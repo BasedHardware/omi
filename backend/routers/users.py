@@ -1,11 +1,10 @@
+import threading
 import uuid
 from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import database.facts as facts_db
-from database.redis_db import cache_user_name
 from database.users import *
 from models.other import Person, CreatePerson
 from utils.other import endpoints as auth
@@ -13,6 +12,25 @@ from utils.other.storage import delete_all_memory_recordings, get_user_person_sp
     delete_user_person_speech_samples
 
 router = APIRouter()
+
+
+@router.delete('/v1/users/delete-account', tags=['v1'])
+def delete_account(uid: str = Depends(auth.get_current_user_uid)):
+    try:
+        # Set account as deleted in Firestore
+        update_user(uid, {"account_deleted": True})
+        # TODO: delete user data from the database
+        return {'status': 'ok', 'message': 'Account deleted successfully'}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+def update_user(uid: str, data: dict):
+    try:
+        user_ref = db.collection('users').document(uid)
+        user_ref.update(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
 
 
 # *************************************************
@@ -34,28 +52,6 @@ def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
     delete_all_memory_recordings(uid)
-    return {'status': 'ok'}
-
-
-# **********************************
-# ************* OTHER **************
-# **********************************
-
-@router.patch('/v1/users/name', tags=['users'])  # TODO: shouldn't need params, instead should retrieve auth values
-def edit_user_name_in_facts(prev: str, new: str, uid: str = Depends(auth.get_current_user_uid)):
-    if len(new.split(' ')) > 1:
-        raise HTTPException(status_code=400, detail='Name must be a single word')
-    if len(new) < 2 or len(new) > 40:
-        raise HTTPException(status_code=400, detail='Name must be between 3 and 40 characters')
-
-    cache_user_name(uid, new.capitalize())
-    facts = facts_db.get_facts(uid, 1000, 0)
-    for fact in facts:
-        text = fact['content']
-        fact['content'] = text.replace(f'{prev.capitalize()}', f'{new.capitalize()}')
-        fact['content'] = text.replace(f'The User', f'{new.capitalize()}').replace(f'User', f'{new.capitalize()}')
-
-    facts_db.save_facts(uid, facts)
     return {'status': 'ok'}
 
 
@@ -94,8 +90,12 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-        for person in people:
+        def single(person):
             person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+
+        threads = [threading.Thread(target=single, args=(person,)) for person in people]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
     return people
 
 

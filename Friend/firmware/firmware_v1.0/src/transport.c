@@ -682,6 +682,8 @@ if(!err) {
     LOG_ERR("Speaker failed to start");
     return 0;
 }
+
+play_boot_sound();
     
 #endif
     // Start advertising

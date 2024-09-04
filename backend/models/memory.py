@@ -27,6 +27,7 @@ class CategoryEnum(str, Enum):
     social = 'social'
     work = 'work'
     sports = 'sports'
+    politics = 'politics'
     literature = 'literature'
     history = 'history'
     other = 'other'
@@ -105,7 +106,14 @@ class MemorySource(str, Enum):
     workflow = 'workflow'
 
 
+class MemoryVisibility(str, Enum):
+    private = 'private'
+    shared = 'shared'
+    public = 'public'
+
+
 class PostProcessingStatus(str, Enum):
+    not_started = 'not_started'
     in_progress = 'in_progress'
     completed = 'completed'
     canceled = 'canceled'
@@ -143,6 +151,7 @@ class Memory(BaseModel):
 
     discarded: bool = False
     deleted: bool = False
+    visibility: MemoryVisibility = MemoryVisibility.private
 
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:

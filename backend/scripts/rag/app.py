@@ -23,7 +23,6 @@ from models.memory import Memory
 from models.transcript_segment import TranscriptSegment
 from utils.llm import qa_rag
 from utils.retrieval.rag import retrieve_rag_context
-from utils.memories.facts import get_prompt_data
 
 # File to store the state
 STATE_FILE = 'chat_state.json'
@@ -121,8 +120,7 @@ def send_message(text: str):
     else:
         context_str, memories, topics, dates_range = data
 
-    user_name, user_facts = get_prompt_data(uid)
-    response: str = qa_rag(user_name, user_facts, context_str, get_messages(), None)
+    response: str = qa_rag(uid, context_str, get_messages(), None)
 
     # Generate visualization
     ai_message_id = str(uuid.uuid4())

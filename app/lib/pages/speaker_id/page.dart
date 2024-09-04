@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -24,20 +25,17 @@ class SpeakerIdPage extends StatefulWidget {
   State<SpeakerIdPage> createState() => _SpeakerIdPageState();
 }
 
-class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin, WebSocketMixin {
+class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      context.read<SpeechProfileProvider>().initialise();
-    });
     super.initState();
   }
 
   @override
   void dispose() {
-    if (mounted) {
-      context.read<SpeechProfileProvider>().dispose();
-    }
+    // if (mounted) {
+    //   context.read<SpeechProfileProvider>().dispose();
+    // }
     super.dispose();
   }
 
@@ -58,6 +56,9 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
+      onPopInvoked: (didPop) {
+        context.read<SpeechProfileProvider>().close();
+      },
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return MessageListener<SpeechProfileProvider>(
           showInfo: (info) {
@@ -259,6 +260,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                             children: [
                               MaterialButton(
                                 onPressed: () async {
+                                  context.read<SpeechProfileProvider>().initialise(false);
                                   BleAudioCodec codec;
                                   try {
                                     codec = await getAudioCodec(provider.device!.id);
@@ -301,25 +303,40 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                     return;
                                   }
 
-                                  provider.initiateWebsocket();
+                                  // provider.initiateWebsocket(false);
                                   // 1.5 minutes seems reasonable
-                                  provider.forceCompletionTimer =
-                                      Timer(Duration(seconds: provider.maxDuration), provider.finalize);
+                                  provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
+                                    provider.finalize(false);
+                                  });
                                   provider.updateStartedRecording(true);
                                 },
                                 color: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                child: const Text('Get Started', style: TextStyle(color: Colors.black)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                child: Text(
+                                  SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                  style: const TextStyle(color: Colors.black),
+                                ),
                               ),
+                              const SizedBox(height: 24),
+                              SharedPreferencesUtil().hasSpeakerProfile
+                                  ? TextButton(
+                                      onPressed: () {
+                                        routeToPage(context, const UserSpeechSamples());
+                                      },
+                                      child: const Text(
+                                        'Listen to my speech profile ➡️',
+                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                      ))
+                                  : const SizedBox(),
                               TextButton(
                                   onPressed: () {
-                                    routeToPage(context, const UserSpeechSamples());
+                                    routeToPage(context, const UserPeoplePage());
                                   },
                                   child: const Text(
-                                    'Listen to existing samples ➡️',
-                                    style: TextStyle(color: Colors.white),
-                                  ))
+                                    'Recognizing others 👀',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  )),
                             ],
                           )
                         : provider.profileCompleted

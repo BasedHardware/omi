@@ -6,6 +6,8 @@ from typing import List
 from google.cloud import storage
 from google.oauth2 import service_account
 
+from database.redis_db import cache_signed_url, get_cached_signed_url
+
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
@@ -38,7 +40,7 @@ def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
             file_path = f'_temp/{uid}_speech_profile.wav'
             blob.download_to_filename(file_path)
             return file_path
-        return blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET")
+        return _get_signed_url(blob, 60)
 
     return None
 
@@ -69,8 +71,7 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
             paths.append(file_path)
         return paths
 
-    return [blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET") for blob in
-            blobs]
+    return [_get_signed_url(blob, 60) for blob in blobs]
 
 
 # ********************************************
@@ -124,8 +125,7 @@ def get_user_person_speech_samples(uid: str, person_id: str, download: bool = Fa
             paths.append(file_path)
         return paths
 
-    return [blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=60), method="GET") for blob in
-            blobs]
+    return [_get_signed_url(blob, 60) for blob in blobs]
 
 
 # ********************************************
@@ -147,13 +147,7 @@ def delete_postprocessing_audio(file_path: str):
 def create_signed_postprocessing_audio_url(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
-    url = blob.generate_signed_url(
-        version="v4",
-        expiration=datetime.timedelta(minutes=15),
-        method="GET",
-    )
-
-    return url
+    return _get_signed_url(blob, 15)
 
 
 # ************************************************
@@ -187,3 +181,12 @@ def delete_all_memory_recordings(uid: str):
     blobs = bucket.list_blobs(prefix=uid)
     for blob in blobs:
         blob.delete()
+
+
+def _get_signed_url(blob, minutes):
+    if cached := get_cached_signed_url(blob.name):
+        return cached
+
+    signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET")
+    cache_signed_url(blob.name, signed_url, minutes * 60)
+    return signed_url

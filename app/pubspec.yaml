@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.29+95
+version: 1.0.34+117
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -22,7 +22,7 @@ dependencies:
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
-  flutter_blue_plus: ^1.32.12
+  flutter_blue_plus: ^1.32.13
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
   http: ^1.2.1
@@ -58,16 +58,13 @@ dependencies:
   package_info_plus: ^8.0.1
 
   path_provider: any
-  ml_linalg: any
-  flutter_foreground_task: ^8.2.0
+  flutter_foreground_task: 8.2.0
   deepgram_speech_to_text: ^2.1.1
   upgrader: ^10.3.0
   crypto: ^3.0.3
-  encrypt: ^5.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
   record: ^5.1.2
-  onesignal_flutter: ^5.1.2
   flutter_background_service: ^5.0.7
   flutter_background_service_android: 6.2.4
   flutter_background_service_platform_interface: 5.1.1
@@ -79,29 +76,32 @@ dependencies:
   flutter_timezone: ^2.0.0
   sign_in_button: ^3.2.0
   sign_in_with_apple: ^6.1.1
-  firebase_core: ^3.2.0
-  firebase_auth: ^5.1.2
+  firebase_core: 3.3.0
+  firebase_auth: 5.1.4
   google_sign_in: ^6.2.1
   location: ^7.0.0
   cached_network_image: ^3.3.1
   map_launcher: ^3.3.1
   internet_connection_checker_plus: ^2.5.0
   geolocator:
-  docx_template: ^0.4.0
-  enum_to_string: ^2.0.1
   visibility_detector: ^0.4.0+2
-  firebase_messaging: ^15.0.4
+  firebase_messaging: 15.0.4
   version: ^3.0.2
   webview_flutter: ^4.8.0
   flutter_sound: ^9.10.0
-  audio_session:
   just_audio: ^0.9.39
-
+  frame_sdk: ^0.0.7
+  gleap_sdk: ^13.9.1
 
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
+  flutter_blue_plus:
+    git:
+      url: https://github.com/chipweinberger/flutter_blue_plus
+      ref: 1.32.13
+      version: ^1.32.13
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
@@ -139,6 +139,7 @@ flutter:
     - assets/pdfs/
     - assets/silero_vad.onnx
     - shorebird.yaml
+    - assets/device_assets/frame_lib.lua
   fonts:
     - family: 'SF Pro Display'
       fonts:
@@ -170,3 +171,4 @@ flutter_native_splash:
 
   android: true
   ios: true
+ 

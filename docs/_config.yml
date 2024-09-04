@@ -4,7 +4,19 @@ theme: just-the-docs
 url: https://basedhardware.github.io
 logo: "/images/logo.png"
 favicon_ico: "/images/favicon.ico"
-color_scheme: dark
+color_scheme: dark_custom
+
+# Custom color scheme
+colors:
+  background: "#1c1e22"  # Slightly warmer dark background
+  sidebar-background: "#15171a"  # Darker sidebar for distinction
+  main-content-background: "#1c1e22"  # Same as background
+  text-color: "#e6e6e6"  # Light gray for main text
+  link-color: "#4a89dc"  # Softer blue for links
+  nav-child-link-color: "#8f9aa8"  # Light gray for sub-items in nav
+  search-result-preview-color: "#b3b3b3"  # Softer color for search previews
+  btn-primary-color: "#4a89dc"  # Softer blue for primary buttons
+  base-button-color: "#2c2e31"  # Slightly lighter than background for buttons
 
 exclude:
   - readme.md
@@ -52,10 +64,7 @@ callouts:
     title: Note
     color: blue
 
-
 mermaid:
-  # Version of mermaid library
-  # Pick an available version from https://cdn.jsdelivr.net/npm/mermaid/
   version: "9.1.3"
 
 aux_links:
@@ -71,3 +80,8 @@ nav_external_links:
   - title: 🧑‍💻 | GitHub
     url: https://github.com/BasedHardware/Omi
     opens_in_new_tab: true
+
+# At the end, add:
+sass:
+  sass_dir: _sass
+  style: compressed

@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -12,10 +11,10 @@ import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-class DeviceProvider extends ChangeNotifier with WebSocketMixin {
+class DeviceProvider extends ChangeNotifier {
   CaptureProvider? captureProvider;
+  WebSocketProvider? webSocketProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
@@ -28,13 +27,15 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
 
   Timer? _disconnectNotificationTimer;
 
-  void setProvider(CaptureProvider provider) {
+  void setProviders(CaptureProvider provider, WebSocketProvider wsProvider) {
     captureProvider = provider;
+    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
   void setConnectedDevice(BTDeviceStruct? device) {
     connectedDevice = device;
+    print('setConnectedDevice: $device');
     captureProvider?.updateConnectedDevice(device);
     notifyListeners();
   }
@@ -62,6 +63,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
         updateConnectingStatus(false);
         periodicConnect('coming from onDisconnect');
         captureProvider?.resetState(restartBytesProcessing: false);
+        captureProvider?.setAudioBytesConnected(false);
         print('after resetState inside initiateConnectionListener');
 
         InstabugLog.logInfo('Friend Device Disconnected');
@@ -104,24 +106,6 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     notifyListeners();
   }
 
-  Future askForPermissions() async {
-    if (Platform.isIOS) {
-      final granted = await Permission.bluetooth.isGranted;
-      if (granted) {
-        return true;
-      }
-      PermissionStatus bleStatus = await Permission.bluetooth.request();
-      debugPrint('bleStatus: $bleStatus');
-      return bleStatus.isGranted;
-    } else {
-      PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
-      PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
-      // PermissionStatus locationStatus = await Permission.location.request();
-
-      return bleConnectStatus.isGranted && bleScanStatus.isGranted; // && locationStatus.isGranted;
-    }
-  }
-
   Future periodicConnect(String printer) async {
     if (timer != null) return;
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
@@ -159,6 +143,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
       updateConnectingStatus(false);
     } else {
       var device = await scanAndConnectDevice();
+      print('inside scanAndConnectToDevice $device in device_provider');
       if (device != null) {
         var cDevice = await getConnectedDevice();
         if (cDevice != null) {
@@ -175,7 +160,7 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
     if (isConnected) {
       await initiateBleBatteryListener();
     }
-    captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
     // if (captureProvider?.webSocketConnected == false) {
     //   restartWebSocket();
     // }
@@ -189,10 +174,11 @@ class DeviceProvider extends ChangeNotifier with WebSocketMixin {
   void restartWebSocket() {
     debugPrint('restartWebSocket');
 
-    closeWebSocket();
+    webSocketProvider?.closeWebSocket();
     if (connectedDevice == null) {
       return;
     }
+    captureProvider?.resetState(restartBytesProcessing: true);
     captureProvider?.streamAudioToWs(connectedDevice!.id, SharedPreferencesUtil().deviceCodec);
     notifyListeners();
   }
