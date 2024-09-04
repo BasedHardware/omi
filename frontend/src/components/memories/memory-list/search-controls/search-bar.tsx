@@ -18,7 +18,7 @@ export default function SearchBar() {
   return (
     <input
       type="text"
-      value={searchValue}
+      defaultValue={searchValue}
       placeholder="Search memories"
       onChange={(e) => handleSearch(e.target.value)}
       className="w-full rounded-md border border-solid border-zinc-600 bg-transparent px-3 py-2"
