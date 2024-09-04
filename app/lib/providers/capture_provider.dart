@@ -79,6 +79,13 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   // -----------------------
 
+  bool resetStateAlreadyCalled = false;
+
+  void setResetStateAlreadyCalled(bool value) {
+    resetStateAlreadyCalled = value;
+    notifyListeners();
+  }
+
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
     notifyListeners();
@@ -91,12 +98,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   void setGeolocation(Geolocation? value) {
     geolocation = value;
-    notifyListeners();
-  }
-
-  void setWebSocketConnected(bool value) {
-    webSocketProvider?.wsConnectionState =
-        value ? WebsocketConnectionStatus.connected : WebsocketConnectionStatus.notConnected;
     notifyListeners();
   }
 
@@ -247,12 +248,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       includeSpeechProfile: true,
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
-        setWebSocketConnected(true);
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
           secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
         }
+        print('bottom in onConnectionSuccess');
         notifyListeners();
       },
       onConnectionFailed: (err) {
@@ -308,7 +309,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
-    print('streamAudioToWs');
+    print('streamAudioToWs in capture_provider');
     audioStorage = WavBytesUtil(codec: codec);
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
@@ -337,61 +338,97 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  void resetForSpeechProfile() {
+  Future resetForSpeechProfile() async {
     closeBleStream();
-    webSocketProvider?.closeWebSocket();
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset for speech profile');
     setAudioBytesConnected(false);
     notifyListeners();
   }
 
-  Future resetState(
-      {bool restartBytesProcessing = true, bool restartAudioStreaming = true, BTDeviceStruct? btDevice}) async {
-    //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
-    debugPrint('resetState: $restartBytesProcessing');
+  Future<void> resetState({
+    bool restartBytesProcessing = true,
+    bool isFromSpeechProfile = false,
+    BTDeviceStruct? btDevice,
+  }) async {
+    if (resetStateAlreadyCalled) {
+      debugPrint('resetState already called');
+      return;
+    }
+    setResetStateAlreadyCalled(true);
+    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing, isFromSpeechProfile=$isFromSpeechProfile');
+
+    _cleanupCurrentState();
+    await startOpenGlass();
+    if (!isFromSpeechProfile) {
+      await _handleMemoryCreation(restartBytesProcessing);
+    }
+
+    bool codecChanged = await _checkCodecChange();
+
+    if (restartBytesProcessing || codecChanged) {
+      await _manageWebSocketConnection(codecChanged, isFromSpeechProfile);
+    }
+
+    await initiateFriendAudioStreaming(isFromSpeechProfile);
+
+    setResetStateAlreadyCalled(false);
+    notifyListeners();
+  }
+
+  void _cleanupCurrentState() {
     closeBleStream();
     cancelMemoryCreationTimer();
+    setAudioBytesConnected(false);
+  }
 
+  Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      var res = await createMemory(forcedCreation: true);
-      notifyListeners();
-      if (res != null && !res) {
-        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+      bool? result = await createMemory(forcedCreation: true);
+      if (result != null && !result) {
+        notifyError('Memory creation failed. It\'s stored locally and will be retried soon.');
       } else {
         notifyInfo('Memory created successfully 🚀');
       }
     }
-    if (restartBytesProcessing) {
-      print('socket connection status22: ${webSocketProvider?.wsConnectionState}');
-      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.closeWebSocket();
-        await initiateWebsocket();
-      } else {
-        print('here comes the initiateWebsocket');
-        await initiateWebsocket();
-      }
-    } else {
-      webSocketProvider?.closeWebSocket();
-    }
-    setAudioBytesConnected(false);
-    startOpenGlass();
+  }
+
+  Future<bool> _checkCodecChange() async {
     if (connectedDevice != null) {
-      BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != codec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec while resetting state');
-        SharedPreferencesUtil().deviceCodec = codec;
-        print('socket connection status: ${webSocketProvider?.wsConnectionState}');
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-          print('closing websocket');
-          webSocketProvider?.closeWebSocket();
-          await initiateWebsocket();
-        } else {
-          await initiateWebsocket();
-        }
+      BleAudioCodec newCodec = await getAudioCodec(connectedDevice!.id);
+      if (SharedPreferencesUtil().deviceCodec != newCodec) {
+        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+        SharedPreferencesUtil().deviceCodec = newCodec;
+        return true;
       }
     }
-    if (restartAudioStreaming) {
-      initiateFriendAudioStreaming();
+    return false;
+  }
+
+  Future<void> _manageWebSocketConnection(bool codecChanged, bool isFromSpeechProfile) async {
+    if (codecChanged || webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
+      await webSocketProvider?.closeWebSocketWithoutReconnect('reset state $isFromSpeechProfile');
+      // if (!isFromSpeechProfile) {
+      await initiateWebsocket();
+      // }
     }
+  }
+
+  Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
+    print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
+    if (connectedDevice == null) return;
+
+    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != codec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
+      SharedPreferencesUtil().deviceCodec = codec;
+      notifyInfo('FIM_CHANGE');
+      await _manageWebSocketConnection(true, isFromSpeechProfile);
+    }
+
+    if (!audioBytesConnected) {
+      await streamAudioToWs(connectedDevice!.id, codec);
+    }
+
     notifyListeners();
   }
 
@@ -414,25 +451,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
     if (!isGlasses) return;
     await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
-    webSocketProvider?.closeWebSocket();
-    notifyListeners();
-  }
-
-  Future<void> initiateFriendAudioStreaming() async {
-    print('inside initiateFriendAudioStreaming');
-    if (connectedDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
-      SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
-    } else {
-      print('codec is the same');
-      print(audioBytesConnected);
-      if (audioBytesConnected) return;
-      streamAudioToWs(connectedDevice!.id, codec);
-    }
-
+    webSocketProvider?.closeWebSocketWithoutReconnect('reset state open glass');
     notifyListeners();
   }
 
