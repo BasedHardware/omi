@@ -2,7 +2,7 @@ import datetime
 import random
 import threading
 import uuid
-from typing import Union
+from typing import Union, Tuple
 
 from fastapi import HTTPException
 
@@ -27,7 +27,7 @@ from utils.retrieval.rag import retrieve_rag_memory_context
 def _get_structured(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
         force_process: bool = False, retries: int = 1
-) -> Structured:
+) -> Tuple[Structured, bool]:
     try:
         if memory.source == MemorySource.workflow:
             if memory.text_source == WorkflowMemorySource.audio:
