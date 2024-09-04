@@ -28,6 +28,9 @@ class SpeakerIdPage extends StatefulWidget {
 class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin {
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      await context.read<SpeechProfileProvider>().updateDevice();
+    });
     super.initState();
   }
 
@@ -57,7 +60,11 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        context.read<SpeechProfileProvider>().close();
+        if (context.read<SpeechProfileProvider>().isInitialised) {
+          WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+            await context.read<SpeechProfileProvider>().close();
+          });
+        }
       },
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return MessageListener<SpeechProfileProvider>(
@@ -258,66 +265,70 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              MaterialButton(
-                                onPressed: () async {
-                                  context.read<SpeechProfileProvider>().initialise(false);
-                                  BleAudioCodec codec;
-                                  try {
-                                    codec = await getAudioCodec(provider.device!.id);
-                                  } catch (e) {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () {
-                                          Navigator.of(context).pop();
-                                          Navigator.of(context).pop();
-                                        },
-                                        () => {},
-                                        'Device Disconnected',
-                                        'Please make sure your device is turned on and nearby, and try again.',
-                                        singleButton: true,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                              provider.isInitialising
+                                  ? CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : MaterialButton(
+                                      onPressed: () async {
+                                        BleAudioCodec codec;
+                                        try {
+                                          codec = await getAudioCodec(provider.device!.id);
+                                        } catch (e) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (c) => getDialog(
+                                              context,
+                                              () {
+                                                Navigator.of(context).pop();
+                                                Navigator.of(context).pop();
+                                              },
+                                              () => {},
+                                              'Device Disconnected',
+                                              'Please make sure your device is turned on and nearby, and try again.',
+                                              singleButton: true,
+                                            ),
+                                          );
+                                          return;
+                                        }
 
-                                  if (codec != BleAudioCodec.opus) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () => Navigator.pop(context),
-                                        () {
-                                          Navigator.pop(context);
-                                          launchUrl(Uri.parse(
-                                              'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
-                                        },
-                                        'Firmware Update Required',
-                                        'Please update your device firmware to set-up your speech profile.',
-                                        okButtonText: 'Do now',
+                                        if (codec != BleAudioCodec.opus) {
+                                          showDialog(
+                                            context: context,
+                                            builder: (c) => getDialog(
+                                              context,
+                                              () => Navigator.pop(context),
+                                              () {
+                                                Navigator.pop(context);
+                                                launchUrl(Uri.parse(
+                                                    'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
+                                              },
+                                              'Firmware Update Required',
+                                              'Please update your device firmware to set-up your speech profile.',
+                                              okButtonText: 'Do now',
+                                            ),
+                                            barrierDismissible: false,
+                                          );
+                                          return;
+                                        }
+                                        await provider.initialise(false);
+                                        // provider.initiateWebsocket(false);
+                                        // 1.5 minutes seems reasonable
+                                        provider.forceCompletionTimer =
+                                            Timer(Duration(seconds: provider.maxDuration), () {
+                                          provider.finalize(false);
+                                        });
+                                        provider.updateStartedRecording(true);
+                                      },
+                                      color: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                      child: Text(
+                                        SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                        style: const TextStyle(color: Colors.black),
                                       ),
-                                      barrierDismissible: false,
-                                    );
-                                    return;
-                                  }
-
-                                  // provider.initiateWebsocket(false);
-                                  // 1.5 minutes seems reasonable
-                                  provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
-                                    provider.finalize(false);
-                                  });
-                                  provider.updateStartedRecording(true);
-                                },
-                                color: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                child: Text(
-                                  SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
-                                  style: const TextStyle(color: Colors.black),
-                                ),
-                              ),
+                                    ),
                               const SizedBox(height: 24),
                               SharedPreferencesUtil().hasSpeakerProfile
                                   ? TextButton(
