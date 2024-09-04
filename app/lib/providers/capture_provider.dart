@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -25,6 +26,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -165,6 +167,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (memory != null) {
       // use memory provider to add memory
       MixpanelManager().memoryCreated(memory);
+      _handleCalendarCreation(memory);
       memoryProvider?.addMemory(memory);
       if (memoryProvider?.memories.isEmpty ?? false) {
         memoryProvider?.getMoreMemoriesFromServer();
@@ -207,6 +210,26 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     setMemoryCreating(false);
     notifyListeners();
     return true;
+  }
+
+  _handleCalendarCreation(ServerMemory memory) {
+    if (!SharedPreferencesUtil().calendarEnabled) return;
+    if (SharedPreferencesUtil().calendarType != 'auto') return;
+
+    List<Event> events = memory.structured.events;
+    if (events.isEmpty) return;
+
+    List<int> indexes = events.mapIndexed((index, e) => index).toList();
+    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+    for (var i = 0; i < events.length; i++) {
+      events[i].created = true;
+      CalendarUtil().createEvent(
+        events[i].title,
+        events[i].startsAt,
+        events[i].duration,
+        description: events[i].description,
+      );
+    }
   }
 
   Future<void> initiateWebsocket([
