@@ -16,43 +16,58 @@ class CalenderProvider extends ChangeNotifier {
     if (calendarEnabled) _getCalendars();
   }
 
-  _getCalendars() async {
-    await CalendarUtil().getCalendars().then((value) {
-      calendars = value;
-      notifyListeners();
-    });
+  Future<void> _getCalendars() async {
+    calendars = await _calendarUtil.getCalendars();
+    notifyListeners();
   }
 
-  void onCalendarSwitchChanged(bool s) async {
-    // TODO: what if user didn't enable permissions?
+
+  Future<void> onCalendarSwitchChanged(bool s) async {
     if (s) {
-      await _getCalendars();
-      bool hasAccess = await _calendarUtil.hasCalendarAccess();
-      if (calendars.isEmpty && !hasAccess && _sharedPreferencesUtil.calendarPermissionAlreadyRequested) {
-        AppSnackbar.showSnackbar(
-          'Calendar access was not granted previously. Please enable it in your settings.',
-          duration: const Duration(seconds: 5),
-        );
-
-        return;
+      bool hasAccess = await _calendarUtil.enableCalendarAccess();
+      print('onCalendarSwitchChanged: hasAccess: $hasAccess');
+      if (hasAccess) {
+        await _getCalendars();
+        if (calendars.isEmpty) {
+          AppSnackbar.showSnackbar(
+            'No calendars found. Please check your device settings.',
+            duration: const Duration(seconds: 5),
+          );
+          calendarEnabled = false;
+        } else {
+          calendarEnabled = true;
+          _mixpanelManager.calendarEnabled();
+        }
+      } else {
+        bool wasAsked = await _calendarUtil.calendarPermissionAsked();
+        if (wasAsked) {
+          AppSnackbar.showSnackbar(
+            'Calendar access was denied. Please enable it in your app settings.',
+            duration: const Duration(seconds: 5),
+            // action: SnackBarAction(
+            //   label: 'Open Settings',
+            //   onPressed: () => _calendarUtil.openAppSettings(),
+            // ),
+          );
+        } else {
+          AppSnackbar.showSnackbar(
+            'Failed to request calendar access. Please try again.',
+            duration: const Duration(seconds: 5),
+          );
+        }
+        calendarEnabled = false;
       }
-
-      calendarEnabled = hasAccess;
-      notifyListeners();
-
-      _mixpanelManager.calendarEnabled();
     } else {
       _sharedPreferencesUtil.calendarId = '';
       _sharedPreferencesUtil.calendarType = 'auto';
       _mixpanelManager.calendarDisabled();
-
-      calendarEnabled = s;
-      notifyListeners();
+      calendarEnabled = false;
     }
-    _sharedPreferencesUtil.calendarPermissionAlreadyRequested = await _calendarUtil.calendarPermissionAsked();
-    _sharedPreferencesUtil.calendarEnabled = await _calendarUtil.hasCalendarAccess() && s;
-  }
 
+    _sharedPreferencesUtil.calendarPermissionAlreadyRequested = await _calendarUtil.calendarPermissionAsked();
+    _sharedPreferencesUtil.calendarEnabled = calendarEnabled;
+    notifyListeners();
+  }
   void onCalendarTypeChanged(String? v) {
     _sharedPreferencesUtil.calendarType = v!;
     _mixpanelManager.calendarTypeChanged(v);
