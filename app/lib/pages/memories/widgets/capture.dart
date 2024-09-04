@@ -14,12 +14,12 @@ import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
@@ -35,10 +35,6 @@ class CaptureWidget extends StatefulWidget {
 class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
-
-  InternetStatus? _internetStatus;
-
-  late StreamSubscription<InternetStatus> _internetListener;
 
   setHasTranscripts(bool hasTranscripts) {
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
@@ -91,26 +87,18 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
           ),
         );
       }
-    });
-    _internetListener = ConnectivityController().internetConnection.onStatusChange.listen((InternetStatus status) {
-      switch (status) {
-        case InternetStatus.connected:
-          _internetStatus = InternetStatus.connected;
-          break;
-        case InternetStatus.disconnected:
-          _internetStatus = InternetStatus.disconnected;
-          // so if you have a memory in progress, it doesn't get created, and you don't lose the remaining bytes.
-          context.read<CaptureProvider>().cancelMemoryCreationTimer();
-          break;
+      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+      if (!connectivityProvider.isConnected) {
+        context.read<CaptureProvider>().cancelMemoryCreationTimer();
       }
     });
+
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _internetListener.cancel();
     // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
@@ -133,6 +121,7 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
     } else {
       PermissionStatus permissionGranted = await locationService.requestPermission();
       SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
+      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {

@@ -134,6 +134,8 @@ async def _websocket_util(
 
         print("Received transcript segments")
         print(segments)
+        if not segments:
+            return
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
