@@ -211,3 +211,26 @@ Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}
   debugPrint('setMemoryVisibility: ${response.body}');
   return response.statusCode == 200;
 }
+
+Future<bool> setMemoryEventsState(
+  String memoryId,
+  List<int> eventsIdx,
+  List<bool> values,
+) async {
+  print(jsonEncode({
+    'events_idx': eventsIdx,
+    'values': values,
+  }));
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/events',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({
+      'events_idx': eventsIdx,
+      'values': values,
+    }),
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryEventsState: ${response.body}');
+  return response.statusCode == 200;
+}
