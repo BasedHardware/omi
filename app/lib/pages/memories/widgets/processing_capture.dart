@@ -88,7 +88,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       }
       provider.updateRecordingState(RecordingState.stop);
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().forceCreateMemory();
+      await context.read<CaptureProvider>().tryCreateMemoryManually();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {

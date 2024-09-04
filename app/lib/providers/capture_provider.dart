@@ -223,36 +223,47 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       }
     }
 
-    if (memory != null && !memory.failed && segments.isNotEmpty && !memory.discarded) {
-      setMemoryCreating(false);
-    }
+    _cleanNew();
 
-    SharedPreferencesUtil().transcriptSegments = [];
-    segments = [];
-    audioStorage?.clearAudioBytes();
-    setHasTranscripts(false);
-
-    currentTranscriptStartedAt = null;
-    currentTranscriptFinishedAt = null;
-    elapsedSeconds = 0;
-
-    streamStartedAtSecond = null;
-    firstStreamReceivedAt = null;
-    secondsMissedOnReconnect = null;
-    photos = [];
-    conversationId = const Uuid().v4();
-    processingMemoryId = null;
+    // Notify
     setMemoryCreating(false);
+    setHasTranscripts(false);
     notifyListeners();
     return true;
   }
 
-  // Warn: Support OpenGlass
-  Future<bool?> _createMemoryTimer() async {
-    if (!isGlasses) {
+  // Should validate with synced frames also
+  bool _shouldWaitCreateMemoryAutomatically() {
+    debugPrint("Should wait ${processingMemoryId != null}");
+    return processingMemoryId != null;
+  }
+
+  bool _shouldWaitCreateMemoryAutomaticallyWithClean() {
+    var shouldWait = _shouldWaitCreateMemoryAutomatically();
+    if (!shouldWait) {
       return false;
     }
+
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+
+    return true;
+  }
+
+  Future<bool?> _createMemoryTimer() async {
     return await _createMemory();
+  }
+
+  Future<bool?> tryCreateMemoryManually() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      setMemoryCreating(true);
+      return false;
+    }
+    return await _createMemory(forcedCreation: true);
   }
 
   // Warn: Split-brain in memory
@@ -346,10 +357,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       }
     }
 
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return true;
+  }
+
+  void _cleanNew() {
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
-    setHasTranscripts(false);
 
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
@@ -361,9 +381,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     photos = [];
     conversationId = const Uuid().v4();
     processingMemoryId = null;
-    setMemoryCreating(false);
-    notifyListeners();
-    return true;
   }
 
   _handleCalendarCreation(ServerMemory memory) {
@@ -581,12 +598,14 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      var res = await forceCreateMemory();
-      notifyListeners();
-      if (res != null && !res) {
-        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
-      } else {
-        notifyInfo('Memory created successfully 🚀');
+      if (!_shouldWaitCreateMemoryAutomaticallyWithClean()) {
+        var res = await forceCreateMemory();
+        notifyListeners();
+        if (res != null && !res) {
+          notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+        } else {
+          notifyInfo('Memory created successfully 🚀');
+        }
       }
     }
   }
