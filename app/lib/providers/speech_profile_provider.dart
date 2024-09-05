@@ -284,7 +284,6 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
   }
 
   Future close() async {
-    await webSocketProvider?.closeWebSocketWithoutReconnect('closing');
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
@@ -294,6 +293,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     percentageCompleted = 0;
     uploadingProfile = false;
     profileCompleted = false;
+    await webSocketProvider?.closeWebSocketWithoutReconnect('closing');
     await captureProvider?.resetState(restartBytesProcessing: true, isFromSpeechProfile: true);
     notifyListeners();
   }
