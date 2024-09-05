@@ -12,7 +12,7 @@ export default function MemoryList({ searchParams }: MemoryListProps) {
     <div className="mt-12 text-white">
       <div className="flex flex-col gap-10">
         <Hits hitComponent={MemoryItem} />
-        <Pagination className='ais-Pagination mx-auto'/>
+        <Pagination className='ais-Pagination mx-auto text-sm'/>
       </div>
     </div>
   );
