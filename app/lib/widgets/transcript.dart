@@ -153,8 +153,8 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => SizedBox(height: widget.separator ? 16.0 : 0),
       itemBuilder: (context, idx) {
-        if (idx == 0) return SizedBox(height: widget.topMargin ? 32 : 0);
-        if (idx == widget.segments.length + 1) return const SizedBox(height: 64);
+        if (idx == 0) return SizedBox(height: widget.topMargin ? 16 : 0);
+        if (idx == widget.segments.length + 1) return const SizedBox(height: 16);
         final data = widget.segments[idx - 1];
 
         var text = data.text;
@@ -208,12 +208,10 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
-                child: SelectionArea(
-                  child: Text(
-                    tryDecodingText(text),
-                    style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
-                    textAlign: TextAlign.left,
-                  ),
+                child: Text(
+                  tryDecodingText(text),
+                  style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
+                  textAlign: TextAlign.left,
                 ),
               ),
             ],
