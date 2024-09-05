@@ -6,7 +6,6 @@ import { InstantSearch, Configure} from 'react-instantsearch';
 import { Fragment } from 'react';
 import envConfig from '@/src/constants/envConfig';
 
-console.log(envConfig);
 const searchClient = algoliasearch(envConfig.ALGOLIA_APP_ID, envConfig.ALGOLIA_SEARCH_API_KEY);
 
 interface SearchControlsProps {
@@ -19,7 +18,7 @@ export default function SearchControls({ children }: SearchControlsProps) {
     <Fragment>
       <h1 className="text-center mt-10 text-3xl font-bold text-white">Memories</h1>
       <InstantSearch searchClient={searchClient} indexName={envConfig.ALGOLIA_INDEX_NAME} routing={true}>
-        <Configure hitsPerPage={15} />
+        <Configure hitsPerPage={20} />
         <SearchBar />
         {children}       
       </InstantSearch>
