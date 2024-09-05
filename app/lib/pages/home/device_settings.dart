@@ -7,15 +7,18 @@ import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-
-import 'device.dart';
 import 'support.dart';
 
 class DeviceSettings extends StatelessWidget {
   final DeviceInfo? deviceInfo;
   final BTDeviceStruct? device;
   final bool isDeviceConnected;
-  const DeviceSettings({super.key, this.deviceInfo, this.device, this.isDeviceConnected = false});
+
+  const DeviceSettings(
+      {super.key,
+      this.deviceInfo,
+      this.device,
+      this.isDeviceConnected = false});
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +93,8 @@ class DeviceSettings extends StatelessWidget {
           ? Padding(
               padding: const EdgeInsets.only(bottom: 70, left: 30, right: 30),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                 decoration: BoxDecoration(
                   border: const GradientBoxBorder(
                     gradient: LinearGradient(colors: [
@@ -111,7 +115,8 @@ class DeviceSettings extends StatelessWidget {
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Your Luca is ${device == null ? "unpaired" : "disconnected"}  😔'),
+                      content: Text(
+                          'Your Luca is ${device == null ? "unpaired" : "disconnected"}  😔'),
                     ));
                     MixpanelManager().disconnectFriendClicked();
                   },
@@ -127,7 +132,8 @@ class DeviceSettings extends StatelessWidget {
   }
 }
 
-List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(
+    DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
   return [
     ListTile(
       title: const Text('Device Name'),

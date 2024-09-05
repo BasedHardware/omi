@@ -89,8 +89,6 @@ class Plugin {
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
 
-  // can be used for
-
   List<PluginReview> reviews;
   PluginReview? userReview;
   double? ratingAvg;

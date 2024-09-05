@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
-
-import '../../backend/schema/plugin.dart';
 
 class PluginDetailPage extends StatefulWidget {
   final Plugin plugin;

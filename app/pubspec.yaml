@@ -91,6 +91,7 @@ dependencies:
   flutter_sound: ^9.10.0
   audio_session:
   firebase_remote_config: ^5.0.4
+  cloud_firestore: ^5.4.0
   markdown: ^7.2.2
 
 dependency_overrides:
