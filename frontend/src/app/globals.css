@@ -37,3 +37,42 @@ body {
     --radius: 0.5rem;
   }
 }
+
+.ais-SearchBox {
+  margin-bottom: 1em;
+}
+
+.ais-SearchBox-input {
+  padding: 0.5em;
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid #353535;
+  background: rgba(var(--foreground-rgb), 0.1);
+  color: white;
+  color: rgba(var(--foreground-rgb), 1);
+}
+
+.ais-InstantSearch {
+  max-width: 960px;
+  width: 100%;
+  display: block;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.ais-Hits-list .ais-Hits-item {
+  margin-left: 0;
+  width: 100%;
+}
+
+.ais-Hits-item img {
+  margin-right: 1em;
+}
+
+.ais-InstantSearch .ais-Hits-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1em;
+  margin-left: 0;
+  margin-top: 0;
+}
