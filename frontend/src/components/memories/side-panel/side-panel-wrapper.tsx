@@ -6,6 +6,7 @@ import { Enlarge, Xmark } from 'iconoir-react';
 import Link from 'next/link';
 import { DialogTitle } from '../../ui/dialog';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { ScrollArea } from '@/src/components/ui/scroll-area';
 
 interface SidePanelWrapperProps {
   children: React.ReactNode;
@@ -30,33 +31,36 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
   return (
     <Fragment>
       <Drawer
-        preventScrollRestoration
+        disablePreventScroll={false}
         direction="right"
         open={!!previewId}
         onOpenChange={handleOpen}
       >
         <DrawerContent
           aria-describedby={undefined}
-          className="ml-auto h-screen max-h-screen max-w-screen-md overflow-y-auto overflow-x-hidden bg-zinc-900 text-white"
+          className="ml-auto max-w-screen-md overflow-hidden text-white"
         >
-          <header className="relative z-20 flex w-full gap-2 px-4 pt-4 md:px-12 md:pt-12">
-            <button
-              onClick={() => handleOpen(false)}
-              className="rounded-md p-1 hover:bg-zinc-800"
-            >
-              <Xmark className="text-base" />
-            </button>
-            <Link
-              href={`/memories/${previewId}`}
-              className="rounded-md p-1 hover:bg-zinc-800"
-            >
-              <Enlarge className="text-base" />
-            </Link>
-          </header>
           <VisuallyHidden.Root>
             <DialogTitle>Memory Details</DialogTitle>
           </VisuallyHidden.Root>
-          {children}
+
+          <ScrollArea className="h-screen max-h-screen bg-zinc-900 select-text">
+            <header className="relative z-20 flex w-full gap-2 px-4 pt-4 md:px-12 md:pt-12">
+              <button
+                onClick={() => handleOpen(false)}
+                className="rounded-md p-1 hover:bg-zinc-800"
+              >
+                <Xmark className="text-base" />
+              </button>
+              <Link
+                href={`/memories/${previewId}`}
+                className="rounded-md p-1 hover:bg-zinc-800"
+              >
+                <Enlarge className="text-base" />
+              </Link>
+            </header>
+            {children}
+          </ScrollArea>
         </DrawerContent>
       </Drawer>
     </Fragment>

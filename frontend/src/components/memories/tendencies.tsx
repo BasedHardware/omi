@@ -19,12 +19,12 @@ export default function Tendencies() {
         <AccordionContent className="p-3 md:p-5">
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <TrendingItem title='work' count={23} />
-              <TrendingItem title='Business' count={6} />
+              <TrendingItem title="work" count={23} />
+              <TrendingItem title="Business" count={6} />
             </div>
             <div className="flex gap-2">
-              <TrendingItem title='Inspiration' count={6} />
-              <TrendingItem title='Social' count={6} />
+              <TrendingItem title="Inspiration" count={6} />
+              <TrendingItem title="Social" count={6} />
             </div>
           </div>
         </AccordionContent>

@@ -11,7 +11,15 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
   const memory = await getSharedMemory(previewId ?? '');
 
   if (!memory) {
-    return null;
+    return (
+      <div className="mx-auto px-12 py-12 text-white">
+        <h1 className="font-semibolds text-xl">Memory not found</h1>
+        <p className="mt-3 text-lg text-zinc-400">
+          The memory you are looking for does not exist. Please check the URL and try
+          again.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -20,7 +28,7 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
         <div className="overflow-hidden py-6">
           <div className="relative z-50">
             <div className="px-4 md:px-12">
-              <h2 className="text-2xl font-bold md:text-3xl">
+              <h2 className="select-text text-2xl font-bold md:text-3xl">
                 {memory.structured.title || DEFAULT_TITLE_MEMORY}
               </h2>
               <p className="my-2 text-sm text-gray-500 md:text-base">
