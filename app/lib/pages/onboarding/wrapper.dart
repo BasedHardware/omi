@@ -163,7 +163,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               if (codec == BleAudioCodec.opus) {
                                 _goNext();
                               } else {
-                                _controller!.animateTo(_controller!.index + 3);
+                                routeToPage(context, const HomePageWrapper(), replace: true);
                               }
                             }
                           }
