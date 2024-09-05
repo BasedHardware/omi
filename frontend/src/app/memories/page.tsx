@@ -6,9 +6,15 @@ import { SearchParamsTypes } from '@/src/types/params.types';
 import { Suspense } from 'react';
 import LoadingPreview from '@/src/components/memories/side-panel/loading-preview';
 import Tendencies from '@/src/components/memories/tendencies';
+import { Metadata } from 'next';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
+}
+
+export const metadata: Metadata = {
+  title: 'Community Memories',
+  description: 'Relive the moments that matter, discover new stories, and connect with others through our shared community memories.',
 }
 
 export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
