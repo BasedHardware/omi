@@ -25,18 +25,20 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 
 Future<bool> _init() async {
-  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
@@ -46,7 +48,7 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-
+  if (Env.gleapApiKey != null) Gleap.initialize(token: Env.gleapApiKey!);
   listenAuthTokenChanges();
   bool isAuth = false;
   try {
@@ -54,16 +56,14 @@ Future<bool> _init() async {
   } catch (e) {} // if no connect this will fail
 
   if (isAuth) MixpanelManager().identify();
+  if (isAuth) identifyGleap();
 
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  if (Env.oneSignalAppId != null) {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize(Env.oneSignalAppId!);
-    OneSignal.login(SharedPreferencesUtil().uid);
-  }
+
+  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
@@ -84,7 +84,8 @@ void main() async {
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          // invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          invocationEvents: [],
         );
         if (isAuth) {
           Instabug.identifyUser(
@@ -133,6 +134,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
         providers: [
+          ListenableProvider(create: (context) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
@@ -141,15 +143,16 @@ class _MyAppState extends State<MyApp> {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updatePluginProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProvider(create: (context) => WebSocketProvider()),
+          ChangeNotifierProxyProvider3<MemoryProvider, MessageProvider, WebSocketProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
+            update: (BuildContext context, memory, message, wsProvider, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(memory, message, wsProvider)) ?? CaptureProvider(),
           ),
-          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+          ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, value, DeviceProvider? previous) =>
-                (previous?..setProvider(value)) ?? DeviceProvider(),
+            update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
+                (previous?..setProviders(captureProvider, wsProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
@@ -157,10 +160,10 @@ class _MyAppState extends State<MyApp> {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider3<DeviceProvider, CaptureProvider, WebSocketProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, value, SpeechProfileProvider? previous) =>
-                (previous?..setProvider(value)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
           ),
         ],
         builder: (context, child) {
@@ -200,11 +203,22 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
-                  ? const HomePageWrapper()
-                  : const OnboardingWrapper(),
+              home: const AuthWrapper(),
             ),
           );
         });
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (SharedPreferencesUtil().onboardingCompleted && user != null) {
+      return const HomePageWrapper();
+    }
+    return const OnboardingWrapper();
   }
 }

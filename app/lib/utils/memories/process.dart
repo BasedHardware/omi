@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -20,6 +20,7 @@ Future<ServerMemory?> processTranscriptContent({
   Geolocation? geolocation,
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
+  String? source,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -32,6 +33,7 @@ Future<ServerMemory?> processTranscriptContent({
     triggerIntegrations: triggerIntegrations,
     language: language,
     audioFile: audioFile,
+    source: source,
   );
   if (result == null || result.memory == null) return null;
 

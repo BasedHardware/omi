@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends
 import database.chat as chat_db
 from models.chat import Message, SendMessageRequest, MessageSender
 from utils.llm import qa_rag, initial_chat_message
-from utils.memories.facts import get_prompt_data
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
 from utils.retrieval.rag import retrieve_rag_context
@@ -40,8 +39,7 @@ def send_message(
     messages = filter_messages(messages, plugin_id)
 
     context_str, memories = retrieve_rag_context(uid, messages)
-    user_name, user_facts = get_prompt_data(uid)
-    response: str = qa_rag(user_name, user_facts, context_str, messages, plugin)
+    response: str = qa_rag(uid, context_str, messages, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -60,8 +58,7 @@ def send_message(
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
     plugin = get_plugin_by_id(plugin_id)
-    user_name, user_facts = get_prompt_data(uid)
-    text = initial_chat_message(user_name, user_facts, plugin)
+    text = initial_chat_message(uid, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),

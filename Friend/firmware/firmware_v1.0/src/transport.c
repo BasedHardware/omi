@@ -13,20 +13,26 @@
 #include "utils.h"
 #include "btutils.h"
 #include "lib/battery/battery.h"
-
-
+#include "speaker.h"
+#include "button.h"
+#include "sdcard.h"
 #include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
-
+extern bool storage_is_on;
+extern uint8_t file_count;
+extern uint32_t file_num_array[20];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
 //
 // Internal
 //
+
+
+static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
 static struct bt_conn_cb _callback_references;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
@@ -48,12 +54,18 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+#ifdef CONFIG_ENABLE_SPEAKER
+     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+#endif
+    
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -230,6 +242,14 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
+static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+ {
+     uint16_t amount = 0;
+     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
+     amount = speak(len, buf);
+     return len;
+ }
+
 //
 // DFU Service Handlers
 //
@@ -268,6 +288,8 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     }
     return len;
 }
+
+
 
 //
 // Battery Service Handlers
@@ -308,6 +330,7 @@ void broadcast_battery_level(struct k_work *work_item) {
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+    storage_is_on = true;
 
     err = bt_conn_get_info(conn, &info);
     if (err)
@@ -338,6 +361,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+    storage_is_on = false;
 
     LOG_INF("Transport disconnected");
     bt_conn_unref(conn);
@@ -431,12 +455,13 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        LOG_WRN("Failed to read from ring buffer %d", tx_buffer_size);
+        printk("Failed to read from ring buffer. not enough data %d\n", tx_buffer_size);
         return false;
     }
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
+    // printk("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -446,16 +471,18 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 1024);
+K_THREAD_STACK_DEFINE(pusher_stack, 2048);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
+static char storage_temp_data[CODEC_OUTPUT_MAX_BYTES];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
+
         return false;
     }
 
@@ -472,6 +499,8 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+        // printk("sent %d bytes \n",tx_buffer_size);
+
         offset += packet_size;
         index++;
 
@@ -501,11 +530,41 @@ static bool push_to_gatt(struct bt_conn *conn)
 
     return true;
 }
+#define OPUS_PREFIX_LENGTH 1
+#define OPUS_PADDED_LENGTH 100
+static uint32_t offset = 0;
+
+bool write_to_storage(void) {
+    if (!read_from_tx_queue())
+    {
+        return false;
+    }
+
+    uint8_t *buffer = tx_buffer+3;
+    uint32_t packet_size = tx_buffer_size;
+    
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH);
+    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH, buffer, packet_size);
+    storage_temp_data[0] = (uint8_t)tx_buffer_size;
+    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+    write_to_file(write_ptr,OPUS_PADDED_LENGTH);
+
+    offset=offset+packet_size;
+    return true;
+}
+
+static bool use_storage = true;
+#define MAX_FILES 10
+#define MAX_AUDIO_FILE_SIZE 300000
+
+
 
 void pusher(void)
 {
+    k_msleep(500);
     while (1)
     {
+
 
         //
         // Load current connection
@@ -513,6 +572,9 @@ void pusher(void)
 
         struct bt_conn *conn = current_connection;
         bool use_gatt = true;
+        uint32_t offset = 0;
+        int length = 1;
+
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -530,17 +592,37 @@ void pusher(void)
         {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
+        
+        if (!valid   && ( length < 100) && !storage_is_on) {
 
-        // If no valid mode exists - discard whole buffer
-        if (!valid)
+        bool result = write_to_storage();
+        file_num_array[file_count-1] = get_file_size(file_count);
+        printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
+        
+    
+        if (result)
         {
-            ring_buf_reset(&ring_buf);
-            k_sleep(K_MSEC(10));
+            
+            // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
+            //     printk("Audio file size limit reached, making new file\n");
+            //     // make_and_rebase_audio_file(get_info_file_length()+1);
+            // }
         }
+        else {
+             k_sleep(K_MSEC(50));
+        }
+        }
+        // if (!valid)
+        // {
+        //     ring_buf_reset(&ring_buf);
+        //     k_sleep(K_MSEC(10));
+        // }
 
         // Handle GATT
+
         if (use_gatt && valid)
         {
+
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
@@ -548,12 +630,17 @@ void pusher(void)
             }
         }
 
+
+       k_yield();
+
         if (conn)
         {
             bt_conn_unref(conn);
         }
     }
 }
+
+
 
 //
 // Public functions
@@ -587,10 +674,23 @@ int transport_start()
      button_init();
      register_button_service();
 #endif
+
+#ifdef CONFIG_ENABLE_SPEAKER
+
+err = speaker_init();
+if(!err) {
+    LOG_ERR("Speaker failed to start");
+    return 0;
+}
+
+play_boot_sound();
+    
+#endif
     // Start advertising
     
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
+   
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {

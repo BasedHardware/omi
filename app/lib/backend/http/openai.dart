@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
@@ -40,7 +40,11 @@ Future<String> getPhotoDescription(Uint8List data) async {
     {
       'role': 'user',
       'content': [
-        {'type': "text", 'text': "What’s in this image?"},
+        {
+          'type': "text",
+          'text':
+              "What’s in this image? Describe in detail. The camera quality may be low, but do your best to accurately describe what you see anyway. The image may or may not be rotated 90 degrees. Do not comment on the image quality, damage, or distortion; only describe the content. If there is any text, please include the text content (including original language and translating to English if necessary).  If there is any media/tv/book/website/screen/etc, do your best to identify what it is and what it's about."
+        },
         {
           'type': "image_url",
           'image_url': {"url": "data:image/jpeg;base64,${base64Encode(data)}"},
@@ -71,7 +75,11 @@ Future<dynamic> gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    var bodyData = {'model': model, 'messages': messages, 'temperature': temperature};
+    var bodyData = {
+      'model': model,
+      'messages': messages,
+      'temperature': temperature
+    };
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
     } else if (tools.isNotEmpty) {
@@ -84,7 +92,8 @@ Future<dynamic> gptApiCall({
     body = jsonEncode(bodyData);
   }
 
-  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response =
+      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   return extractContentFromResponse(
     response,
     isEmbedding: urlSuffix == 'embeddings',
@@ -92,13 +101,15 @@ Future<dynamic> gptApiCall({
   );
 }
 
-Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
+Future<String> executeGptPrompt(String? prompt,
+    {bool ignoreCache = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
-  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty)
+    return cachedResponse;
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}

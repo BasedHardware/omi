@@ -36,13 +36,6 @@ workflows:
           include: true
     working_directory: app
     scripts:
-      - name: Installing Shorebird
-        script: |
-          # Install the Shorebird CLI
-          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
-          # Set Shorebird PATH
-          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
-
       - name: Installing Opus
         script: |
           brew install opus
@@ -72,7 +65,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -109,15 +102,15 @@ workflows:
         script: |
           cd ios && pod install --repo-update
 
-      - name: Release ipa with Shorebird
+      - name: Flutter build ipa
         script: |
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
-
           # Build
-          shorebird release ios \
-            --flavor prod -- \
+          flutter build ipa \
+            --release \
+            --flavor prod \
             --export-options-plist=$HOME/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
@@ -138,6 +131,7 @@ workflows:
         submit_to_testflight: true
         beta_groups:
           - Internal
+          - Discord Folks
         submit_to_app_store: false
 
   android-prod-internal:
@@ -154,7 +148,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -174,13 +167,6 @@ workflows:
           include: true
     working_directory: app
     scripts:
-      - name: Installing Shorebird
-        script: |
-          # Install the Shorebird CLI
-          curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
-          # Set Shorebird PATH
-          echo PATH="/Users/builder/.shorebird/bin:$PATH" >> $CM_ENV
-
       - name: Installing Android SDK
         script: |
           export ANDROID_HOME="$HOME/opt/android-sdk"
@@ -244,7 +230,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -275,14 +261,15 @@ workflows:
       - name: Run build runner
         script: |
           dart run build_runner build
-      - name: Release AAB with Shorebird
+      - name: Build AAB with Flutter
         script: | 
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
           echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
           # Should use bump version automatically by CI
-          shorebird release android \
+          flutter build appbundle \
+            --release \
             --flavor prod
     artifacts:
       - build/**/outputs/**/*.aab
@@ -300,8 +287,10 @@ workflows:
           failure: false
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: $GOOGLE_PLAY_TRACK
+        track: "internal"
         submit_as_draft: false
+        release_promotion:
+          track: "alpha"
 
   ios-prod-patch:
     name: Patch iOS to Production
@@ -376,7 +365,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
@@ -451,7 +440,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -541,7 +529,7 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.develop \
+            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
             --android-app-id=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \

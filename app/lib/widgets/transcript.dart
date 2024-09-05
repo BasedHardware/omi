@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class TranscriptWidget extends StatefulWidget {
@@ -46,6 +47,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         try {
           text = utf8.decode(data.text.toString().codeUnits);
         } catch (e) {}
+        Person? person = data.personId != null ? SharedPreferencesUtil().getPersonById(data.personId!) : null;
         return Padding(
           padding: EdgeInsetsDirectional.fromSTEB(
               widget.horizontalMargin ? 16 : 0, 0.0, widget.horizontalMargin ? 16 : 0, 0.0),
@@ -62,7 +64,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Image.asset(
-                      data.isUser ? 'assets/images/speaker_0_icon.png' : 'assets/images/speaker_1_icon.png',
+                      data.isUser
+                          ? 'assets/images/speaker_0_icon.png'
+                          : person != null
+                              ? speakerImagePath[person.colorIdx!]
+                              : 'assets/images/speaker_1_icon.png',
                       width: 26,
                       height: 26,
                     ),
@@ -73,9 +79,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               ? SharedPreferencesUtil().givenName
                               : 'You'
                           : data.personId != null
-                              ? SharedPreferencesUtil().getPersonById(data.personId!)?.name ?? 'Deleted Person'
+                              ? person?.name ?? 'Deleted Person'
                               : 'Speaker ${data.speakerId}',
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                      style: const TextStyle(
+                          //  person != null ? speakerColors[person.colorIdx!] :
+                          color: Colors.white,
+                          fontSize: 18),
                     ),
                     widget.canDisplaySeconds ? const SizedBox(width: 12) : const SizedBox(),
                     // pad as start-end as hours:minutes:seconds e.g. 01:23:45
@@ -93,7 +102,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 alignment: Alignment.centerLeft,
                 child: SelectionArea(
                   child: Text(
-                    text,
+                    tryDecodingText(text),
                     style: const TextStyle(letterSpacing: 0.0, color: Colors.grey),
                     textAlign: TextAlign.left,
                   ),
@@ -104,5 +113,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         );
       },
     );
+  }
+}
+
+String tryDecodingText(String text) {
+  try {
+    return utf8.decode(text.toString().codeUnits);
+  } catch (e) {
+    return text;
   }
 }

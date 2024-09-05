@@ -4,27 +4,29 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
-import 'package:friend_private/pages/capture/logic/websocket_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -32,31 +34,33 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
-class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin, MessageNotifierMixin {
+class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
+  WebSocketProvider? webSocketProvider;
 
-  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
+  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p, WebSocketProvider? wsProvider) {
     memoryProvider = mp;
     messageProvider = p;
+    webSocketProvider = wsProvider;
+    notifyListeners();
   }
 
   BTDeviceStruct? connectedDevice;
   bool isGlasses = false;
-
-  bool restartAudioProcessing = false;
 
   List<TranscriptSegment> segments = [];
   Geolocation? geolocation;
 
   bool hasTranscripts = false;
   bool memoryCreating = false;
-  bool webSocketConnected = false;
-  bool webSocketConnecting = false;
+  bool audioBytesConnected = false;
 
   static const quietSecondsForMemoryCreation = 120;
 
   StreamSubscription? _bleBytesStream;
+
+  get bleBytesStream => _bleBytesStream;
 
   var record = AudioRecorder();
   RecordingState recordingState = RecordingState.stop;
@@ -72,7 +76,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
+
   // -----------------------
+
+  bool resetStateAlreadyCalled = false;
+
+  void setResetStateAlreadyCalled(bool value) {
+    resetStateAlreadyCalled = value;
+    notifyListeners();
+  }
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -89,13 +101,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     notifyListeners();
   }
 
-  void setWebSocketConnected(bool value) {
-    webSocketConnected = value;
-    notifyListeners();
-  }
-
-  void setWebSocketConnecting(bool value) {
-    webSocketConnecting = value;
+  void setAudioBytesConnected(bool value) {
+    audioBytesConnected = value;
     notifyListeners();
   }
 
@@ -161,6 +168,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     if (memory != null) {
       // use memory provider to add memory
       MixpanelManager().memoryCreated(memory);
+      _handleCalendarCreation(memory);
       memoryProvider?.addMemory(memory);
       if (memoryProvider?.memories.isEmpty ?? false) {
         memoryProvider?.getMoreMemoriesFromServer();
@@ -171,8 +179,15 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
       setMemoryCreating(false);
       try {
         memoryPostProcessing(file, memory.id).then((postProcessed) {
-          // use memory provider to update memory
-          memoryProvider?.updateMemory(postProcessed);
+          if (postProcessed != null) {
+            memoryProvider?.updateMemory(postProcessed);
+          } else {
+            memory!.postprocessing = MemoryPostProcessing(
+              status: MemoryPostProcessingStatus.failed,
+              model: MemoryPostProcessingModel.fal_whisperx,
+            );
+            memoryProvider?.updateMemory(memory);
+          }
         });
       } catch (e) {
         print('Error occurred during memory post-processing: $e');
@@ -198,30 +213,52 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     return true;
   }
 
+  _handleCalendarCreation(ServerMemory memory) {
+    if (!SharedPreferencesUtil().calendarEnabled) return;
+    if (SharedPreferencesUtil().calendarType != 'auto') return;
+
+    List<Event> events = memory.structured.events;
+    if (events.isEmpty) return;
+
+    List<int> indexes = events.mapIndexed((index, e) => index).toList();
+    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+    for (var i = 0; i < events.length; i++) {
+      events[i].created = true;
+      CalendarUtil().createEvent(
+        events[i].title,
+        events[i].startsAt,
+        events[i].duration,
+        description: events[i].description,
+      );
+    }
+  }
+
   Future<void> initiateWebsocket([
     BleAudioCodec? audioCodec,
     int? sampleRate,
   ]) async {
-    setWebSocketConnecting(true);
-    print('initiateWebsocket');
+    // setWebSocketConnecting(true);
+    print('initiateWebsocket in capture_provider');
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
-    await initWebSocket(
+    print('is ws null: ${webSocketProvider == null}');
+    await webSocketProvider?.initWebSocket(
       codec: codec,
       sampleRate: sampleRate,
-      includeSpeechProfile: false,
+      includeSpeechProfile: true,
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
-        setWebSocketConnecting(false);
-        setWebSocketConnected(true);
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
           secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
         }
+        print('bottom in onConnectionSuccess');
         notifyListeners();
       },
       onConnectionFailed: (err) {
+        print('inside onConnectionFailed');
+        print('err: $err');
         notifyListeners();
       },
       onConnectionClosed: (int? closeCode, String? closeReason) {
@@ -272,56 +309,126 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
-    print('streamAudioToWs');
+    print('streamAudioToWs in capture_provider');
     audioStorage = WavBytesUtil(codec: codec);
+    if (_bleBytesStream != null) {
+      _bleBytesStream?.cancel();
+    }
     _bleBytesStream = await getBleAudioBytesListener(
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage!.storeFramePacket(value);
-        // print(value);
-        value.removeRange(0, 3);
+        final trimmedValue = value.sublist(3);
         // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
-        if (wsConnectionState == WebsocketConnectionStatus.connected) {
-          websocketChannel?.sink.add(value);
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+          webSocketProvider?.websocketChannel?.sink.add(trimmedValue);
         }
       },
     );
+    setAudioBytesConnected(true);
     notifyListeners();
   }
 
-  void setRestartAudioProcessing(bool value) {
-    restartAudioProcessing = value;
+  void clearTranscripts() {
+    segments = [];
+    SharedPreferencesUtil().transcriptSegments = [];
+    setHasTranscripts(false);
     notifyListeners();
   }
 
-  Future resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
-    //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
-    debugPrint('resetState: $restartBytesProcessing');
+  Future resetForSpeechProfile() async {
+    closeBleStream();
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset for speech profile');
+    setAudioBytesConnected(false);
+    notifyListeners();
+  }
+
+  Future<void> resetState({
+    bool restartBytesProcessing = true,
+    bool isFromSpeechProfile = false,
+    BTDeviceStruct? btDevice,
+  }) async {
+    if (resetStateAlreadyCalled) {
+      debugPrint('resetState already called');
+      return;
+    }
+    setResetStateAlreadyCalled(true);
+    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing, isFromSpeechProfile=$isFromSpeechProfile');
+
+    _cleanupCurrentState();
+    await startOpenGlass();
+    if (!isFromSpeechProfile) {
+      await _handleMemoryCreation(restartBytesProcessing);
+    }
+
+    bool codecChanged = await _checkCodecChange();
+
+    if (restartBytesProcessing || codecChanged) {
+      await _manageWebSocketConnection(codecChanged, isFromSpeechProfile);
+    }
+
+    await initiateFriendAudioStreaming(isFromSpeechProfile);
+
+    setResetStateAlreadyCalled(false);
+    notifyListeners();
+  }
+
+  void _cleanupCurrentState() {
     closeBleStream();
     cancelMemoryCreationTimer();
+    setAudioBytesConnected(false);
+  }
 
+  Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      var res = await createMemory(forcedCreation: true);
-      notifyListeners();
-      if (res != null && !res) {
-        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+      bool? result = await createMemory(forcedCreation: true);
+      if (result != null && !result) {
+        notifyError('Memory creation failed. It\'s stored locally and will be retried soon.');
       } else {
         notifyInfo('Memory created successfully 🚀');
       }
     }
-    if (restartBytesProcessing) {
-      if (webSocketConnected) {
-        closeWebSocket();
-        initiateWebsocket();
-      } else {
-        initiateWebsocket();
+  }
+
+  Future<bool> _checkCodecChange() async {
+    if (connectedDevice != null) {
+      BleAudioCodec newCodec = await getAudioCodec(connectedDevice!.id);
+      if (SharedPreferencesUtil().deviceCodec != newCodec) {
+        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+        SharedPreferencesUtil().deviceCodec = newCodec;
+        return true;
       }
     }
-    setRestartAudioProcessing(restartBytesProcessing);
-    startOpenGlass();
-    initiateFriendAudioStreaming();
+    return false;
+  }
+
+  Future<void> _manageWebSocketConnection(bool codecChanged, bool isFromSpeechProfile) async {
+    if (codecChanged || webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
+      await webSocketProvider?.closeWebSocketWithoutReconnect('reset state $isFromSpeechProfile');
+      // if (!isFromSpeechProfile) {
+      await initiateWebsocket();
+      // }
+    }
+  }
+
+  Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
+    print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
+    if (connectedDevice == null) return;
+
+    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != codec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
+      SharedPreferencesUtil().deviceCodec = codec;
+      notifyInfo('FIM_CHANGE');
+      await _manageWebSocketConnection(true, isFromSpeechProfile);
+    }
+
+    if (!audioBytesConnected) {
+      await streamAudioToWs(connectedDevice!.id, codec);
+    }
+
     notifyListeners();
   }
 
@@ -344,21 +451,7 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
     if (!isGlasses) return;
     await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
-    closeWebSocket();
-    notifyListeners();
-  }
-
-  Future<void> initiateFriendAudioStreaming() async {
-    if (connectedDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
-      SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
-    } else {
-      streamAudioToWs(connectedDevice!.id, codec);
-    }
-
+    webSocketProvider?.closeWebSocketWithoutReconnect('reset state open glass');
     notifyListeners();
   }
 
@@ -391,8 +484,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     );
     updateRecordingState(RecordingState.record);
     stream.listen((data) async {
-      if (wsConnectionState == WebsocketConnectionStatus.connected) {
-        websocketChannel?.sink.add(data);
+      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+        webSocketProvider?.websocketChannel?.sink.add(data);
       }
     });
   }
@@ -409,7 +502,8 @@ class CaptureProvider extends ChangeNotifier with WebSocketMixin, OpenGlassMixin
     if (await FlutterBackgroundService().isRunning()) {
       FlutterBackgroundService().on('audioBytes').listen((event) {
         Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (wsConnectionState == WebsocketConnectionStatus.connected) websocketChannel?.sink.add(convertedList);
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
+          webSocketProvider?.websocketChannel?.sink.add(convertedList);
       });
       FlutterBackgroundService().on('stateUpdate').listen((event) {
         if (event!['state'] == 'recording') {

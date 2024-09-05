@@ -7,7 +7,8 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
-
+#include "sdcard.h"
+#include "storage.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -124,25 +125,6 @@ int main(void)
     }
     // Run the boot LED sequence
     boot_led_sequence();
-
-    // // Indicate storage initialization
-    // set_led_red(true);
-    // LOG_INF("Initializing storage...");
-    // err = storage_init();
-    // if (err) {
-    //     LOG_ERR("Failed to initialize storage: %d", err);
-    //     // Blink red LED to indicate error
-    //     for (int i = 0; i < 5; i++) {
-    //         set_led_red(!gpio_pin_get_dt(&led_red));
-    //         k_msleep(200);
-    //     }
-    //     set_led_red(false);
-    //     return err;
-    // }
-    // LOG_INF("Storage initialized successfully");
-    // set_led_red(false);
-    // test_sd_card();
-
     // Indicate transport initialization
     set_led_green(true);
     err = transport_start();
@@ -158,7 +140,15 @@ int main(void)
     }
     set_led_green(false);
 
-    // Indicate codec initialization
+    err = mount_sd_card();
+    printk("result of mount:%d\n",err);
+
+    k_msleep(500);
+    storage_init();
+
+
+
+    
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
@@ -196,7 +186,7 @@ int main(void)
     set_led_green(false);
 
     // Indicate successful initialization
-    LOG_INF("Omi firmware initialized successfully");
+    LOG_INF("Omi firmware initialized successfully\n");
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);
