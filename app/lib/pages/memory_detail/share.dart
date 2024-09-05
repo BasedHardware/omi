@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -174,6 +175,35 @@ void showShareBottomSheet(
                     ),
                   ),
                   const SizedBox(height: 10),
+                  Card(
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                    child: Column(
+                      children: [
+                        _buildListTile(
+                          context,
+                          title: 'Copy URL',
+                          icon: Icons.link,
+                          onTap: () async {
+                            // TODO: include loading indicator
+                            bool shared = await setMemoryVisibility(memory.id);
+                            if (!shared) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Memory URL could not be shared.')),
+                              );
+                              return;
+                            }
+                            Clipboard.setData(ClipboardData(text: 'https://h.omi.me/memories/${memory.id}'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('URL Copied to Clipboard')),
+                            );
+                            Navigator.pop(ctx);
+                            HapticFeedback.lightImpact();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Card(
                     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                     child: Column(

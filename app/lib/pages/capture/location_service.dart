@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:location/location.dart';
@@ -52,15 +52,12 @@ class LocationService {
   Future hasPermission() async => (await location.hasPermission()) == PermissionStatus.granted;
 
   Future<void> getDeviceLocation() async {
-    print("Getting location data");
     locationData = await location.getLocation();
-    print("Location data: $locationData");
   }
 
   Future<Geolocation?> getGeolocationDetails() async {
     try {
       if (await hasPermission()) {
-        print('background mode enabled: ${await location.isBackgroundModeEnabled()}');
         if (await location.isBackgroundModeEnabled()) {
           if (await location.serviceEnabled()) {
             await location.requestService();

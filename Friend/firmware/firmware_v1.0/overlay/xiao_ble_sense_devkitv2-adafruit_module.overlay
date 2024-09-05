@@ -8,48 +8,40 @@
 &pinctrl {
     i2s0_default: i2s0_default {
         group1 {
-            psels = <NRF_PSEL(I2S_SCK_M, 0, 3)>,    // SCK pin (bit clock) A3
-                    <NRF_PSEL(I2S_LRCK_M, 0, 2)>,   // LRCK pin (word select clock) A2
-                    <NRF_PSEL(I2S_SDOUT, 0, 1)>;    // SDOUT pin (data out) A1
+            psels = <NRF_PSEL(I2S_SCK_M, 0, 29)>,    // SCK pin (bit clock) A3
+                    <NRF_PSEL(I2S_LRCK_M, 0, 28)>,   // LRCK pin (word select clock) A2
+                    <NRF_PSEL(I2S_SDOUT, 0, 3)>;    // SDOUT pin (data out) A1
         };
     };
 };
 
 &spi2 {
     status = "okay";
-    pinctrl-0 = <&spi2_default>;
-    pinctrl-1 = <&spi2_sleep>;
+    pinctrl-0 = <&custom_spi>;
+    pinctrl-1 = <&custom_spi>;
     pinctrl-names = "default", "sleep";
-    cs-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;  // SD chip select pin (P0.13)
+    cs-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;  // CS pin on P0.28
 
     sdhc0: sdhc@0 {
-        compatible = "zephyr,mmc-spi-slot";
+        compatible = "zephyr,sdhc-spi-slot";
         reg = <0>;
         status = "okay";
         label = "SDHC_0";
-        spi-max-frequency = <24000000>;
+        mmc {
+            compatible = "zephyr,sdmmc-disk";
+            status = "okay";
+        };
+        spi-max-frequency = <24000000>;  // 24 MHz SPI speed for SD card
     };
 };
 
 &pinctrl {
-    spi2_default: spi2_default {
+    custom_spi: custom_spi {
         group1 {
-            psels = <NRF_PSEL(SPIM_SCK, 1, 15)>,    // SCK connected to P1.15
-                    <NRF_PSEL(SPIM_MOSI, 1, 13)>,   // MOSI connected to P1.13
-                    <NRF_PSEL(SPIM_MISO, 1, 14)>;   // MISO connected to P1.14
-        };
-    };
-
-    spi2_sleep: spi2_sleep {
-        group1 {
-            psels = <NRF_PSEL(SPIM_SCK, 1, 15)>,
-                    <NRF_PSEL(SPIM_MOSI, 1, 13)>,
-                    <NRF_PSEL(SPIM_MISO, 1, 14)>;
-            low-power-enable;
+            psels = <NRF_PSEL(SPIM_SCK, 1, 13)>,  // SCK on P1.13
+                    <NRF_PSEL(SPIM_MOSI, 1, 15)>, // MOSI on P1.15
+                    <NRF_PSEL(SPIM_MISO, 1, 14)>; // MISO on P1.14
         };
     };
 };
 
-/ {
-    /delete-node/ lsm6dsl@0;
-};

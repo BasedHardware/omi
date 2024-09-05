@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/memory_provider.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -171,7 +170,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                             if (provider.loadingExportMemories) return;
                             setState(() => provider.loadingExportMemories = true);
                             List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
-                            String json = getPrettyJSONString(memories.map((m) => m.toJson()).toList());
+                            String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/memories.json');
                             await file.writeAsString(json);

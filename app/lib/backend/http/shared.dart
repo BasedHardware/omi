@@ -18,7 +18,11 @@ Future<String> getAuthHeader() async {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
   }
   if (SharedPreferencesUtil().authToken == '') {
-    throw Exception('No auth token found');
+    if (isSignedIn()) {
+      // should only throw if the user is signed in but the token is not found
+      // if the user is not signed in, the token will always be empty
+      throw Exception('No auth token found');
+    }
   }
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
@@ -52,7 +56,8 @@ Future<http.Response?> makeApiCall({
     } else if (method == 'DELETE') {
       return await client.delete(Uri.parse(url), headers: headers);
     } else if (method == 'PATCH') {
-      return await client.patch(Uri.parse(url), headers: headers);
+      headers['Content-Type'] = 'application/json';
+      return await client.patch(Uri.parse(url), headers: headers, body: body);
     } else {
       throw Exception('Unsupported HTTP method: $method');
     }

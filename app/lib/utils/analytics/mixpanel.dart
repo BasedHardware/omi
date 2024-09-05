@@ -27,6 +27,8 @@ class MixpanelManager {
   MixpanelManager._internal();
 
   setPeopleValues() {
+    setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
+    setUserProperty('Location Enabled', _preferences.locationEnabled);
     setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
     setUserProperty('Plugins Enabled Count', _preferences.pluginsList.map((p) => p.id).toSet().length);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);

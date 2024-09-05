@@ -1,5 +1,6 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
 
@@ -21,35 +22,71 @@ class CalendarUtil {
     _calendarPlugin = DeviceCalendarPlugin();
   }
 
-  enableCalendarAccess() async {
-    var permissionsGranted = await _calendarPlugin!.hasPermissions();
-    if (permissionsGranted.isSuccess && (permissionsGranted.data == null || permissionsGranted.data == false)) {
-      permissionsGranted = await _calendarPlugin!.requestPermissions();
-      if (!permissionsGranted.isSuccess || permissionsGranted.data == null || permissionsGranted.data == false) {
-        return false;
+  Future<bool> enableCalendarAccess() async {
+    print('enableCalendarAccess');
+    try {
+      var permissionsGranted = await _calendarPlugin!.hasPermissions();
+      print('permissionsGranted: ${permissionsGranted.data}');
+
+      if (permissionsGranted.isSuccess && (permissionsGranted.data == null || permissionsGranted.data == false)) {
+        permissionsGranted = await _calendarPlugin!.requestPermissions();
+        print('permissionsGranted after request: ${permissionsGranted.data}');
       }
+
+      bool hasAccess = permissionsGranted.isSuccess && permissionsGranted.data == true;
+      print('enableCalendarAccess: $hasAccess');
+      return hasAccess;
+    } on PlatformException catch (e) {
+      print('PlatformException in enableCalendarAccess: ${e.message}');
+      return false;
     }
-    return true;
   }
 
   Future<bool> hasCalendarAccess() async {
-    final permissionsGranted = await _calendarPlugin!.hasPermissions();
-    return permissionsGranted.isSuccess && permissionsGranted.data == true;
+    print('hasCalendarAccess');
+    try {
+      final permissionsGranted = await _calendarPlugin!.hasPermissions();
+      return permissionsGranted.isSuccess && permissionsGranted.data == true;
+    } on PlatformException catch (e) {
+      print('PlatformException in hasCalendarAccess: ${e.message}');
+      return false;
+    }
   }
 
   Future<bool> calendarPermissionAsked() async {
-    final permissionsGranted = await _calendarPlugin!.hasPermissions();
-    return permissionsGranted.isSuccess;
+    try {
+      final permissionsGranted = await _calendarPlugin!.hasPermissions();
+      return permissionsGranted.isSuccess;
+    } on PlatformException catch (e) {
+      print('PlatformException in calendarPermissionAsked: ${e.message}');
+      return false;
+    }
   }
 
   Future<List<Calendar>> getCalendars() async {
-    bool hasAccess = await enableCalendarAccess();
-    if (!hasAccess) return [];
-
+    print('getCalendars');
     try {
+      bool hasAccess = await enableCalendarAccess();
+      if (!hasAccess) return [];
+      print('getCalendars $hasAccess');
+
       final calendarsResult = await _calendarPlugin!.retrieveCalendars();
+      print('calendarsResult: ${calendarsResult.data}');
       if (calendarsResult.isSuccess && calendarsResult.data != null) {
         return calendarsResult.data!;
+      }
+    } on PlatformException catch (e) {
+      print('PlatformException in getCalendars: ${e.message}');
+      if (e.code == '401') {
+        // Try to request permissions again
+        var permissionsGranted = await _calendarPlugin!.requestPermissions();
+        if (permissionsGranted.isSuccess && permissionsGranted.data == true) {
+          // If permissions are granted, try to retrieve calendars again
+          return await getCalendars();
+        } else {
+          print('Calendar modification permission denied even after re-requesting');
+          return [];
+        }
       }
     } catch (e) {
       print('Failed to get calendars: $e');

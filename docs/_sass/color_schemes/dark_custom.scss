@@ -1,0 +1,137 @@
+@import "./color_schemes/dark";
+
+// Background colors
+$body-background-color: #1c1e22;
+$sidebar-color: #1e2024; // Slightly lighter than body background
+$search-background-color: $body-background-color;
+$table-background-color: $body-background-color;
+$code-background-color: #2c2e31;
+
+// Text colors
+$body-text-color: #f0f0f0; // Brighter for better contrast
+$body-heading-color: #ffffff; // White for headers
+$link-color: #5fa8ee; // Brighter blue for links
+$nav-child-link-color: #a0a8b4; // Slightly brighter
+$search-result-preview-color: #c0c0c0; // Brighter
+
+// Button colors
+$btn-primary-color: #5fa8ee; // Matching link color
+$base-button-color: #2c2e31;
+
+// Border color
+$border-color: #3a3d42; // Slightly lighter for subtle borders
+
+// Accent color
+$accent-color: #99EC7E; // Soft teal
+
+// Additional custom styles
+.main-content {
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    margin-top: 2em;
+    margin-bottom: 0.5em;
+  }
+
+  h1 {
+    font-size: 2.5em;
+    color: $accent-color;
+  }
+}
+
+// Code blocks
+pre.highlight {
+  border: 1px solid $border-color;
+  border-radius: 4px;
+  background-color: darken($code-background-color, 2%);
+}
+
+// Links
+a:hover {
+  text-decoration: underline;
+}
+
+// Icons
+.icon {
+  color: $accent-color;
+}
+
+// Improved spacing
+p, li {
+  line-height: 1.6;
+}
+
+// Section dividers
+.section-divider {
+  border-bottom: 1px solid $border-color;
+  margin: 2em 0;
+}
+
+// Custom scrollbar
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: $body-background-color;
+}
+
+::-webkit-scrollbar-thumb {
+  background: lighten($body-background-color, 10%);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: lighten($body-background-color, 15%);
+}
+
+// Sidebar improvements
+.side-bar {
+  background-color: $sidebar-color;
+  border-right: 1px solid $border-color;
+}
+
+.nav-list .nav-list-item .nav-list-link:hover {
+  background-color: lighten($sidebar-color, 5%);
+}
+
+.nav-list .nav-list-item .nav-list-link {
+  &:hover, &.active {
+    background-color: lighten($sidebar-color, 10%);
+    border-left: 3px solid $accent-color;
+    color: $accent-color;
+    transition: all 0.2s ease;
+  }
+}
+
+// Main content area
+.main {
+  background-color: $body-background-color;
+}
+
+// Search input
+.search-input {
+  background-color: lighten($body-background-color, 5%);
+  border-color: $border-color;
+}
+
+// Tables
+table {
+  border-color: $border-color;
+}
+
+th {
+  background-color: lighten($body-background-color, 5%);
+}
+
+// Buttons
+.btn {
+  &:hover {
+    background-color: lighten($base-button-color, 10%);
+  }
+}
+
+.btn-primary {
+  &:hover {
+    background-color: darken($btn-primary-color, 10%);
+  }
+}

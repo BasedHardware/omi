@@ -18,6 +18,7 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
         res = requests.get(plugin.external_integration.setup_completed_url + f'?uid={uid}')
+        print('enable_plugin_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='Plugin setup is not completed')
 
@@ -54,7 +55,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = next(filter(lambda x: x['id'] == plugin_id, get_plugins_data(uid)), None)
+    plugin = next(filter(lambda x: x.id == plugin_id, get_plugins_data(uid)), None)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
 

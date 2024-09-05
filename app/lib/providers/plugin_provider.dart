@@ -27,12 +27,10 @@ class PluginProvider extends BaseProvider {
 
   Future getPlugins() async {
     setLoadingState(true);
-    if (SharedPreferencesUtil().pluginsList.isEmpty) {
-      plugins = await retrievePlugins();
-      updatePrefPlugins();
-    } else {
-      setPlugins();
-    }
+    plugins = await retrievePlugins();
+    updatePrefPlugins();
+    setPlugins();
+    setLoadingState(false);
     notifyListeners();
   }
 
