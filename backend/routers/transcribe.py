@@ -408,7 +408,7 @@ async def _websocket_util(
                     should_create_memory_time_words = True
                     break
 
-        print(f"Should create memory {should_create_memory_time and should_create_memory_time_words} - {timer_start} {segment_end} {now}")
+        print(f"Should create memory {should_create_memory_time and should_create_memory_time_words} - {timer_start} {segment_end} {min_seconds_limit} {now}")
         if should_create_memory_time and should_create_memory_time_words:
             memory = await _create_memory()
             if not memory:

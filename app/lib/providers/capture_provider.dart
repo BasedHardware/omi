@@ -369,7 +369,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     return true;
   }
 
-  void _cleanNew() {
+  void _cleanNew() async {
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
@@ -384,6 +384,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     photos = [];
     conversationId = const Uuid().v4();
     processingMemoryId = null;
+
+    // Create new socket session
+    // Warn: should have a better solution to keep the socket alived
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset new memory session');
+    await initiateWebsocket();
   }
 
   _handleCalendarCreation(ServerMemory memory) {
