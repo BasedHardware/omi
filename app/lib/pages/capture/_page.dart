@@ -251,7 +251,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       }
       provider.updateRecordingState(RecordingState.stop);
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().createMemory();
+      await context.read<CaptureProvider>().tryCreateMemoryManually();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
