@@ -14,7 +14,7 @@ class PluginReview {
   factory PluginReview.fromJson(Map<String, dynamic> json) {
     return PluginReview(
       uid: json['uid'],
-      ratedAt: DateTime.parse(json['rated_at']),
+      ratedAt: DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
       review: json['review'],
     );
@@ -23,7 +23,7 @@ class PluginReview {
   toJson() {
     return {
       'uid': uid,
-      'rated_at': ratedAt.toIso8601String(),
+      'rated_at': ratedAt.toUtc().toIso8601String(),
       'score': score,
       'review': review,
     };
