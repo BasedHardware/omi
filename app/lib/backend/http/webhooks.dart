@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -71,9 +71,13 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
       method: 'POST',
     );
     debugPrint('response: ${response?.statusCode}');
-    var body = jsonDecode(response?.body ?? '{}');
-    print(body);
-    return body['message'] ?? '';
+    if (response?.statusCode == 200) {
+      var body = jsonDecode(response?.body ?? '{}');
+      print(body);
+      return body['message'] ?? '';
+    } else {
+      return '';
+    }
   } catch (e) {
     debugPrint('Error triggering transcript request at endpoint: $e');
     // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.

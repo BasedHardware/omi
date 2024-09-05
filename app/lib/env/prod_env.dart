@@ -21,10 +21,6 @@ final class ProdEnv implements EnvFields {
   final String? mixpanelProjectToken = _ProdEnv.mixpanelProjectToken;
 
   @override
-  @EnviedField(varName: 'ONESIGNAL_APP_ID', obfuscate: true)
-  final String? oneSignalAppId = _ProdEnv.oneSignalAppId;
-
-  @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
 
@@ -35,4 +31,8 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
+
+  @override
+  @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
+  final String? gleapApiKey = _ProdEnv.gleapApiKey;
 }

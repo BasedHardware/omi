@@ -7,10 +7,10 @@ RUN apt-get -y install python3-pip
 RUN apt-get -y install git
 RUN apt-get -y install ffmpeg
 
-COPY requirements.txt /tmp/requirements.txt
+COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY . /app
+COPY backend/ /app
 
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

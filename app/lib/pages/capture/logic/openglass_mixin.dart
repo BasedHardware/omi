@@ -19,17 +19,15 @@ mixin OpenGlassMixin {
     Function(List<Tuple2<String, String>>) onPhotosUpdated,
     Function(bool) setHasTranscripts,
   ) async {
-    _bleBytesStream = await getBleImageBytesListener(
+    _bleBytesStream = await getImageListener(
       device.id,
-      onImageBytesReceived: (List<int> value) async {
-        if (value.isEmpty) return;
-        Uint8List data = Uint8List.fromList(value);
-        // print(data);
-        Uint8List? completedImage = imageBytesUtil.processChunk(data);
-        if (completedImage != null && completedImage.isNotEmpty) {
+      onImageReceived: (Uint8List completedImage) async {
+        if (completedImage.isNotEmpty) {
           debugPrint('Completed image bytes length: ${completedImage.length}');
+          Tuple2<String, String> photo = Tuple2(base64Encode(completedImage), '');
+          photos.add(photo);
           getPhotoDescription(completedImage).then((description) {
-            photos.add(Tuple2(base64Encode(completedImage), description));
+            photos[photos.indexOf(photo)] = Tuple2(photo.item1, description);
             onPhotosUpdated(photos);
             debugPrint('photos: ${photos.length}');
             setHasTranscripts(true);

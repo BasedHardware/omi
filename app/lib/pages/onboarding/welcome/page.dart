@@ -1,18 +1,15 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 class WelcomePage extends StatefulWidget {
   final VoidCallback goNext;
-  final VoidCallback skipDevice;
 
-  const WelcomePage({super.key, required this.goNext, required this.skipDevice});
+  const WelcomePage({super.key, required this.goNext});
 
   @override
   State<WelcomePage> createState() => _WelcomePageState();
@@ -40,104 +37,70 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Padding(
-          padding: EdgeInsets.only(left: screenSize.width * 0.1, right: screenSize.width * 0.1),
-          child: Container(
-            decoration: BoxDecoration(
-              border: const GradientBoxBorder(
-                gradient: LinearGradient(colors: [
-                  Color.fromARGB(127, 208, 208, 208),
-                  Color.fromARGB(127, 188, 99, 121),
-                  Color.fromARGB(127, 86, 101, 182),
-                  Color.fromARGB(127, 126, 190, 236)
-                ]),
-                width: 2,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ElevatedButton(
-              onPressed: () async {
-                bool permissionsAccepted = await context.read<DeviceProvider>().askForPermissions();
-                if (!permissionsAccepted) {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return AlertDialog(
-                        backgroundColor: Colors.grey[900],
-                        title: const Text(
-                          'Permissions Required',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        content: const Text(
-                          'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              openAppSettings();
-                            },
-                            child: const Text(
-                              'OK',
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                } else {
-                  widget.goNext();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: const Color.fromARGB(255, 17, 17, 17),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+        Consumer<OnboardingProvider>(builder: (context, provider, child) {
+          return Padding(
+            padding: EdgeInsets.only(left: screenSize.width * 0.1, right: screenSize.width * 0.1),
+            child: Container(
+              decoration: BoxDecoration(
+                border: const GradientBoxBorder(
+                  gradient: LinearGradient(colors: [
+                    Color.fromARGB(127, 208, 208, 208),
+                    Color.fromARGB(127, 188, 99, 121),
+                    Color.fromARGB(127, 86, 101, 182),
+                    Color.fromARGB(127, 126, 190, 236)
+                  ]),
+                  width: 2,
                 ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Container(
-                width: double.infinity, // Button takes full width of the padding
-                height: 45, // Fixed height for the button
-                alignment: Alignment.center,
-                child: const Text(
-                  'Connect My Friend',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 18,
-                    color: Color.fromARGB(255, 255, 255, 255),
+              child: ElevatedButton(
+                onPressed: () async {
+                  await provider.askForBluetoothPermissions();
+                  if (provider.hasBluetoothPermission) {
+                    widget.goNext();
+                  } else {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () {
+                          Navigator.of(context).pop();
+                          openAppSettings();
+                        },
+                        () {},
+                        'Permissions Required',
+                        'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
+                        okButtonText: 'Open Settings',
+                        singleButton: true,
+                      ),
+                      barrierDismissible: false,
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: const Color.fromARGB(255, 17, 17, 17),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Container(
+                  width: double.infinity, // Button takes full width of the padding
+                  height: 45, // Fixed height for the button
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'Connect My Friend',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 18,
+                      color: Color.fromARGB(255, 255, 255, 255),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        TextButton(
-            onPressed: () {
-              widget.skipDevice();
-              MixpanelManager().useWithoutDeviceOnboardingWelcome();
-            },
-            child: const Text(
-              'Skip for now',
-              style: TextStyle(
-                  color: Colors.white,
-                  // decoration: TextDecoration.underline,
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal),
-            )),
+          );
+        }),
         const SizedBox(height: 16)
       ],
     );

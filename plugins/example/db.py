@@ -1,6 +1,9 @@
 import os
+from typing import List
 
 import redis
+
+from models import TranscriptSegment
 
 r = redis.Redis(
     host=os.getenv('REDIS_DB_HOST'),
@@ -48,7 +51,7 @@ def get_notion_database_id(uid: str) -> str:
 # ************ ADVANCED REALTIME PLUGIN UTILS ***********
 # *******************************************************
 
-def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[dict]):
+def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[TranscriptSegment]) -> List[dict]:
     key = f'transcript:{uid}:{session_id}'
     segments = r.get(key)
     if not segments:
@@ -56,14 +59,14 @@ def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[d
     else:
         segments = eval(segments)
 
-    segments.extend(new_segments)
+    segments.extend([segment.dict() for segment in new_segments])
 
     segments = sorted(segments, key=lambda x: x['start'])
     if len(segments) > 20:
         segments = segments[-20:]
 
     r.set(key, str(segments))
-    return segments
+    return [TranscriptSegment(**segment) for segment in segments]
 
 
 def remove_transcript(uid: str, session_id: str):
@@ -98,3 +101,34 @@ def store_zapier_subscribes(uid: str, target_url: str):
 
 def remove_zapier_subscribes(uid: str, target_url: str):
     r.srem(f'zapier_subscribes:{uid}', target_url)
+
+
+# **********************************************************
+# ************ MULTION UTILS ************
+# **********************************************************
+
+def store_multion_user_id(uid: str, user_id: str):
+    r.set(f'multion_user_id:{uid}', user_id)
+
+
+def get_multion_user_id(uid: str) -> str:
+    result = r.get(f'multion_user_id:{uid}')
+    return result.decode('utf-8') if result else None
+
+
+def set_task_status(task_id: str, status: str):
+    r.set(f'task_status:{task_id}', status)
+
+
+def get_task_status(task_id: str) -> str:
+    result = r.get(f'task_status:{task_id}')
+    return result.decode('utf-8') if result else None
+
+
+def set_task_result(task_id: str, result: str):
+    r.set(f'task_result:{task_id}', result)
+
+
+def get_task_result(task_id: str) -> str:
+    result = r.get(f'task_result:{task_id}')
+    return result.decode('utf-8') if result else None

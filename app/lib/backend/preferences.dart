@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
@@ -48,6 +48,14 @@ class SharedPreferencesUtil {
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
+
+  set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
+
+  bool get notificationsEnabled => getBool('notificationsEnabled') ?? false;
+
+  set locationEnabled(bool value) => saveBool('locationEnabled', value);
+
+  bool get locationEnabled => getBool('locationEnabled') ?? false;
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 

@@ -71,6 +71,9 @@ class HumeJobModelPredictionResponseModel:
     @classmethod
     def from_multi_dict(cls, prediction_model: str, data: dict) -> "[HumeJobModelPredictionResponseModel]":
         model = []
+        if "results" not in data or "predictions" not in data["results"]:
+            return model
+
         for prediction in data["results"]["predictions"]:
             for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
                 for grouped_prediction_prediction in grouped_prediction['predictions']:

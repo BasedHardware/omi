@@ -17,12 +17,15 @@ class PeopleProvider extends BaseProvider {
   bool isPlaying = false;
 
   void initialize() {
+    loading = true;
+    notifyListeners();
     setPeople();
     _setupAudioPlayerListeners();
   }
 
   setPeople() {
     getAllPeople().then((value) {
+      loading = false;
       people = value;
       SharedPreferencesUtil().cachedPeople = people;
       notifyListeners();
@@ -60,26 +63,24 @@ class PeopleProvider extends BaseProvider {
     }
   }
 
-  void addOrUpdatePersonProvider(Person? person, TextEditingController nameController) {
+  void addOrUpdatePersonProvider(Person? person, TextEditingController nameController) async {
+    if (loading) return;
     String name = nameController.text.toString()[0].toUpperCase() + nameController.text.toString().substring(1);
     if (person == null) {
-      String newPersonTemporalId = const Uuid().v4();
-      createPerson(name).then((p) {
-        if (p != null) {
-          final index = people.indexWhere((p) => p.id == newPersonTemporalId);
-          if (index != -1) {
-            people[index] = p;
-            SharedPreferencesUtil().replaceCachedPerson(p);
-          }
-        }
-      });
-      Person newPerson = Person(
-          id: newPersonTemporalId, name: name, createdAt: DateTime.now(), updatedAt: DateTime.now(), speechSamples: []);
-      people.add(newPerson);
+      loading = true;
+      notifyListeners();
+      Person? person = await createPerson(name);
+      if (person == null) {
+        loading = false;
+        notifyListeners();
+        return;
+      }
+      people.add(person);
       people.sort((a, b) => a.name.compareTo(b.name));
       SharedPreferencesUtil().cachedPeople = people;
     } else {
-      updatePersonName(person.id, name);
+      loading = true;
+      await updatePersonName(person.id, name);
       final index = people.indexWhere((p) => p.id == person.id);
       if (index != -1) {
         people[index] = Person(
@@ -93,6 +94,7 @@ class PeopleProvider extends BaseProvider {
         SharedPreferencesUtil().cachedPeople = people;
       }
     }
+    loading = false;
     notifyListeners();
   }
 
