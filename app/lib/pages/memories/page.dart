@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
+import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
@@ -100,7 +102,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -131,6 +132,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 ],
               ),
             ),
+          ),
+          SliverToBoxAdapter(
+            child: getMemoryCaptureWidget(),
           ),
           if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
             const SliverToBoxAdapter(

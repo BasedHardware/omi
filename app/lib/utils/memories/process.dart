@@ -21,6 +21,7 @@ Future<ServerMemory?> processTranscriptContent({
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
   String? source,
+  String? processingMemoryId,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -34,6 +35,7 @@ Future<ServerMemory?> processTranscriptContent({
     language: language,
     audioFile: audioFile,
     source: source,
+    processingMemoryId: processingMemoryId,
   );
   if (result == null || result.memory == null) return null;
 
@@ -51,4 +53,26 @@ Future<ServerMemory?> processTranscriptContent({
     if (sendMessageToChat != null) sendMessageToChat(message);
   }
   return result.memory;
+}
+
+Future<ServerMemory?> processMemoryContent({
+  required ServerMemory memory,
+  required List<ServerMessage> messages,
+  Function(ServerMessage)? sendMessageToChat,
+}) async {
+  debugPrint('processTranscriptContent');
+  webhookOnMemoryCreatedCall(memory).then((s) {
+    if (s.isNotEmpty) {
+      NotificationService.instance
+          .createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
+    }
+  });
+
+  for (var message in messages) {
+    String pluginId = message.pluginId ?? '';
+    NotificationService.instance
+        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
+    if (sendMessageToChat != null) sendMessageToChat(message);
+  }
+  return memory;
 }
