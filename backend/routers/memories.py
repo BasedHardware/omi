@@ -49,6 +49,9 @@ def create_memory(
     else:
         create_memory.language = language_code
 
+    if not create_memory.processing_memory_id:
+        print(f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}")
+
     memory = process_memory(uid, language_code, create_memory, force_process=False)
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])

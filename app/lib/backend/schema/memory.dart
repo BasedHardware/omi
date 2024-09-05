@@ -55,6 +55,58 @@ class MemoryPostProcessing {
   toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
 }
 
+class ServerProcessingMemory {
+  final String id;
+  final DateTime createdAt;
+  final DateTime? startedAt;
+
+  ServerProcessingMemory({
+    required this.id,
+    required this.createdAt,
+    this.startedAt,
+  });
+
+  factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
+    return ServerProcessingMemory(
+      id: json['id'],
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'created_at': createdAt.toIso8601String(),
+      'started_at': startedAt?.toIso8601String(),
+    };
+  }
+
+  String getTag() {
+    return 'Processing';
+  }
+
+  Color getTagTextColor() {
+    return Colors.white;
+  }
+
+  Color getTagColor() {
+    return Colors.grey.shade800;
+  }
+}
+
+class UpdateProcessingMemoryResponse {
+  final ServerProcessingMemory? result;
+
+  UpdateProcessingMemoryResponse({required this.result});
+
+  factory UpdateProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return UpdateProcessingMemoryResponse(
+      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
+    );
+  }
+}
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
@@ -72,6 +124,7 @@ class ServerMemory {
 
   final MemoryExternalData? externalIntegration;
   MemoryPostProcessing? postprocessing;
+  String? processingMemoryId;
 
   bool discarded;
   final bool deleted;
@@ -98,6 +151,7 @@ class ServerMemory {
     this.language,
     this.externalIntegration,
     this.postprocessing,
+    this.processingMemoryId,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -122,6 +176,7 @@ class ServerMemory {
       retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
       postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
+      processingMemoryId: json['processing_memory_id'],
     );
   }
 
@@ -156,6 +211,7 @@ class ServerMemory {
       'retries': retries,
       'external_data': externalIntegration?.toJson(),
       'postprocessing': postprocessing?.toJson(),
+      'processing_memory_id': processingMemoryId,
     };
   }
 
