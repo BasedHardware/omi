@@ -132,8 +132,6 @@ async def _websocket_util(
         nonlocal processing_memory_synced
         nonlocal memory_transcript_segements
 
-        print("Received transcript segments")
-        print(segments)
         if not segments or len(segments) == 0:
             return
 
@@ -348,7 +346,6 @@ async def _websocket_util(
         ok = await _send_message_event(msg)
         if not ok:
             print("Can not send message event new_memory_create_failed")
-        print(msg)
 
         return memory
 
@@ -457,5 +454,4 @@ async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False
 ):
-    print("here")
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
