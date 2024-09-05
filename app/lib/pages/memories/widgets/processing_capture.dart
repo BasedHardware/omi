@@ -63,24 +63,36 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
               ));
             },
             child: Padding(
-              padding: const EdgeInsetsDirectional.all(16),
+              padding: const EdgeInsetsDirectional.only(
+                start: 16,
+                top: 16,
+                end: 16,
+                bottom: 4,
+              ),
               child: Container(
-                constraints: BoxConstraints(maxHeight: 127.6), // 47.2+32+36.4+12
-                child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                constraints: BoxConstraints(maxHeight: 127.6),
+                child: Stack(
                   children: [
-                    _getMemoryHeader(context),
-                    const SizedBox(height: 16),
-                    const Expanded(
-                      child: CustomScrollView(
-                        slivers: [
-                          SliverToBoxAdapter(child: SizedBox(height: 8)),
-                          SliverToBoxAdapter(
-                            child: CaptureWidget(),
+                    RecordAnimationWidget(
+                      sizeMultiplier: 0.5,
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.max,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _getMemoryHeader(context),
+                        const SizedBox(height: 4),
+                        const Expanded(
+                          child: CustomScrollView(
+                            slivers: [
+                              SliverToBoxAdapter(child: SizedBox(height: 8)),
+                              SliverToBoxAdapter(
+                                child: CaptureWidget(),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -113,7 +125,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-			context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
+            context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();
@@ -269,4 +281,68 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
 
 Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
   return MemoryCaptureWidget(memory: memory);
+}
+
+class RecordAnimationWidget extends StatefulWidget {
+  final bool animatedBackground;
+  final double sizeMultiplier;
+
+  const RecordAnimationWidget({
+    super.key,
+    this.sizeMultiplier = 1.0,
+    this.animatedBackground = true,
+  });
+
+  @override
+  State<RecordAnimationWidget> createState() => _RecordAnimationWidgetState();
+}
+
+class _RecordAnimationWidgetState extends State<RecordAnimationWidget> with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 200,
+      child: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Image.asset(
+              "assets/images/stars.png",
+            ),
+            widget.animatedBackground
+                ? AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      return Image.asset(
+                        "assets/images/blob.png",
+                        height: 200 * widget.sizeMultiplier * _animation.value,
+                        width: 200 * widget.sizeMultiplier * _animation.value,
+                      );
+                    },
+                  )
+                : Container(),
+          ],
+        ),
+      ),
+    );
+  }
 }
