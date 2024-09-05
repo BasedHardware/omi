@@ -21,9 +21,7 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-      await context.read<SpeechProfileProvider>().initialise(true);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {});
     SharedPreferencesUtil().onboardingCompleted = true;
     super.initState();
   }
@@ -205,10 +203,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: TextButton(
-                                      onPressed: () {
+                                      onPressed: () async {
+                                        await provider.initialise(true);
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () async {
-                                          await provider.finalize(true);
+                                          provider.finalize(true);
                                         });
                                         provider.updateStartedRecording(true);
                                       },
