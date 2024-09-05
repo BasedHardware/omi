@@ -183,8 +183,12 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
           );
         },
         child: Container(
-          child: getTranscriptWidget(
-              provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
+          child: getLiteTranscriptWidget(
+            provider.memoryCreating,
+            provider.segments,
+            provider.photos,
+            deviceProvider.connectedDevice,
+          ),
         ),
       );
     });
