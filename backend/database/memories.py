@@ -1,3 +1,5 @@
+from google.cloud.firestore_v1.async_client import AsyncClient
+import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -125,8 +127,6 @@ def set_memory_visibility(uid: str, memory_id: str, visibility: str):
 
 
 # claude outputs
-import asyncio
-from google.cloud.firestore_v1.async_client import AsyncClient
 
 
 async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
@@ -196,7 +196,7 @@ def store_model_emotion_predictions_result(
     memory_ref = user_ref.collection('memories').document(memory_id)
     predictions_ref = memory_ref.collection(model_name)
     batch = db.batch()
-    count = 1
+    count = 0
     for prediction in predictions:
         prediction_id = str(uuid.uuid4())
         prediction_ref = predictions_ref.document(prediction_id)
@@ -207,7 +207,8 @@ def store_model_emotion_predictions_result(
             "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
         count = count + 1
-        if count % 400 == 0:
+        if count >= 100:
             batch.commit()
             batch = db.batch()
+            count = 0
     batch.commit()
