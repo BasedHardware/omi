@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +18,7 @@ class FrameDevice extends DeviceBase {
   @override
   final String deviceId;
   Frame? _frame;
+  @override
   late String name;
 
   BluetoothDevice? device;
@@ -306,7 +306,7 @@ class FrameDevice extends DeviceBase {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 250));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -342,7 +342,7 @@ class FrameDevice extends DeviceBase {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -424,7 +424,7 @@ class FrameDevice extends DeviceBase {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -435,7 +435,7 @@ class FrameDevice extends DeviceBase {
   Future<StreamSubscription?> performGetImageListener({required void Function(Uint8List p1) onImageReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }

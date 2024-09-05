@@ -47,7 +47,7 @@ class WebSocketProvider with ChangeNotifier {
     if (_isConnecting) return;
     _isConnecting = true;
 
-    debugPrint('initWebSocket with ${codec} ${sampleRate}');
+    debugPrint('initWebSocket with $codec $sampleRate');
     if (!_internetListenerSetup) {
       _setupInternetListener(
         onConnectionSuccess: onConnectionSuccess,

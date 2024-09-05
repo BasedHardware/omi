@@ -33,7 +33,8 @@ class CapturePage extends StatefulWidget {
   State<CapturePage> createState() => CapturePageState();
 }
 
-class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+class CapturePageState extends State<CapturePage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -127,7 +128,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           ),
         );
       }
-      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+      final connectivityProvider =
+          Provider.of<ConnectivityProvider>(context, listen: false);
       if (!connectivityProvider.isConnected) {
         context.read<CaptureProvider>().cancelMemoryCreationTimer();
       }
@@ -159,9 +161,12 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         );
       }
     } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
-      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+      PermissionStatus permissionGranted =
+          await locationService.requestPermission();
+      SharedPreferencesUtil().locationEnabled =
+          permissionGranted == PermissionStatus.granted;
+      MixpanelManager().setUserProperty(
+          'Location Enabled', SharedPreferencesUtil().locationEnabled);
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
@@ -183,7 +188,8 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+    return Consumer2<CaptureProvider, DeviceProvider>(
+        builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
           // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
@@ -194,10 +200,15 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
+                  context
+                      .read<WebSocketProvider>()
+                      .closeWebSocketWithoutReconnect(
+                          'Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
-                  context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
+                  context
+                      .read<CaptureProvider>()
+                      .resetState(restartBytesProcessing: true);
                   context.read<CaptureProvider>().initiateWebsocket(codec);
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
@@ -217,7 +228,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             SnackBar(
               content: Text(
                 error,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );
@@ -226,15 +237,19 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           children: [
             ListView(children: [
               speechProfileWidget(context),
-              ...getConnectionStateWidgets(context, provider.hasTranscripts, deviceProvider.connectedDevice,
+              ...getConnectionStateWidgets(
+                  context,
+                  provider.hasTranscripts,
+                  deviceProvider.connectedDevice,
                   context.read<WebSocketProvider>().wsConnectionState),
-              getTranscriptWidget(
-                  provider.memoryCreating, provider.segments, provider.photos, deviceProvider.connectedDevice),
-              ...connectionStatusWidgets(
-                  context, provider.segments, context.read<WebSocketProvider>().wsConnectionState),
+              getTranscriptWidget(provider.memoryCreating, provider.segments,
+                  provider.photos, deviceProvider.connectedDevice),
+              ...connectionStatusWidgets(context, provider.segments,
+                  context.read<WebSocketProvider>().wsConnectionState),
               const SizedBox(height: 16)
             ]),
-            getPhoneMicRecordingButton(() => _recordingToggled(provider), provider.recordingState),
+            getPhoneMicRecordingButton(
+                () => _recordingToggled(provider), provider.recordingState),
           ],
         ),
       );
@@ -251,7 +266,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       }
       provider.updateRecordingState(RecordingState.stop);
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().createMemory();
+      await context.read<CaptureProvider>();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
@@ -262,7 +277,9 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
+            context
+                .read<WebSocketProvider>()
+                .closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();

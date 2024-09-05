@@ -101,7 +101,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   //----------------- Onboarding Permissions -----------------
 
   void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && _findDevicesTimer.isActive) {
+    if (_findDevicesTimer.isActive) {
       _findDevicesTimer.cancel();
     }
     if (connectionStateTimer?.isActive ?? false) {

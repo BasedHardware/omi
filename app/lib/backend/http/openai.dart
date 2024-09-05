@@ -108,8 +108,9 @@ Future<String> executeGptPrompt(String? prompt,
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
-  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty)
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) {
     return cachedResponse;
+  }
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}

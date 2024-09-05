@@ -20,7 +20,6 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:wav/wav_file.dart';
 
 getConnectionStateWidgets(
   BuildContext context,

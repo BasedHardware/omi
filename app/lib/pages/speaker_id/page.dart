@@ -181,7 +181,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                 Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: Column(
                       children: [
                         const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
@@ -266,7 +266,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               provider.isInitialising
-                                  ? CircularProgressIndicator(
+                                  ? const CircularProgressIndicator(
                                       color: Colors.white,
                                     )
                                   : MaterialButton(

@@ -97,7 +97,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
-    print('set memory creating ${value}');
+    print('set memory creating $value');
     memoryCreating = value;
     notifyListeners();
   }
@@ -728,8 +728,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (await FlutterBackgroundService().isRunning()) {
       FlutterBackgroundService().on('audioBytes').listen((event) {
         Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
+        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
           webSocketProvider?.websocketChannel?.sink.add(convertedList);
+        }
       });
       FlutterBackgroundService().on('stateUpdate').listen((event) {
         if (event!['state'] == 'recording') {

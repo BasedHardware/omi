@@ -334,13 +334,13 @@ class FriendDevice extends DeviceBase {
                         (value[baseIndex + 1] << 8) |
                         (value[baseIndex + 2] << 16) |
                         (value[baseIndex + 3] << 24)) &
-                    0xFFFFFFFF as int)
+                    0xFFFFFFFF)
                 .toSigned(32);
             var temp = ((value[baseIndex + 4] |
                         (value[baseIndex + 5] << 8) |
                         (value[baseIndex + 6] << 16) |
                         (value[baseIndex + 7] << 24)) &
-                    0xFFFFFFFF as int)
+                    0xFFFFFFFF)
                 .toSigned(32);
             double axisValue = result + (temp / 1000000);
             accelerometerData.add(axisValue);
@@ -354,9 +354,9 @@ class FriendDevice extends DeviceBase {
           debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
           debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
           //simple threshold fall calcaultor
-          var fall_number =
+          var fallNumber =
               sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
-          if (fall_number > 30.0) {
+          if (fallNumber > 30.0) {
             AwesomeNotifications().createNotification(
               content: NotificationContent(
                 id: 6,

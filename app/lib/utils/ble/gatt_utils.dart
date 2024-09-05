@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/utils/ble/errors.dart';

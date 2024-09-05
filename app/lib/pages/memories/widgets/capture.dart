@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,7 +6,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -18,7 +16,6 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
@@ -32,7 +29,8 @@ class CaptureWidget extends StatefulWidget {
   State<CaptureWidget> createState() => CaptureWidgetState();
 }
 
-class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+class CaptureWidgetState extends State<CaptureWidget>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -87,7 +85,8 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
           ),
         );
       }
-      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+      final connectivityProvider =
+          Provider.of<ConnectivityProvider>(context, listen: false);
       if (!connectivityProvider.isConnected) {
         context.read<CaptureProvider>().cancelMemoryCreationTimer();
       }
@@ -119,9 +118,12 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
         );
       }
     } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
-      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+      PermissionStatus permissionGranted =
+          await locationService.requestPermission();
+      SharedPreferencesUtil().locationEnabled =
+          permissionGranted == PermissionStatus.granted;
+      MixpanelManager().setUserProperty(
+          'Location Enabled', SharedPreferencesUtil().locationEnabled);
       if (permissionGranted == PermissionStatus.denied) {
         debugPrint('Location permission not granted');
       } else if (permissionGranted == PermissionStatus.deniedForever) {
@@ -143,7 +145,8 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+    return Consumer2<CaptureProvider, DeviceProvider>(
+        builder: (context, provider, deviceProvider, child) {
       return MessageListener<CaptureProvider>(
         showInfo: (info) {
           // This probably will never be called because this has been handled even before we start the audio stream. But it's here just in case.
@@ -154,10 +157,15 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
+                  context
+                      .read<WebSocketProvider>()
+                      .closeWebSocketWithoutReconnect(
+                          'Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
-                  context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
+                  context
+                      .read<CaptureProvider>()
+                      .resetState(restartBytesProcessing: true);
                   context.read<CaptureProvider>().initiateWebsocket(codec);
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
@@ -177,7 +185,7 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
             SnackBar(
               content: Text(
                 error,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );

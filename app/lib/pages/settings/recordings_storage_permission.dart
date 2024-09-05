@@ -68,13 +68,13 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       title: "Improve Your Speech Profile",
                       description: "We use recordings to further train and enhance your personal speech profile.",
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.group,
                       title: "Train Profiles for Friends and Family",
                       description: "Your recordings help us recognize and create profiles for your friends and family.",
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.trending_up,
                       title: "Enhance Transcript Accuracy",

@@ -70,10 +70,10 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                 bottom: 4,
               ),
               child: Container(
-                constraints: BoxConstraints(maxHeight: 127.6),
+                constraints: const BoxConstraints(maxHeight: 127.6),
                 child: Stack(
                   children: [
-                    RecordAnimationWidget(
+                    const RecordAnimationWidget(
                       sizeMultiplier: 0.5,
                     ),
                     Column(

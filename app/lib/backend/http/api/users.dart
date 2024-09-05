@@ -58,7 +58,7 @@ Future<bool> deletePermissionAndRecordings() async {
   return response.statusCode == 200;
 }
 
-/**/
+/// /
 
 Future<Person?> createPerson(String name) async {
   var response = await makeApiCall(

@@ -96,7 +96,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     if (device != null) await initiateFriendAudioStreaming();
     if (webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
       // wait for websocket to connect
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
     }
 
     setInitialising(false);

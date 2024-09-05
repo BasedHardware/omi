@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/other/temp.dart';

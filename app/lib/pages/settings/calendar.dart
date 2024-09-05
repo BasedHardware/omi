@@ -18,7 +18,7 @@ class CalendarPage extends StatelessWidget {
 }
 
 class _CalendarPage extends StatefulWidget {
-  const _CalendarPage({super.key});
+  const _CalendarPage();
 
   @override
   State<_CalendarPage> createState() => __CalendarPageState();

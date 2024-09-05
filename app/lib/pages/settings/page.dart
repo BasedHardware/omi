@@ -54,7 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    Future<void> _showMockupOmiFeebackNotification() async {
+    Future<void> showMockupOmiFeebackNotification() async {
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -193,7 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
                         // Show a mockup notifications to help user understand about Omi Feedback
                         if (enabled) {
-                          _showMockupOmiFeebackNotification();
+                          showMockupOmiFeebackNotification();
                         }
                       },
                       viewPrivacyDetails: () {
@@ -369,7 +369,7 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 class _MockNotification extends StatelessWidget {
-  const _MockNotification({super.key, required this.path});
+  const _MockNotification({required this.path});
 
   final String path;
 

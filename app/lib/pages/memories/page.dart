@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/memory_provider.dart';

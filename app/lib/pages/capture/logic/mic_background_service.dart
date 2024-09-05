@@ -43,11 +43,11 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 Future onStart(ServiceInstance service) async {
-  FlutterSoundRecorder? _mRecorder = FlutterSoundRecorder();
-  await _mRecorder.openRecorder(isBGService: true);
+  FlutterSoundRecorder? mRecorder = FlutterSoundRecorder();
+  await mRecorder.openRecorder(isBGService: true);
   var recordingDataController = StreamController<Uint8List>();
 
-  await _mRecorder.startRecorder(
+  await mRecorder.startRecorder(
     toStream: recordingDataController.sink,
     codec: Codec.pcm16,
     numChannels: 1,
@@ -62,7 +62,7 @@ Future onStart(ServiceInstance service) async {
   });
 
   service.on('stop').listen((event) {
-    _mRecorder.stopRecorder();
+    mRecorder.stopRecorder();
     service.invoke("stateUpdate", {"state": 'stopped'});
     service.stopSelf();
   });
