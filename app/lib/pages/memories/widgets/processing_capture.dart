@@ -65,7 +65,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             child: Padding(
               padding: const EdgeInsetsDirectional.all(16),
               child: Container(
-                constraints: BoxConstraints(maxHeight: 110.4), // 32+14*1.3*2+16+8
+                constraints: BoxConstraints(maxHeight: 127.6), // 47.2+32+36.4+12
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,7 +147,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                 captureProvider.recordingState == RecordingState.record) &&
             (deviceProvider.connectedDevice != null)
         ? "Live"
-        : "";
+        : "Live";
 
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),

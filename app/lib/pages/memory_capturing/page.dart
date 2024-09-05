@@ -41,13 +41,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
-      debugPrint("${widget.topMemoryId}");
-      debugPrint("${provider.memoryProvider?.memories.first.id}");
-      debugPrint("${provider.memoryProvider?.memories.length}");
       // Track memory
       if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
           (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
-        debugPrint("push");
         _pushNewMemory(context, provider.memoryProvider!.memories.first);
       }
 
@@ -128,9 +124,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                       ),
                       ListView(
                         shrinkWrap: true,
-                        children: const [
+                        children: [
                           const SizedBox(height: 80),
-                          Center(child: Text("Processing")),
+                          Center(child: Text(provider.segments.isEmpty ? "No summary" : "Processing")),
                         ],
                       ),
                     ],
