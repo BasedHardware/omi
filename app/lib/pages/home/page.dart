@@ -10,7 +10,6 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/capture/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
@@ -127,11 +126,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     // TODO: Being triggered multiple times during navigation. It ideally shouldn't
     _controller = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
       initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
     );
-    SharedPreferencesUtil().pageToShowFromNotification = 1;
+    SharedPreferencesUtil().pageToShowFromNotification = 0; // TODO: whatisit
     SharedPreferencesUtil().onboardingCompleted = true;
 
     WidgetsBinding.instance.addObserver(this);
@@ -172,7 +171,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   _tabChange(int index) {
-    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Device', 'Chat'][index]);
+    MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat'][index]);
     FocusScope.of(context).unfocus();
     context.read<HomeProvider>().setIndex(index);
     _controller!.animateTo(index);
@@ -260,7 +259,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         MemoriesPage(
                           textFieldFocusNode: memoriesTextFieldFocusNode,
                         ),
-                        const CapturePage(),
                         ChatPage(
                           key: chatPageKey,
                           textFieldFocusNode: chatTextFieldFocusNode,
@@ -295,6 +293,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            const Expanded(
+                              child: SizedBox(
+                                height: 10,
+                              ),
+                            ),
                             Expanded(
                               child: MaterialButton(
                                 onPressed: () => _tabChange(0),
@@ -316,33 +319,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               child: MaterialButton(
                                 onPressed: () => _tabChange(1),
                                 child: Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 20,
-                                    bottom: 20,
-                                  ),
-                                  child: Text(
-                                    'Capture',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: provider.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: MaterialButton(
-                                onPressed: () => _tabChange(2),
-                                child: Padding(
                                   padding: const EdgeInsets.only(top: 20, bottom: 20),
                                   child: Text(
                                     'Chat',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: provider.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                      color: provider.selectedIndex == 1 ? Colors.white : Colors.grey,
                                       fontSize: 16,
                                     ),
                                   ),
@@ -472,7 +455,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   }
                 }),
                 Consumer2<PluginProvider, HomeProvider>(builder: (context, provider, home, child) {
-                  if (home.selectedIndex != 2) {
+                  if (home.selectedIndex != 1) {
                     return SizedBox(
                       width: 16,
                     );

@@ -35,6 +35,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
   String? language,
   File? audioFile,
   String? source,
+  String? processingMemoryId,
 }) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
@@ -48,6 +49,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
       'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
       'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
       'language': language, // maybe determine auto?
+      'processing_memory_id': processingMemoryId,
       // 'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
     }),
   );
@@ -146,6 +148,21 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   debugPrint('getMemoryById: ${response.body}');
   if (response.statusCode == 200) {
     return ServerMemory.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<ServerProcessingMemory?> getProcessingMemoryById(String id) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/processing-memories/$id',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getProcessingMemoryById: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerProcessingMemory.fromJson(jsonDecode(response.body));
   }
   return null;
 }

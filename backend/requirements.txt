@@ -225,3 +225,4 @@ watchfiles==0.22.0
 wcwidth==0.2.13
 websockets==12.0
 yarl==1.9.4
+pyogg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f

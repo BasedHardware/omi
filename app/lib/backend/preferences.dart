@@ -334,7 +334,7 @@ class SharedPreferencesUtil {
 
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
 
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
 
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 

@@ -10,11 +10,14 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/processing_memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
@@ -79,6 +82,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   // -----------------------
 
+  String? processingMemoryId;
+
   bool resetStateAlreadyCalled = false;
 
   void setResetStateAlreadyCalled(bool value) {
@@ -92,12 +97,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
+    print('set memory creating ${value}');
     memoryCreating = value;
     notifyListeners();
   }
 
   void setGeolocation(Geolocation? value) {
     geolocation = value;
+
+    // Update processing memory on geolocation
+    if (processingMemoryId != null) {
+      _updateProcessingMemory();
+    }
+
     notifyListeners();
   }
 
@@ -112,9 +124,161 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
+  void _onMemoryCreating() {
+    setMemoryCreating(true);
+  }
+
+  Future<void> _updateProcessingMemory() async {
+    if (processingMemoryId == null) {
+      return;
+    }
+
+    debugPrint("update processing memory");
+    // Update info likes geolocation
+    UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
+      id: processingMemoryId!,
+      geolocation: geolocation,
+      emotionalFeedback: SharedPreferencesUtil().optInEmotionalFeedback,
+    );
+    if (result?.result == null) {
+      print("Can not update processing memory, result null");
+    }
+  }
+
+  Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
+    this.processingMemoryId = processingMemoryId;
+    _updateProcessingMemory();
+  }
+
+  Future<void> _onMemoryCreated(ServerMessageEvent event) async {
+    if (event.memory == null) {
+      print("Memory is not found, processing memory ${event.processingMemoryId}");
+      return;
+    }
+    _processOnMemoryCreated(event.memory, event.messages ?? []);
+  }
+
+  void _onMemoryCreateFailed() {
+    _processOnMemoryCreated(null, []); // force failed
+  }
+
+  Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
+  Future<void> _onMemoryPostProcessFailed(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
+  Future<bool?> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory != null) {
+      await processMemoryContent(
+        memory: memory,
+        messages: messages,
+        sendMessageToChat: (v) {
+          // use message provider to send message to chat
+          messageProvider?.addMessage(v);
+        },
+      );
+    }
+    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        geolocation: geolocation,
+        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        startedAt: currentTranscriptStartedAt,
+        finishedAt: currentTranscriptFinishedAt,
+        failed: true,
+        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory);
+
+      // TODO: store anyways something temporal and retry once connected again.
+    }
+
+    if (memory != null) {
+      // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory);
+      memoryProvider?.addMemory(memory);
+      if (memoryProvider?.memories.isEmpty ?? false) {
+        memoryProvider?.getMoreMemoriesFromServer();
+      }
+    }
+
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return true;
+  }
+
+  // Should validate with synced frames also
+  bool _shouldWaitCreateMemoryAutomatically() {
+    debugPrint("Should wait ${processingMemoryId != null}");
+    return processingMemoryId != null;
+  }
+
+  bool _shouldWaitCreateMemoryAutomaticallyWithClean() {
+    var shouldWait = _shouldWaitCreateMemoryAutomatically();
+    if (!shouldWait) {
+      return false;
+    }
+
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+
+    return true;
+  }
+
+  Future<bool?> _createMemoryTimer() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      return false;
+    }
+    return await _createMemory();
+  }
+
+  Future<bool?> tryCreateMemoryManually() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      setMemoryCreating(true);
+      return false;
+    }
+    return await _createMemory(forcedCreation: true);
+  }
+
+  // Warn: Split-brain in memory
+  Future<bool?> forceCreateMemory() async {
+    return await _createMemory(forcedCreation: true);
+  }
+
+  Future<bool?> _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
+
     if (memoryCreating) return null;
+
     if (segments.isEmpty && photos.isEmpty) return false;
 
     // TODO: should clean variables here? and keep them locally?
@@ -143,6 +307,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
       audioFile: file,
+      processingMemoryId: processingMemoryId,
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
@@ -159,6 +324,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         failed: true,
         source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
 
@@ -194,10 +360,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       }
     }
 
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return true;
+  }
+
+  void _cleanNew() async {
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
-    setHasTranscripts(false);
 
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
@@ -208,9 +383,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
-    setMemoryCreating(false);
-    notifyListeners();
-    return true;
+    processingMemoryId = null;
+
+    // Create new socket session
+    // Warn: should have a better solution to keep the socket alived
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset new memory session');
+    await initiateWebsocket();
   }
 
   _handleCalendarCreation(ServerMemory memory) {
@@ -246,6 +424,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: true,
+      newMemoryWatch: true, // Warn: need clarify about initiateWebsocket
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
         if (segments.isNotEmpty) {
@@ -273,6 +452,49 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         // connection was okay, but then failed.
         notifyListeners();
       },
+      onMessageEventReceived: (ServerMessageEvent event) {
+        if (event.type == MessageEventType.newMemoryCreating) {
+          _onMemoryCreating();
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreated) {
+          _onMemoryCreated(event);
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreateFailed) {
+          _onMemoryCreateFailed();
+          return;
+        }
+
+        if (event.type == MessageEventType.newProcessingMemoryCreated) {
+          if (event.processingMemoryId == null) {
+            print("New processing memory created message event is invalid");
+            return;
+          }
+          _onProcessingMemoryCreated(event.processingMemoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingSuccess) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessSuccess(event.memoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingFailed) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessFailed(event.memoryId!);
+          return;
+        }
+      },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
         if (segments.isEmpty) {
@@ -297,10 +519,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
           messageProvider?.addMessage(v);
         });
         SharedPreferencesUtil().transcriptSegments = segments;
-        setHasTranscripts(true);
         debugPrint('Memory creation timer restarted');
         _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => createMemory());
+        _memoryCreationTimer =
+            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemoryTimer());
+        setHasTranscripts(true);
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
         notifyListeners();
@@ -383,11 +606,14 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
     if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      bool? result = await createMemory(forcedCreation: true);
-      if (result != null && !result) {
-        notifyError('Memory creation failed. It\'s stored locally and will be retried soon.');
-      } else {
-        notifyInfo('Memory created successfully 🚀');
+      if (!_shouldWaitCreateMemoryAutomaticallyWithClean()) {
+        var res = await forceCreateMemory();
+        notifyListeners();
+        if (res != null && !res) {
+          notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+        } else {
+          notifyInfo('Memory created successfully 🚀');
+        }
       }
     }
   }
