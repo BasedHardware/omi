@@ -27,7 +27,7 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
         <div className="w-full">
           <SearchControls>
             <Tendencies />
-            <MemoryList searchParams={searchParams} />
+            <MemoryList />
           </SearchControls>
           <SidePanelWrapper previewId={previewId}>
             <Suspense fallback={<LoadingPreview />}>
@@ -39,20 +39,3 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
     </div>
   );
 }
-
-// export const Hit = ({ hit }) => {
-//   return (
-//     <article>
-//       <img src={hit.backdrop_path} />
-// 			<div className="hit-original_title">
-// 			  <Highlight attribute="original_title" hit={hit} />
-// 			</div>
-// 			<div className="hit-overview">
-// 			  <Highlight attribute="overview" hit={hit} />
-// 			</div>
-// 			<div className="hit-release_date">
-// 			  <Highlight attribute="release_date" hit={hit} />
-// 			</div>
-//     </article>
-//   );
-// };

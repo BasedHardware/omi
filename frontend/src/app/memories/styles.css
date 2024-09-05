@@ -1,5 +1,4 @@
 .ais-Pagination {
-
 }
 
 .ais-Pagination .ais-Pagination-list {
@@ -9,7 +8,7 @@
 
 .ais-Pagination .ais-Pagination-item {
   border-radius: 5px;
-    cursor: pointer;
+  cursor: pointer;
 }
 
 .ais-Pagination .ais-Pagination-item .ais-Pagination-link {

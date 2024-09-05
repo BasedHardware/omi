@@ -5,7 +5,8 @@ export default function SearchBar() {
   return (
     <SearchBox
       placeholder="Search memories"
-      className='mt-5'
+      className="mt-5"
+      loadingIconComponent={() => <></>}
       submitIconComponent={() => <></>}
       resetIconComponent={() => <></>}
     />
