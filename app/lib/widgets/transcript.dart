@@ -143,6 +143,7 @@ class LiteTranscriptWidget extends StatefulWidget {
 }
 
 class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
+
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
@@ -154,7 +155,7 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
       separatorBuilder: (_, __) => SizedBox(height: widget.separator ? 16.0 : 0),
       itemBuilder: (context, idx) {
         if (idx == 0) return SizedBox(height: widget.topMargin ? 16 : 0);
-        if (idx == widget.segments.length + 1) return const SizedBox(height: 16);
+        if (idx == widget.segments.length + 1) return const SizedBox(height: 32);
         final data = widget.segments[idx - 1];
 
         var text = data.text;
