@@ -194,7 +194,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocket();
+                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
                   context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
@@ -262,7 +262,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocket();
+            context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();

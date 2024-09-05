@@ -41,12 +41,13 @@ class _FoundDevicesState extends State<FoundDevices> {
         },
         showInfo: (info) {
           if (info == "DEVICE_CONNECTED") {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => const HomePageWrapper(),
-              ),
-              (route) => false,
-            );
+            // Navigator.of(context).pushAndRemoveUntil(
+            //   MaterialPageRoute(
+            //     builder: (context) => const HomePageWrapper(),
+            //   ),
+            //   (route) => false,
+            // );
+            Navigator.pop(context);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(info),
