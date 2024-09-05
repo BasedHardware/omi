@@ -1,6 +1,7 @@
 import { Hit } from 'algoliasearch';
 import moment from 'moment';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Highlight } from 'react-instantsearch';
 
 interface MemoryItemProps {
@@ -8,9 +9,10 @@ interface MemoryItemProps {
 }
 
 export default function MemoryItem({ hit }: MemoryItemProps) {
+  const searchParams = useSearchParams();
   return (
     <Link
-      href={`/memories?previewId=${hit.id}`}
+      href={`/memories?${searchParams.toString()}&previewId=${hit.id}`}
       className="group flex w-full items-start gap-4 border-b border-solid border-gray-700 pb-8 last:border-transparent md:gap-7"
     >
       <div className="w-fit rounded-md bg-zinc-800 p-2.5 text-sm transition-colors group-hover:bg-zinc-700 md:p-4 md:text-base">
