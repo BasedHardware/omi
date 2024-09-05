@@ -1,0 +1,43 @@
+.ais-Pagination {
+
+}
+
+.ais-Pagination .ais-Pagination-list {
+  display: flex;
+  gap: 10px;
+}
+
+.ais-Pagination .ais-Pagination-item {
+  border-radius: 5px;
+    cursor: pointer;
+}
+
+.ais-Pagination .ais-Pagination-item .ais-Pagination-link {
+  width: 100%;
+  display: block;
+  padding: 8px 20px;
+}
+
+.ais-Pagination .ais-Pagination-item--disabled {
+  color: #5f5f5f;
+  cursor: not-allowed;
+}
+
+.ais-Pagination .ais-Pagination-item--selected {
+  border: 1px solid #373737;
+  color: white;
+}
+
+.ais-Pagination .ais-Pagination-item:hover {
+  background-color: #27272a;
+}
+
+.ais-Pagination .ais-Pagination-item--selected:hover {
+  background-color: transparent;
+  cursor: not-allowed;
+}
+
+.ais-Pagination .ais-Pagination-item--disabled:hover {
+  background-color: transparent;
+  cursor: not-allowed;
+}

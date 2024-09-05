@@ -1,39 +1,41 @@
-import { Memory } from '@/src/types/memory.types';
-import { SearchParamsTypes } from '@/src/types/params.types';
+import { Hit } from 'algoliasearch';
 import moment from 'moment';
 import Link from 'next/link';
+import { Highlight } from 'react-instantsearch';
 
 interface MemoryItemProps {
-  memory: Memory;
-  searchParams: SearchParamsTypes;
+  hit: Hit;
 }
 
-export default function MemoryItem({ memory, searchParams }: MemoryItemProps) {
-  // @ts-ignore
-  const _searchParams = new URLSearchParams(searchParams);
+export default function MemoryItem({ hit }: MemoryItemProps) {
   return (
     <Link
+      href={`/memories?previewId=${hit.id}`}
       className="group flex w-full items-start gap-4 border-b border-solid border-gray-700 pb-8 last:border-transparent md:gap-7"
-      href={`/memories?${_searchParams.toString()}&previewId=${memory.id}`}
     >
-      <div className="w-fith-fit rounded-md bg-zinc-800 p-2.5 text-sm transition-colors group-hover:bg-zinc-700 md:p-4 md:text-base">
-        {memory.structured.emoji}
+      <div className="w-fit rounded-md bg-zinc-800 p-2.5 text-sm transition-colors group-hover:bg-zinc-700 md:p-4 md:text-base">
+        {hit.structured?.emoji}
       </div>
-      <div className="w-full">
+      <div>
         <h2 className="line-clamp-2 text-base font-semibold group-hover:underline md:text-xl">
-          {!memory?.structured?.title ? 'Untitle memory' : memory.structured.title}
+          {!hit?.structured?.title ? (
+            'Untitle memory'
+          ) : (
+            <Highlight attribute="structured.title" hit={hit} />
+          )}
         </h2>
         <div className="line-clamp-2 text-sm font-extralight text-zinc-300 md:text-base">
-          {!memory?.structured?.overview
-            ? "This memory doesn't have an overview"
-            : memory?.structured?.overview}
+          {!hit?.structured?.overview ? (
+            "This memory doesn't have an overview"
+          ) : (
+            <Highlight attribute="structured.overview" hit={hit} />
+          )}
         </div>
         <div className="mt-8 flex items-center justify-start gap-1.5 text-xs text-zinc-400 md:text-sm">
-          <p className="">{moment(memory.created_at).format('MMM Do YYYY')}</p>
+          <p>{moment(hit.created_at).format('MMM Do YYYY')}</p>
           <div className="text-xs">•</div>
           <p className="rounded-full">
-            {memory.structured.category.charAt(0).toUpperCase() +
-              memory.structured.category.slice(1)}
+            <Highlight attribute={'structured.category'} hit={hit} />
           </p>
         </div>
       </div>
