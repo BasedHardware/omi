@@ -159,8 +159,8 @@ class ServerMemory {
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       structured: Structured.fromJson(json['structured']),
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
-      finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
+      finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']).toLocal() : null,
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
@@ -195,10 +195,10 @@ class ServerMemory {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
-      'started_at': startedAt?.toIso8601String(),
-      'finished_at': finishedAt?.toIso8601String(),
+      'started_at': startedAt?.toUtc().toIso8601String(),
+      'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'plugins_results': pluginsResults.map((result) => result.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
