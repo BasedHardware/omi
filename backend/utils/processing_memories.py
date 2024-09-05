@@ -26,8 +26,8 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     timer_start = processing_memory.timer_start
     segment_end = transcript_segments[-1].end
     new_memory = CreateMemory(
-        started_at=datetime.fromtimestamp(timer_start),
-        finished_at=datetime.fromtimestamp(timer_start + segment_end),
+        started_at=datetime.utcfromtimestamp(timer_start),
+        finished_at=datetime.utcfromtimestamp(timer_start + segment_end),
         language=processing_memory.language,
         transcript_segments=transcript_segments,
     )
