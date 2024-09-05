@@ -65,7 +65,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             child: Padding(
               padding: const EdgeInsetsDirectional.all(16),
               child: Container(
-                constraints: BoxConstraints(maxHeight: 68.4), // 32+14*1.3*2
+                constraints: BoxConstraints(maxHeight: 110.4), // 32+14*1.3*2+16+8
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
