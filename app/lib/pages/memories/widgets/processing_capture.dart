@@ -113,7 +113,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () => Navigator.pop(context),
           () async {
             provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocket();
+			context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             if (Platform.isAndroid) {
               await provider.streamRecordingOnAndroid();

@@ -154,7 +154,7 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocket();
+                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await getAudioCodec(connectedDevice!.id);
                   context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
