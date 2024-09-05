@@ -238,8 +238,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: TextButton(
-                                  onPressed: () async {
-                                    await provider.close();
+                                  onPressed: () {
+                                    provider.close();
                                     widget.goNext();
                                   },
                                   child: const Text(
