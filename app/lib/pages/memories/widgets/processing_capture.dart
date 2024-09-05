@@ -7,6 +7,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
+import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
@@ -33,9 +34,10 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+      var topMemoryId =
+          (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
       return GestureDetector(
         child: Container(
-          constraints: BoxConstraints(maxHeight: provider.hasTranscripts ? 350 : 100),
           margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
           width: double.maxFinite,
           decoration: const BoxDecoration(
@@ -52,25 +54,37 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
             shape: BoxShape.rectangle,
           ),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _getMemoryHeader(context),
-                const SizedBox(height: 16),
-                const Expanded(
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(child: SizedBox(height: 32)),
-                      SliverToBoxAdapter(
-                        child: CaptureWidget(),
-                      ),
-                    ],
-                  ),
+          child: GestureDetector(
+            onTap: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (c) => MemoryCapturingPage(
+                  topMemoryId: topMemoryId,
                 ),
-              ],
+              ));
+            },
+            child: Padding(
+              padding: const EdgeInsetsDirectional.all(16),
+              child: Container(
+                constraints: BoxConstraints(maxHeight: 68.4), // 32+14*1.3*2
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _getMemoryHeader(context),
+                    const SizedBox(height: 16),
+                    const Expanded(
+                      child: CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(child: SizedBox(height: 8)),
+                          SliverToBoxAdapter(
+                            child: CaptureWidget(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -132,7 +146,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     var stateText = ((captureProvider.audioStorage?.frames ?? []).isNotEmpty ||
                 captureProvider.recordingState == RecordingState.record) &&
             (deviceProvider.connectedDevice != null)
-        ? "Listening"
+        ? "Live"
         : "";
 
     return Padding(
