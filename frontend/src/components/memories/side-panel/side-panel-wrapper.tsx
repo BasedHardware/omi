@@ -44,7 +44,7 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
             <DialogTitle>Memory Details</DialogTitle>
           </VisuallyHidden.Root>
 
-          <ScrollArea className="h-screen max-h-screen bg-zinc-900 select-text">
+          <ScrollArea className="h-screen max-h-screen select-text bg-zinc-900">
             <header className="relative z-20 flex w-full gap-2 px-4 pt-4 md:px-12 md:pt-12">
               <button
                 onClick={() => handleOpen(false)}

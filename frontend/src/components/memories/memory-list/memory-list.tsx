@@ -1,19 +1,18 @@
-import getPublicMemories from '@/src/actions/memories/get-public-memories';
-import MemoryItem from './memory-item';
+'use client';
+import { Hits, Pagination} from 'react-instantsearch';
 import { SearchParamsTypes } from '@/src/types/params.types';
+import MemoryItem from './memory-item';
 
 interface MemoryListProps {
   searchParams: SearchParamsTypes;
 }
 
-export default async function MemoryList({ searchParams }: MemoryListProps) {
-  const memories = await getPublicMemories();
+export default function MemoryList({ searchParams }: MemoryListProps) {
   return (
-    <div className="mt-20 text-white">
+    <div className="mt-12 text-white">
       <div className="flex flex-col gap-10">
-        {memories.map((memory) => (
-          <MemoryItem key={memory.id} memory={memory} searchParams={searchParams} />
-        ))}
+        <Hits hitComponent={MemoryItem} />
+        <Pagination className='ais-Pagination mx-auto'/>
       </div>
     </div>
   );
