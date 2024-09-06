@@ -9,6 +9,7 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -33,10 +34,21 @@ class MemoryCaptureWidget extends StatefulWidget {
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   @override
   Widget build(BuildContext context) {
-    return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
+    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
+        builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
       return GestureDetector(
+        onTap: () async {
+          if (provider.segments.isEmpty) {
+            return;
+          }
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (c) => MemoryCapturingPage(
+              topMemoryId: topMemoryId,
+            ),
+          ));
+        },
         child: Container(
           margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
           width: double.maxFinite,
@@ -54,49 +66,23 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
             shape: BoxShape.rectangle,
           ),
-          child: GestureDetector(
-            onTap: () async {
-              await Navigator.of(context).push(MaterialPageRoute(
-                builder: (c) => MemoryCapturingPage(
-                  topMemoryId: topMemoryId,
-                ),
-              ));
-            },
-            child: Padding(
-              padding: const EdgeInsetsDirectional.only(
-                start: 16,
-                top: 16,
-                end: 16,
-                bottom: 4,
-              ),
-              child: Container(
-                constraints: BoxConstraints(maxHeight: 127.6),
-                child: Stack(
-                  children: [
-                    RecordAnimationWidget(
-                      sizeMultiplier: 0.5,
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.max,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _getMemoryHeader(context),
-                        const SizedBox(height: 4),
-                        const Expanded(
-                          child: CustomScrollView(
-                            slivers: [
-                              SliverToBoxAdapter(child: SizedBox(height: 8)),
-                              SliverToBoxAdapter(
-                                child: CaptureWidget(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _getMemoryHeader(context),
+                provider.segments.isNotEmpty
+                    ? const Column(
+                        children: [
+                          SizedBox(height: 8),
+                          LiteCaptureWidget(),
+                          SizedBox(height: 8),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ],
             ),
           ),
         ),
@@ -153,96 +139,174 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       deviceText = '$deviceName ($deviceShortId)';
     }
 
-    // Recording
+    // State
+    var stateText = "";
     var captureProvider = context.read<CaptureProvider>();
-    var stateText = ((captureProvider.audioStorage?.frames ?? []).isNotEmpty ||
-                captureProvider.recordingState == RecordingState.record) &&
-            (deviceProvider.connectedDevice != null)
-        ? "Live"
-        : "Live";
+    var connectivityProvider = context.read<ConnectivityProvider>();
+    if (!connectivityProvider.isConnected) {
+      stateText = "No connection";
+    } else if (captureProvider.memoryCreating) {
+      stateText = "Processing";
+    } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
+      stateText = "Listening";
+    }
+
+    var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+        captureProvider.recordingState == RecordingState.initialising ||
+        captureProvider.recordingState == RecordingState.pause;
+
+    var shouldShowDevice = !(isUsingPhoneMic ||
+        (deviceProvider.connectedDevice == null &&
+            !deviceProvider.isConnecting &&
+            (["Processing"].contains(stateText))));
 
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          GestureDetector(
-            onTap: () async {
-              if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
-                routeToPage(context, const ConnectDevicePage());
-                MixpanelManager().connectFriendClicked();
-              } else {
-                await routeToPage(context,
-                    ConnectedDevice(device: deviceProvider.connectedDevice, batteryLevel: deviceProvider.batteryLevel));
-              }
-            },
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-                border: GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 1,
-                ),
-                shape: BoxShape.rectangle,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: deviceProvider.connectedDevice != null
-                  ? Row(
-                      children: [
-                        Image.asset(
-                          "assets/images/recording_green_circle_icon.png",
-                          width: 10,
-                          height: 10,
-                        ),
-                        const SizedBox(
-                          width: 4,
-                        ),
-                        Text(
-                          deviceText,
-                          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                          maxLines: 1,
-                        )
-                      ],
-                    )
-                  : context.read<DeviceProvider>().isConnecting
-                      ? Text(
-                          "Connecting",
-                          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                        )
-                      : Text(
-                          "No device found",
-                          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                        ),
-            ),
-          ),
+          shouldShowDevice
+              ? GestureDetector(
+                  onTap: () async {
+                    if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+                      routeToPage(context, const ConnectDevicePage());
+                      MixpanelManager().connectFriendClicked();
+                    } else {
+                      await routeToPage(
+                          context,
+                          ConnectedDevice(
+                              device: deviceProvider.connectedDevice, batteryLevel: deviceProvider.batteryLevel));
+                    }
+                  },
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      border: GradientBoxBorder(
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
+                        width: 1,
+                      ),
+                      shape: BoxShape.rectangle,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: deviceProvider.connectedDevice != null
+                        ? Row(
+                            children: [
+                              Image.asset(
+                                "assets/images/recording_green_circle_icon.png",
+                                width: 10,
+                                height: 10,
+                              ),
+                              const SizedBox(
+                                width: 4,
+                              ),
+                              Text(
+                                deviceText,
+                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                maxLines: 1,
+                              )
+                            ],
+                          )
+                        : deviceProvider.isConnecting
+                            ? Text(
+                                "Connecting",
+                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                              )
+                            : Text(
+                                "No device found",
+                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                              ),
+                  ),
+                )
+              : SizedBox.shrink(),
+
           // mic
           deviceProvider.connectedDevice == null && !deviceProvider.isConnecting
-              ? Row(
-                  children: [
-                    getPhoneMicRecordingButton(
-                        context, () => _recordingToggled(context, captureProvider), captureProvider.recordingState),
-                  ],
+              ? Center(
+                  child: getPhoneMicRecordingButton(
+                      context, () => _recordingToggled(context, captureProvider), captureProvider.recordingState),
                 )
-              : const SizedBox(
-                  width: 16,
-                ),
-          Expanded(
-            child: Text(
-              stateText,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              maxLines: 1,
-              textAlign: TextAlign.end,
-            ),
-          )
+              : const SizedBox.shrink(),
+
+          stateText.isNotEmpty
+              ? Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: RecordingStatusIndicator(),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        stateText,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        maxLines: 1,
+                        textAlign: TextAlign.end,
+                      ),
+                    ],
+                  ),
+                )
+              : SizedBox.shrink(),
         ],
       ),
     );
+  }
+}
+
+class RecordingStatusIndicator extends StatefulWidget {
+  const RecordingStatusIndicator({super.key});
+
+  @override
+  _RecordingStatusIndicatorState createState() => _RecordingStatusIndicatorState();
+}
+
+class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Color?> _colorAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2), // adjust duration as needed
+      vsync: this,
+    )
+      ..forward()
+      ..repeat();
+
+    final Animation<double> curve = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+
+    _colorAnim = ColorTween(
+      begin: Colors.grey,
+      end: Colors.blue,
+    ).animate(curve);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+        animation: _colorAnim,
+        builder: (context, child) {
+          var indicator = CircularProgressIndicator(
+            color: _colorAnim.value,
+            strokeWidth: 1.0,
+            value: 1.0,
+          );
+          return indicator;
+        });
   }
 }
 
@@ -281,68 +345,4 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
 
 Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
   return MemoryCaptureWidget(memory: memory);
-}
-
-class RecordAnimationWidget extends StatefulWidget {
-  final bool animatedBackground;
-  final double sizeMultiplier;
-
-  const RecordAnimationWidget({
-    super.key,
-    this.sizeMultiplier = 1.0,
-    this.animatedBackground = true,
-  });
-
-  @override
-  State<RecordAnimationWidget> createState() => _RecordAnimationWidgetState();
-}
-
-class _RecordAnimationWidgetState extends State<RecordAnimationWidget> with TickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Image.asset(
-              "assets/images/stars.png",
-            ),
-            widget.animatedBackground
-                ? AnimatedBuilder(
-                    animation: _animation,
-                    builder: (context, child) {
-                      return Image.asset(
-                        "assets/images/blob.png",
-                        height: 200 * widget.sizeMultiplier * _animation.value,
-                        width: 200 * widget.sizeMultiplier * _animation.value,
-                      );
-                    },
-                  )
-                : Container(),
-          ],
-        ),
-      ),
-    );
-  }
 }
