@@ -1,8 +1,6 @@
 'use client';
-
 import { liteClient as algoliasearch } from 'algoliasearch/lite';
-import SearchBar from './search-bar';
-import { InstantSearch, Configure } from 'react-instantsearch';
+import { Configure, InstantSearch } from 'react-instantsearch';
 import { Fragment } from 'react';
 import envConfig from '@/src/constants/envConfig';
 import { history } from 'instantsearch.js/es/lib/routers';
@@ -34,7 +32,6 @@ export default function SearchControls({ children }: SearchControlsProps) {
         routing={routing}
       >
         <Configure hitsPerPage={20} />
-        <SearchBar />
         {children}
       </InstantSearch>
     </Fragment>

@@ -8,6 +8,7 @@ import SidePanelWrapper from '@/src/components/memories/side-panel/side-panel-wr
 import SidePanel from '@/src/components/memories/side-panel/side-panel';
 import MemoryList from '@/src/components/memories/memory-list/memory-list';
 import './styles.css';
+import SearchBar from '@/src/components/memories/memory-list/search-controls/search-bar';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
@@ -23,18 +24,19 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const previewId = searchParams.previewId;
   return (
     <div className="my-10 flex w-full px-4 md:my-28">
-      <div className='max-w-screen-xl w-full mx-auto'>
-        <h1 className="text-center md:text-start text-4xl font-bold text-white">
+      <div className="mx-auto w-full max-w-screen-xl">
+        <h1 className="text-center text-4xl font-bold text-white md:text-start">
           Memories
         </h1>
-        <div className="mt-10 flex w-full items-start gap-10">
-          <div className="w-full">
-            <SearchControls>
-              <MemoryList />
-            </SearchControls>
+        <SearchControls>
+          <div className="mt-10 flex w-full items-start gap-10">
+            <div className="w-full">
+              <SearchBar />
+              <MemoryList searchParams={searchParams} />
+            </div>
+            <Tendencies />
           </div>
-          <Tendencies />
-        </div>
+        </SearchControls>
       </div>
       <SidePanelWrapper previewId={previewId}>
         <Suspense fallback={<LoadingPreview />}>

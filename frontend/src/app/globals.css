@@ -22,11 +22,10 @@
   }
 } */
 
-input[type="search"]::-webkit-search-cancel-button {
+input[type='search']::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
 }
-
 
 ::selection {
   background-color: #ffffff;
