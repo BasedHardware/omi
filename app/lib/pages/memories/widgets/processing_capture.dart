@@ -38,34 +38,34 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-      return Container(
-        margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
-        width: double.maxFinite,
-        decoration: const BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          border: GradientBoxBorder(
-            gradient: LinearGradient(colors: [
-              Color.fromARGB(127, 208, 208, 208),
-              Color.fromARGB(127, 188, 99, 121),
-              Color.fromARGB(127, 86, 101, 182),
-              Color.fromARGB(127, 126, 190, 236)
-            ]),
-            width: 1,
+      return GestureDetector(
+        onTap: () async {
+          if (provider.segments.isEmpty) {
+            return;
+          }
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (c) => MemoryCapturingPage(
+              topMemoryId: topMemoryId,
+            ),
+          ));
+        },
+        child: Container(
+          margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
+          width: double.maxFinite,
+          decoration: const BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+            border: GradientBoxBorder(
+              gradient: LinearGradient(colors: [
+                Color.fromARGB(127, 208, 208, 208),
+                Color.fromARGB(127, 188, 99, 121),
+                Color.fromARGB(127, 86, 101, 182),
+                Color.fromARGB(127, 126, 190, 236)
+              ]),
+              width: 1,
+            ),
+            shape: BoxShape.rectangle,
           ),
-          shape: BoxShape.rectangle,
-        ),
-        child: GestureDetector(
-          onTap: () async {
-            if (provider.segments.isEmpty) {
-              return;
-            }
-            await Navigator.of(context).push(MaterialPageRoute(
-              builder: (c) => MemoryCapturingPage(
-                topMemoryId: topMemoryId,
-              ),
-            ));
-          },
           child: Padding(
             padding: const EdgeInsetsDirectional.all(16),
             child: Column(
