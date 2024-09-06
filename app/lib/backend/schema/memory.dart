@@ -70,15 +70,15 @@ class ServerProcessingMemory {
     return ServerProcessingMemory(
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'created_at': createdAt.toIso8601String(),
-      'started_at': startedAt?.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'started_at': startedAt?.toUtc().toIso8601String(),
     };
   }
 

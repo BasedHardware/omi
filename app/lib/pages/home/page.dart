@@ -293,11 +293,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Expanded(
-                              child: SizedBox(
-                                height: 10,
-                              ),
-                            ),
                             Expanded(
                               child: MaterialButton(
                                 onPressed: () => _tabChange(0),

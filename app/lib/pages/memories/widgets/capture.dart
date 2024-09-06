@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,32 +6,31 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
-class CaptureWidget extends StatefulWidget {
-  const CaptureWidget({
+class LiteCaptureWidget extends StatefulWidget {
+  const LiteCaptureWidget({
     super.key,
   });
 
   @override
-  State<CaptureWidget> createState() => CaptureWidgetState();
+  State<LiteCaptureWidget> createState() => LiteCaptureWidgetState();
 }
 
-class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+class LiteCaptureWidgetState extends State<LiteCaptureWidget>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -182,13 +180,10 @@ class CaptureWidgetState extends State<CaptureWidget> with AutomaticKeepAliveCli
             ),
           );
         },
-        child: Container(
-          child: getLiteTranscriptWidget(
-            provider.memoryCreating,
-            provider.segments,
-            provider.photos,
-            deviceProvider.connectedDevice,
-          ),
+        child: getLiteTranscriptWidget(
+          provider.segments,
+          provider.photos,
+          deviceProvider.connectedDevice,
         ),
       );
     });
