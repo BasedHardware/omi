@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
@@ -8,12 +10,14 @@ import 'package:share_plus/share_plus.dart';
 class PluginTabWidget extends StatefulWidget {
   final UserMemoriesModel plugin;
   final PluginsResult content;
+  final PluginModel pluginModel;
   final Function onTap;
 
   const PluginTabWidget(
       {super.key,
       required this.plugin,
       required this.content,
+      required this.pluginModel,
       required this.onTap});
 
   @override
@@ -21,6 +25,8 @@ class PluginTabWidget extends StatefulWidget {
 }
 
 class _PluginTabWidgetState extends State<PluginTabWidget> {
+  List<PluginModel> pluginModels = SharedPreferencesUtil().firePluginsList;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -41,7 +47,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                   Container(
                     margin: const EdgeInsets.only(top: 5),
                     child: CachedNetworkImage(
-                      imageUrl: widget.plugin.getImageUrl(),
+                      imageUrl: widget.pluginModel.image!,
                       imageBuilder: (context, imageProvider) => CircleAvatar(
                         backgroundColor: Colors.white,
                         maxRadius: 18,
@@ -64,7 +70,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    widget.plugin.name,
+                                    widget.pluginModel.name ?? "",
                                     maxLines: 1,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600,
@@ -72,7 +78,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                         fontSize: 16),
                                   ),
                                   Text(
-                                    widget.plugin.description,
+                                    widget.pluginModel.description ?? "",
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

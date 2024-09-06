@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart' as um;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -163,14 +164,26 @@ class SharedPreferencesUtil {
   }
 
   List<um.UserMemoriesModel> get pluginMemoriesList {
-    final List<String> plugins = getStringList('pluginMemories') ?? [];
-    return um.fromUserMemoriesList(plugins.map((e) => jsonDecode(e)).toList());
+    final String plugins = getString('pluginMemories') ?? "";
+    final List<um.UserMemoriesModel> userMemoriesModels =
+        um.userMemoriesModelListFromJson(plugins);
+    return userMemoriesModels;
   }
 
   set pluginMemoriesList(List<um.UserMemoriesModel> value) {
-    final List<String> plugins =
-        value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('pluginMemories', plugins);
+    final String plugins = um.userMemoriesModelListToJson(value);
+    saveString('pluginMemories', plugins);
+  }
+
+  List<PluginModel> get firePluginsList {
+    final String plugins = getString('firePlugins') ?? "";
+    final List<PluginModel> pluginsList = pluginModelFromJson(plugins);
+    return pluginsList;
+  }
+
+  set firePluginsList(List<PluginModel> value) {
+    final String plugins = pluginModelToJson(value);
+    saveString('firePlugins', plugins);
   }
 
   enablePlugin(String value) {

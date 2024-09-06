@@ -2,14 +2,18 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+List<UserMemoriesModel> userMemoriesModelListFromJson(String str) =>
+    List<UserMemoriesModel>.from(
+        json.decode(str).map((x) => UserMemoriesModel.fromJson(x)));
+
+String userMemoriesModelListToJson(List<UserMemoriesModel> data) =>
+    json.encode(List<dynamic>.from(data.map((x) => x.toJson())));
+
 UserMemoriesModel userMemoriesModelFromJson(String str) =>
     UserMemoriesModel.fromJson(json.decode(str));
 
 String userMemoriesModelToJson(UserMemoriesModel data) =>
     json.encode(data.toJson());
-
-List<UserMemoriesModel> fromUserMemoriesList(List<dynamic> jsonList) =>
-    jsonList.map((e) => UserMemoriesModel.fromJson(e)).toList();
 
 class UserMemoriesModel {
   bool? discarded;

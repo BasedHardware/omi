@@ -19,7 +19,10 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
+import 'package:friend_private/firebase/service/plugin_fire.dart';
+import 'package:friend_private/firebase/service/user_memories_fire.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -76,6 +79,7 @@ class _HomePageWrapperState extends State<HomePageWrapper>
   List<Plugin> plugins = [];
 
   List<UserMemoriesModel>? userMemoriesModels = [];
+  List<PluginModel>? pluginsModels = [];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool loadingNewMemories = true;
@@ -204,10 +208,10 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
 
-    /*userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
-    if (userMemoriesModels != null) {
-      SharedPreferencesUtil().pluginMemoriesList = userMemoriesModels!;
-    }*/
+    userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
+    debugPrint("initiatePlugins 0 -> ${userMemoriesModels?.length ?? 0}");
+    pluginsModels = await PluginService().getPluginsList();
+    debugPrint("initiatePlugins 0 -> ${pluginsModels?.length ?? 0}");
 
     _edgeCasePluginNotAvailable();
 
@@ -580,7 +584,10 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                                       backgroundColor: Colors.deepPurple,
                                       onRefresh: _initiatePlugins,
                                       child: (!isPluginLoading)
-                                          ? const PluginsTabPage()
+                                          ? PluginsTabPage(
+                                              userMemoriesModels:
+                                                  userMemoriesModels!,
+                                              pluginsModels: pluginsModels!)
                                           : const Center(
                                               child:
                                                   CupertinoActivityIndicator())),
@@ -873,7 +880,7 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                                       setState(() {});
                                       return;
                                     }
-                                    print(
+                                    debugPrint(
                                         'Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
                                     if (s == null ||
                                         s ==
@@ -906,6 +913,7 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                       _controller != null && _controller!.index == 1
                           ? GestureDetector(
                               onTap: () async {
+                                //updateCommunityPluginsData();
                                 String header = "";
                                 header = await getAuthHeader();
                                 Clipboard.setData(ClipboardData(text: header));
