@@ -10,7 +10,7 @@ export default function MemoryList() {
       <div className="flex flex-col gap-10">
         <NoResultsBoundary
           fallback={
-            <div className="px-4 text-center">
+            <div className="px-4 text-center w-full">
               <h3 className="text-lg font-semibold md:text-xl">
                 Sorry, we can't find any matches to your query!
               </h3>
