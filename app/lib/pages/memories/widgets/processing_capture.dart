@@ -155,12 +155,17 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
+    var shouldShowDevice = !(isUsingPhoneMic ||
+        (deviceProvider.connectedDevice == null &&
+            !deviceProvider.isConnecting &&
+            (["Processing"].contains(stateText))));
+
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          !isUsingPhoneMic
+          shouldShowDevice
               ? GestureDetector(
                   onTap: () async {
                     if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
@@ -207,7 +212,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                               )
                             ],
                           )
-                        : context.read<DeviceProvider>().isConnecting
+                        : deviceProvider.isConnecting
                             ? Text(
                                 "Connecting",
                                 style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),

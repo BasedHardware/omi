@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models.processing_memory import ProcessingMemory, UpdateProcessingMemory
 from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing, TranscriptSegment
@@ -26,8 +26,8 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     timer_start = processing_memory.timer_start
     segment_end = transcript_segments[-1].end
     new_memory = CreateMemory(
-        started_at=datetime.utcfromtimestamp(timer_start),
-        finished_at=datetime.utcfromtimestamp(timer_start + segment_end),
+        started_at=datetime.fromtimestamp(timer_start, timezone.utc),
+        finished_at=datetime.fromtimestamp(timer_start + segment_end, timezone.utc),
         language=processing_memory.language,
         transcript_segments=transcript_segments,
     )
@@ -49,6 +49,7 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     messages = trigger_external_integrations(uid, memory)
 
     # update
+    processing_memory.memory_id = memory.id
     processing_memory.message_ids = list(map(lambda m: m.id, messages))
     processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
