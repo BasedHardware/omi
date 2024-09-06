@@ -43,16 +43,15 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: (){
+            onTap: () {
               widget.onTap();
             },
-            child: MarkdownBody(
-              shrinkWrap: true,
-              data: displayedText,
-              onTapText: () {
-                widget.onTap();
-              },
-              selectable: false,
+            child: Container(
+              color: Colors.transparent,
+              child: MarkdownBody(
+                shrinkWrap: true,
+                data: displayedText,
+              ),
             ),
           ),
           if (widget.text.length > widget.maxCharacter)
@@ -62,10 +61,10 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 padding: const EdgeInsets.only(top: 4.0, right: 10, bottom: 4),
                 child: Text(
                   widget.isExpanded ? widget.collapseText : widget.expandText,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.deepPurple,
                     fontWeight: FontWeight.w500,
-                    fontSize: widget.style.fontSize,
+                    fontSize: 13,
                   ),
                 ),
               ),

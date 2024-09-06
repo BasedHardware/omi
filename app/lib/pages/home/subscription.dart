@@ -19,7 +19,7 @@ class SubscriptionPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            subscriptionCard(
+            /*subscriptionCard(
               heading: 'General Subscriptions',
               title: 'PREMIUM',
               subtitle: '10M tokens',
@@ -27,7 +27,7 @@ class SubscriptionPage extends StatelessWidget {
                   'Lorem ipsum dolor sit amet, Eum nostrum voluptas est saepe quod et tempore harum est magnam eaque eos enim saepe est voluptatem quasi.',
               price: '\$19.9',
               iconColor: Colors.orange,
-            ),
+            ),*/
             subscriptionCard(
               heading: 'Plugin Subscriptions',
               title: 'PLUGIN',

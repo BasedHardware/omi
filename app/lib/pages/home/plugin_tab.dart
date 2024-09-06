@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
 import 'package:friend_private/pages/home/plugin_tab_detail.dart';
@@ -35,34 +34,26 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
     debugPrint("PluginsTabPage -> ${plugins.length}");
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: ListView.separated(
+      body: ListView.builder(
         shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 100, left: 1, right: 1, top: 10),
+        padding: const EdgeInsets.only(bottom: 100, top: 10, left: 0, right: 0),
         itemCount: plugins.length,
-        separatorBuilder: (context, index) {
-          final plugin = plugins[index];
-          return (plugin.pluginsResults != null &&
-                  plugin.pluginsResults!.isNotEmpty)
-              ? const Divider(color: Colors.grey)
-              : const SizedBox.shrink();
-        },
-        itemBuilder: (context, index) {
-          final plugin = plugins[index];
+        itemBuilder: (context, ind) {
+          final plugin = plugins[ind];
           return (plugin.pluginsResults != null &&
                   plugin.pluginsResults!.isNotEmpty)
               ? (plugin.pluginsResults != null &&
                       plugin.pluginsResults!.isNotEmpty)
-                  ? ListView.separated(
+                  ? ListView.builder(
                       shrinkWrap: true,
                       reverse: true,
                       padding: EdgeInsets.zero,
                       itemCount: plugin.pluginsResults!.length,
                       physics: const NeverScrollableScrollPhysics(),
-                      separatorBuilder: (context, index) {
-                        return const Divider(color: Colors.grey);
-                      },
                       itemBuilder: (context, index) {
                         return PluginTabWidget(
+                          isDividerShow: true,
+                          isInstallButtonShow: false,
                           userMemoriesModel: plugin,
                           pluginsResult: plugin.pluginsResults![index],
                           pluginModel: widget.pluginsModels
@@ -83,6 +74,8 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                                               .pluginsResults![index].pluginId)
                                       .toList()
                                       .first,
+                                  userMemoriesModels: plugins,
+                                  pluginsModels: widget.pluginsModels,
                                 ));
                           },
                         );
