@@ -23,7 +23,7 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
   }
 
   return (
-    <div data-vaul-no-drag className=''>
+    <div data-vaul-no-drag className="">
       <div className="rounded-2xl text-white">
         <div className="overflow-hidden pb-6">
           <div className="relative z-50">
