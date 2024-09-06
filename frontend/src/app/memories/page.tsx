@@ -22,20 +22,25 @@ export const metadata: Metadata = {
 export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const previewId = searchParams.previewId;
   return (
-    <div className="mx-auto my-10 max-w-screen-md px-4 md:my-28">
-      <div className="relative col-span-2 mx-auto flex max-w-screen-md text-white">
-        <div className="w-full">
-          <SearchControls>
-            <Tendencies />
-            <MemoryList />
-          </SearchControls>
-          <SidePanelWrapper previewId={previewId}>
-            <Suspense fallback={<LoadingPreview />}>
-              <SidePanel previewId={previewId} />
-            </Suspense>
-          </SidePanelWrapper>
+    <div className="my-10 flex w-full px-4 md:my-28">
+      <div className='max-w-screen-xl w-full mx-auto'>
+        <h1 className="text-center md:text-start text-4xl font-bold text-white">
+          Memories
+        </h1>
+        <div className="mt-10 flex w-full items-start gap-10">
+          <div className="w-full">
+            <SearchControls>
+              <MemoryList />
+            </SearchControls>
+          </div>
+          <Tendencies />
         </div>
       </div>
+      <SidePanelWrapper previewId={previewId}>
+        <Suspense fallback={<LoadingPreview />}>
+          <SidePanel previewId={previewId} />
+        </Suspense>
+      </SidePanelWrapper>
     </div>
   );
 }
