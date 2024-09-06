@@ -70,7 +70,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
-  TabController? _controller;
   List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   GlobalKey<ChatPageState> chatPageKey = GlobalKey();
@@ -116,12 +115,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    // TODO: Being triggered multiple times during navigation. It ideally shouldn't
-    _controller = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
-    );
     SharedPreferencesUtil().pageToShowFromNotification = 0; // TODO: whatisit
     SharedPreferencesUtil().onboardingCompleted = true;
 
@@ -548,7 +541,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
     ForegroundUtil.stopForegroundTask();
     super.dispose();
   }
