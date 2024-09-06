@@ -23,9 +23,9 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
   }
 
   return (
-    <div data-vaul-no-drag>
+    <div data-vaul-no-drag className=''>
       <div className="rounded-2xl text-white">
-        <div className="overflow-hidden py-6">
+        <div className="overflow-hidden pb-6">
           <div className="relative z-50">
             <div className="px-4 md:px-12">
               <h2 className="select-text text-2xl font-bold md:text-3xl">
@@ -42,10 +42,10 @@ export default async function SidePanel({ previewId }: SidePanelProps) {
             </div>
             <MemoryWithTabs memory={memory} />
           </div>
-          <div className="absolute top-0 z-10 h-full w-full  select-none blur-3xl">
-            <div className="absolute right-[0rem] top-[-70px] h-[10rem] w-[100%] bg-[#1758e74f] opacity-30" />
-          </div>
         </div>
+      </div>
+      <div className="absolute top-0 z-10 h-full w-full  select-none blur-3xl">
+        <div className="absolute right-[0rem] top-[-70px] h-[10rem] w-[100%] bg-[#1758e74f] opacity-30" />
       </div>
     </div>
   );
