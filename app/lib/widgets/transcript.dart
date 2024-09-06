@@ -139,6 +139,7 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
     }
 
     var text = getLastTranscript(widget.segments, maxCount: 100, includeTimestamps: false);
+    text = text.replaceAll(RegExp(r"\s+|\n+"), " "); // trim before pushing to 1 line text view
     return Text(
       text,
       maxLines: 1,
@@ -152,7 +153,7 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
 String getLastTranscript(List<TranscriptSegment> transcriptSegments,
     {int? maxCount, bool generate = false, bool includeTimestamps = true}) {
   var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: includeTimestamps);
-  if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0), transcript.length);
+  if (maxCount != null) transcript = transcript.substring(max(transcript.length - maxCount, 0));
   try {
     return utf8.decode(transcript.codeUnits);
   } catch (e) {
