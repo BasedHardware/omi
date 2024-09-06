@@ -65,6 +65,14 @@ class PluginModel {
             : ExternalIntegration.fromJson(json["external_integration"]),
       );
 
+  bool hasCapability(String capability) => capabilities!.contains(capability);
+
+  bool worksWithMemories() => hasCapability('memories');
+
+  bool worksWithChat() => hasCapability('chat');
+
+  bool worksExternally() => hasCapability('external_integration');
+
   Map<String, dynamic> toJson() => {
         "id": id,
         "name": name,
@@ -105,6 +113,17 @@ class ExternalIntegration {
         setupCompletedUrl: json["setup_completed_url"],
         setupInstructionsFilePath: json["setup_instructions_file_path"],
       );
+
+  String getTriggerOnString() {
+    switch (triggersOn) {
+      case 'memory_creation':
+        return 'Memory Creation';
+      case 'transcript_processed':
+        return 'Transcript Segment Processed (every 30 seconds during conversation)';
+      default:
+        return 'Unknown';
+    }
+  }
 
   Map<String, dynamic> toJson() => {
         "triggers_on": triggersOn,

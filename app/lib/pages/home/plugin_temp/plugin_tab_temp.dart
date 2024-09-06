@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/home/plugin_tab_detail.dart';
 import 'package:friend_private/pages/home/plugin_temp/plugin_tab_detail_temp.dart';
 import 'package:friend_private/pages/home/subscription.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
 class PluginsTabTempPage extends StatefulWidget {
@@ -116,7 +114,7 @@ class _PluginsTabTempPageState extends State<PluginsTabTempPage> {
               "filteredPlugins -> ${plugin.name} -> ${plugin.content?.length ?? 0}");
           return GestureDetector(
             onTap: () async {
-              await routeToPage(context, PluginTabDetailPage(plugin: plugin));
+              //await routeToPage(context, PluginTabDetailPage(plugin: plugin));
               setState(() => plugins = SharedPreferencesUtil().pluginsList);
             },
             child: Container(
@@ -230,8 +228,7 @@ class _PluginsTabTempPageState extends State<PluginsTabTempPage> {
                       ? PluginTabDetailTempPage(
                           plugin: plugin,
                           onTap: () async {
-                            await routeToPage(
-                                context, PluginTabDetailPage(plugin: plugin));
+                            //await routeToPage(context, PluginTabDetailPage(plugin: plugin));
                             setState(() =>
                                 plugins = SharedPreferencesUtil().pluginsList);
                           },

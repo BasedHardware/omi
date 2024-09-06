@@ -1,20 +1,19 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/firebase/model/plugin_model.dart';
+import 'package:friend_private/firebase/model/user_memories_model.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 
 class PluginTabDetailPage extends StatefulWidget {
-  final Plugin plugin;
+  final UserMemoriesModel userMemoriesModel;
+  final PluginModel pluginModel;
 
-  const PluginTabDetailPage({super.key, required this.plugin});
+  const PluginTabDetailPage(
+      {super.key, required this.userMemoriesModel, required this.pluginModel});
 
   @override
   State<PluginTabDetailPage> createState() => _PluginTabDetailPageState();
@@ -26,8 +25,8 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
   bool pluginLoading = false;
 
   checkSetupCompleted() {
-    // TODO: move check to backend
-    isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl)
+    isPluginSetupCompleted(
+            widget.pluginModel.externalIntegration!.setupCompletedUrl)
         .then((value) {
       setState(() => setupCompleted = value);
     });
@@ -35,13 +34,13 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
 
   @override
   void initState() {
-    if (widget.plugin.worksExternally()) {
-      getPluginMarkdown(
-              widget.plugin.externalIntegration!.setupInstructionsFilePath)
+    if (widget.pluginModel.worksExternally()) {
+      getPluginMarkdown(widget
+              .pluginModel.externalIntegration!.setupInstructionsFilePath!)
           .then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.pluginModel.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
@@ -55,7 +54,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text(widget.plugin.name),
+          title: Text(widget.pluginModel.name ?? ""),
           backgroundColor: Theme.of(context).colorScheme.primary,
           elevation: 0,
         ),
@@ -68,7 +67,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                 backgroundColor: Colors.white,
                 maxRadius: 28,
                 child: CachedNetworkImage(
-                  imageUrl: widget.plugin.getImageUrl(),
+                  imageUrl: widget.pluginModel.image ?? "",
                   imageBuilder: (context, imageProvider) => CircleAvatar(
                     backgroundColor: Colors.white,
                     maxRadius: 28,
@@ -83,15 +82,15 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
+                  //SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
-                      widget.plugin.description,
+                      widget.pluginModel.description ?? "",
                       style: const TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   ),
-                  SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
+                  /*SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
                   widget.plugin.ratingAvg != null
                       ? Row(
                           children: [
@@ -118,7 +117,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                             Text('(${widget.plugin.ratingCount})'),
                           ],
                         )
-                      : Container(),
+                      : Container(),*/
                 ],
               ),
               trailing: pluginLoading
@@ -130,13 +129,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                       ),
                     )
                   : IconButton(
-                      icon: Icon(
-                        widget.plugin.enabled
-                            ? Icons.check
-                            : Icons.arrow_downward_rounded,
-                        color:
-                            widget.plugin.enabled ? Colors.white : Colors.grey,
-                      ),
+                      icon: const Icon(Icons.check, color: Colors.white),
                       onPressed: () {
                         if (!ConnectivityController().isConnected.value) {
                           ScaffoldMessenger.of(context)
@@ -146,32 +139,11 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ));
                           return;
                         }
-                        if (widget.plugin.worksExternally() &&
-                            !widget.plugin.enabled) {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () {
-                                Navigator.pop(context);
-                                _togglePlugin(widget.plugin.id.toString(),
-                                    !widget.plugin.enabled);
-                              },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                              okButtonText: 'Confirm',
-                            ),
-                          );
-                        } else {
-                          _togglePlugin(widget.plugin.id.toString(),
-                              !widget.plugin.enabled);
-                        }
                       },
                     ),
             ),
             const SizedBox(height: 16),
-            widget.plugin.worksWithMemories()
+            widget.pluginModel.worksWithMemories()
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
@@ -181,20 +153,20 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithMemories()
+            widget.pluginModel.worksWithMemories()
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      (widget.plugin.memoryPrompt ?? '').decodeSting,
+                      (widget.pluginModel.memoryPrompt ?? '').decodeSting,
                       style: const TextStyle(
                           color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithChat()
+            widget.pluginModel.worksWithChat()
                 ? const SizedBox(height: 16)
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithChat()
+            widget.pluginModel.worksWithChat()
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
@@ -204,20 +176,20 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithChat()
+            widget.pluginModel.worksWithChat()
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.plugin.chatPrompt!,
+                      widget.pluginModel.chatPrompt!,
                       style: const TextStyle(
                           color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
+            widget.pluginModel.worksExternally()
                 ? const SizedBox(height: 16)
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
+            widget.pluginModel.worksExternally()
                 ? ListTile(
                     onTap: () async {
                       await routeToPage(
@@ -241,14 +213,15 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                     subtitle: Text(
-                      'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
+                      'Triggers on ${widget.pluginModel.externalIntegration!.getTriggerOnString()}',
                       style: const TextStyle(
                           fontWeight: FontWeight.w400, fontSize: 14),
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally() &&
-                    widget.plugin.externalIntegration?.setupCompletedUrl != null
+            widget.pluginModel.worksExternally() &&
+                    widget.pluginModel.externalIntegration?.setupCompletedUrl !=
+                        null
                 ? CheckboxListTile(
                     title: const Text('Setup Completed'),
                     value: setupCompleted,
@@ -258,7 +231,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                     enabled: false,
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
+            widget.pluginModel.worksExternally()
                 ? const SizedBox(height: 16)
                 : const SizedBox.shrink(),
             const SizedBox(height: 16),
@@ -271,7 +244,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                   style: TextStyle(fontSize: 16),
                 ),
                 TextSpan(
-                  text: '${widget.plugin.author}.',
+                  text: '${widget.pluginModel.author}.',
                   style: const TextStyle(
                       fontSize: 16,
                       fontStyle: FontStyle.italic,
@@ -291,7 +264,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                     style: TextStyle(fontSize: 16),
                   ),
                   const SizedBox(width: 16),
-                  widget.plugin.worksWithMemories()
+                  widget.pluginModel.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
@@ -308,8 +281,8 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
-                  widget.plugin.worksWithMemories()
+                  SizedBox(width: widget.pluginModel.worksWithChat() ? 8 : 0),
+                  widget.pluginModel.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
@@ -326,8 +299,8 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
-                  widget.plugin.worksExternally()
+                  SizedBox(width: widget.pluginModel.worksWithChat() ? 8 : 0),
+                  widget.pluginModel.worksExternally()
                       ? Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
@@ -348,7 +321,7 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
               ),
             ),
             const SizedBox(height: 32),
-            const Padding(
+            /*const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 'Your rating:',
@@ -399,43 +372,8 @@ class _PluginTabDetailPageState extends State<PluginTabDetailPage> {
                 },
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 24),*/
           ],
         ));
-  }
-
-  Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
-    var prefs = SharedPreferencesUtil();
-    setState(() => pluginLoading = true);
-    if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
-      if (!enabled) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (c) => getDialog(
-              context,
-              () => Navigator.pop(context),
-              () => Navigator.pop(context),
-              'Error activating the plugin',
-              'If this is an integration plugin, make sure the setup is completed.',
-              singleButton: true,
-            ),
-          );
-        }
-
-        setState(() => pluginLoading = false);
-        return;
-      }
-
-      prefs.enablePlugin(pluginId);
-      MixpanelManager().pluginEnabled(pluginId);
-    } else {
-      prefs.disablePlugin(pluginId);
-      await enablePluginServer(pluginId);
-      MixpanelManager().pluginDisabled(pluginId);
-    }
-    setState(() => widget.plugin.enabled = isEnabled);
-    setState(() => pluginLoading = false);
   }
 }

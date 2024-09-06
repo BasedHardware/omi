@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';

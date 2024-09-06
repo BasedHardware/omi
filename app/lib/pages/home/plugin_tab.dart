@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
+import 'package:friend_private/pages/home/plugin_tab_detail.dart';
 import 'package:friend_private/pages/home/plugin_tab_widget.dart';
+import 'package:friend_private/utils/other/temp.dart';
 
 class PluginsTabPage extends StatefulWidget {
   const PluginsTabPage(
@@ -61,8 +63,8 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                       },
                       itemBuilder: (context, index) {
                         return PluginTabWidget(
-                          plugin: plugin,
-                          content: plugin.pluginsResults![index],
+                          userMemoriesModel: plugin,
+                          pluginsResult: plugin.pluginsResults![index],
                           pluginModel: widget.pluginsModels
                               .where((t) =>
                                   t.id ==
@@ -70,9 +72,18 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
                               .toList()
                               .first,
                           onTap: () async {
-                            //await routeToPage(context, PluginTabDetailPage(plugin: plugin));
-                            setState(() => plugins =
-                                SharedPreferencesUtil().pluginMemoriesList);
+                            await routeToPage(
+                                context,
+                                PluginTabDetailPage(
+                                  userMemoriesModel: plugin,
+                                  pluginModel: widget.pluginsModels
+                                      .where((t) =>
+                                          t.id ==
+                                          plugin
+                                              .pluginsResults![index].pluginId)
+                                      .toList()
+                                      .first,
+                                ));
                           },
                         );
                       },

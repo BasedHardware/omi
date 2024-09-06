@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/firebase/model/plugin_model.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -8,15 +7,15 @@ import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:share_plus/share_plus.dart';
 
 class PluginTabWidget extends StatefulWidget {
-  final UserMemoriesModel plugin;
-  final PluginsResult content;
+  final UserMemoriesModel userMemoriesModel;
+  final PluginsResult pluginsResult;
   final PluginModel pluginModel;
   final Function onTap;
 
   const PluginTabWidget(
       {super.key,
-      required this.plugin,
-      required this.content,
+      required this.userMemoriesModel,
+      required this.pluginsResult,
       required this.pluginModel,
       required this.onTap});
 
@@ -25,8 +24,6 @@ class PluginTabWidget extends StatefulWidget {
 }
 
 class _PluginTabWidgetState extends State<PluginTabWidget> {
-  List<PluginModel> pluginModels = SharedPreferencesUtil().firePluginsList;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -39,8 +36,8 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
           shape: BoxShape.rectangle,
           color: Colors.black,
         ),
-        child: (widget.plugin.pluginsResults != null &&
-                widget.plugin.pluginsResults!.isNotEmpty)
+        child: (widget.userMemoriesModel.pluginsResults != null &&
+                widget.userMemoriesModel.pluginsResults!.isNotEmpty)
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -98,11 +95,11 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                             onTap: () {
                               widget.onTap();
                             },
-                            text: widget.content.content ?? '',
-                            isExpanded: widget.content.isExpanded,
+                            text: widget.pluginsResult.content ?? '',
+                            isExpanded: widget.pluginsResult.isExpanded,
                             toggleExpand: () {
-                              widget.content.isExpanded =
-                                  !widget.content.isExpanded;
+                              widget.pluginsResult.isExpanded =
+                                  !widget.pluginsResult.isExpanded;
                               setState(() {});
                             },
                             style: TextStyle(
@@ -116,14 +113,14 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                           children: [
                             GestureDetector(
                               onTap: () {
-                                widget.content.isFavourite =
-                                    !widget.content.isFavourite;
+                                widget.pluginsResult.isFavourite =
+                                    !widget.pluginsResult.isFavourite;
                                 setState(() {});
                               },
                               child: Container(
                                 padding: const EdgeInsets.fromLTRB(5, 9, 5, 5),
                                 child: Icon(
-                                  widget.content.isFavourite
+                                  widget.pluginsResult.isFavourite
                                       ? Icons.bookmark_outlined
                                       : Icons.bookmark_outline,
                                   size: 17,
@@ -133,7 +130,8 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                             ),
                             GestureDetector(
                               onTap: () async {
-                                await Share.share(widget.content.content ?? '');
+                                await Share.share(
+                                    widget.pluginsResult.content ?? '');
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(5),
@@ -148,8 +146,10 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                             Container(
                               padding: const EdgeInsets.only(right: 10),
                               child: Text(
-                                dateTimeFormat('MMM d, h:mm a',
-                                    widget.content.date ?? DateTime.now()),
+                                dateTimeFormat(
+                                    'MMM d, h:mm a',
+                                    widget.pluginsResult.date ??
+                                        DateTime.now()),
                                 style: const TextStyle(
                                     color: Colors.grey, fontSize: 12),
                               ),

@@ -6,8 +6,6 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/firebase/model/plugin_model.dart';
-import 'package:friend_private/firebase/model/user_memories_model.dart' as um;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -163,7 +161,7 @@ class SharedPreferencesUtil {
     saveStringList('pluginsList', plugins);
   }
 
-  List<um.UserMemoriesModel> get pluginMemoriesList {
+  /*List<um.UserMemoriesModel> get pluginMemoriesList {
     final String plugins = getString('pluginMemories') ?? "";
     final List<um.UserMemoriesModel> userMemoriesModels =
         um.userMemoriesModelListFromJson(plugins);
@@ -184,7 +182,7 @@ class SharedPreferencesUtil {
   set firePluginsList(List<PluginModel> value) {
     final String plugins = pluginModelToJson(value);
     saveString('firePlugins', plugins);
-  }
+  }*/
 
   enablePlugin(String value) {
     final List<Plugin> plugins = pluginsList;
