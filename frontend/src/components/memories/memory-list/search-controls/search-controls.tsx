@@ -25,7 +25,6 @@ const routing = {
 export default function SearchControls({ children }: SearchControlsProps) {
   return (
     <Fragment>
-      <h1 className="mt-10 text-center text-4xl font-bold text-white">Memories</h1>
       <InstantSearch
         future={{
           preserveSharedStateOnUnmount: true,
