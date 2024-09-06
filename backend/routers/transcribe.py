@@ -109,8 +109,6 @@ async def _websocket_util(
         await websocket.accept()
     except RuntimeError as e:
         print(e)
-        # Should not close here, maybe used by deepgram
-        # await websocket.close()
         return
 
     # Processing memory
@@ -158,6 +156,7 @@ async def _websocket_util(
     # Process
     transcript_socket2 = None
     websocket_active = True
+    websocket_close_code = 1001  # Going Away, don't close with good from backend
     timer_start = None
     audio_buffer = None
     duration = 0
@@ -183,7 +182,8 @@ async def _websocket_util(
 
     except Exception as e:
         print(f"Initial processing error: {e}")
-        await websocket.close()
+        websocket_close_code = 1011
+        await websocket.close(code=websocket_close_code)
         return
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
@@ -191,6 +191,7 @@ async def _websocket_util(
 
     async def receive_audio(socket1, socket2):
         nonlocal websocket_active
+        nonlocal websocket_close_code
         nonlocal timer_start
         nonlocal audio_buffer
         audio_buffer = bytearray()
@@ -225,6 +226,7 @@ async def _websocket_util(
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Could not process audio: error {e}')
+            websocket_close_code = 1011
         finally:
             websocket_active = False
             socket1.finish()
@@ -234,6 +236,7 @@ async def _websocket_util(
     # heart beat
     async def send_heartbeat():
         nonlocal websocket_active
+        nonlocal websocket_close_code
         try:
             while websocket_active:
                 await asyncio.sleep(30)
@@ -246,6 +249,7 @@ async def _websocket_util(
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Heartbeat error: {e}')
+            websocket_close_code = 1011
         finally:
             websocket_active = False
 
@@ -296,9 +300,15 @@ async def _websocket_util(
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced], frame_rate=sample_rate, channels=channels, codec=codec,)
 
         emotional_feedback = processing_memory.emotional_feedback
-        postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+        (status, new_memory) = postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+        if status == 200:
+            memory = new_memory
+        else:
+            print(f"Post processing failed {memory.id}")
 
         os.remove(file_path)
+
+        return memory
 
     # Create memory
     async def _create_memory():
@@ -337,6 +347,11 @@ async def _websocket_util(
             return
         processing_memory = updated_processing_memory
 
+        # Post processing
+        new_memory = await _post_process_memory(memory)
+        if new_memory:
+            memory = new_memory
+
         # Message: completed
         msg = NewMemoryCreated(event_type="new_memory_created",
                                processing_memory_id=processing_memory.id,
@@ -345,7 +360,7 @@ async def _websocket_util(
                                messages=messages,)
         ok = await _send_message_event(msg)
         if not ok:
-            print("Can not send message event new_memory_create_failed")
+            print("Can not send message event new_memory_created")
 
         return memory
 
@@ -354,7 +369,7 @@ async def _websocket_util(
         nonlocal memory_watching
         nonlocal websocket_active
         while memory_watching and websocket_active:
-            print("new memory watch")
+            print(f"new memory watch, uid: {uid}")
             await asyncio.sleep(5)
 
             await _try_flush_new_memory()
@@ -394,8 +409,8 @@ async def _websocket_util(
         now = time.time()
         should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
-        # 0 words at least
-        min_words_limit = 0
+        # 1 words at least
+        min_words_limit = 1
         should_create_memory_time_words = min_words_limit == 0
         if min_words_limit > 0 and should_create_memory_time:
             wc = 0
@@ -411,8 +426,6 @@ async def _websocket_util(
             if not memory:
                 print(f"Can not create new memory uid: ${uid}, processing memory: {processing_memory.id if processing_memory else 0}")
                 return
-
-            await _post_process_memory(memory)
 
             # Clean
             memory_transcript_segements = memory_transcript_segements[processing_memory_synced:]
@@ -437,16 +450,17 @@ async def _websocket_util(
     finally:
         websocket_active = False
         memory_watching = False
-        large_audio_buffer = bytearray()
-        if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close()
-            except Exception as e:
-                print(f"Error closing WebSocket: {e}")
 
         # Flush new memory watch
         if new_memory_watch:
             await _try_flush_new_memory()
+
+        # Close socket
+        if websocket.client_state == WebSocketState.CONNECTED:
+            try:
+                await websocket.close(code=websocket_close_code)
+            except Exception as e:
+                print(f"Error closing WebSocket: {e}")
 
 
 @ router.websocket("/listen")

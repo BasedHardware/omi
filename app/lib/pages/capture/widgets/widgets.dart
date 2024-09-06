@@ -285,27 +285,16 @@ getTranscriptWidget(
 }
 
 getLiteTranscriptWidget(
-  bool memoryCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
   BTDeviceStruct? btDevice,
 ) {
-  if (memoryCreating) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 0),
-      child: Center(child: CircularProgressIndicator(color: Colors.white)),
-    );
-  }
-
   return Column(
     children: [
       if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
       if (segments.isNotEmpty)
         LiteTranscriptWidget(
           segments: segments,
-          topMargin: false,
-          separator: false,
-          horizontalMargin: false,
         ),
     ],
   );
