@@ -2,11 +2,10 @@
 import { Fragment } from 'react';
 import { Drawer, DrawerContent } from '@/src/components/ui/drawer';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Enlarge, Xmark } from 'iconoir-react';
-import Link from 'next/link';
 import { DialogTitle } from '../../ui/dialog';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { ScrollArea } from '@/src/components/ui/scroll-area';
+import SidePanelHeader from './side-panel-header';
 
 interface SidePanelWrapperProps {
   children: React.ReactNode;
@@ -43,22 +42,8 @@ export default function SidePanelWrapper({ children, previewId }: SidePanelWrapp
           <VisuallyHidden.Root>
             <DialogTitle>Memory Details</DialogTitle>
           </VisuallyHidden.Root>
-
           <ScrollArea className="h-screen max-h-screen select-text bg-zinc-900">
-            <header className="relative z-20 flex w-full gap-2 px-4 pt-4 md:px-12 md:pt-12">
-              <button
-                onClick={() => handleOpen(false)}
-                className="rounded-md p-1 hover:bg-zinc-800"
-              >
-                <Xmark className="text-base" />
-              </button>
-              <Link
-                href={`/memories/${previewId}`}
-                className="rounded-md p-1 hover:bg-zinc-800"
-              >
-                <Enlarge className="text-base" />
-              </Link>
-            </header>
+            <SidePanelHeader handleOpen={handleOpen} previewId={previewId} />
             {children}
           </ScrollArea>
         </DrawerContent>

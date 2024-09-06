@@ -7,8 +7,8 @@ import { Metadata } from 'next';
 import SidePanelWrapper from '@/src/components/memories/side-panel/side-panel-wrapper';
 import SidePanel from '@/src/components/memories/side-panel/side-panel';
 import MemoryList from '@/src/components/memories/memory-list/memory-list';
-import './styles.css';
 import SearchBar from '@/src/components/memories/memory-list/search-controls/search-bar';
+import './styles.css';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
@@ -25,14 +25,14 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   return (
     <div className="my-10 flex w-full px-4 md:my-28">
       <div className="mx-auto w-full max-w-screen-xl">
-        <h1 className="text-center text-4xl font-bold text-white md:text-start">
+        <h1 className="text-center text-3xl font-bold text-white md:text-start md:text-4xl">
           Memories
         </h1>
         <SearchControls>
           <div className="mt-10 flex w-full items-start gap-10">
             <div className="w-full">
               <SearchBar />
-              <MemoryList searchParams={searchParams} />
+              <MemoryList />
             </div>
             <Tendencies />
           </div>

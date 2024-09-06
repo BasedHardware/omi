@@ -3,8 +3,7 @@ import { Hits, Pagination } from 'react-instantsearch';
 import MemoryItem from './memory-item';
 import { NoResultsBoundary } from './no-results-boundary';
 
-export default function MemoryList({ searchParams }) {
-  console.log({ searchParams });
+export default function MemoryList() {
   return (
     <div className="mt-12 text-white">
       <div className="flex flex-col gap-10">
