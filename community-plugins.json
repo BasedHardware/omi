@@ -702,7 +702,7 @@
       "setup_completed_url": "https://friend-integration.vercel.app/check_setup",
       "setup_instructions_file_path": "https://friend-integration.vercel.app/static/README.md"
     },
-    "deleted": true
+    "deleted": false
   },
   {
     "id": "multion-amazon",
