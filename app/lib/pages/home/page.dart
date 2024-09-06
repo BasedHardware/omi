@@ -20,7 +20,6 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/firebase/model/user_memories_model.dart';
-import 'package:friend_private/firebase/service/user_memories_fire.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/capture/page.dart';
@@ -205,10 +204,10 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     plugins = SharedPreferencesUtil().pluginsList;
     plugins = await retrievePlugins();
 
-    userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
+    /*userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
     if (userMemoriesModels != null) {
       SharedPreferencesUtil().pluginMemoriesList = userMemoriesModels!;
-    }
+    }*/
 
     _edgeCasePluginNotAvailable();
 
@@ -907,21 +906,6 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                       _controller != null && _controller!.index == 1
                           ? GestureDetector(
                               onTap: () async {
-                                List<UserMemoriesModel>? userMemoriesModels =
-                                    await UserMemoriesService()
-                                        .getUserMemoriesList();
-                                if (userMemoriesModels != null) {
-                                  debugPrint(
-                                      "getUserMemoriesList -> ${userMemoriesModels.length}");
-                                }
-                                /*if (userMemoriesModels != null) {
-                                  for (int i = 0;
-                                      i < userMemoriesModels.length;
-                                      i++) {
-                                    debugPrint(
-                                        "getUserMemoriesList -> ${userMemoriesModels[i].toJson()}");
-                                  }
-                                }*/
                                 String header = "";
                                 header = await getAuthHeader();
                                 Clipboard.setData(ClipboardData(text: header));

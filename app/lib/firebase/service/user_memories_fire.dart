@@ -1,5 +1,6 @@
 import "package:cloud_firestore/cloud_firestore.dart";
 import "package:firebase_auth/firebase_auth.dart";
+import "package:flutter/material.dart";
 import "package:friend_private/firebase/model/user_memories_model.dart";
 
 class UserMemoriesService {
@@ -22,9 +23,13 @@ class UserMemoriesService {
         if (snapshot.docs.isNotEmpty) {
           for (final f in snapshot.docs) {
             //debugPrint("getUserMemoriesList -> ${jsonEncode(f.data())}");
-            final userMemoriesModel = UserMemoriesModel.fromJson(f.data())
-              ..refId = f.id;
-            userMemoriesModels.add(userMemoriesModel);
+            try {
+              final userMemoriesModel = UserMemoriesModel.fromJson(f.data())
+                ..refId = f.id;
+              userMemoriesModels.add(userMemoriesModel);
+            } catch (e) {
+              debugPrint(e.toString());
+            }
           }
           return userMemoriesModels;
         } else {
