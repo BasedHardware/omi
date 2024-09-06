@@ -136,7 +136,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                     },
                                     child: Container(
                                       padding:
-                                          const EdgeInsets.fromLTRB(0, 5, 5, 5),
+                                          const EdgeInsets.fromLTRB(0, 8, 5, 5),
                                       child: Icon(
                                         widget.pluginsResult.isFavourite
                                             ? Icons.bookmark_outlined
