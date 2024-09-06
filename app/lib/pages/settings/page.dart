@@ -330,7 +330,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Sign Out', () {
                     signOut();
                     Navigator.pushAndRemoveUntil(
-                        context, MaterialPageRoute(builder: (context) => const AuthWrapper()), (route) => false);
+                        context, MaterialPageRoute(builder: (context) => const DeciderWidget()), (route) => false);
                   }, icon: Icons.logout, visibility: true),
                   const SizedBox(height: 32),
                   Padding(

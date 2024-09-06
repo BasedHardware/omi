@@ -124,7 +124,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           MixpanelManager().onboardingStepICompleted('Auth');
                           if (SharedPreferencesUtil().onboardingCompleted) {
                             // previous users
-                            routeToPage(context, const HomePageWrapper(), replace: true);
+                            // Not needed anymore, because AuthProvider already does this
+                            // routeToPage(context, const HomePageWrapper(), replace: true);
                           } else {
                             _goNext();
                           }
