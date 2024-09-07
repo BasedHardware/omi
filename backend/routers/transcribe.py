@@ -111,7 +111,7 @@ async def _websocket_util(
         print(e)
         return
 
-    session_id = uuid.uuid4()
+    session_id = str(uuid.uuid4())
 
     # Processing memory
     memory_watching = new_memory_watch
@@ -274,6 +274,7 @@ async def _websocket_util(
         nonlocal processing_memory_synced
         processing_memory = ProcessingMemory(
             id=str(uuid.uuid4()),
+            session_id=session_id,
             created_at=datetime.utcnow(),
             timer_start=timer_start,
             language=language,
