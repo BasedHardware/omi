@@ -111,11 +111,12 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                       ListView(
                         shrinkWrap: true,
                         children: [
-                          provider.segments.isEmpty
-                              ? const Column(
+                          provider.segments.isEmpty && provider.photos.isEmpty
+                              ? Column(
                                   children: [
-                                    SizedBox(height: 80),
-                                    Center(child: Text("No transcript")),
+                                    const SizedBox(height: 80),
+                                    Center(
+                                        child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
                                   ],
                                 )
                               : getTranscriptWidget(provider.memoryCreating, provider.segments, provider.photos,

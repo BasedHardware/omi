@@ -234,7 +234,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   // Should validate with synced frames also
   bool _shouldWaitCreateMemoryAutomatically() {
-    if (isGlasses) {
+    // Openglass
+    if (photos.isNotEmpty) {
       return false;
     }
 
