@@ -20,6 +20,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
@@ -38,6 +39,7 @@ import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
   if (F.env == Environment.prod) {
@@ -200,7 +202,47 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: const DeciderWidget(),
+              builder: (context, child) {
+                FlutterError.onError = (FlutterErrorDetails details) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    Logger.instance.talker.handle(details.exception, details.stack);
+                  });
+                };
+                ErrorWidget.builder = (errorDetails) {
+                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                };
+                return child!;
+              },
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: TalkerWrapperOptions(
+                  enableErrorAlerts: true,
+                  enableExceptionAlerts: true,
+                  exceptionAlertBuilder: (context, data) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(0),
+                        leading: const Icon(Icons.error_outline, color: Colors.white),
+                        title: Text(
+                          data.message ?? 'Something went wrong! Please try again later.',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.share, color: Colors.white),
+                          onPressed: () {},
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                child: const DeciderWidget(),
+              ),
             ),
           );
         });
@@ -230,6 +272,41 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           return const OnboardingWrapper();
         }
       },
+    );
+  }
+}
+
+class CustomErrorWidget extends StatelessWidget {
+  final String errorMessage;
+
+  CustomErrorWidget({required this.errorMessage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 50.0,
+            ),
+            const SizedBox(height: 10.0),
+            const Text(
+              'Something went wrong! Please try again later.',
+              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10.0),
+            Text(
+              errorMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16.0),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
