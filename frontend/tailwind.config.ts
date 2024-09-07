@@ -23,6 +23,10 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       keyframes: {
+        slideRightAndFade: {
+          '0%': { opacity: '0', transform: 'translateX(-7px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
         'accordion-down': {
           from: {
             height: '0',
@@ -43,6 +47,7 @@ const config: Config = {
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        slideRightAndFade: 'slideRightAndFade 300ms cubic-bezier(0.16, 0, 0.13, 1)',
       },
     },
   },
