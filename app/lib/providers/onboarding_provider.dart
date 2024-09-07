@@ -123,8 +123,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     required bool isFromOnboarding,
     VoidCallback? goNext,
   }) async {
+    if (device.name.toLowerCase() == 'openglass' || device.type == DeviceType.openglass) {
+      notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      return;
+    }
     if (isClicked) return; // if any item is clicked, don't do anything
-
     isClicked = true; // Prevent further clicks
     connectingToDeviceId = device.id; // Mark this device as being connected to
     notifyListeners();
