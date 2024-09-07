@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
@@ -12,11 +12,8 @@ import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
-  final FocusNode textFieldFocusNode;
-
   const MemoriesPage({
     super.key,
-    required this.textFieldFocusNode,
   });
 
   @override
@@ -25,7 +22,6 @@ class MemoriesPage extends StatefulWidget {
 
 class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
-  FocusNode textFieldFocusNode = FocusNode();
 
   @override
   bool get wantKeepAlive => true;
@@ -70,36 +66,38 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                 ),
                 shape: BoxShape.rectangle,
               ),
-              child: TextField(
-                enabled: true,
-                controller: textController,
-                onChanged: (s) {
-                  memoryProvider.filterMemories(s);
-                },
-                obscureText: false,
-                autofocus: false,
-                focusNode: widget.textFieldFocusNode,
-                decoration: InputDecoration(
-                  hintText: 'Search for memories...',
-                  hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  suffixIcon: textController.text.isEmpty
-                      ? const SizedBox.shrink()
-                      : IconButton(
-                          icon: const Icon(
-                            Icons.cancel,
-                            color: Color(0xFFF7F4F4),
-                            size: 28.0,
+              child: Consumer<HomeProvider>(builder: (context, home, child) {
+                return TextField(
+                  enabled: true,
+                  controller: textController,
+                  onChanged: (s) {
+                    memoryProvider.filterMemories(s);
+                  },
+                  obscureText: false,
+                  autofocus: false,
+                  focusNode: home.memoryFieldFocusNode,
+                  decoration: InputDecoration(
+                    hintText: 'Search for memories...',
+                    hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    suffixIcon: textController.text.isEmpty
+                        ? const SizedBox.shrink()
+                        : IconButton(
+                            icon: const Icon(
+                              Icons.cancel,
+                              color: Color(0xFFF7F4F4),
+                              size: 28.0,
+                            ),
+                            onPressed: () {
+                              textController.clear();
+                              memoryProvider.initFilteredMemories();
+                            },
                           ),
-                          onPressed: () {
-                            textController.clear();
-                            memoryProvider.initFilteredMemories();
-                          },
-                        ),
-                ),
-                style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-              ),
+                  ),
+                  style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                );
+              }),
             ),
           ),
           SliverToBoxAdapter(
