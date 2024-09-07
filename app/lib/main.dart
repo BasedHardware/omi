@@ -126,9 +126,8 @@ class _MyAppState extends State<MyApp> {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<ConnectivityProvider>().isConnected) {
-        NotificationService.instance.saveNotificationToken();
-      }
+      //TODO: Internet connection check required
+      NotificationService.instance.saveNotificationToken();
     });
 
     super.initState();
