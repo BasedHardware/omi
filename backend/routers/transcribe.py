@@ -113,6 +113,8 @@ async def _websocket_util(
 
     session_id = str(uuid.uuid4())
 
+    flush_new_memory_lock = threading.Lock()
+
     # Processing memory
     memory_watching = new_memory_watch
     processing_memory: ProcessingMemory = None
@@ -374,8 +376,11 @@ async def _websocket_util(
         while memory_watching and websocket_active:
             print(f"new memory watch, uid: {uid}, session: {session_id}")
             await asyncio.sleep(5)
+            await _try_flush_new_memory_with_lock()
 
-            await _try_flush_new_memory()
+    async def _try_flush_new_memory_with_lock():
+        with flush_new_memory_lock:
+            return await _try_flush_new_memory()
 
     async def _try_flush_new_memory():
         nonlocal memory_transcript_segements
@@ -456,7 +461,7 @@ async def _websocket_util(
 
         # Flush new memory watch
         if new_memory_watch:
-            await _try_flush_new_memory()
+            await _try_flush_new_memory_with_lock()
 
         # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
