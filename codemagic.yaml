@@ -1,7 +1,7 @@
 workflows:
   ios-prod-testflight:
     name: Release iOS to Testflight
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v2
@@ -136,7 +136,7 @@ workflows:
 
   android-prod-internal:
     name: Release Android Internal Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
       android_signing:
@@ -294,7 +294,7 @@ workflows:
 
   ios-prod-patch:
     name: Patch iOS to Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v2
@@ -429,7 +429,7 @@ workflows:
 
   android-prod-patch:
     name: Patch Android to Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
       android_signing:
