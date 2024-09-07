@@ -234,6 +234,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   // Should validate with synced frames also
   bool _shouldWaitCreateMemoryAutomatically() {
+    if (isGlasses) {
+      return false;
+    }
+
+    // Friend
     debugPrint("Should wait ${processingMemoryId != null}");
     return processingMemoryId != null;
   }
