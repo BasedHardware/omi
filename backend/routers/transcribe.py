@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 
+from database.memories import get_memory
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
 from models.memory import Memory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing, TranscriptSegment
@@ -123,12 +124,12 @@ async def _websocket_util(
     memory_transcript_segements = []
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
-    lock = threading.Lock()
+    processing_memory_lock = threading.Lock()
+    flush_memory_lock = threading.Lock()
 
     def stream_transcript(segments, stream_id):
         nonlocal websocket
         nonlocal processing_memory
-        nonlocal processing_memory_synced
         nonlocal memory_transcript_segements
 
         if not segments or len(segments) == 0:
@@ -144,7 +145,6 @@ async def _websocket_util(
 
             # Sync processing transcript, periodly
             if processing_memory and len(memory_transcript_segements) % 3 == 0:
-                processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
@@ -255,7 +255,6 @@ async def _websocket_util(
             websocket_active = False
 
     async def _send_message_event(msg: MessageEvent):
-        print(f"Message: ${msg.to_json()}")
         try:
             await websocket.send_json(msg.to_json())
             return True
@@ -268,16 +267,19 @@ async def _websocket_util(
 
     # Create proccesing memory
     async def _create_processing_memory_with_lock():
-        with lock:
+        nonlocal processing_memory_lock
+        with processing_memory_lock:
             if processing_memory:
-                return
+                return processing_memory
 
             return await _create_processing_memory()
 
     async def _create_processing_memory():
+        print("create processing memory")
         nonlocal processing_memory
         nonlocal memory_transcript_segements
         nonlocal processing_memory_synced
+
         processing_memory = ProcessingMemory(
             id=str(uuid.uuid4()),
             created_at=datetime.utcnow(),
@@ -318,7 +320,39 @@ async def _websocket_util(
 
         return memory
 
+    async def _sync_exists_memory(memory: Memory):
+        print("sync exists memory")
+        nonlocal processing_memory
+        nonlocal processing_memory_synced
+        nonlocal processing_audio_frames
+        nonlocal processing_audio_frame_synced
+        nonlocal memory_transcript_segements
+
+        # update processing memory
+        processing_memory_synced = len(memory_transcript_segements)
+        processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m),
+                                                         memory_transcript_segements[:processing_memory_synced]))
+        processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+
+        # Post processing
+        new_memory = await _post_process_memory(memory)
+        if new_memory:
+            memory = new_memory
+
+        # Message: completed
+        msg = NewMemoryCreated(event_type="new_memory_created",
+                               processing_memory_id=processing_memory.id,
+                               memory_id=memory.id,
+                               memory=memory,
+                               messages=[],)
+        ok = await _send_message_event(msg)
+        if not ok:
+            print("Can not send message event new_memory_created")
+
+        return memory
+
     # Create memory
+
     async def _create_memory():
         print("create memory")
         nonlocal processing_memory
@@ -331,12 +365,10 @@ async def _websocket_util(
             # Force create one
             await _create_processing_memory_with_lock()
         else:
-            # or ensure synced processing transcript
-            if processing_memory:
-                processing_memory_synced = len(memory_transcript_segements)
-                processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m),
-                                                                 memory_transcript_segements[:processing_memory_synced]))
-                processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+            processing_memory_synced = len(memory_transcript_segements)
+            processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m),
+                                                             memory_transcript_segements[:processing_memory_synced]))
+            processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
@@ -353,7 +385,8 @@ async def _websocket_util(
             if not ok:
                 print("Can not send message event new_memory_create_failed")
             return
-        processing_memory = updated_processing_memory
+        if not updated_processing_memory:
+            processing_memory = updated_processing_memory
 
         # Post processing
         new_memory = await _post_process_memory(memory)
@@ -383,8 +416,9 @@ async def _websocket_util(
             await _try_flush_new_memory_with_lock()
 
     async def _try_flush_new_memory_with_lock():
-        with lock:
-            await _try_flush_new_memory()
+        nonlocal flush_memory_lock
+        with flush_memory_lock:
+            return await _try_flush_new_memory()
 
     async def _try_flush_new_memory():
         nonlocal memory_transcript_segements
@@ -398,6 +432,20 @@ async def _websocket_util(
             print("not timer start")
             return
 
+        # Sync to existing memory
+        if processing_memory and processing_memory.memory_id and processing_memory_synced < len(memory_transcript_segements):
+            print("sync memory to existing one")
+            memory = get_memory(uid, processing_memory.memory_id)
+            if not memory:
+                print(f"memory is not found, memory_id: {processing_memory.memory_id}")
+                return
+
+            memory = Memory(**memory)
+
+            await _sync_exists_memory(memory)
+            return
+
+        # Or create new
         # Validate last segment
         last_segment = None
         if len(memory_transcript_segements) > 0:
