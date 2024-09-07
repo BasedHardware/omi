@@ -779,8 +779,12 @@ showOptionsBottomSheet(
       builder: (context) => StatefulBuilder(builder: (context, setModalState) {
             changeDisplayDevOptions(bool value) => setModalState(() => displayDevTools = value);
             changeDisplayShareOptions(bool value) => setModalState(() => displayShareOptions = value);
+            changeLoadingReprocessMemory(bool value) {
+              if (context.mounted) {
+                setModalState(() => loadingReprocessMemory = value);
+              }
+            }
 
-            changeLoadingReprocessMemory(bool value) => setModalState(() => loadingReprocessMemory = value);
             changeLoadingPluginIntegrationTest(bool value) => setModalState(() => loadingPluginIntegrationTest = value);
 
             changeLoadingShareMemoryTranscript(bool value) => setModalState(() => loadingShareMemoryTranscript = value);
