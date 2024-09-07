@@ -123,6 +123,7 @@ async def _websocket_util(
     memory_transcript_segements = []
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
+    lock = threading.Lock()
 
     def stream_transcript(segments, stream_id):
         nonlocal websocket
@@ -266,6 +267,13 @@ async def _websocket_util(
         return False
 
     # Create proccesing memory
+    async def _create_processing_memory_with_lock():
+        with lock:
+            if processing_memory:
+                return
+
+            return await _create_processing_memory()
+
     async def _create_processing_memory():
         nonlocal processing_memory
         nonlocal memory_transcript_segements
@@ -321,7 +329,7 @@ async def _websocket_util(
 
         if not processing_memory:
             # Force create one
-            await _create_processing_memory()
+            await _create_processing_memory_with_lock()
         else:
             # or ensure synced processing transcript
             if processing_memory:
@@ -372,6 +380,10 @@ async def _websocket_util(
             print(f"new memory watch, uid: {uid}")
             await asyncio.sleep(5)
 
+            await _try_flush_new_memory_with_lock()
+
+    async def _try_flush_new_memory_with_lock():
+        with lock:
             await _try_flush_new_memory()
 
     async def _try_flush_new_memory():
@@ -400,7 +412,7 @@ async def _websocket_util(
         should_create_processing_memory = not processing_memory and len(memory_transcript_segements) > 0
         print(f"Should create processing {should_create_processing_memory}")
         if should_create_processing_memory:
-            await _create_processing_memory()
+            await _create_processing_memory_with_lock()
 
         # Validate transcript
         # Longer 60s
@@ -453,7 +465,7 @@ async def _websocket_util(
 
         # Flush new memory watch
         if new_memory_watch:
-            await _try_flush_new_memory()
+            await _try_flush_new_memory_with_lock()
 
         # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
