@@ -30,7 +30,9 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   checkSetupCompleted() {
     // TODO: move check to backend
     isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
-      setState(() => setupCompleted = value);
+      if (mounted) {
+        setState(() => setupCompleted = value);
+      }
     });
   }
 
@@ -186,7 +188,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.plugin.chatPrompt!,
+                      widget.plugin.chatPrompt ?? '',
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
