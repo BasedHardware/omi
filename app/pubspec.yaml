@@ -93,6 +93,8 @@ dependencies:
   frame_sdk: ^0.0.7
   gleap_sdk: ^13.9.1
   web_socket_channel: ^3.0.1
+  talker_flutter:
+
 
 dependency_overrides:
   http: ^1.2.1
