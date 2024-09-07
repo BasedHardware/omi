@@ -10,6 +10,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/scan.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier {
@@ -45,6 +46,12 @@ class DeviceProvider extends ChangeNotifier {
     if (statusSubscription != null) return;
     if (connectedDevice == null) {
       connectedDevice = await getConnectedDevice();
+      if (connectedDevice == null) {
+        print('connectedDevice is null, unable to connect as well');
+        Logger.handle(Exception('Unable to connect to device'), StackTrace.current,
+            message: 'Unable to connect to device. Please make sure the device is turned on and nearby.');
+        return;
+      }
       SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice!.name;
       MixpanelManager().deviceConnected();
