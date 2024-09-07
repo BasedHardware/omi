@@ -52,7 +52,6 @@ Future<bool> _init() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   if (Env.gleapApiKey != null) Gleap.initialize(token: Env.gleapApiKey!);
-  listenAuthTokenChanges();
   bool isAuth = false;
   try {
     isAuth = (await getIdToken()) != null;
@@ -60,7 +59,6 @@ Future<bool> _init() async {
 
   if (isAuth) MixpanelManager().identify();
   if (isAuth) identifyGleap();
-
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -101,19 +99,17 @@ void main() async {
           Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
-        runApp(MyApp(isAuth: isAuth));
+        runApp(const MyApp());
       },
       CrashReporting.reportCrash,
     );
   } else {
-    runApp(MyApp(isAuth: isAuth));
+    runApp(const MyApp());
   }
 }
 
 class MyApp extends StatefulWidget {
-  final bool isAuth;
-
-  const MyApp({super.key, required this.isAuth});
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -245,7 +241,7 @@ class _MyAppState extends State<MyApp> {
                     );
                   },
                 ),
-                child: const AuthWrapper(),
+                child: const DeciderWidget(),
               ),
             ),
           );
@@ -253,16 +249,30 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+class DeciderWidget extends StatefulWidget {
+  const DeciderWidget({super.key});
+
+  @override
+  State<DeciderWidget> createState() => _DeciderWidgetState();
+}
+
+class _DeciderWidgetState extends State<DeciderWidget> {
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (SharedPreferencesUtil().onboardingCompleted && user != null) {
-      return const HomePageWrapper();
-    }
-    return const OnboardingWrapper();
+    return Consumer<AuthenticationProvider>(
+      builder: (context, authProvider, child) {
+        if (SharedPreferencesUtil().onboardingCompleted && authProvider.isSignedIn()) {
+          return const HomePageWrapper();
+        } else {
+          return const OnboardingWrapper();
+        }
+      },
+    );
   }
 }
 

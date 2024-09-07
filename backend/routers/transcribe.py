@@ -300,9 +300,15 @@ async def _websocket_util(
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced], frame_rate=sample_rate, channels=channels, codec=codec,)
 
         emotional_feedback = processing_memory.emotional_feedback
-        postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+        (status, new_memory) = postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+        if status == 200:
+            memory = new_memory
+        else:
+            print(f"Post processing failed {memory.id}")
 
         os.remove(file_path)
+
+        return memory
 
     # Create memory
     async def _create_memory():
@@ -340,6 +346,11 @@ async def _websocket_util(
                 print("Can not send message event new_memory_create_failed")
             return
         processing_memory = updated_processing_memory
+
+        # Post processing
+        new_memory = await _post_process_memory(memory)
+        if new_memory:
+            memory = new_memory
 
         # Message: completed
         msg = NewMemoryCreated(event_type="new_memory_created",
@@ -398,8 +409,8 @@ async def _websocket_util(
         now = time.time()
         should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
-        # 0 words at least
-        min_words_limit = 0
+        # 1 words at least
+        min_words_limit = 1
         should_create_memory_time_words = min_words_limit == 0
         if min_words_limit > 0 and should_create_memory_time:
             wc = 0
@@ -415,8 +426,6 @@ async def _websocket_util(
             if not memory:
                 print(f"Can not create new memory uid: ${uid}, processing memory: {processing_memory.id if processing_memory else 0}")
                 return
-
-            await _post_process_memory(memory)
 
             # Clean
             memory_transcript_segements = memory_transcript_segements[processing_memory_synced:]
