@@ -32,6 +32,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
+    //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
     _controller = TabController(length: 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
