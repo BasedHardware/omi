@@ -107,7 +107,16 @@ class FriendDevice extends DeviceBase {
     }
 
     try {
-      await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+      // TODO: Unknown GATT error here (code 133) on Android. StackOverflow says that it has to do with smaller MTU size
+      // The creator of the plugin says not to use autoConnect
+      // https://github.com/chipweinberger/flutter_blue_plus/issues/612
+      final device = BluetoothDevice.fromId(deviceId);
+      if (device.isConnected) {
+        if (Platform.isAndroid && device.mtuNow < 512) {
+          await device.requestMtu(512); // This might fix the code 133 error
+        }
+        await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+      }
     } catch (e, stackTrace) {
       logSubscribeError('Audio data stream', deviceId, e, stackTrace);
       return null;
@@ -124,7 +133,7 @@ class FriendDevice extends DeviceBase {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid) await device.requestMtu(512);
+    if (Platform.isAndroid && device.isConnected) await device.requestMtu(512);
 
     return listener;
   }
