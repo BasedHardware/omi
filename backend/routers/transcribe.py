@@ -378,11 +378,11 @@ async def _websocket_util(
             await asyncio.sleep(5)
             await _try_flush_new_memory_with_lock()
 
-    async def _try_flush_new_memory_with_lock():
+    async def _try_flush_new_memory_with_lock(time_validate: bool = True):
         with flush_new_memory_lock:
-            return await _try_flush_new_memory()
+            return await _try_flush_new_memory(time_validate=time_validate)
 
-    async def _try_flush_new_memory():
+    async def _try_flush_new_memory(time_validate: bool = True):
         nonlocal memory_transcript_segements
         nonlocal timer_start
         nonlocal processing_memory
@@ -412,10 +412,12 @@ async def _websocket_util(
 
         # Validate transcript
         # Longer 120s
-        min_seconds_limit = 120
-        segment_end = int(last_segment["end"])
-        now = time.time()
-        should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
+        should_create_memory_time = False
+        if time_validate:
+            min_seconds_limit = 120
+            segment_end = int(last_segment["end"])
+            now = time.time()
+            should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
         min_words_limit = 1
@@ -428,8 +430,9 @@ async def _websocket_util(
                     should_create_memory_time_words = True
                     break
 
-        print(f"Should create memory {should_create_memory_time and should_create_memory_time_words} - {timer_start} {segment_end} {min_seconds_limit} {now}")
-        if should_create_memory_time and should_create_memory_time_words:
+        should_create_memory = should_create_memory_time and should_create_memory_time_words
+        print(f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}")
+        if should_create_memory:
             memory = await _create_memory()
             if not memory:
                 print(f"Can not create new memory uid: ${uid}, processing memory: {processing_memory.id if processing_memory else 0}")
@@ -461,7 +464,7 @@ async def _websocket_util(
 
         # Flush new memory watch
         if new_memory_watch:
-            await _try_flush_new_memory_with_lock()
+            await _try_flush_new_memory_with_lock(time_validate=False)
 
         # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
