@@ -42,8 +42,8 @@ Future<CreateMemoryResponse?> createMemoryServer({
     headers: {},
     method: 'POST',
     body: jsonEncode({
-      'started_at': startedAt.toIso8601String(),
-      'finished_at': finishedAt.toIso8601String(),
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'finished_at': finishedAt.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
