@@ -291,7 +291,8 @@ getLiteTranscriptWidget(
 ) {
   return Column(
     children: [
-      if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      // TODO: thinh, be reenabled soon
+      //if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
       if (segments.isNotEmpty)
         LiteTranscriptWidget(
           segments: segments,
