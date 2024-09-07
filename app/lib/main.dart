@@ -125,7 +125,12 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
-    NotificationService.instance.saveNotificationToken();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.read<ConnectivityProvider>().isConnected) {
+        NotificationService.instance.saveNotificationToken();
+      }
+    });
+
     super.initState();
   }
 
