@@ -111,6 +111,8 @@ async def _websocket_util(
         print(e)
         return
 
+    session_id = uuid.uuid4()
+
     # Processing memory
     memory_watching = new_memory_watch
     processing_memory: ProcessingMemory = None
@@ -369,7 +371,7 @@ async def _websocket_util(
         nonlocal memory_watching
         nonlocal websocket_active
         while memory_watching and websocket_active:
-            print(f"new memory watch, uid: {uid}")
+            print(f"new memory watch, uid: {uid}, session: {session_id}")
             await asyncio.sleep(5)
 
             await _try_flush_new_memory()
