@@ -40,7 +40,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
       return GestureDetector(
         onTap: () async {
-          if (provider.segments.isEmpty) {
+          if (provider.segments.isEmpty && provider.photos.isEmpty) {
             return;
           }
           await Navigator.of(context).push(MaterialPageRoute(
