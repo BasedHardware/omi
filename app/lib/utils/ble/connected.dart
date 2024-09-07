@@ -33,12 +33,19 @@ StreamSubscription<OnConnectionStateChangedEvent>? getConnectionStateListener({
         onDisconnected();
       } else if (event.connectionState == BluetoothConnectionState.connected) {
         print('Connected to ${event.device.platformName}');
-        onConnected(BTDeviceStruct(
-          id: event.device.remoteId.str,
-          name: event.device.platformName,
-          rssi: await event.device.readRssi(),
-          // TODO: add firmware version
-        ));
+        try {
+          // FIXME: Reading RSSI value takes time and it shouldn't be done inside of a listener. Instead move it to somehwere else @mdmohsin7
+          // This is a note for the future.
+          int rssi = await event.device.readRssi();
+          onConnected(BTDeviceStruct(
+            id: event.device.remoteId.str,
+            name: event.device.platformName,
+            rssi: rssi,
+            // TODO: add firmware version
+          ));
+        } catch (e) {
+          debugPrint('Error reading RSSI, device disconnected by the time rssi was read: $e');
+        }
       }
     }
   });
