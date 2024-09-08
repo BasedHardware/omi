@@ -62,6 +62,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   get bleBytesStream => _bleBytesStream;
 
+  StreamSubscription? _storageStream;
+  get storageStream => _storageStream;
+
   var record = AudioRecorder();
   RecordingState recordingState = RecordingState.stop;
 
@@ -76,7 +79,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
-
+  List<int> currentStorageFiles = <int>[];
+  StorageBytesUtil? storageUtil;
   // -----------------------
 
   bool resetStateAlreadyCalled = false;
@@ -111,7 +115,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     connectedDevice = device;
     notifyListeners();
   }
-
+  //create the memory here
   Future<bool?> createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
     if (memoryCreating) return null;
@@ -130,7 +134,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       } // in case was a local recording and not a BLE recording
     }
 
-    ServerMemory? memory = await processTranscriptContent(
+    ServerMemory? memory = await processTranscriptContent( //create mmeory "shell"
       segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
@@ -178,7 +182,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
       setMemoryCreating(false);
       try {
-        memoryPostProcessing(file, memory.id).then((postProcessed) {
+        memoryPostProcessing(file, memory.id).then((postProcessed) { //fill the shell with audio file
           if (postProcessed != null) {
             memoryProvider?.updateMemory(postProcessed);
           } else {
@@ -331,6 +335,36 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
+  Future sendStorage(String id) async {
+    storageUtil = StorageBytesUtil();
+    // storageUtil.currentStorageList = currentStorageFiles;
+
+    if (_storageStream != null) {
+      _storageStream?.cancel();
+    }
+    _storageStream = await getBleStorageBytesListener(
+      id,
+      onStorageBytesReceived: (List<int> value) async {
+        if (value.isEmpty) return;
+        storageUtil!.storeFrameStoragePacket(value);
+        if (value.length == 1) {
+          if (value[0] == 100) {
+          debugPrint('done. sending to backend....');
+          File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+          sendStorageToBackend(storageFile, "hi");
+          } 
+        }
+      }
+    );
+
+    writeToStorage(id);
+
+  //  notifyListeners();
+  }
+
+  // Future saveAndSendStorageWav() async {
+  // }
+
   void clearTranscripts() {
     segments = [];
     SharedPreferencesUtil().transcriptSegments = [];
@@ -370,6 +404,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     await initiateFriendAudioStreaming(isFromSpeechProfile);
+    await initiateStorageBytesStreaming();
 
     setResetStateAlreadyCalled(false);
     notifyListeners();
@@ -416,7 +451,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
     print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
-
+    
     BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
@@ -429,6 +464,14 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       await streamAudioToWs(connectedDevice!.id, codec);
     }
 
+    notifyListeners();
+  }
+
+  Future<void> initiateStorageBytesStreaming() async {
+    debugPrint('initiateStorageBytesStreaming');
+    currentStorageFiles = await getStorageList(connectedDevice!.id);
+    debugPrint('Storage files: $currentStorageFiles');
+    await sendStorage(connectedDevice!.id);
     notifyListeners();
   }
 
@@ -526,4 +569,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   stopStreamRecordingOnAndroid() {
     stopBackgroundService();
   }
+
+
 }
