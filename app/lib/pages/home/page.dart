@@ -249,7 +249,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       return Align(
                         alignment: Alignment.bottomCenter,
                         child: Container(
-                          margin: const EdgeInsets.fromLTRB(40, 16, 40, 40),
+                          margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
                           decoration: const BoxDecoration(
                             color: Colors.black,
                             borderRadius: BorderRadius.all(Radius.circular(16)),

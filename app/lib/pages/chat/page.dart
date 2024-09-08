@@ -70,7 +70,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Stack(
           children: [
-            Center(
+            Align(
+              alignment: Alignment.topCenter,
               child: provider.isLoadingMessages
                   ? const CircularProgressIndicator(
                       color: Colors.white,
@@ -116,7 +117,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 child: Container(
                   width: double.maxFinite,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  margin: EdgeInsets.only(left: 18, right: 18, bottom: home.isChatFieldFocused ? 40 : 120),
+                  margin: EdgeInsets.only(left: 32, right: 32, bottom: home.isChatFieldFocused ? 40 : 120),
                   decoration: const BoxDecoration(
                     color: Colors.black,
                     borderRadius: BorderRadius.all(Radius.circular(16)),
