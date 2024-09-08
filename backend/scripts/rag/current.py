@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 from _shared import *
@@ -8,7 +8,7 @@ from models.memory import Memory
 
 
 def _get_mesage(text: str, sender: str):
-    return Message(id=str(uuid.uuid4()), text=text, created_at=datetime.utcnow(), sender=sender, type='text')
+    return Message(id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender=sender, type='text')
 
 
 conversation = [
