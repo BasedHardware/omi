@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from google.cloud import firestore
@@ -19,7 +19,7 @@ def add_plugin_message(text: str, plugin_id: str, uid: str, memory_id: Optional[
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=plugin_id,
         from_external_integration=False,
@@ -34,7 +34,7 @@ def add_summary_message(text: str, uid: str) -> Message:
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=None,
         from_external_integration=False,

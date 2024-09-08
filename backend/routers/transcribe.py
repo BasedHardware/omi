@@ -3,7 +3,7 @@ import os
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
@@ -272,7 +272,7 @@ async def _websocket_util(
         processing_memory = ProcessingMemory(
             id=str(uuid.uuid4()),
             session_id=session_id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             timer_start=timer_start,
             language=language,
         )
