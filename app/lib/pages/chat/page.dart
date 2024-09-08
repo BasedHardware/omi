@@ -206,7 +206,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         ? null
         : SharedPreferencesUtil().selectedChatPluginId;
     var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, null, false, []);
+        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, pluginId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
     scrollToBottom();
     textController.clear();
