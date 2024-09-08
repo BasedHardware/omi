@@ -36,18 +36,22 @@ async def main():
                         global count
                         global done
                         print(len(data))
-                        amount_to_append = data[3]
-                        audio_frames.append(data[4:data[3]+4])
-                        count +=1
-                        print(np.frombuffer(data,dtype=np.uint8))   
+                        if (len(data)==1):
+                             print(data[0])
+                        else:
+                            amount_to_append = data[3]
+                            audio_frames.append(data[4:data[3]+4])
+                            count +=1
+                            print(np.frombuffer(data,dtype=np.uint8))   
 
 
                 stuff = await client.start_notify(storage_uuid, on_notify)
-                print('b')
+
                 # await client.read_gatt_char(storage_read_uuid)
                 await asyncio.sleep(1)
-                await client.write_gatt_char(storage_uuid, b'd', response=True)
-                print('c')
+                command = bytearray([0,1,0,0,0,0])
+                await client.write_gatt_char(storage_uuid, command, response=True)
+            
                 print(stuff)
                 await asyncio.sleep(1)   
                 while True:

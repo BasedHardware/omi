@@ -540,7 +540,7 @@ bool write_to_storage(void) {
         return false;
     }
 
-    uint8_t *buffer = tx_buffer+3;
+    uint8_t *buffer = tx_buffer+2;
     uint32_t packet_size = tx_buffer_size;
     
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH);
@@ -597,7 +597,7 @@ void pusher(void)
 
         bool result = write_to_storage();
         file_num_array[file_count-1] = get_file_size(file_count);
-        printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
+        // printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
         
     
         if (result)
