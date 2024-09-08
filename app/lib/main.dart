@@ -63,9 +63,7 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  if (await Permission.bluetooth.isGranted) {
-    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  }
+  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
