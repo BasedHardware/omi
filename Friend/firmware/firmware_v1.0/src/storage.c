@@ -18,6 +18,8 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define OPUS_ENTRY_LENGTH 100
 #define FRAME_PREFIX_LENGTH 3
 
+#define READ_COMMAND 0
+#define DELETE_COMMAND 1
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -68,7 +70,7 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
 static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
     k_msleep(10);
     // char amount[1] = {file_count};
-    uint32_t amount[20] = {0};
+    uint32_t amount[50] = {0};
     for (int i = 0; i < file_count; i++) {
            amount[i] = file_num_array[i];
         }
@@ -79,15 +81,6 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt
 
 uint8_t transport_started = 0;
 
-static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) {
-
-    LOG_INF("about to schedule the storage");
-    transport_started = 1;
-    k_msleep(1000);
-    
-    
-    return len;
-}
 
 static uint16_t packet_next_index = 0;
 
@@ -98,17 +91,18 @@ static uint8_t index = 0;
 static uint8_t current_packet_size = 0;
 static uint8_t tx_buffer_size = 0;
 
-
+static uint8_t delete_started = 0;
 static uint8_t current_read_num = 1;
 uint32_t remaining_length = 0;
 
-static int setup_storage_tx(void) {
+static int setup_storage_tx() {
     transport_started= (uint8_t)0; 
-    offset = 0;
-
+    // offset = 0;
+    LOG_INF("about to transmit storage\n");
+    k_msleep(1000);
     int res = move_read_pointer(current_read_num);
     if (res) {
-        printk("bad pointer\n");
+        LOG_ERR("bad pointer\n");
         transport_started = 0;
         // current_read_num++;
         current_read_num = 1;
@@ -116,20 +110,89 @@ static int setup_storage_tx(void) {
         return -1;
     }
     else {
-    if ((uint32_t)get_file_size(current_read_num) == 0 ) {
+    if (file_num_array[current_read_num-1] == 0 ) {
             // LOG_ERR("bad file size, moving again...");
-            current_read_num++;
+            // file_num++;
             move_read_pointer(current_read_num);
     }
     printk("current read ptr %d\n",current_read_num);
 
-    remaining_length = get_file_size(current_read_num);
-    LOG_INF("remaining length: %d",remaining_length);
+    remaining_length = file_num_array[current_read_num-1];
+    remaining_length = remaining_length - offset;
+    // offset=offset_;
+    printk("remaining length: %d\n",remaining_length);
+    LOG_INF("offset: %d\n",offset);
+    printk("file: %d\n",current_read_num);
     }
     return 0;
 
 }
 
+static int parse_storage_command(void *buf,uint16_t len) {
+
+    if (len != 6 && len != 2) {
+        printk("not the exact length for command");
+        return -2;
+    }
+    uint8_t command = ((uint8_t*)buf)[0];
+    uint8_t file_num = ((uint8_t*)buf)[1];
+    uint32_t size = 0;
+    if ( len == 6 ) {
+
+    size = ((uint8_t*)buf)[2] <<24 |((uint8_t*)buf)[3] << 16 | ((uint8_t*)buf)[4] << 8 | ((uint8_t*)buf)[5];
+
+    }
+    printk("command successful: command: %d file: %d size: %d \n",command,file_num,size);
+
+    if (file_num == 0) {
+      printk("invalid file count 0\n");
+      return -3;
+    }
+    if (file_num > file_count) { //invalid file count 
+    printk("invalid file count\n");
+      return -3;
+//add audio all?
+    }
+    if (command == READ_COMMAND) { //read 
+        uint32_t temp = file_num_array[file_num-1];
+        if (temp == 0) {
+            printk("file size is 0\n");
+            return -4;
+        }
+        if (size > temp) {
+            printk("requested size is too large\n");
+            return -5;
+        }
+        else {
+            printk("valid command, setting up \n");
+            offset = size;
+            current_read_num = file_num;
+            transport_started = 1;
+        }
+    }
+    else if (command == DELETE_COMMAND) {
+          printk("delete something\n");
+
+    }
+    else {
+        printk("invalid command \n");
+        return -6;
+    }
+    return 0;
+
+}
+
+static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) {
+
+    LOG_INF("about to schedule the storage");
+    printk("was sent %d \n ", ((uint8_t*)buf)[0] );
+    int result = parse_storage_command(buf,len);
+    printk("length of storage write: %d\n",len);
+    printk("result: %d \n", result);
+
+    k_msleep(1000);
+    return len;
+}
 
 static void write_to_gatt(struct bt_conn *conn) {
     uint32_t id = packet_next_index++;
@@ -158,6 +221,11 @@ void storage_write(void) {
         setup_storage_tx();
     }
 
+    // if (delete_started) {
+        
+    //     delete_started = 0;
+    // }
+
     if(remaining_length > 0 ) {
 
         struct bt_conn *conn = get_current_connection();
@@ -170,6 +238,9 @@ void storage_write(void) {
         transport_started = 0;
         if (remaining_length == 0) {
            printk("done. attempting to download more files\n");
+           uint8_t stop_result[2] = {100,100};
+           int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
+   
 
         //    current_read_num++;
            k_sleep(K_MSEC(10));

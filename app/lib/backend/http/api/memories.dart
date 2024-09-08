@@ -78,7 +78,7 @@ Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
-
+  
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
@@ -233,4 +233,31 @@ Future<bool> setMemoryEventsState(
   if (response == null) return false;
   debugPrint('setMemoryEventsState: ${response.body}');
   return response.statusCode == 200;
+}
+
+
+Future sendStorageToBackend(File file, String memoryId) async  {
+     var request = http.MultipartRequest(
+    'POST',
+    // Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
+    Uri.parse('http://127.0.0.1:8000/download_wav'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+    debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
+
+  } else {
+    debugPrint('Failed to storageSend. Status code: ${response.statusCode}');
+    return null;
+  }
+  } catch (e) {
+    debugPrint('An error occurred storageSend: $e');
+    return null;
+  }
+
 }

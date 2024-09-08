@@ -298,3 +298,22 @@ int get_next_item(struct fs_dir_t *zdp, struct fs_dirent *entry) {
    }
    return count;
 }
+//we should clear instead of delete since we lose fifo structure 
+int clear_audio_file(uint8_t num) {
+
+    char *ptr = generate_new_audio_header(num);
+    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
+    free(ptr);
+    int res = fs_unlink(&current_full_path);
+    if (res) {
+        printk("error deleting file\n");
+        return -1;
+    }
+    res = create_file(&current_full_path);
+    if (res) {
+        printk("error creating file\n");
+        return -1;
+    }
+
+    return 0;
+}
