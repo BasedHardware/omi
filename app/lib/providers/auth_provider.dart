@@ -50,7 +50,11 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       await signInWithGoogle();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+      }
       setLoadingState(false);
     }
   }
@@ -59,7 +63,11 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       await signInWithApple();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+      }
       setLoadingState(false);
     }
   }
