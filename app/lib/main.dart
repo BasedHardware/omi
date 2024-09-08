@@ -63,9 +63,7 @@ Future<bool> _init() async {
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-  if (await Permission.bluetooth.isGranted) {
-    ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
-  }
+  ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
 
@@ -125,7 +123,11 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
-    NotificationService.instance.saveNotificationToken();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      //TODO: Internet connection check required
+      NotificationService.instance.saveNotificationToken();
+    });
+
     super.initState();
   }
 

@@ -153,7 +153,9 @@ class WavBytesUtil {
         for (var entity in entities) {
           if (entity is File && entity.path.endsWith('.wav')) {
             debugPrint('Removing file: ${entity.path}');
-            await entity.delete();
+            if (entity.existsSync()) {
+              await entity.delete();
+            }
           }
         }
       }
