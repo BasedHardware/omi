@@ -107,6 +107,8 @@ Before you start, make sure you have the following:
       ```
         - `--reload` automatically restarts the server when code changes are saved, making development easier
         - `--env-file .env` loads environment variables from your `.env` file
+        - `--host 0.0.0.0` listens to every interface on your computer so you don't have to set up `ngrok` when developing in your network
+        -  `--port 8000` port for backend to listen
 
 3. **Troubleshooting SSL Errors: 🔒**
     - **SSL Errors:** If you encounter SSL certificate errors during model downloads, add this to `utils/stt/vad.py`:
