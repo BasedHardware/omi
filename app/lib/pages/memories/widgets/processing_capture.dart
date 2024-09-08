@@ -50,7 +50,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ));
         },
         child: Container(
-          margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
+          margin: const EdgeInsets.only(top: 12, left: 16, right: 16),
           width: double.maxFinite,
           decoration: const BoxDecoration(
             color: Colors.black,
@@ -67,7 +67,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             shape: BoxShape.rectangle,
           ),
           child: Padding(
-            padding: const EdgeInsetsDirectional.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,

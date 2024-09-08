@@ -13,6 +13,7 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
@@ -21,7 +22,6 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -249,7 +249,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       return Align(
                         alignment: Alignment.bottomCenter,
                         child: Container(
-                          margin: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                          margin: const EdgeInsets.fromLTRB(40, 16, 40, 40),
                           decoration: const BoxDecoration(
                             color: Colors.black,
                             borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -265,7 +265,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             shape: BoxShape.rectangle,
                           ),
                           child: TabBar(
-                            padding: const EdgeInsets.only(top: 10, bottom: 10),
+                            padding: const EdgeInsets.only(top: 4, bottom: 4),
                             onTap: (index) {
                               MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat'][index]);
                               primaryFocus?.unfocus();

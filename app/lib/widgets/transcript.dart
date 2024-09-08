@@ -138,7 +138,7 @@ class _LiteTranscriptWidgetState extends State<LiteTranscriptWidget> {
       return const SizedBox.shrink();
     }
 
-    var text = getLastTranscript(widget.segments, maxCount: 100, includeTimestamps: false);
+    var text = getLastTranscript(widget.segments, maxCount: 70, includeTimestamps: false);
     text = text.replaceAll(RegExp(r"\s+|\n+"), " "); // trim before pushing to 1 line text view
     return Text(
       text,

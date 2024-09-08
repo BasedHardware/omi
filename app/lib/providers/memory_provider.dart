@@ -16,6 +16,7 @@ class MemoryProvider extends ChangeNotifier {
 
   bool isLoadingMemories = false;
   bool displayDiscardMemories = false;
+  bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
 
@@ -52,6 +53,11 @@ class MemoryProvider extends ChangeNotifier {
                   .contains(query.toLowerCase()),
             )
             .toList();
+    if (query == '' && filteredMemories.isEmpty) {
+      filteredMemories = memories;
+      displayDiscardMemories = true;
+      hasNonDiscardedMemories = false;
+    }
     populateMemoriesWithDates();
     notifyListeners();
   }
