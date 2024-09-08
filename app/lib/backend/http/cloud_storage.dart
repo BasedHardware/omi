@@ -3,23 +3,29 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 
 AuthClient? authClient;
 
 Future<void> authenticateGCP({String? base64}) async {
-  var credentialsBase64 = base64 ?? SharedPreferencesUtil().gcpCredentials;
-  if (credentialsBase64.isEmpty) {
-    debugPrint('No GCP credentials found');
-    return;
+  try {
+    var credentialsBase64 = base64 ?? SharedPreferencesUtil().gcpCredentials;
+    if (credentialsBase64.isEmpty) {
+      debugPrint('No GCP credentials found');
+      return;
+    }
+    final credentialsBytes = base64Decode(credentialsBase64);
+    String decodedString = utf8.decode(credentialsBytes);
+    final credentials = ServiceAccountCredentials.fromJson(jsonDecode(decodedString));
+    var scopes = ['https://www.googleapis.com/auth/devstorage.full_control'];
+    authClient = await clientViaServiceAccount(credentials, scopes);
+    debugPrint('Authenticated');
+  } catch (e, s) {
+    Logger.handle(e, s,
+        message: 'Error authenticating with GCP credentials provided. Please check the credentials and try again.');
   }
-  final credentialsBytes = base64Decode(credentialsBase64);
-  String decodedString = utf8.decode(credentialsBytes);
-  final credentials = ServiceAccountCredentials.fromJson(jsonDecode(decodedString));
-  var scopes = ['https://www.googleapis.com/auth/devstorage.full_control'];
-  authClient = await clientViaServiceAccount(credentials, scopes);
-  debugPrint('Authenticated');
 }
 
 Future<String?> uploadFile(File file, {bool prefixTimestamp = false}) async {

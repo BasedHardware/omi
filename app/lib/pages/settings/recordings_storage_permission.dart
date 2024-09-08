@@ -24,12 +24,14 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
 
   Future<void> _checkPermission() async {
     final permission = await getStoreRecordingPermission();
-    setState(() {
-      _hasPermission = permission;
-      if (permission != null) {
-        SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
-      }
-    });
+    if (mounted) {
+      setState(() {
+        _hasPermission = permission;
+        if (permission != null) {
+          SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
+        }
+      });
+    }
   }
 
   @override

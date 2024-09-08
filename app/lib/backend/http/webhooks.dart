@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:http/http.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:mime/mime.dart';
 
@@ -31,10 +32,13 @@ Future<String> webhookOnMemoryCreatedCall(ServerMemory? memory, {bool returnRawB
     );
     debugPrint('response: ${response?.statusCode}');
     if (returnRawBody) return jsonEncode({'statusCode': response?.statusCode, 'body': response?.body});
-
     var body = jsonDecode(response?.body ?? '{}');
     print(body);
+    //TODO: Some endpoints return an array. I guess it makes sense to have standardised response strcuture. What do you think? @josancamon19
     return body['message'] ?? '';
+  } on FormatException catch (e) {
+    debugPrint('Response not a valid json: $e');
+    return '';
   } catch (e) {
     debugPrint('Error triggering memory request at endpoint: $e');
     // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.
@@ -60,8 +64,9 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
   } else {
     url += '?uid=${SharedPreferencesUtil().uid}';
   }
+  Response? response;
   try {
-    var response = await makeApiCall(
+    response = await makeApiCall(
       url: url,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
@@ -74,10 +79,16 @@ Future<String> triggerTranscriptSegmentsRequest(String url, String sessionId, Li
     if (response?.statusCode == 200) {
       var body = jsonDecode(response?.body ?? '{}');
       print(body);
+      // TODO: Some endpoints return an array. I guess it makes sense to have standardised response structure.
       return body['message'] ?? '';
     } else {
       return '';
     }
+  } on FormatException catch (e) {
+    debugPrint('Response not a valid json: $e');
+    // TODO: It is either a string or html string. So I guess we can return it as is.
+    // I guess we should probably have a predefined response structure for webhooks which the webhook creators have to follow? @josancamon19
+    return response?.body ?? '';
   } catch (e) {
     debugPrint('Error triggering transcript request at endpoint: $e');
     // TODO: is it bad for reporting?  I imagine most of the time is backend error, so nah.
