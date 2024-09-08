@@ -28,7 +28,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   Timer? connectionStateTimer;
   List<BTDeviceStruct> deviceList = [];
   late Timer _didNotMakeItTimer;
-  late Timer _findDevicesTimer;
+  Timer? _findDevicesTimer;
   bool enableInstructions = false;
   Map<String, BTDeviceStruct> foundDevicesMap = {};
 
@@ -101,8 +101,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   //----------------- Onboarding Permissions -----------------
 
   void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && _findDevicesTimer.isActive) {
-      _findDevicesTimer.cancel();
+    if (_findDevicesTimer != null && (_findDevicesTimer?.isActive ?? false)) {
+      _findDevicesTimer!.cancel();
     }
     if (connectionStateTimer?.isActive ?? false) {
       connectionStateTimer?.cancel();
@@ -223,7 +223,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   @override
   void dispose() {
     //TODO: This does not get called when the page is popped
-    _findDevicesTimer.cancel();
+    _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
     connectionStateTimer?.cancel();
     super.dispose();
