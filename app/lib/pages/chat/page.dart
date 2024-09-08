@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -8,10 +10,10 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -92,7 +94,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           itemBuilder: (context, chatIndex) {
                             final message = provider.messages[chatIndex];
                             double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
-                            double bottomPadding = chatIndex == 0 ? 170 : 0;
+                            double bottomPadding = chatIndex == 0
+                                ? Platform.isAndroid
+                                    ? 200
+                                    : 170
+                                : 0;
                             return Padding(
                               key: ValueKey(message.id),
                               padding: EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
