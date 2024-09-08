@@ -412,10 +412,10 @@ async def _websocket_util(
         # Validate transcript
         # Longer 120s
         segment_end = int(last_segment["end"])
+        min_seconds_limit = 120
+        now = time.time()
         should_create_memory_time = True
         if time_validate:
-            min_seconds_limit = 120
-            now = time.time()
             should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
