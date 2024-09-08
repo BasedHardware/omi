@@ -75,7 +75,7 @@ Before starting, make sure you have the following installed:
     - Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or
       the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
 
-   If you face auth issues when running the app, enable Google/Apple sign-in in Firebase
+   If you're facing auth issues when running the app, you can enable Google/Apple sign-in in Firebase. Go to the Firebase console and select your project. In the left-hand menu, click on "Authentication." On the "Sign-in method" tab, scroll down to the "Sign-in providers" section. Click on the "Google" sign-in provider. Click the "Enable" switch to enable Google Sign-In for your Firebase project.
 
 8. **Run the App**:
     - Select your target device in Xcode or Android Studio.
