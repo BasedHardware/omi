@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
@@ -29,7 +29,7 @@ def filter_messages(messages, plugin_id):
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.utcnow(), sender='human', type='text')
+    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text')
     chat_db.add_message(uid, message.dict())
 
     plugin = get_plugin_by_id(plugin_id)
@@ -44,7 +44,7 @@ def send_message(
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=response,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=plugin_id,
         type='text',
@@ -63,7 +63,7 @@ def initial_message_util(uid: str, plugin_id: Optional[str] = None):
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=plugin_id,
         from_external_integration=False,
