@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -298,13 +299,47 @@ class CustomErrorWidget extends StatelessWidget {
             const SizedBox(height: 10.0),
             const Text(
               'Something went wrong! Please try again later.',
+              textAlign: TextAlign.center,
               style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10.0),
-            Text(
-              errorMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16.0),
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.all(16),
+              height: 200,
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 63, 63, 63),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                errorMessage,
+                textAlign: TextAlign.start,
+                style: const TextStyle(fontSize: 16.0),
+              ),
+            ),
+            const SizedBox(height: 10.0),
+            SizedBox(
+              width: 210,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: errorMessage));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Error message copied to clipboard'),
+                    ),
+                  );
+                },
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('Copy error message'),
+                    SizedBox(width: 10),
+                    Icon(Icons.copy_rounded),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
