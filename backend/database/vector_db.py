@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from pinecone import Pinecone
@@ -21,7 +21,7 @@ def _get_data(uid: str, memory_id: str, vector: List[float]):
         'metadata': {
             'uid': uid,
             'memory_id': memory_id,
-            'created_at': datetime.utcnow().timestamp() / 1000,  # TODO: check this
+            'created_at': datetime.now(timezone.utc).timestamp() / 1000,  # TODO: check this
         }
     }
 
