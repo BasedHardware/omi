@@ -1,6 +1,6 @@
 import os
 from typing import Annotated, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Header
 from fastapi import Request, HTTPException
 import models.memory as memory_models
@@ -19,7 +19,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     # Time
-    started_at = create_memory.started_at if create_memory.started_at is not None else datetime.utcnow()
+    started_at = create_memory.started_at if create_memory.started_at is not None else datetime.now(timezone.utc)
     finished_at = create_memory.finished_at if create_memory.finished_at is not None else started_at + \
         timedelta(seconds=300)  # 5 minutes
     create_memory.started_at = started_at

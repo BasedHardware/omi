@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 
@@ -54,8 +54,8 @@ class FactDB(Fact):
             uid=uid,
             content=fact.content,
             category=fact.category,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             memory_id=memory_id,
             memory_category=memory_category,
         )
