@@ -1,4 +1,5 @@
 import datetime
+from datetime import timezone
 import random
 import threading
 import uuid
@@ -70,7 +71,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
             uid=uid,
             structured=structured,
             **memory.dict(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             discarded=discarded,
             deleted=False,
         )
@@ -81,7 +82,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
         memory = Memory(
             id=str(uuid.uuid4()),
             **memory.dict(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             deleted=False,
             structured=structured,
             discarded=discarded,
