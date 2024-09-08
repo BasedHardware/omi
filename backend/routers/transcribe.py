@@ -411,7 +411,7 @@ async def _websocket_util(
 
         # Validate transcript
         # Longer 120s
-        should_create_memory_time = False
+        should_create_memory_time = True
         if time_validate:
             min_seconds_limit = 120
             segment_end = int(last_segment["end"])
