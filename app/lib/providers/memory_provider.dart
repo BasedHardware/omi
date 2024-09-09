@@ -83,7 +83,8 @@ class MemoryProvider extends ChangeNotifier {
       SharedPreferencesUtil().cachedMemories = memories;
     }
     initFilteredMemories();
-    retryFailedMemories();
+    // No need to retry memories anymore as it is handled by the server
+    // retryFailedMemories();
     notifyListeners();
   }
 
