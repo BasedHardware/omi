@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
 
-  Future<void> _initiatePlugins() async {
+  void _initiatePlugins() {
     context.read<PluginProvider>().getPlugins();
   }
 
@@ -126,7 +126,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.startForegroundTask();
       if (mounted) {
         await context.read<HomeProvider>().setupHasSpeakerProfile();
-        await context.read<HomeProvider>().setUserPeople();
+        if (mounted) {
+          await context.read<HomeProvider>().setUserPeople();
+        }
       }
     });
 
