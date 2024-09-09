@@ -659,7 +659,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     // Why is the connectedDevice null at this point?
-    if (!audioBytesConnected && connectedDevice != null) {
+    if (!audioBytesConnected) {
       if (connectedDevice != null) {
         await streamAudioToWs(connectedDevice!.id, codec);
       } else {
