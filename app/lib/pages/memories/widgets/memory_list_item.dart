@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:provider/provider.dart';
 
 class MemoryListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -33,6 +35,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
+        context.read<MemoryDetailProvider>().updateMemory(widget.memory);
         var result = await Navigator.of(context).push(MaterialPageRoute(
           builder: (c) => MemoryDetailPage(
             memory: widget.memory,
