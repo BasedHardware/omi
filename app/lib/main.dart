@@ -124,11 +124,6 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      //TODO: Internet connection check required
-      NotificationService.instance.saveNotificationToken();
-    });
-
     super.initState();
   }
 
@@ -262,6 +257,11 @@ class DeciderWidget extends StatefulWidget {
 class _DeciderWidgetState extends State<DeciderWidget> {
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.read<ConnectivityProvider>().isConnected) {
+        NotificationService.instance.saveNotificationToken();
+      }
+    });
     super.initState();
   }
 
