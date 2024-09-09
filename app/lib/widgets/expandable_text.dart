@@ -68,7 +68,9 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                   ),
                 ),
               ),
-            ),
+            )
+          else
+            Container(height: 5),
         ],
       ),
     );

@@ -35,6 +35,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
         widget.onTap();
       },
       child: Container(
+        padding: const EdgeInsets.only(top: 5),
         decoration: const BoxDecoration(
           shape: BoxShape.rectangle,
           color: Colors.black,
@@ -43,7 +44,8 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                 widget.userMemoriesModel.pluginsResults!.isNotEmpty)
             ? Column(
                 children: [
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -63,12 +65,13 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                 const Icon(Icons.error),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 5),
                         Expanded(
                           child: Column(
                             children: [
                               Container(
                                 height: 45,
+                                padding: const EdgeInsets.only(left: 5),
                                 alignment: Alignment.center,
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -90,11 +93,13 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                                 fontSize: 16),
                                           ),
                                           Text(
-                                            widget.pluginModel.description ?? "",
+                                            widget.pluginModel.description ??
+                                                "",
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
-                                                color: Colors.grey, fontSize: 14),
+                                                color: Colors.grey,
+                                                fontSize: 14),
                                           ),
                                         ],
                                       ),
@@ -107,7 +112,8 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(top: 5, right: 5),
+                                padding: const EdgeInsets.only(
+                                    top: 5, right: 5, left: 5),
                                 child: ExpandableTextWidget(
                                   onTap: () {
                                     widget.onTap();
@@ -126,53 +132,60 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                   linkColor: Colors.white,
                                 ),
                               ),
-                              Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: () {
-                                      widget.pluginsResult.isFavourite =
-                                          !widget.pluginsResult.isFavourite;
-                                      setState(() {});
-                                    },
-                                    child: Container(
-                                      padding:
-                                          const EdgeInsets.fromLTRB(0, 8, 5, 5),
-                                      child: Icon(
-                                        widget.pluginsResult.isFavourite
-                                            ? Icons.bookmark_outlined
-                                            : Icons.bookmark_outline,
-                                        size: 17,
-                                        color: Colors.grey,
+                              Container(
+                                color: Colors.transparent,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        widget.pluginsResult.isFavourite =
+                                            !widget.pluginsResult.isFavourite;
+                                        setState(() {});
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            0, 8, 6, 5),
+                                        child: Icon(
+                                          widget.pluginsResult.isFavourite
+                                              ? Icons.bookmark_outlined
+                                              : Icons.bookmark_outline,
+                                          size: 20,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      await Share.share(
-                                          widget.pluginsResult.content ?? '');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(5),
-                                      child: const Icon(
-                                        Icons.ios_share,
-                                        size: 17,
-                                        color: Colors.grey,
+                                    GestureDetector(
+                                      onTap: () async {
+                                        await Share.share(
+                                            widget.pluginsResult.content ?? '');
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            6, 5, 5, 5),
+                                        child: const Icon(
+                                          Icons.ios_share,
+                                          size: 20,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.only(right: 10),
-                                    child: Text(
-                                      dateTimeFormat(
-                                          'MMM d, h:mm a',
-                                          widget.pluginsResult.createdAt ??
-                                              DateTime.now()),
-                                      style: const TextStyle(
-                                          color: Colors.grey, fontSize: 12),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.only(right: 10),
+                                      child: Text(
+                                        dateTimeFormat(
+                                            'MMM d, h:mm a',
+                                            widget.pluginsResult.createdAt ??
+                                                DateTime.now()),
+                                        style: const TextStyle(
+                                            color: Colors.grey, fontSize: 12),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
