@@ -102,12 +102,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   _migrationScripts() async {
-    setState(() => scriptsInProgress = true);
+    if (mounted) {
+      setState(() => scriptsInProgress = true);
+    }
     // await scriptMigrateMemoriesToBack();
     if (mounted) {
       await context.read<mp.MemoryProvider>().getInitialMemories();
     }
-    setState(() => scriptsInProgress = false);
+    if (mounted) {
+      setState(() => scriptsInProgress = false);
+    }
   }
 
   ///Screens with respect to subpage
