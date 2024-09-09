@@ -427,7 +427,7 @@
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "note-to-self",
@@ -577,7 +577,7 @@
       "webhook_url": "https://based-hardware--plugins-api.modal.run/emotional-support",
       "setup_instructions_file_path": ""
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "warren-buffett-advisor",
