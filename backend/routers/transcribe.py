@@ -122,6 +122,10 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
+    # Soft timeout
+    TIMEOUT_SECONDS = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    started_at = time.time()
+
     def stream_transcript(segments, stream_id):
         nonlocal websocket
         nonlocal processing_memory
@@ -244,6 +248,11 @@ async def _websocket_util(
                     await websocket.send_json({"type": "ping"})
                 else:
                     break
+
+                # time out
+                if time.time() - started_at >= TIMEOUT_SECONDS:
+                    websocket_close_code = 1001
+                    websocket_active = False
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
