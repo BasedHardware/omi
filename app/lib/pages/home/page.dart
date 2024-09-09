@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
@@ -509,10 +510,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundColor: Colors.white,
-                  maxRadius: 12,
-                  backgroundImage: NetworkImage(plugin.getImageUrl()),
+                CachedNetworkImage(
+                  imageUrl: plugin.getImageUrl(),
+                  imageBuilder: (context, imageProvider) {
+                    return CircleAvatar(
+                      backgroundColor: Colors.white,
+                      radius: 12,
+                      backgroundImage: imageProvider,
+                    );
+                  },
+                  errorWidget: (context, url, error) {
+                    return const CircleAvatar(
+                      backgroundColor: Colors.white,
+                      radius: 12,
+                      child: Icon(Icons.error_outline_rounded),
+                    );
+                  },
+                  progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                    backgroundColor: Colors.white,
+                    radius: 12,
+                    child: CircularProgressIndicator(
+                      value: progress.progress,
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
