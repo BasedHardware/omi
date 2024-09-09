@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 enum MessageSender { ai, human }
 
 enum MessageType {
@@ -9,7 +11,7 @@ enum MessageType {
   const MessageType(this.value);
 
   static MessageType valuesFromString(String value) {
-    return MessageType.values.firstWhere((e) => e.value == value);
+    return MessageType.values.firstWhereOrNull((e) => e.value == value) ?? MessageType.text;
   }
 }
 
