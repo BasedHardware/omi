@@ -8,7 +8,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<Plugin>> retrievePlugins() async {
   // Log request details
-  final url = '${Env.apiBaseUrl}v2/plugins/return/with-memory';
+  final url = '${Env.apiBaseUrl}v2/plugins';
   print('retrievePlugins Request URL: $url');
   print('retrievePlugins Request Method: GET');
   print('retrievePlugins Request Headers: {}');

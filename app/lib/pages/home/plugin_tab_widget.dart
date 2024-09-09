@@ -166,7 +166,7 @@ class _PluginTabWidgetState extends State<PluginTabWidget> {
                                     child: Text(
                                       dateTimeFormat(
                                           'MMM d, h:mm a',
-                                          widget.pluginsResult.date ??
+                                          widget.pluginsResult.createdAt ??
                                               DateTime.now()),
                                       style: const TextStyle(
                                           color: Colors.grey, fontSize: 12),

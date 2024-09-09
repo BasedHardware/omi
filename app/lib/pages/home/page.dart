@@ -209,6 +209,9 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     plugins = await retrievePlugins();
 
     userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
+    if (userMemoriesModels != null) {
+      userMemoriesModels!.removeWhere((t) => t.deleted == true);
+    }
     debugPrint("initiatePlugins 0 -> ${userMemoriesModels?.length ?? 0}");
     pluginsModels = await PluginService().getPluginsList();
     debugPrint("initiatePlugins 0 -> ${pluginsModels?.length ?? 0}");
@@ -579,18 +582,35 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                                     textFieldFocusNode:
                                         memoriesTextFieldFocusNode,
                                   ),
-                                  RefreshIndicator(
-                                      color: Colors.white,
-                                      backgroundColor: Colors.deepPurple,
-                                      onRefresh: _initiatePlugins,
-                                      child: (!isPluginLoading)
-                                          ? PluginsTabPage(
-                                              userMemoriesModels:
-                                                  userMemoriesModels!,
-                                              pluginsModels: pluginsModels!)
-                                          : const Center(
-                                              child:
-                                                  CupertinoActivityIndicator())),
+                                  (userMemoriesModels == null ||
+                                          userMemoriesModels!.isEmpty ||
+                                          userMemoriesModels!
+                                              .where((t) => t.deleted == false)
+                                              .toList()
+                                              .isEmpty)
+                                      ? RefreshIndicator(
+                                          color: Colors.white,
+                                          backgroundColor: Colors.deepPurple,
+                                          onRefresh: _initiatePlugins,
+                                          child: (!isPluginLoading)
+                                              ? const Center(
+                                                  child:
+                                                      Text("No record found"))
+                                              : const Center(
+                                                  child:
+                                                      CupertinoActivityIndicator()))
+                                      : RefreshIndicator(
+                                          color: Colors.white,
+                                          backgroundColor: Colors.deepPurple,
+                                          onRefresh: _initiatePlugins,
+                                          child: (!isPluginLoading)
+                                              ? PluginsTabPage(
+                                                  userMemoriesModels:
+                                                      userMemoriesModels!,
+                                                  pluginsModels: pluginsModels!)
+                                              : const Center(
+                                                  child:
+                                                      CupertinoActivityIndicator())),
                                   ChatPage(
                                     key: chatPageKey,
                                     textFieldFocusNode: chatTextFieldFocusNode,

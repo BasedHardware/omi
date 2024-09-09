@@ -25,8 +25,14 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
   void initState() {
     super.initState();
     plugins = widget.userMemoriesModels
-        .where((t) => t.pluginsResults != null && t.pluginsResults!.isNotEmpty)
+        .where((t) =>
+            t.pluginsResults != null &&
+            t.pluginsResults!.isNotEmpty &&
+            t.deleted == false)
         .toList();
+
+    plugins.sort((b, a) => (a.createdAt ?? DateTime(2023, 1, 1))
+        .compareTo(b.createdAt ?? DateTime(2023, 1, 1)));
   }
 
   @override

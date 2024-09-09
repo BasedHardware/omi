@@ -29,11 +29,15 @@ class _PluginDetailPostPageState extends State<PluginDetailPostPage> {
         .where((t) =>
             t.pluginsResults != null &&
             t.pluginsResults!.isNotEmpty &&
+            t.deleted == false &&
             t.pluginsResults!
                 .where((p) => p.pluginId == widget.pluginModel.id)
                 .toList()
                 .isNotEmpty)
         .toList();
+
+    plugins.sort((b, a) => (a.createdAt ?? DateTime(2023, 1, 1))
+        .compareTo(b.createdAt ?? DateTime(2023, 1, 1)));
   }
 
   @override

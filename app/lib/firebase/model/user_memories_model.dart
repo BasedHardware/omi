@@ -124,38 +124,38 @@ class UserMemoriesModel {
 class PluginsResult {
   String? pluginId;
   String? content;
-  DateTime? date;
+  DateTime? createdAt;
   bool isExpanded = false;
   bool isFavourite = false;
 
   PluginsResult({
     this.pluginId,
     this.content,
-    this.date,
+    this.createdAt,
   });
 
   factory PluginsResult.fromJson(Map<String, dynamic> json) => PluginsResult(
         pluginId: json["plugin_id"],
         content: json["content"],
-        date: json["date"] != null
-            ? (json["date"] is String)
-                ? (json["date"] != "")
-                    ? DateTime.parse(json["date"])
+        createdAt: json["created_at"] != null
+            ? (json["created_at"] is String)
+                ? (json["created_at"] != "")
+                    ? DateTime.parse(json["created_at"])
                     : null
-                : json["date"].toDate()
+                : json["created_at"].toDate()
             : null,
       );
 
   Map<String, dynamic> toJson() => {
         "plugin_id": pluginId,
         "content": content,
-        "date": date!.toIso8601String(),
+        "created_at": createdAt!.toIso8601String(),
       };
 
   Map<String, dynamic> toJsonTimeStamp() => {
         "plugin_id": pluginId,
         "content": content,
-        "date": Timestamp.fromDate(date!),
+        "created_at": Timestamp.fromDate(createdAt!),
       };
 }
 
