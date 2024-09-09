@@ -30,6 +30,7 @@ import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -657,8 +658,15 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       await _manageWebSocketConnection(true, isFromSpeechProfile);
     }
 
-    if (!audioBytesConnected) {
-      await streamAudioToWs(connectedDevice!.id, codec);
+    // Why is the connectedDevice null at this point?
+    if (!audioBytesConnected && connectedDevice != null) {
+      if (connectedDevice != null) {
+        await streamAudioToWs(connectedDevice!.id, codec);
+      } else {
+        // Is the app in foreground when this happens?
+        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      }
     }
 
     notifyListeners();
