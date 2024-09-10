@@ -732,7 +732,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   streamRecordingOnAndroid() async {
     await Permission.microphone.request();
-    updateRecordingState(RecordingState.initialising);
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
@@ -743,6 +742,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       updateRecordingState(RecordingState.record);
     }, onStop: () {
       updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
     });
   }
 
