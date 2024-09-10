@@ -32,13 +32,14 @@ async def main():
 
                 async def on_notify(sender: bleak.BleakGATTCharacteristic, data: bytearray):
                         # Write bytes to file
-                        binary_file.write(data)
+                        
                         global count
                         global done
                         print(len(data))
                         if (len(data)==1):
                              print(data[0])
                         else:
+                            binary_file.write(data)
                             amount_to_append = data[3]
                             audio_frames.append(data[4:data[3]+4])
                             count +=1
