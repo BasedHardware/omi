@@ -26,4 +26,8 @@ def update_processing_memory(
     if not processing_memory:
         raise HTTPException(status_code=404, detail="Processing memory not found")
 
-    return UpdateProcessingMemoryResponse(result=processing_memory)
+    return UpdateProcessingMemoryResponse(result=UpdateProcessingMemory(
+        id=processing_memory.id,
+        emotional_feedback=processing_memory.emotional_feedback,
+        geolocation=processing_memory.geolocation,
+    ))
