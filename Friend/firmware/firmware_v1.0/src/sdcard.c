@@ -191,31 +191,11 @@ int read_audio_data(uint8_t *buf, int amount,int offset) {
 int write_to_file(uint8_t *data,uint32_t length)
 {
 
-    int ret = 0;
     struct fs_file_t data_loc;
 	fs_file_t_init(&data_loc);
     uint8_t *temp_ptr = data;
-   	ret = fs_open(&data_loc, write_buffer , FS_O_WRITE | FS_O_APPEND);
-    if(ret)
-    {
-        printk("Error opening file\n");
-  
-        return -1;
-    }
-	ret = fs_write(&data_loc, temp_ptr, length);
-    // // printk("length is %d\n", length);
-    // printk("write data: ");
-    // for (int i = 0; i < length; i++) {
-    //     printk("%d ",temp_ptr[i]);
-    // }
-    // printk("\n");
-
-	if(ret < 0)
-	{
-        printk("er %d\n",ret);
-
-		return -1;
-	}
+   	fs_open(&data_loc, write_buffer , FS_O_WRITE | FS_O_APPEND);
+	fs_write(&data_loc, temp_ptr, length);
     fs_close(&data_loc);
 
     return 0;

@@ -15,11 +15,15 @@
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_PACKET_LENGTH 256
-#define OPUS_ENTRY_LENGTH 100
+#define OPUS_ENTRY_LENGTH 80
 #define FRAME_PREFIX_LENGTH 3
 
 #define READ_COMMAND 0
 #define DELETE_COMMAND 1
+
+#define INVALID_FILE_SIZE 3
+#define ZERO_FILE_SIZE 4
+#define INVALID_COMMAND 6
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -128,11 +132,11 @@ static int setup_storage_tx() {
 
 }
 
-static int parse_storage_command(void *buf,uint16_t len) {
+static uint8_t parse_storage_command(void *buf,uint16_t len) {
 
     if (len != 6 && len != 2) {
-        printk("not the exact length for command");
-        return -2;
+        printk("invalid command");
+        return INVALID_COMMAND;
     }
     uint8_t command = ((uint8_t*)buf)[0];
     uint8_t file_num = ((uint8_t*)buf)[1];
@@ -146,22 +150,28 @@ static int parse_storage_command(void *buf,uint16_t len) {
 
     if (file_num == 0) {
       printk("invalid file count 0\n");
-      return -3;
+      return INVALID_FILE_SIZE;
     }
     if (file_num > file_count) { //invalid file count 
     printk("invalid file count\n");
-      return -3;
+      return INVALID_FILE_SIZE;
 //add audio all?
     }
     if (command == READ_COMMAND) { //read 
         uint32_t temp = file_num_array[file_num-1];
-        if (temp == 0) {
-            printk("file size is 0\n");
-            return -4;
+        if ( file_num == (file_count -1) ) {
+            printk("valid command, setting up \n");
+            offset = size;
+            current_read_num = file_num;
+            transport_started = 1;           
         }
-        if (size > temp) {
+        else if (temp == 0) {
+            printk("file size is 0\n");
+            return ZERO_FILE_SIZE;
+        }
+        else if (size > temp) {
             printk("requested size is too large\n");
-            return -5;
+            return 5;
         }
         else {
             printk("valid command, setting up \n");
@@ -176,7 +186,7 @@ static int parse_storage_command(void *buf,uint16_t len) {
     }
     else {
         printk("invalid command \n");
-        return -6;
+        return 6;
     }
     return 0;
 
@@ -186,10 +196,13 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
 
     LOG_INF("about to schedule the storage");
     printk("was sent %d \n ", ((uint8_t*)buf)[0] );
-    int result = parse_storage_command(buf,len);
+
+    uint8_t result_buffer[1] = {0};
+    uint8_t result = parse_storage_command(buf,len);
+    result_buffer[0] = result; 
     printk("length of storage write: %d\n",len);
     printk("result: %d \n", result);
-
+    bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer,1);
     k_msleep(1000);
     return len;
 }
@@ -208,7 +221,7 @@ static void write_to_gatt(struct bt_conn *conn) {
     remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
     index++;
 
-    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+3);
+    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
 }
 
 
@@ -217,7 +230,7 @@ void storage_write(void) {
   while (1) {
     
     if ( transport_started ) {
-    LOG_INF("transpor started in side : %d",transport_started);
+        LOG_INF("transpor started in side : %d",transport_started);
         setup_storage_tx();
     }
 
@@ -238,23 +251,13 @@ void storage_write(void) {
         transport_started = 0;
         if (remaining_length == 0) {
            printk("done. attempting to download more files\n");
-           uint8_t stop_result[2] = {100,100};
+           uint8_t stop_result[1] = {100};
            int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
-   
-
-        //    current_read_num++;
            k_sleep(K_MSEC(10));
-        //    int res = setup_storage_tx();
-        //    if (res) {
-
-        //     printk("Error occuring while moving pointers. Exiting..\n");
-        //    }
            
         }
         
         }
-        
-
         k_yield();
   }
 
