@@ -207,7 +207,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                               style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                           GestureDetector(
                               onTap: () {
-                                launchUrl(Uri.parse('https://docs.basedhardware.com/developer/plugins/Integrations/'));
+                                launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
                                 MixpanelManager().advancedModeDocsOpened();
                               },
                               child: const Padding(
