@@ -20,11 +20,11 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -725,10 +725,20 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   streamRecordingOnAndroid() async {
     await Permission.microphone.request();
     updateRecordingState(RecordingState.initialising);
-    await initializeMicBackgroundService();
-    startBackgroundService();
-    await listenToBackgroundService();
+
+    // record
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
+        webSocketProvider?.websocketChannel?.sink.add(bytes);
+      }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    });
   }
+
+  CaptureProvider callback() => this;
 
   listenToBackgroundService() async {
     if (await FlutterBackgroundService().isRunning()) {
@@ -756,6 +766,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   stopStreamRecordingOnAndroid() {
-    stopBackgroundService();
+    ServiceManager.instance().mic.stop();
   }
 }
