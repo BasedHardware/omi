@@ -46,7 +46,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
-  await ServiceManager.instance().backgroundRunner.start();
+  await ServiceManager.instance().start();
 
   // Firebase
   if (F.env == Environment.prod) {
