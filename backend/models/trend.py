@@ -22,5 +22,5 @@ class TrendData(BaseModel):
 class Trend(BaseModel):
     id: str
     name: str
-    created_date: datetime
+    created_at: datetime
     data: int
