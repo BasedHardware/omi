@@ -11,6 +11,7 @@ import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/device_base.dart';
 import 'package:friend_private/utils/ble/errors.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
+import 'package:friend_private/utils/logger.dart';
 
 class FriendDevice extends DeviceBase {
   @override
@@ -115,7 +116,12 @@ class FriendDevice extends DeviceBase {
         if (Platform.isAndroid && device.mtuNow < 512) {
           await device.requestMtu(512); // This might fix the code 133 error
         }
-        await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+        if (device.isConnected) {
+          await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+        } else {
+          Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
+              message: 'Device is disconnected. Please reconnect and try again');
+        }
       }
     } catch (e, stackTrace) {
       logSubscribeError('Audio data stream', deviceId, e, stackTrace);

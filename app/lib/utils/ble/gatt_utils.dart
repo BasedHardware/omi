@@ -34,14 +34,15 @@ Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
     // Check if the device is connected before discovering services
-    if (!device.isConnected) {
+    if (device.isDisconnected) {
       Logger.handle(Exception('Device is not connected'), StackTrace.current,
           message: 'Looks like the device is not connected. Please make sure the device is connected and try again.');
       return [];
+    } else {
+      // TODO: need to be fixed for open glass
+      // if (Platform.isAndroid && device.servicesList.isNotEmpty) return device.servicesList;
+      return await device.discoverServices();
     }
-    // TODO: need to be fixed for open glass
-    // if (Platform.isAndroid && device.servicesList.isNotEmpty) return device.servicesList;
-    return await device.discoverServices();
   } catch (e, stackTrace) {
     logCrashMessage('Get BLE services', deviceId, e, stackTrace);
     return [];
