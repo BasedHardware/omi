@@ -13,7 +13,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://docs.omi.me/) | [Buy Assembled Device](https://basedhardware.com)
+[Homepage](https://omi.me/) | [Documentation](https://docs.omi.me/) | [Buy Assembled Device](https://omi.me)
 
 </h3>
 
