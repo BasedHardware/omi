@@ -92,9 +92,12 @@ class DeviceProvider extends ChangeNotifier {
         updateConnectingStatus(false);
         await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
         //  initiateBleBatteryListener();
-        MixpanelManager().deviceConnected();
-        SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
-        SharedPreferencesUtil().deviceName = connectedDevice!.name;
+        // The device is still disconnected for some reason
+        if (connectedDevice != null) {
+          MixpanelManager().deviceConnected();
+          SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
+          SharedPreferencesUtil().deviceName = connectedDevice!.name;
+        }
         notifyListeners();
       },
     );
