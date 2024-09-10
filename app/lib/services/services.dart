@@ -66,32 +66,6 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 Future onStart(ServiceInstance service) async {
-  /*
-    FlutterSoundRecorder? _mRecorder = FlutterSoundRecorder();
-    await _mRecorder.openRecorder(isBGService: true);
-    var recordingDataController = StreamController<Uint8List>();
-
-    await _mRecorder.startRecorder(
-      toStream: recordingDataController.sink,
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: 16000,
-      bufferSize: 8192,
-    );
-    service.invoke("stateUpdate", {"state": 'recording'});
-    recordingDataController.stream.listen((buffer) {
-      Uint8List audioBytes = buffer;
-      List<dynamic> audioBytesList = audioBytes.toList();
-      service.invoke("audioBytes", {"data": audioBytesList});
-    });
-
-    service.on('stop').listen((event) {
-      _mRecorder.stopRecorder();
-      service.invoke("stateUpdate", {"state": 'stopped'});
-      service.stopSelf();
-    });
-		*/
-
   // Recorder
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
@@ -113,7 +87,6 @@ Future onStart(ServiceInstance service) async {
   });
 
   service.on('stop').listen((event) async {
-    debugPrint("stop");
     if (recorder?.status != RecorderServiceStatus.stop) {
       recorder?.stop();
     }
@@ -127,9 +100,7 @@ Future onStart(ServiceInstance service) async {
     pongAt = DateTime.now();
   });
   Timer.periodic(const Duration(seconds: 5), (timer) async {
-    debugPrint("ping");
     if (pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) {
-      debugPrint("retired");
       // retire
       if (recorder?.status != RecorderServiceStatus.stop) {
         recorder?.stop();
