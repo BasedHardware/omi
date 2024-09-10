@@ -25,4 +25,4 @@ class UpdateProcessingMemory(BaseModel):
     emotional_feedback: Optional[bool] = False
 
 class UpdateProcessingMemoryResponse(BaseModel):
-    result: ProcessingMemory
+    result: UpdateProcessingMemory
