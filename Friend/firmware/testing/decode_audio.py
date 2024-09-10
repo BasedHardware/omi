@@ -8,11 +8,11 @@ count = 0
 with open("my_file.txt", "rb") as binary_file:
     info_char = binary_file.read()
     # print(len(info_char))
-    count = int(len(info_char) / 103)
+    count = int(len(info_char) / 83)
 
     
     for i in range(0,count):
-        sample_frame = info_char[i*103:(i+1)*103]
+        sample_frame = info_char[i*83:(i+1)*83]
         amount = int(sample_frame[3])
         frame_to_decode = bytes(list(sample_frame[4:4+amount]))
 
@@ -24,7 +24,7 @@ with open("my_file.txt", "rb") as binary_file:
 
     for frame in f:
         try:
-            decoded_frame = opus_decoder.decode(bytes(frame), 320)
+            decoded_frame = opus_decoder.decode(bytes(frame), 960)
             pcm_data.extend(decoded_frame)
         except Exception as e:
             print(f"Error decoding frame: {e}")
