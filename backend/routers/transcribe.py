@@ -122,6 +122,10 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
+    # Soft timeout
+    TIMEOUT_SECONDS = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    started_at = time.time()
+
     def stream_transcript(segments, stream_id):
         nonlocal websocket
         nonlocal processing_memory
@@ -236,6 +240,7 @@ async def _websocket_util(
     async def send_heartbeat():
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal started_at
         try:
             while websocket_active:
                 await asyncio.sleep(30)
@@ -244,6 +249,12 @@ async def _websocket_util(
                     await websocket.send_json({"type": "ping"})
                 else:
                     break
+
+                # timeout
+                if time.time() - started_at >= TIMEOUT_SECONDS:
+                    print(f"Session timeout is hit by soft timeout {TIMEOUT_SECONDS}, session {session_id}")
+                    websocket_close_code = 1001
+                    websocket_active = False
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
@@ -431,7 +442,7 @@ async def _websocket_util(
 
         should_create_memory = should_create_memory_time and should_create_memory_time_words
         print(
-            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}")
+            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
         if should_create_memory:
             memory = await _create_memory()
             if not memory:

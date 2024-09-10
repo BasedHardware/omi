@@ -8,7 +8,6 @@ import 'package:friend_private/utils/ble/device_base.dart';
 import 'package:friend_private/utils/ble/frame_communication.dart';
 import 'package:friend_private/utils/ble/friend_communication.dart';
 
-
 Map<String, DeviceBase> deviceMap = {};
 Future<DeviceBase?> getDevice(String deviceId) async {
   if (deviceMap.containsKey(deviceId)) {
@@ -42,20 +41,18 @@ Future<StreamSubscription<List<int>>?> getBleBatteryLevelListener(
   String deviceId, {
   void Function(int)? onBatteryLevelChange,
 }) async =>
-    (await getDevice(deviceId))?.getBleBatteryLevelListener(
-            onBatteryLevelChange: onBatteryLevelChange) ??
-        Future.value(null);
+    (await getDevice(deviceId))?.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange) ??
+    Future.value(null);
 
 Future<StreamSubscription?> getBleAudioBytesListener(
   String deviceId, {
   required void Function(List<int>) onAudioBytesReceived,
 }) async =>
-    (await getDevice(deviceId))?.getBleAudioBytesListener(
-            onAudioBytesReceived: onAudioBytesReceived) ??
-        Future.value(null);
+    (await getDevice(deviceId))?.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived) ??
+    Future.value(null);
 
 Future<BleAudioCodec> getAudioCodec(String deviceId) async =>
-    (await getDevice(deviceId))?.getAudioCodec() ?? Future.value(BleAudioCodec.pcm8); 
+    (await getDevice(deviceId))?.getAudioCodec() ?? Future.value(BleAudioCodec.pcm8);
 
 Future cameraStartPhotoController(String deviceId) async =>
     (await getDevice(deviceId))?.cameraStartPhotoController() ?? Future.value(null);
@@ -70,14 +67,10 @@ Future<StreamSubscription?> getImageListener(
   String deviceId, {
   required void Function(Uint8List base64JpgData) onImageReceived,
 }) async =>
-    (await getDevice(deviceId))?.getImageListener(
-            onImageReceived: onImageReceived) ??
-        Future.value(null);
+    (await getDevice(deviceId))?.getImageListener(onImageReceived: onImageReceived) ?? Future.value(null);
 
 Future<StreamSubscription<List<int>>?> getAccelListener(
   String deviceId, {
   void Function(int)? onAccelChange,
 }) async =>
-    (await getDevice(deviceId))?.getAccelListener(
-            onAccelChange: onAccelChange) ??
-        Future.value(null);
+    (await getDevice(deviceId))?.getAccelListener(onAccelChange: onAccelChange) ?? Future.value(null);
