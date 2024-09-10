@@ -113,21 +113,21 @@ static int setup_storage_tx() {
         remaining_length = 0;
         return -1;
     }
-    else {
-    if (file_num_array[current_read_num-1] == 0 ) {
-            // LOG_ERR("bad file size, moving again...");
-            // file_num++;
-            move_read_pointer(current_read_num);
-    }
-    printk("current read ptr %d\n",current_read_num);
 
+    printk("current read ptr %d\n",current_read_num);
+   
     remaining_length = file_num_array[current_read_num-1];
+    if(current_read_num == file_count) {
+        remaining_length = get_file_size(file_count);
+    }
+
     remaining_length = remaining_length - offset;
+    
     // offset=offset_;
     printk("remaining length: %d\n",remaining_length);
     LOG_INF("offset: %d\n",offset);
     printk("file: %d\n",current_read_num);
-    }
+    
     return 0;
 
 }
@@ -159,7 +159,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len) {
     }
     if (command == READ_COMMAND) { //read 
         uint32_t temp = file_num_array[file_num-1];
-        if ( file_num == (file_count -1) ) {
+        if ( file_num == (file_count ) ) {
             printk("valid command, setting up \n");
             offset = size;
             current_read_num = file_num;
