@@ -92,8 +92,18 @@ class BTDeviceStruct {
   int? rssi;
   List<int>? fwver;
   DeviceType? type;
+  String? bootloaderVersion; // New field for bootloader version
+  String? firmwareVersion; // New field for firmware version
 
-  BTDeviceStruct({required this.id, required this.name, this.rssi, this.fwver, this.type}) {
+  BTDeviceStruct({
+    required this.id,
+    required this.name,
+    this.rssi,
+    this.fwver,
+    this.type,
+    this.bootloaderVersion,
+    this.firmwareVersion,
+  }) {
     if (type != null) {
       deviceTypeMap[id] = type!;
     } else if (deviceTypeMap.containsKey(id)) {
@@ -130,10 +140,20 @@ class BTDeviceStruct {
       type: json['type'] == null
           ? null
           : DeviceType.values.firstWhere((e) => e.name.toLowerCase() == json['type'].toLowerCase()),
+      bootloaderVersion: json['bootloaderVersion'] as String?, // Deserialize bootloader version
+      firmwareVersion: json['firmwareVersion'] as String?, // Deserialize firmware version
     );
   }
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'rssi': rssi, 'fwver': fwver?.toList(), 'type': type?.name};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'rssi': rssi,
+    'fwver': fwver?.toList(),
+    'type': type?.name,
+    'bootloaderVersion': bootloaderVersion, // Serialize bootloader version
+    'firmwareVersion': firmwareVersion, // Serialize firmware version
+  };
 }
 
 class DeviceInfo {
