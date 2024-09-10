@@ -46,6 +46,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
+  await ServiceManager.instance().backgroundRunner.start();
 
   // Firebase
   if (F.env == Environment.prod) {
@@ -124,22 +125,27 @@ class MyApp extends StatefulWidget {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
   }
 
   void _deinit() {
+    debugPrint("App > _deinit");
     ServiceManager.instance().deinit();
   }
 
   @override
-  void dispose() {
-    _deinit();
-    super.dispose();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint("App > lifecycle changed $state");
+    if (state == AppLifecycleState.detached) {
+      _deinit();
+    }
   }
 
   @override
