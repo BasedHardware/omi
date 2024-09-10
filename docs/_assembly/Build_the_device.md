@@ -16,7 +16,7 @@ If you received an unassembled Friend or want to build one yourself, follow the 
 
 **Step 0.** Components
 
-Ensure you've purchased all required components from the [buying guide](https://docs.basedhardware.com/assembly/Buying_Guide/))
+Ensure you've purchased all required components from the [buying guide](https://docs.omi.me/assembly/Buying_Guide/))
 
 <img src="/images/latest_assembly/components.png" alt="components" width="300">
 
