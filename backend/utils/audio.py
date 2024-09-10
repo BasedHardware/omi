@@ -47,4 +47,19 @@ def create_wav_from_bytes(file_path: str, frames: [], codec: str, frame_rate: in
         wave_write.close()
         return
 
+    # pcm8
+    if codec == "pcm8":
+        wave_write = wave.open(file_path, "wb")
+        # Save the wav's specification
+        wave_write.setnchannels(channels)
+        wave_write.setframerate(frame_rate)
+        wave_write.setsampwidth(sample_width)
+
+        for frame in frames:
+            decoded_pcm = frame
+            wave_write.writeframes(decoded_pcm)
+
+        wave_write.close()
+        return
+
     raise Exception(f"codec {codec} is not supported")

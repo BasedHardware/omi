@@ -21,6 +21,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -43,6 +44,10 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
+  // Service manager
+  ServiceManager.init();
+
+  // Firebase
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
@@ -124,12 +129,17 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      //TODO: Internet connection check required
-      NotificationService.instance.saveNotificationToken();
-    });
-
     super.initState();
+  }
+
+  void _deinit() {
+    ServiceManager.instance().deinit();
+  }
+
+  @override
+  void dispose() {
+    _deinit();
+    super.dispose();
   }
 
   @override
@@ -262,6 +272,11 @@ class DeciderWidget extends StatefulWidget {
 class _DeciderWidgetState extends State<DeciderWidget> {
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.read<ConnectivityProvider>().isConnected) {
+        NotificationService.instance.saveNotificationToken();
+      }
+    });
     super.initState();
   }
 
