@@ -141,14 +141,12 @@ int main(void)
     set_led_green(false);
 
     err = mount_sd_card();
-    printk("result of mount:%d\n",err);
+    LOG_INF("result of mount:%d",err);
 
     k_msleep(500);
     storage_init();
 
 
-
-    
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();

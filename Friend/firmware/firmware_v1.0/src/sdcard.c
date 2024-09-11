@@ -43,7 +43,7 @@ int move_read_pointer(uint8_t num) {
     struct fs_dirent entry; 
     int res = fs_stat(&read_buffer,&entry);
     if (res) {
-        printk("invalid file\n");
+        LOG_ERR("invalid file\n");
         
     return -1;  
     }
@@ -56,7 +56,7 @@ int move_write_pointer(uint8_t num) {
     struct fs_dirent entry;
     int res = fs_stat(&write_buffer,&entry);
     if (res) {
-        printk("invalid file\n");
+        LOG_ERR("invalid file\n");
         
     return -1;  
     }
@@ -73,7 +73,7 @@ int mount_sd_card(void)
 	uint32_t block_size;
     static const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
-    printk("disk_access_init: %d\n", err);
+    LOG_INF("disk_access_init: %d\n", err);
     if (err) {
         k_msleep(2000);
         err = disk_access_init(disk_pdrv); 
@@ -85,52 +85,52 @@ int mount_sd_card(void)
     int res = fs_mount(&mount_point);
 
     if (res == FR_OK) {
-        printk("SD card mounted successfully\n");
+        LOG_INF("SD card mounted successfully");
     } else {
-        printk("f_mount failed: %d\n", res);
+        LOG_ERR("f_mount failed: %d", res);
         return -1;
     }
     res = fs_mkdir("/SD:/audio");
     if (res == FR_OK) {
-        printk("audio directory created successfully\n");
+        LOG_INF("audio directory created successfully");
     }
     else if (res == FR_EXIST) {
-        printk("audio directory already exists\n");
+        LOG_INF("audio directory already exists");
     }
      else {
-        printk("audio directory creation failed: %d\n", res);
+        LOG_INF("audio directory creation failed: %d", res);
     }
 
     struct fs_dir_t zdp;
     fs_dir_t_init(&zdp);
     err = fs_opendir(&zdp,"/SD:/audio");
     if (err) {
-        printk("error while opening directory \n",err);
+        LOG_ERR("error while opening directory ",err);
         return -1;
     }
-    printk("result of opendir: %d\n",err);
+    LOG_INF("result of opendir: %d",err);
     
     struct fs_dirent entry_;
   
     file_count =get_next_item(&zdp, &entry_);
     if (file_count < 0) {
-        printk(" error getting file count\n");
+        LOG_ERR(" error getting file count");
         return -1;
     }
 
     fs_closedir(&zdp);
-    printk("current num files: %d\n",file_count);
+    LOG_INF("current num files: %d",file_count);
     file_count++;
-    printk("new num files: %d\n",file_count);
+    LOG_INF("new num files: %d",file_count);
     initialize_audio_file(file_count);
     err = move_write_pointer(file_count); 
     if (err) {
-        printk("erro while moving the write pointer\n");
+        LOG_ERR("erro while moving the write pointer");
         return -1;
     }
     move_read_pointer(file_count);
     if (err) {
-        printk("error while moving the reader pointer\n");
+        LOG_ERR("error while moving the reader pointer\n");
         return -1;
     }
 
@@ -139,10 +139,10 @@ int mount_sd_card(void)
     res = fs_stat(info_path,&entry);
     if (res) {
         res = create_file("info.txt");
-        printk("result of info.txt creation: %d\n ",res);
+        LOG_INF("result of info.txt creation: %d ",res);
    
     }
-    printk("result of check: %d\n",res);
+    LOG_INF("result of check: %d",res);
 
 
 	return 0;
@@ -160,7 +160,7 @@ int create_file(const char *file_path){
 
 	if (ret) 
 	{
-      printk("File creation failed %d\n", ret);
+      LOG_ERR("File creation failed %d", ret);
 		return -2;
 	} 
     fs_close(&data_filp);
@@ -264,16 +264,16 @@ int get_next_item(struct fs_dir_t *zdp, struct fs_dirent *entry) {
    }
    int count = 0;  
    file_num_array[count] = entry->size;
-   printk("file numarray %d %d \n",count,file_num_array[count]);
-   printk("file name is %s \n", entry->name);
+   LOG_INF("file numarray %d %d ",count,file_num_array[count]);
+   LOG_INF("file name is %s ", entry->name);
    count++;
    while (zdp->mp->fs->readdir(zdp, entry) == 0 ) {
       if (entry->name[0] ==  0 ) {
         break;
       }
       file_num_array[count] = entry->size;
-      printk("file numarray %d %d \n",count,file_num_array[count]);
-      printk("file name is %s \n", entry->name);
+      LOG_INF("file numarray %d %d ",count,file_num_array[count]);
+      LOG_INF("file name is %s ", entry->name);
       count++;
    }
    return count;
@@ -283,15 +283,18 @@ int clear_audio_file(uint8_t num) {
 
     char *ptr = generate_new_audio_header(num);
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
-    free(ptr);
-    int res = fs_unlink(&current_full_path);
+    k_free(ptr);
+    int res = fs_unlink(current_full_path);
     if (res) {
-        printk("error deleting file\n");
+        LOG_ERR("error deleting file");
         return -1;
     }
-    res = create_file(&current_full_path);
+    char *ptr2 = generate_new_audio_header(num);
+    k_msleep(10);
+    res = create_file(ptr2);
+    k_free(ptr2);
     if (res) {
-        printk("error creating file\n");
+        LOG_ERR("error creating file");
         return -1;
     }
 
