@@ -13,7 +13,7 @@ To contribute:
 * create a Pull Request and specifiy which issue is it related to
 
 ## Docs Contribution
-Docs contributions are as important as code contributions! Our docs are located at [github docs folder](https://github.com/BasedHardware/Omi/tree/main/docs) and synced real-time with docs.basedhardware.com 
+Docs contributions are as important as code contributions! Our docs are located at [github docs folder](https://github.com/BasedHardware/Omi/tree/main/docs) and synced real-time with docs.omi.me 
 
 You can modify the docs directly from Github interface by Createing a fork => [clicking this icon](https://share.cleanshot.com/dkBSffGr) => click "preview" => create pull request  
 

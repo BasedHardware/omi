@@ -1,6 +1,6 @@
 # import os
 # import uuid
-# from datetime import datetime
+# from datetime import datetime, timezone
 #
 # from fastapi import APIRouter
 # from fastapi import Request, HTTPException
@@ -21,7 +21,7 @@
 #     if data.source == 'screen':
 #         structured = summarize_screen_pipe(data.text)
 #     elif data.source == 'audio':
-#         structured = get_transcript_structure(data.text, datetime.utcnow(), 'en')
+#         structured = get_transcript_structure(data.text, datetime.now(timezone.utc), 'en')
 #     else:
 #         raise HTTPException(status_code=400, detail='Invalid memory source')
 #
@@ -29,9 +29,9 @@
 #         id=str(uuid.uuid4()),
 #         uid=uid,
 #         structured=structured,
-#         started_at=datetime.utcnow(),
-#         finished_at=datetime.utcnow(),
-#         created_at=datetime.utcnow(),
+#         started_at=datetime.now(timezone.utc),
+#         finished_at=datetime.now(timezone.utc),
+#         created_at=datetime.now(timezone.utc),
 #         discarded=False,
 #         deleted=False,
 #         source='screenpipe',

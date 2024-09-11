@@ -46,7 +46,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
         }
       },
       child: Container(
-        margin: const EdgeInsets.only(top: 12, left: 8, right: 8),
+        margin: const EdgeInsets.only(top: 12, left: 16, right: 16),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,

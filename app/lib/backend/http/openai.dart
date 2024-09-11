@@ -52,7 +52,9 @@ Future<String> getPhotoDescription(Uint8List data) async {
       ],
     },
   ];
-  return await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  var res = await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  if (res == null) return '';
+  return res;
 }
 
 Future<dynamic> gptApiCall({
@@ -75,11 +77,7 @@ Future<dynamic> gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    var bodyData = {
-      'model': model,
-      'messages': messages,
-      'temperature': temperature
-    };
+    var bodyData = {'model': model, 'messages': messages, 'temperature': temperature};
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
     } else if (tools.isNotEmpty) {
@@ -92,8 +90,7 @@ Future<dynamic> gptApiCall({
     body = jsonEncode(bodyData);
   }
 
-  var response =
-      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   return extractContentFromResponse(
     response,
     isEmbedding: urlSuffix == 'embeddings',
@@ -101,15 +98,13 @@ Future<dynamic> gptApiCall({
   );
 }
 
-Future<String> executeGptPrompt(String? prompt,
-    {bool ignoreCache = false}) async {
+Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
-  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty)
-    return cachedResponse;
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}

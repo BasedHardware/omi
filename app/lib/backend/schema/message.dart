@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 enum MessageSender { ai, human }
 
 enum MessageType {
@@ -9,7 +11,7 @@ enum MessageType {
   const MessageType(this.value);
 
   static MessageType valuesFromString(String value) {
-    return MessageType.values.firstWhere((e) => e.value == value);
+    return MessageType.values.firstWhereOrNull((e) => e.value == value) ?? MessageType.text;
   }
 }
 
@@ -41,7 +43,7 @@ class MessageMemory {
   static MessageMemory fromJson(Map<String, dynamic> json) {
     return MessageMemory(
       json['id'],
-      DateTime.parse(json['created_at']),
+      DateTime.parse(json['created_at']).toLocal(),
       MessageMemoryStructured.fromJson(json['structured']),
     );
   }
@@ -49,7 +51,7 @@ class MessageMemory {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
     };
   }
@@ -81,7 +83,7 @@ class ServerMessage {
   static ServerMessage fromJson(Map<String, dynamic> json) {
     return ServerMessage(
       json['id'],
-      DateTime.parse(json['created_at']),
+      DateTime.parse(json['created_at']).toLocal(),
       json['text'],
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
       MessageType.valuesFromString(json['type']),
@@ -94,7 +96,7 @@ class ServerMessage {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'text': text,
       'sender': sender.toString().split('.').last,
       'type': type.toString().split('.').last,
