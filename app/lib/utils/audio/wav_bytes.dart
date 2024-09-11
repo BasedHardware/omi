@@ -368,13 +368,17 @@ class StorageBytesUtil extends WavBytesUtil {
    List<int> pending = [];
    List<int> currentStorageList = [];
    int currentStorageCount = 0;
+   int fileNum = 1;
+
+   int getFileNum() {
+    return fileNum;
+   }
    
    void storeFrameStoragePacket(value) {
     if (value.length == 1) {
-      debugPrint('stop command');
       return;
     }
-    if (value.length < 100) {
+    if (value.length < 40) {
       debugPrint('packet too small');
       return;
     }
@@ -423,21 +427,16 @@ class StorageBytesUtil extends WavBytesUtil {
     lastPacketIndex = index; // Update packet id
     // debugPrint('reached end');
   }
-
 @override
-Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
-  debugPrint('createWavFile $filename');
-  List<List<int>> framesCopy;
-  if (removeLastNSeconds > 0) {
-    removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
-    framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
-  } else {
-    framesCopy = List<List<int>>.from(frames); // copy the frames before clearing all
-    clearAudioBytes();
-  }
-  File file = await createWavByCodec(framesCopy, filename: filename);
-  return Tuple2(file, framesCopy);
+Future<File> createWav(Uint8List wavBytes,{String? filename}) async {
+  final directory = await getDir();
+  String filename2 = 'recording-$fileNum.wav';
+  final file = File('${directory.path}/$filename2');
+  await file.writeAsBytes(wavBytes);
+  debugPrint('WAV file created: ${file.path}');
+  return file;
 }
+
 @override
 Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
   Uint8List wavBytes;
@@ -447,7 +446,9 @@ Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async 
       decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
     }
     wavBytes = getUInt8ListBytes(decodedSamples, 16000);
-  return createWav(wavBytes, filename: filename);
+  return createWav(wavBytes);
 }
+
+static Future<Directory> getDir() => getTemporaryDirectory();
 
 }

@@ -80,7 +80,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
   List<int> currentStorageFiles = <int>[];
-  StorageBytesUtil? storageUtil;
+  StorageBytesUtil storageUtil = StorageBytesUtil();
   // -----------------------
 
   bool resetStateAlreadyCalled = false;
@@ -182,7 +182,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
       setMemoryCreating(false);
       try {
-        memoryPostProcessing(file, memory.id).then((postProcessed) { //fill the shell with audio file
+        memoryPostProcessing(file, memory.id).then((postProcessed) { //tyoe ServerMemory
           if (postProcessed != null) {
             memoryProvider?.updateMemory(postProcessed);
           } else {
@@ -337,7 +337,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future sendStorage(String id) async {
     storageUtil = StorageBytesUtil();
-    // storageUtil.currentStorageList = currentStorageFiles;
 
     if (_storageStream != null) {
       _storageStream?.cancel();
@@ -346,25 +345,55 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       id,
       onStorageBytesReceived: (List<int> value) async {
         if (value.isEmpty) return;
+
         storageUtil!.storeFrameStoragePacket(value);
-        if (value.length == 1) {
-          if (value[0] == 100) {
-          debugPrint('done. sending to backend....');
-          File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
-          sendStorageToBackend(storageFile, "hi");
+        if (value.length == 1) { //result codes i guess
+          debugPrint('returned $value');
+          if (value[0] == 0) { //valid command
+          debugPrint('good to go');
           } 
+          else if (value[0] == 3) {
+            debugPrint('bad file size. finishing...');
+          }
+          else if (value[0] == 4) { //file size is zero.
+          debugPrint('file size is zero. going to next one....');
+          getFileFromDevice(storageUtil.getFileNum()+1);
+          } 
+          else if (value[0] == 100) { //valid end command
+          debugPrint('done. sending to backend....trying to dl more');
+          File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+          List<ServerMemory> result = await sendStorageToBackend(storageFile, "hi");
+          for (ServerMemory memory in result) {
+            memoryProvider?.addMemory(memory);
+          }
+          storageUtil.clearAudioBytes();
+          getFileFromDevice(storageUtil.getFileNum()+1);
+          } 
+          else { //bad bit
+            debugPrint('Error bit returned');
+          }
         }
+        
       }
     );
 
-    writeToStorage(id);
+    getFileFromDevice(storageUtil.getFileNum());
 
   //  notifyListeners();
   }
 
+Future getFileFromDevice(int fileNum) async {
+  storageUtil.fileNum = fileNum;
+  writeToStorage(connectedDevice!.id,storageUtil.fileNum);
+
+}
   // Future saveAndSendStorageWav() async {
   // }
-
+// Future storageHandler() async {
+//     File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+//     sendStorageToBackend(storageFile, "hi");
+//     writeToStorage(id,2);
+// }
   void clearTranscripts() {
     segments = [];
     SharedPreferencesUtil().transcriptSegments = [];

@@ -68,8 +68,8 @@ Future<StreamSubscription?> getBleStorageBytesListener(
             onStorageBytesReceived: onStorageBytesReceived) ??
         Future.value(null);   
 
-Future<bool> writeToStorage(String deviceId) async => 
-    (await getDevice(deviceId))?.writeToStorage() ?? Future.value(false);
+Future<bool> writeToStorage(String deviceId,int numFile) async => 
+    (await getDevice(deviceId))?.writeToStorage(numFile) ?? Future.value(false);
 
 Future<List<int>> getStorageList(String deviceId) async =>
     (await getDevice(deviceId))?.getStorageList() ?? Future.value(null); 
