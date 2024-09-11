@@ -11,7 +11,8 @@ Future<List<ServerMessage>> getMessagesServer() async {
   if (response == null) return [];
   debugPrint('getMessages: ${response.body}');
   if (response.statusCode == 200) {
-    var decodedBody = jsonDecode(response.body) as List<dynamic>;
+    var body = utf8.decode(response.bodyBytes);
+    var decodedBody = jsonDecode(body) as List<dynamic>;
     if (decodedBody.isEmpty) {
       return [];
     }

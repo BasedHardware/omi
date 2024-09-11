@@ -103,7 +103,9 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
       url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
-    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
+    var body = utf8.decode(response.bodyBytes);
+    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
   }
