@@ -16,8 +16,13 @@ const String buttonTriggerCharacteristicUuid = '23ba7925-0000-1000-7450-346eac49
 const String imageDataStreamCharacteristicUuid = '19b10005-e8f2-537e-4f6c-d104768a1214';
 const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d104768a1214';
 
-const String accelDataStreamServiceUuid = '32403790-0000-1000-7450-bf445e5829a2';
-const String accelDataStreamCharacteristicUuid = '32403791-0000-1000-7450-bf445e5829a2';
+
+const String storageDataStreamServiceUuid = '30295780-4301-eabd-2904-2849adfeae43';
+const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849adfeae43';
+const String storageReadControlCharacteristicUuid = '30295782-4301-eabd-2904-2849adfeae43';
+
+const String accelDataStreamServiceUuid  = '32403790-0000-1000-7450-bf445e5829a2';
+const String accelDataStreamCharacteristicUuid  = '32403791-0000-1000-7450-bf445e5829a2';
 
 const String batteryServiceUuid = '0000180f-0000-1000-8000-00805f9b34fb';
 const String batteryLevelCharacteristicUuid = '00002a19-0000-1000-8000-00805f9b34fb';

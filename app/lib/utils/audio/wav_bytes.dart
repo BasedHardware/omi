@@ -184,12 +184,15 @@ class WavBytesUtil {
     debugPrint('createWavFile $filename');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
+          debugPrint(' in this branch');
       removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
       framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
     } else {
+      debugPrint(' in other branch');
       framesCopy = List<List<int>>.from(frames); // copy the frames before clearing all
       clearAudioBytes();
     }
+    debugPrint('about to write to other codec');
     File file = await createWavByCodec(framesCopy, filename: filename);
     return Tuple2(file, framesCopy);
   }
@@ -363,4 +366,97 @@ class ImageBytesUtil {
     // debugPrint('Added to buffer, new size: ${_buffer.length}');
     return null;
   }
+}
+
+class StorageBytesUtil extends WavBytesUtil {
+
+   StorageBytesUtil() : super();
+// @override
+   int count = 0;
+   List<int> pending = [];
+   List<int> currentStorageList = [];
+   int currentStorageCount = 0;
+   int fileNum = 1;
+
+   int getFileNum() {
+    return fileNum;
+   }
+   
+   void storeFrameStoragePacket(value) {
+    if (value.length == 1) {
+      return;
+    }
+    if (value.length < 40) {
+      debugPrint('packet too small');
+      return;
+    }
+    rawPackets.add(value);
+    int index = value[0] + (value[1] << 8);
+    int internal = value[2];
+    int amount = value[3];
+    List<int> content = value.sublist(4,4+amount);
+    count =  count +1;
+    // debugPrint('current count: $count');
+
+    // Start of a new frame
+    if (lastPacketIndex == -1 && internal == 0) {
+      lastPacketIndex = index;
+      lastFrameId = internal;
+      pending = content;
+      // debugPrint('discsrd');
+      return;
+    }
+
+    if (lastPacketIndex == -1) return;
+
+    // Lost frame - reset state
+    if (index != lastPacketIndex + 1 || (internal != 0 && internal != lastFrameId + 1)) {
+      // debugPrint('Lost frame');
+      lastPacketIndex = -1;
+      pending = [];
+      lost += 1;
+      return;
+    }
+
+    // Start of a new frame
+    if (internal == 0) {
+      frames.add(pending); // Save frame
+      pending = content; // Start new frame
+      lastFrameId = internal; // Update internal frame id
+      lastPacketIndex = index; // Update packet id
+      // debugPrint('Frames received: ${frames.length} && Lost: $lost');
+      // debugPrint('new frame');
+      return;
+    }
+
+    // Continue frame
+    pending.addAll(content);
+    lastFrameId = internal; // Update internal frame id
+    lastPacketIndex = index; // Update packet id
+    // debugPrint('reached end');
+  }
+@override
+Future<File> createWav(Uint8List wavBytes,{String? filename}) async {
+  final directory = await getDir();
+  String filename2 = 'recording-$fileNum.wav';
+  final file = File('${directory.path}/$filename2');
+  await file.writeAsBytes(wavBytes);
+  debugPrint('WAV file created: ${file.path}');
+  return file;
+}
+
+@override
+Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
+  Uint8List wavBytes;
+
+    List<int> decodedSamples = [];
+    for (var frame in frames) {
+      decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
+    }
+    wavBytes = getUInt8ListBytes(decodedSamples, 16000);
+  return createWav(wavBytes);
+}
+
+static Future<Directory> getDir() => getTemporaryDirectory();
+
 }
