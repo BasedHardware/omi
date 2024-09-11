@@ -47,7 +47,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageToServer(String message, String? pluginId) async {
-    var mes = await sendMessageServer(message);
+    var mes = await sendMessageServer(message, pluginId: pluginId);
     messages.insert(0, mes);
     notifyListeners();
   }
