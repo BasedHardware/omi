@@ -19,6 +19,7 @@ from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMe
 from models.processing_memory import ProcessingMemory
 from routers.postprocessing import postprocess_memory_util
 from utils.audio import create_wav_from_bytes, merge_wav_files
+from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import process_audio_dg, send_initial_file
 from utils.stt.streaming import process_segments
@@ -417,12 +418,19 @@ async def _websocket_util(
             messages = new_messages
             processing_memory = updated_processing_memory
         else:
+            # Or process the existed with new transcript
             memory_data = memories_db.get_memory(uid, processing_memory.memory_id)
             if memory_data is None:
                 print(f"Memory is not found. Uid: {uid}. Memory: {processing_memory.memory_id}")
                 return
-
             memory = Memory(**memory_data)
+
+            # Update transcripts
+            memory.transcript_segments = processing_memory.transcript_segments
+            memories_db.update_memory_segments(uid, memory.id, [segment.dict() for segment in memory.transcript_segments])
+            
+            # Process
+            memory = process_memory(uid, memory.language, memory, force_process=True)
 
         # Post processing
         new_memory = await _post_process_memory(memory)
