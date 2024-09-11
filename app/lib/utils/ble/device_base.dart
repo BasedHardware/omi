@@ -71,13 +71,13 @@ abstract class DeviceBase {
 
   Future<List<int>> performGetStorageList();
 
-  Future<bool> performWriteToStorage();
+  Future<bool> performWriteToStorage(int numFile);
 
-  Future<bool> writeToStorage() async {
+  Future<bool> writeToStorage(int numFile) async {
  
     if (await isConnected()) {
-      return await performWriteToStorage();
-    }
+      return await performWriteToStorage(numFile);
+    } 
     _showDeviceDisconnectedNotification();
     return Future.value(false);
   }

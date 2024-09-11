@@ -484,7 +484,7 @@ Future<StreamSubscription?> performGetBleStorageBytesListener({
   return Future.value(null);
 }
 @override
-Future<bool> performWriteToStorage() {
+Future<bool> performWriteToStorage(int numFile) {
   return Future.value(false);
 }
 }
