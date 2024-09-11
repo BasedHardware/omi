@@ -9,15 +9,12 @@ import 'package:flutter_sound/flutter_sound.dart';
 class ServiceManager {
   late IMicRecorderService _mic;
 
-  late BackgroundService _backgroundRunner;
-
   static ServiceManager? _instance;
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._backgroundRunner = BackgroundService();
     sm._mic = MicRecorderBackgroundService(
-      runner: sm._backgroundRunner,
+      runner: BackgroundService(),
     );
 
     return sm;
@@ -33,23 +30,17 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
-  BackgroundService get backgroundRunner => _backgroundRunner;
-
   static void init() {
     if (_instance != null) {
       throw Exception("Service manager is initiated");
     }
     _instance = ServiceManager._create();
-    _instance?.backgroundRunner.init();
   }
 
-  Future<void> start() async {
-    await _backgroundRunner.start();
-  }
+  Future<void> start() async {}
 
   void deinit() {
     _mic.stop();
-    _backgroundRunner.stop();
   }
 }
 
@@ -142,6 +133,11 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
   }
 
+  Future<void> ensureRunning() async {
+    await init();
+    await start();
+  }
+
   Future<void> start() async {
     _service.startService();
 
@@ -232,9 +228,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
   }) async {
-    if (_runner.status != BackgroundServiceStatus.running) {
-      throw Expando("Background runner is not running");
-    }
+    await _runner.ensureRunning();
 
     _runner.startRecorder(
       onByteReceived: onByteReceived,
