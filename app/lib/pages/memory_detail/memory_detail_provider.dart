@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -14,6 +15,8 @@ import 'package:tuple/tuple.dart';
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   PluginProvider? pluginProvider;
   late ServerMemory memory;
+
+  int memoryIdx = 0;
 
   int selectedTab = 0;
   bool isLoading = false;
@@ -41,12 +44,18 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   bool displayDevToolsInSheet = false;
   bool displayShareOptionsInSheet = false;
 
-  void populatePhotosData() async {
+  Future populatePhotosData() async {
     if (photos.isEmpty) return;
-    // photosData = await compute<String, List<Tuple2<String, String>>>((m) {
-    //   return photos.map((e) => Tuple2(e.base64, e.description)).toList();
-    // }, 'message');
+    // photosData = await compute<List<MemoryPhoto>, List<Tuple2<String, String>>>(
+    //   (photos) => photos.map((e) => Tuple2(e.base64, e.description)).toList(),
+    //   photos,
+    // );
     photosData = photos.map((e) => Tuple2(e.base64, e.description)).toList();
+    notifyListeners();
+  }
+
+  void toggleIsTranscriptExpanded() {
+    isTranscriptExpanded = !isTranscriptExpanded;
     notifyListeners();
   }
 
@@ -79,7 +88,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateMemory(ServerMemory memory) {
+  void updateMemory(ServerMemory memory, int memIdx) {
+    memoryIdx = memIdx;
     pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
     this.memory = memory;
     notifyListeners();
@@ -96,22 +106,21 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   }
 
   Future initMemory() async {
-    updateLoadingState(true);
+    // updateLoadingState(true);
+    photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(memory.transcriptSegments);
     if (memory.source == MemorySource.openglass) {
-      await getMemoryPhotos(memory.id).then((value) {
+      await getMemoryPhotos(memory.id).then((value) async {
         photos = value;
-        populatePhotosData();
+        await populatePhotosData();
       });
     } else if (memory.source == MemorySource.friend) {
       await hasMemoryRecording(memory.id).then((value) {
         hasAudioRecording = value;
       });
     }
-    print('pluginResults: ${memory.pluginsResults.length}');
-    print('Memory source: ${memory.source}');
     pluginsList = pluginProvider!.plugins;
-    updateLoadingState(false);
+    // updateLoadingState(false);
     notifyListeners();
   }
 
@@ -126,7 +135,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
       } else {
-        updateMemory(updatedMemory);
+        updateMemory(updatedMemory, memoryIdx);
         SharedPreferencesUtil().modifiedMemoryDetails = updatedMemory;
         notifyInfo('REPROCESS_SUCCESS');
         notifyListeners();
