@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketState
 
 from utils.other.storage import upload_postprocessing_audio, download_postprocessing_audio
 import database.processing_memories as processing_memories_db
+import database.memories as memories_db
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
@@ -336,12 +337,12 @@ async def _websocket_util(
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced],
                               frame_rate=sample_rate, channels=channels, codec=codec, )
 
-        # Merge with the previous
-        previous_file_path = None
+        # Merge new audio with the previous
         if processing_memory.audio_url:
             previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
             download_postprocessing_audio(processing_memory.audio_url, previous_file_path)
-        if previous_file_path:
+
+            # merge
             merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
             merge_wav_files(merge_file_path, [previous_file_path, file_path])
 
@@ -415,6 +416,13 @@ async def _websocket_util(
             memory = new_memory
             messages = new_messages
             processing_memory = updated_processing_memory
+        else:
+            memory_data = memories_db.get_memory(uid, processing_memory.memory_id)
+            if memory_data is None:
+                print(f"Memory is not found. Uid: {uid}. Memory: {processing_memory.memory_id}")
+                return
+
+            memory = Memory(**memory_data)
 
         # Post processing
         new_memory = await _post_process_memory(memory)
