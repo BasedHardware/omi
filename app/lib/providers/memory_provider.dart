@@ -127,7 +127,7 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void deleteMemory(ServerMemory memory, int index) {
-    memories.removeAt(index);
+    memories.removeWhere((element) => element.id == memory.id);
     deleteMemoryServer(memory.id);
     filterMemories('');
     notifyListeners();

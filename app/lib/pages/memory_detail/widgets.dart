@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
@@ -12,6 +13,7 @@ import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -34,34 +36,34 @@ class GetSummaryWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
-      builder: (context, provider, child) {
+    return Selector<MemoryDetailProvider, ServerMemory>(
+      selector: (context, provider) => provider.memory,
+      builder: (context, memory, child) {
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
             Text(
-              provider.memory.discarded ? 'Discarded Memory' : provider.structured.title,
+              memory.discarded ? 'Discarded Memory' : memory.structured.title,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
             Text(
-              '${dateTimeFormat('MMM d,  yyyy', provider.memory.createdAt)} ${provider.memory.startedAt == null ? 'at' : 'from'} ${setTime(provider.memory.startedAt, provider.memory.createdAt, provider.memory.finishedAt)}',
+              '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 GestureDetector(
-                  onTap: provider.memory.onTagPressed(context),
+                  onTap: memory.onTagPressed(context),
                   child: Container(
-                    decoration:
-                        BoxDecoration(color: provider.memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
+                    decoration: BoxDecoration(color: memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     child: Text(
-                      provider.memory.getTag(),
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: provider.memory.getTagTextColor()),
+                      memory.getTag(),
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: memory.getTagTextColor()),
                       maxLines: 1,
                     ),
                   ),
@@ -69,21 +71,21 @@ class GetSummaryWidgets extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 40),
-            provider.memory.discarded
+            memory.discarded
                 ? const SizedBox.shrink()
                 : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
-            provider.memory.discarded
+            memory.discarded
                 ? const SizedBox.shrink()
-                : ((provider.memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
-            provider.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-            provider.memory.discarded
+                : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
+            memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+            memory.discarded
                 ? const SizedBox.shrink()
                 : GetEditTextField(
-                    enabled: provider.editingOverview,
-                    overview: provider.structured.overview,
+                    enabled: context.read<MemoryDetailProvider>().editingTitle,
+                    overview: memory.structured.overview,
                   ),
-            provider.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-            provider.structured.actionItems.isNotEmpty
+            memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
+            memory.structured.actionItems.isNotEmpty
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -95,7 +97,7 @@ class GetSummaryWidgets extends StatelessWidget {
                       IconButton(
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
-                              text: '- ${provider.structured.actionItems.map((e) => e.description).join('\n- ')}'));
+                              text: '- ${memory.structured.actionItems.map((e) => e.description).join('\n- ')}'));
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text('Action items copied to clipboard'),
                             duration: Duration(seconds: 2),
@@ -107,7 +109,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     ],
                   )
                 : const SizedBox.shrink(),
-            ...provider.structured.actionItems.map<Widget>((item) {
+            ...memory.structured.actionItems.map<Widget>((item) {
               return Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Row(
@@ -129,8 +131,8 @@ class GetSummaryWidgets extends StatelessWidget {
                 ),
               );
             }),
-            provider.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-            provider.structured.events.isNotEmpty
+            memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+            memory.structured.events.isNotEmpty
                 ? Row(
                     children: [
                       Icon(Icons.event, color: Colors.grey.shade300),
@@ -142,7 +144,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     ],
                   )
                 : const SizedBox.shrink(),
-            ...provider.structured.events.mapIndexed<Widget>((idx, event) {
+            ...memory.structured.events.mapIndexed<Widget>((idx, event) {
               print(event.toJson());
               return ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -172,8 +174,8 @@ class GetSummaryWidgets extends StatelessWidget {
                             ));
                             return;
                           }
-                          provider.updateEventState(true, idx);
-                          setMemoryEventsState(provider.memory.id, [idx], [true]);
+                          context.read<MemoryDetailProvider>().updateEventState(true, idx);
+                          setMemoryEventsState(memory.id, [idx], [true]);
                           CalendarUtil().createEvent(
                             event.title,
                             event.startsAt,
@@ -190,7 +192,7 @@ class GetSummaryWidgets extends StatelessWidget {
                 ),
               );
             }),
-            provider.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+            memory.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
         );
       },
@@ -242,226 +244,238 @@ class GetPluginsWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment:
-            provider.memory.pluginsResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-        children: provider.memory.pluginsResults.isEmpty
-            ? [
-                const SizedBox(height: 32),
-                Text(
-                  'No plugins were triggered\nfor this memory.',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        border: const GradientBoxBorder(
-                          gradient: LinearGradient(colors: [
-                            Color.fromARGB(127, 208, 208, 208),
-                            Color.fromARGB(127, 188, 99, 121),
-                            Color.fromARGB(127, 86, 101, 182),
-                            Color.fromARGB(127, 126, 190, 236)
-                          ]),
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: MaterialButton(
-                        onPressed: () {
-                          Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
-                        },
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                            child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
-                      ),
+    return Consumer<MemoryDetailProvider>(
+      builder: (context, provider, child) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment:
+              provider.memory.pluginsResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: provider.memory.pluginsResults.isEmpty
+              ? [child!]
+              : [
+                  // TODO: include a way to trigger specific plugins
+                  if (provider.memory.pluginsResults.isNotEmpty && !provider.memory.discarded) ...[
+                    provider.memory.structured.actionItems.isEmpty
+                        ? const SizedBox(height: 40)
+                        : const SizedBox.shrink(),
+                    Text(
+                      'Plugins 🧑‍💻',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                      textAlign: TextAlign.start,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-              ]
-            : [
-                // TODO: include a way to trigger specific plugins
-                if (provider.memory.pluginsResults.isNotEmpty && !provider.memory.discarded) ...[
-                  provider.memory.structured.actionItems.isEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-                  Text(
-                    'Plugins 🧑‍💻',
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                    textAlign: TextAlign.start,
-                  ),
-                  const SizedBox(height: 24),
-                  ...provider.memory.pluginsResults.mapIndexed(
-                    (i, pluginResponse) {
-                      if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                      Plugin? plugin =
-                          provider.pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 40),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            plugin != null
-                                ? ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: CachedNetworkImage(
-                                      imageUrl: plugin.getImageUrl(),
-                                      imageBuilder: (context, imageProvider) {
-                                        return CircleAvatar(
+                    const SizedBox(height: 24),
+                    ...provider.memory.pluginsResults.mapIndexed(
+                      (i, pluginResponse) {
+                        if (pluginResponse.content.length < 5) return const SizedBox.shrink();
+                        Plugin? plugin =
+                            provider.pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 40),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              plugin != null
+                                  ? ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: CachedNetworkImage(
+                                        imageUrl: plugin.getImageUrl(),
+                                        imageBuilder: (context, imageProvider) {
+                                          return CircleAvatar(
+                                            backgroundColor: Colors.white,
+                                            radius: 16,
+                                            backgroundImage: imageProvider,
+                                          );
+                                        },
+                                        errorWidget: (context, url, error) {
+                                          return const CircleAvatar(
+                                            backgroundColor: Colors.white,
+                                            radius: 16,
+                                            child: Icon(Icons.error_outline_rounded),
+                                          );
+                                        },
+                                        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
                                           backgroundColor: Colors.white,
                                           radius: 16,
-                                          backgroundImage: imageProvider,
-                                        );
-                                      },
-                                      errorWidget: (context, url, error) {
-                                        return const CircleAvatar(
-                                          backgroundColor: Colors.white,
-                                          radius: 16,
-                                          child: Icon(Icons.error_outline_rounded),
-                                        );
-                                      },
-                                      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                                        backgroundColor: Colors.white,
-                                        radius: 16,
-                                        child: CircularProgressIndicator(
-                                          value: progress.progress,
-                                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                          child: CircularProgressIndicator(
+                                            value: progress.progress,
+                                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    title: Text(
-                                      plugin.name,
-                                      maxLines: 1,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    subtitle: Padding(
-                                      padding: const EdgeInsets.only(top: 4.0),
-                                      child: Text(
-                                        plugin.description,
+                                      title: Text(
+                                        plugin.name,
                                         maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
                                       ),
-                                    ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                      onPressed: () {
-                                        Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                          content: Text('Plugin response copied to clipboard'),
-                                        ));
-                                        MixpanelManager()
-                                            .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
-                                      },
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                            ExpandableTextWidget(
-                              text: pluginResponse.content.trim(),
-                              isExpanded: provider.pluginResponseExpanded[i],
-                              toggleExpand: () {
-                                print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
-                                if (!provider.pluginResponseExpanded[i]) {
-                                  MixpanelManager()
-                                      .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
-                                }
-                                provider.updatePluginResponseExpanded(i);
-                              },
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                              maxLines: 6,
-                              // Change this to 6 if you want the initial max lines to be 6
-                              linkColor: Colors.white,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 4.0),
+                                        child: Text(
+                                          plugin.description,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                        ),
+                                      ),
+                                      trailing: IconButton(
+                                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
+                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                            content: Text('Plugin response copied to clipboard'),
+                                          ));
+                                          MixpanelManager()
+                                              .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
+                                        },
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                              ExpandableTextWidget(
+                                text: pluginResponse.content.trim(),
+                                isExpanded: provider.pluginResponseExpanded[i],
+                                toggleExpand: () {
+                                  print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
+                                  if (!provider.pluginResponseExpanded[i]) {
+                                    MixpanelManager()
+                                        .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
+                                  }
+                                  provider.updatePluginResponseExpanded(i);
+                                },
+                                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                                maxLines: 6,
+                                // Change this to 6 if you want the initial max lines to be 6
+                                linkColor: Colors.white,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 8)
                 ],
-                const SizedBox(height: 8)
-              ],
-      );
-    });
+        );
+      },
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const SizedBox(height: 32),
+          Text(
+            'No plugins were triggered\nfor this memory.',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  border: const GradientBoxBorder(
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: MaterialButton(
+                  onPressed: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                  },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
   }
 }
 
 class GetGeolocationWidgets extends StatelessWidget {
-  final ServerMemory memory;
-  const GetGeolocationWidgets({super.key, required this.memory});
+  const GetGeolocationWidgets({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: memory.geolocation == null || memory.discarded
-          ? []
-          : [
-              Text(
-                'Taken at',
-                style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${memory.geolocation!.address}',
-                style: TextStyle(color: Colors.grey.shade300),
-              ),
-              const SizedBox(height: 8),
-              memory.geolocation != null
-                  ? GestureDetector(
-                      onTap: () async {
-                        // TODO: open google maps URL if available
-                        MapsUtil.launchMap(memory.geolocation!.latitude!, memory.geolocation!.longitude!);
-                      },
-                      child: CachedNetworkImage(
-                        imageBuilder: (context, imageProvider) {
-                          return Container(
-                            margin: const EdgeInsets.only(top: 10, bottom: 8),
-                            height: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              image: DecorationImage(
-                                image: imageProvider,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          );
+    return Selector<MemoryDetailProvider, Geolocation?>(selector: (context, provider) {
+      if (provider.memory.discarded) return null;
+      return provider.memory.geolocation;
+    }, builder: (context, geolocation, child) {
+      return Column(
+        children: geolocation == null
+            ? []
+            : [
+                Text(
+                  'Taken at',
+                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${geolocation.address}',
+                  style: TextStyle(color: Colors.grey.shade300),
+                ),
+                const SizedBox(height: 8),
+                geolocation != null
+                    ? GestureDetector(
+                        onTap: () async {
+                          // TODO: open google maps URL if available
+                          MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
                         },
-                        errorWidget: (context, url, error) {
-                          return Container(
-                            margin: const EdgeInsets.only(top: 10, bottom: 8),
-                            height: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              color: Colors.grey.shade800,
-                            ),
-                            child: const Center(
-                              child: Text(
-                                'Could not load Maps. Please check your internet connection.',
-                                textAlign: TextAlign.center,
+                        child: CachedNetworkImage(
+                          imageBuilder: (context, imageProvider) {
+                            return Container(
+                              margin: const EdgeInsets.only(top: 10, bottom: 8),
+                              height: 200,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                image: DecorationImage(
+                                  image: imageProvider,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                        imageUrl: MapsUtil.getMapImageUrl(
-                          memory.geolocation!.latitude!,
-                          memory.geolocation!.longitude!,
+                            );
+                          },
+                          errorWidget: (context, url, error) {
+                            return Container(
+                              margin: const EdgeInsets.only(top: 10, bottom: 8),
+                              height: 200,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                color: Colors.grey.shade800,
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'Could not load Maps. Please check your internet connection.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            );
+                          },
+                          imageUrl: MapsUtil.getMapImageUrl(
+                            geolocation.latitude!,
+                            geolocation.longitude!,
+                          ),
                         ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-              const SizedBox(height: 8),
-            ],
-    );
+                      )
+                    : const SizedBox.shrink(),
+                const SizedBox(height: 8),
+              ],
+      );
+    });
   }
 }
 
@@ -486,8 +500,6 @@ class GetSheetTitle extends StatelessWidget {
             trailing: IconButton(
               icon: const Icon(Icons.cancel_outlined),
               onPressed: () {
-                provider.toggleDevToolsInSheet(false);
-                provider.toggleShareOptionsInSheet(false);
                 Navigator.of(context).pop(true);
               },
             ),
@@ -840,7 +852,8 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () {
-                                  deleteMemoryServer(provider.memory.id);
+                                  context.read<MemoryProvider>().deleteMemory(provider.memory, provider.memoryIdx);
+                                  // deleteMemoryServer(provider.memory.id);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
