@@ -169,7 +169,7 @@ async def _websocket_util(
             duration = get_user_speech_profile_duration(uid)
             print('speech_profile', len(speech_profile), duration)
             if duration:
-                duration += 20
+                duration *= 2
         else:
             speech_profile, duration = [], 0
 
@@ -240,6 +240,7 @@ async def _websocket_util(
     async def send_heartbeat():
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal started_at
         try:
             while websocket_active:
                 await asyncio.sleep(30)
@@ -249,8 +250,9 @@ async def _websocket_util(
                 else:
                     break
 
-                # time out
+                # timeout
                 if time.time() - started_at >= TIMEOUT_SECONDS:
+                    print(f"Session timeout is hit by soft timeout {TIMEOUT_SECONDS}, session {session_id}")
                     websocket_close_code = 1001
                     websocket_active = False
         except WebSocketDisconnect:
@@ -440,7 +442,7 @@ async def _websocket_util(
 
         should_create_memory = should_create_memory_time and should_create_memory_time_words
         print(
-            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}")
+            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
         if should_create_memory:
             memory = await _create_memory()
             if not memory:
