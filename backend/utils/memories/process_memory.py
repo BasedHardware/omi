@@ -8,6 +8,7 @@ from typing import Union, Tuple
 from fastapi import HTTPException
 
 import database.facts as facts_db
+import database.trends as trends_db
 import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
@@ -18,7 +19,8 @@ from models.plugin import Plugin
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from utils.llm import obtain_emotional_message
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
-    get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor
+    get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
+    trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.plugins import get_plugins_data
@@ -123,6 +125,15 @@ def _extract_facts(uid: str, memory: Memory):
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
 
+def _extract_trends(memory: Memory):
+    mem_trends = trends_extractor(memory)
+    parsed_trends = []
+    for trend in mem_trends:
+        print(f"extracted_trend: {trend}")
+        parsed_trends.append(trend)        
+    trends_db.save_trends(memory, parsed_trends)
+
+
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
                    force_process: bool = False) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
@@ -133,6 +144,7 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
         upsert_vector(uid, memory, vector)
         _trigger_plugins(uid, memory)
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
+        threading.Thread(target=_extract_trends, args=(memory,)).start()
 
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
