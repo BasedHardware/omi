@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
-extern uint32_t file_num_array[20];
+extern uint32_t file_num_array[30];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
@@ -475,7 +475,7 @@ K_THREAD_STACK_DEFINE(pusher_stack, 2048);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
-static char storage_temp_data[CODEC_OUTPUT_MAX_BYTES];
+static char storage_temp_data[400];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
@@ -531,25 +531,29 @@ static bool push_to_gatt(struct bt_conn *conn)
     return true;
 }
 #define OPUS_PREFIX_LENGTH 1
-#define OPUS_PADDED_LENGTH 100
+#define OPUS_PADDED_LENGTH 80
 static uint32_t offset = 0;
-
+static uint16_t buffer_offset = 0;
 bool write_to_storage(void) {
     if (!read_from_tx_queue())
     {
         return false;
     }
 
-    uint8_t *buffer = tx_buffer+3;
+    uint8_t *buffer = tx_buffer+2;
     uint32_t packet_size = tx_buffer_size;
+    //load into write at 400 bytes at a time. is faster 
+    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
+    storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
     
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH);
-    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH, buffer, packet_size);
-    storage_temp_data[0] = (uint8_t)tx_buffer_size;
+    buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
+    if(buffer_offset >= OPUS_PADDED_LENGTH*5) { 
     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-    write_to_file(write_ptr,OPUS_PADDED_LENGTH);
+    write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
 
-    offset=offset+packet_size;
+    buffer_offset = 0;
+    }
+
     return true;
 }
 
@@ -571,10 +575,7 @@ void pusher(void)
         //
 
         struct bt_conn *conn = current_connection;
-        bool use_gatt = true;
-        uint32_t offset = 0;
-        int length = 1;
-
+        // bool use_gatt = true;
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -593,34 +594,24 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
         
-        if (!valid   && ( length < 100) && !storage_is_on) {
+        if (!valid  && !storage_is_on) {
 
         bool result = write_to_storage();
-        file_num_array[file_count-1] = get_file_size(file_count);
-        printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
-        
-    
+        // file_num_array[file_count-1] = get_file_size(file_count);
+        // printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
         if (result)
         {
-            
             // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
             //     printk("Audio file size limit reached, making new file\n");
             //     // make_and_rebase_audio_file(get_info_file_length()+1);
             // }
         }
         else {
-             k_sleep(K_MSEC(50));
+             k_sleep(K_MSEC(10));
         }
-        }
-        // if (!valid)
-        // {
-        //     ring_buf_reset(&ring_buf);
-        //     k_sleep(K_MSEC(10));
-        // }
+        }    
 
-        // Handle GATT
-
-        if (use_gatt && valid)
+        if (valid)
         {
 
             bool sent = push_to_gatt(conn);
@@ -630,13 +621,12 @@ void pusher(void)
             }
         }
 
-
-       k_yield();
-
         if (conn)
         {
             bt_conn_unref(conn);
         }
+
+      k_yield();
     }
 }
 
@@ -690,7 +680,7 @@ play_boot_sound();
     
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-   
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {

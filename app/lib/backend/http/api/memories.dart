@@ -80,7 +80,7 @@ Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
-
+  
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
@@ -250,4 +250,42 @@ Future<bool> setMemoryEventsState(
   if (response == null) return false;
   debugPrint('setMemoryEventsState: ${response.body}');
   return response.statusCode == 200;
+}
+
+//should return a storage unit
+Future<List<ServerMemory>> sendStorageToBackend(File file, String memoryId) async  {
+     var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
+
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+    debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
+
+  } else {
+    debugPrint('Failed to storageSend. Status code: ${response.statusCode}');
+    return [];
+  }
+
+
+  var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+  debugPrint('getMemories length: ${memories.length}');
+    //  for (var memory in memories) {
+    //   debugPrint('memory: ${memory}');
+    // }
+  return memories;
+
+
+
+  } catch (e) {
+    debugPrint('An error occurred storageSend: $e');
+    return [];
+  }
+  
 }
