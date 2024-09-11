@@ -69,31 +69,31 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      child: Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-        return DefaultTabController(
-          length: 2,
-          initialIndex: 1,
-          child: MessageListener<MemoryDetailProvider>(
-            showError: (error) {
-              if (error == 'REPROCESS_FAILED') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Error while processing memory. Please try again later.')));
-              }
-            },
-            showInfo: (info) {
-              if (info == 'REPROCESS_SUCCESS') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
-                );
-              }
-            },
-            child: Scaffold(
-              key: scaffoldKey,
+      child: DefaultTabController(
+        length: 2,
+        initialIndex: 1,
+        child: MessageListener<MemoryDetailProvider>(
+          showError: (error) {
+            if (error == 'REPROCESS_FAILED') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Error while processing memory. Please try again later.')));
+            }
+          },
+          showInfo: (info) {
+            if (info == 'REPROCESS_SUCCESS') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
+              );
+            }
+          },
+          child: Scaffold(
+            key: scaffoldKey,
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
               backgroundColor: Theme.of(context).colorScheme.primary,
-              appBar: AppBar(
-                automaticallyImplyLeading: false,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                title: Row(
+              title: Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+                return Row(
                   mainAxisSize: MainAxisSize.max,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -150,92 +150,97 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                       icon: const Icon(Icons.more_horiz),
                     ),
                   ],
+                );
+              }),
+            ),
+            floatingActionButton: Selector<MemoryDetailProvider, int>(
+                selector: (context, provider) => provider.selectedTab,
+                builder: (context, selectedTab, child) {
+                  return selectedTab == 0
+                      ? FloatingActionButton(
+                          backgroundColor: Colors.black,
+                          elevation: 8,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(32)),
+                              side: BorderSide(color: Colors.grey, width: 1)),
+                          onPressed: () {
+                            var provider = Provider.of<MemoryDetailProvider>(context, listen: false);
+                            Clipboard.setData(ClipboardData(text: provider.memory.getTranscript(generate: true)));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Transcript copied to clipboard'),
+                              duration: Duration(seconds: 1),
+                            ));
+                            MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Transcript');
+                          },
+                          child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                        )
+                      : const SizedBox.shrink();
+                }),
+            body: Column(
+              children: [
+                TabBar(
+                  indicatorSize: TabBarIndicatorSize.label,
+                  isScrollable: false,
+                  onTap: (value) {
+                    // provider.updateSelectedTab(value);
+                    context.read<MemoryDetailProvider>().updateSelectedTab(value);
+                  },
+                  padding: EdgeInsets.zero,
+                  indicatorPadding: EdgeInsets.zero,
+                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                  tabs: [
+                    Selector<MemoryDetailProvider, MemorySource?>(
+                        selector: (context, provider) => provider.memory.source,
+                        builder: (context, memorySource, child) {
+                          return Tab(
+                            text: memorySource == MemorySource.openglass
+                                ? 'Photos'
+                                : memorySource == MemorySource.screenpipe
+                                    ? 'Raw Data'
+                                    : 'Transcript',
+                          );
+                        }),
+                    const Tab(text: 'Summary')
+                  ],
+                  indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 ),
-              ),
-              floatingActionButton: provider.selectedTab == 0
-                  ? FloatingActionButton(
-                      backgroundColor: Colors.black,
-                      elevation: 8,
-                      shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(32)),
-                          side: BorderSide(color: Colors.grey, width: 1)),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: provider.memory.getTranscript(generate: true)));
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Transcript copied to clipboard'),
-                          duration: Duration(seconds: 1),
-                        ));
-                        MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Transcript');
-                      },
-                      child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                    )
-                  : null,
-              body: Column(
-                children: [
-                  TabBar(
-                    indicatorSize: TabBarIndicatorSize.label,
-                    isScrollable: false,
-                    onTap: (value) {
-                      provider.updateSelectedTab(value);
-                    },
-                    padding: EdgeInsets.zero,
-                    indicatorPadding: EdgeInsets.zero,
-                    labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                    tabs: [
-                      Tab(
-                        text: provider.memory.source == MemorySource.openglass
-                            ? 'Photos'
-                            : provider.memory.source == MemorySource.screenpipe
-                                ? 'Raw Data'
-                                : 'Transcript',
-                      ),
-                      const Tab(text: 'Summary')
-                    ],
-                    indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TabBarView(
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Builder(builder: (context) {
+                      return TabBarView(
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
-                          provider.isLoading
-                              ? const Center(
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                                  ),
-                                )
-                              : ListView(
-                                  shrinkWrap: true,
-                                  children: provider.memory.source == MemorySource.openglass
-                                      ? _getImagesWidget(provider.photosData)
-                                      : _getTranscriptWidgets(provider),
-                                ),
-                          // provider.isLoading
-                          //     ? const Center(
-                          //         child: CircularProgressIndicator(
-                          //           valueColor: AlwaysStoppedAnimation(Colors.white),
-                          //         ),
-                          //       )
-                          //     :
+                          Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+                            return ListView(
+                                shrinkWrap: true,
+                                children: provider.memory.source == MemorySource.openglass
+                                    ? [
+                                        PhotosGridComponent(
+                                          photos: provider.photosData,
+                                        ),
+                                        const SizedBox(height: 32)
+                                      ]
+                                    : [const TransccriptWidgets()]);
+                          }),
                           ListView(
                             shrinkWrap: true,
-                            children: [
-                              const GetSummaryWidgets(),
-                              const GetPluginsWidgets(),
-                              GetGeolocationWidgets(memory: provider.memory),
+                            children: const [
+                              GetSummaryWidgets(),
+                              GetPluginsWidgets(),
+                              GetGeolocationWidgets(),
                             ],
                           ),
                         ],
-                      ),
-                    ),
+                      );
+                    }),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
 
@@ -464,8 +469,10 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
               maxLines: 10000,
               linkColor: Colors.grey.shade300,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+              toggleExpand: () {
+                provider.toggleIsTranscriptExpanded();
+              },
               isExpanded: provider.isTranscriptExpanded,
-              toggleExpand: () => setState(() => provider.isTranscriptExpanded = !provider.isTranscriptExpanded),
             )
           : TranscriptWidget(
               segments: provider.memory.transcriptSegments,
@@ -487,8 +494,61 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       const SizedBox(height: 32)
     ];
   }
+}
 
-  List<Widget> _getImagesWidget(List<Tuple2<String, String>> photosData) {
-    return [PhotosGridComponent(photos: photosData), const SizedBox(height: 32)];
+class TransccriptWidgets extends StatelessWidget {
+  const TransccriptWidgets({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      return ListView(
+        shrinkWrap: true,
+        children: [
+          SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
+          provider.memory.isPostprocessing()
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+                )
+              : const SizedBox(height: 0),
+          SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
+          provider.memory.transcriptSegments.isEmpty
+              ? ExpandableTextWidget(
+                  text: (provider.memory.externalIntegration?.text ?? '').decodeSting,
+                  maxLines: 10000,
+                  linkColor: Colors.grey.shade300,
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                  toggleExpand: () {
+                    provider.toggleIsTranscriptExpanded();
+                  },
+                  isExpanded: provider.isTranscriptExpanded,
+                )
+              : TranscriptWidget(
+                  segments: provider.memory.transcriptSegments,
+                  horizontalMargin: false,
+                  topMargin: false,
+                  canDisplaySeconds: provider.canDisplaySeconds,
+                  isMemoryDetail: true,
+                  editSegment: !provider.memory.isPostprocessing()
+                      ? (i) {
+                          // editSegment(i, provider);
+                        }
+                      : (_) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Memory still processing. Please wait...'),
+                            duration: Duration(seconds: 1),
+                          ));
+                        },
+                ),
+          const SizedBox(height: 32)
+        ],
+      );
+    });
   }
 }
