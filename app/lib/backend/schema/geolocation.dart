@@ -50,7 +50,7 @@ class Geolocation {
       'longitude': longitude,
       'altitude': altitude,
       'accuracy': accuracy,
-      'time': time?.toIso8601String(),
+      'time': time?.toUtc().toIso8601String(),
       'googlePlaceId': googlePlaceId,
       'google_place_id': googlePlaceId, // server
       'address': address,

@@ -20,6 +20,7 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wav/wav_file.dart';
 
 getConnectionStateWidgets(
   BuildContext context,
@@ -279,6 +280,23 @@ getTranscriptWidget(
     children: [
       if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
       if (segments.isNotEmpty) TranscriptWidget(segments: segments),
+    ],
+  );
+}
+
+getLiteTranscriptWidget(
+  List<TranscriptSegment> segments,
+  List<Tuple2<String, String>> photos,
+  BTDeviceStruct? btDevice,
+) {
+  return Column(
+    children: [
+      // TODO: thinh, be reenabled soon
+      //if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (segments.isNotEmpty)
+        LiteTranscriptWidget(
+          segments: segments,
+        ),
     ],
   );
 }

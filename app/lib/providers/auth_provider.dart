@@ -11,11 +11,50 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AuthenticationProvider extends BaseProvider {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? user;
+  String? authToken;
+
+  bool isSignedIn() {
+    return _auth.currentUser != null;
+  }
+
+  AuthenticationProvider() {
+    _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      this.user = user;
+      SharedPreferencesUtil().uid = user?.uid ?? '';
+      SharedPreferencesUtil().email = user?.email ?? '';
+      SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
+    });
+    _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      if (user == null) {
+        debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
+        SharedPreferencesUtil().authToken = '';
+        authToken = null;
+      } else {
+        debugPrint('User is signed in at ${DateTime.now()} with user ${user.uid}');
+        try {
+          if (SharedPreferencesUtil().authToken.isEmpty ||
+              DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
+            authToken = await getIdToken();
+          }
+        } catch (e) {
+          authToken = null;
+          debugPrint('Failed to get token: $e');
+        }
+      }
+    });
+  }
+
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
       await signInWithGoogle();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+      }
       setLoadingState(false);
     }
   }
@@ -24,7 +63,11 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       await signInWithApple();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+      }
       setLoadingState(false);
     }
   }

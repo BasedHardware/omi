@@ -29,11 +29,13 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       await getLatestVersion(deviceName: widget.device!.name);
       var (a, b) = await shouldUpdateFirmware(
           currentFirmware: widget.deviceInfo.firmwareRevision, deviceName: widget.device!.name);
-      setState(() {
-        shouldUpdate = b;
-        updateMessage = a;
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          shouldUpdate = b;
+          updateMessage = a;
+          isLoading = false;
+        });
+      }
     });
     super.initState();
   }

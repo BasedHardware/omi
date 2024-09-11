@@ -23,9 +23,11 @@ class _PageWebViewState extends State<PageWebView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int p) {
-            setState(() {
-              progress = p;
-            });
+            if (mounted) {
+              setState(() {
+                progress = p;
+              });
+            }
           },
           onPageStarted: (String url) {},
           onPageFinished: (String url) {},

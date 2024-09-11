@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/services/notification_service.dart';
@@ -36,9 +37,11 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) async {
     print('isConnecting before even the func begins: $_isConnecting');
     if (_isConnecting) return;
@@ -52,9 +55,11 @@ class WebSocketProvider with ChangeNotifier {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
       _internetListenerSetup = true;
     }
@@ -90,9 +95,11 @@ class WebSocketProvider with ChangeNotifier {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            onMessageEventReceived: onMessageEventReceived,
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
+            newMemoryWatch: newMemoryWatch,
           );
           notifyListeners();
         },
@@ -109,9 +116,11 @@ class WebSocketProvider with ChangeNotifier {
                 onConnectionClosed: onConnectionClosed,
                 onConnectionError: onConnectionError,
                 onMessageReceived: onMessageReceived,
+                onMessageEventReceived: onMessageEventReceived,
                 codec: codec,
                 sampleRate: sampleRate,
                 includeSpeechProfile: includeSpeechProfile,
+                newMemoryWatch: newMemoryWatch,
               );
             }
           }
@@ -130,16 +139,20 @@ class WebSocketProvider with ChangeNotifier {
             onConnectionClosed: onConnectionClosed,
             onConnectionError: onConnectionError,
             onMessageReceived: onMessageReceived,
+            onMessageEventReceived: onMessageEventReceived,
             codec: codec,
             sampleRate: sampleRate,
             includeSpeechProfile: includeSpeechProfile,
+            newMemoryWatch: newMemoryWatch,
           );
           notifyListeners();
         },
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
     } catch (e) {
       debugPrint('Error in initWebSocket: $e');
@@ -155,9 +168,11 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) {
     _internetListener?.cancel();
     _internetListener = InternetConnection().onStatusChange.listen((InternetStatus status) {
@@ -175,9 +190,11 @@ class WebSocketProvider with ChangeNotifier {
               onConnectionClosed: onConnectionClosed,
               onConnectionError: onConnectionError,
               onMessageReceived: onMessageReceived,
+              onMessageEventReceived: onMessageEventReceived,
               codec: codec,
               sampleRate: sampleRate,
               includeSpeechProfile: includeSpeechProfile,
+              newMemoryWatch: newMemoryWatch,
             );
           }
           break;
@@ -201,9 +218,11 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) {
     if (websocketReconnecting || _internetStatus == InternetStatus.disconnected || _isConnecting) return;
 
@@ -221,9 +240,11 @@ class WebSocketProvider with ChangeNotifier {
         onConnectionClosed: onConnectionClosed,
         onConnectionError: onConnectionError,
         onMessageReceived: onMessageReceived,
+        onMessageEventReceived: onMessageEventReceived,
         codec: codec,
         sampleRate: sampleRate,
         includeSpeechProfile: includeSpeechProfile,
+        newMemoryWatch: newMemoryWatch,
       );
     });
     if (_reconnectionAttempts == 6 && !_hasNotifiedUser) {
@@ -243,9 +264,11 @@ class WebSocketProvider with ChangeNotifier {
     required Function(int?, String?) onConnectionClosed,
     required Function(dynamic) onConnectionError,
     required Function(List<TranscriptSegment>) onMessageReceived,
+    Function(ServerMessageEvent)? onMessageEventReceived,
     required BleAudioCodec codec,
     required int sampleRate,
     required bool includeSpeechProfile,
+    required bool newMemoryWatch,
   }) async {
     if (_internetStatus == InternetStatus.disconnected) {
       debugPrint('Cannot attempt reconnection: No internet connection');
@@ -260,9 +283,11 @@ class WebSocketProvider with ChangeNotifier {
       onConnectionClosed: onConnectionClosed,
       onConnectionError: onConnectionError,
       onMessageReceived: onMessageReceived,
+      onMessageEventReceived: onMessageEventReceived,
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: includeSpeechProfile,
+      newMemoryWatch: newMemoryWatch,
     );
   }
 
