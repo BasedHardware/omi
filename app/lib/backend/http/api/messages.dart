@@ -11,8 +11,11 @@ Future<List<ServerMessage>> getMessagesServer() async {
   if (response == null) return [];
   debugPrint('getMessages: ${response.body}');
   if (response.statusCode == 200) {
-    var messages =
-        (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMessage.fromJson(memory)).toList();
+    var decodedBody = jsonDecode(response.body) as List<dynamic>;
+    if (decodedBody.isEmpty) {
+      return [];
+    }
+    var messages = decodedBody.map((memory) => ServerMessage.fromJson(memory)).toList();
     debugPrint('getMessages length: ${messages.length}');
     return messages;
   }

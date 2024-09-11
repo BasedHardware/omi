@@ -77,12 +77,10 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
 
 
-async def process_audio_dg(
-        uid: str, fast_socket: WebSocket, language: str, sample_rate: int, codec: str, channels: int,
-        preseconds: int = 0,
-):
+async def process_audio_dg(stream_transcript, stream_id: int, language: str, sample_rate: int, codec: str, channels: int,
+                           preseconds: int = 0,
+                           ):
     print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
-    loop = asyncio.get_event_loop()
 
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
@@ -121,8 +119,8 @@ async def process_audio_dg(
                         'person_id': None,
                     })
 
-        asyncio.run_coroutine_threadsafe(fast_socket.send_json(segments), loop)
-        threading.Thread(target=process_segments, args=(uid, segments)).start()
+        # stream
+        stream_transcript(segments, stream_id)
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")

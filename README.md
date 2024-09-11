@@ -13,7 +13,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 <h3>
 
-[Homepage](https://basedhardware.com/) | [Documentation](https://docs.basedhardware.com/) | [Buy Assembled Device](https://basedhardware.com)
+[Homepage](https://omi.me/) | [Documentation](https://docs.omi.me/) | [Buy Assembled Device](https://omi.me)
 
 </h3>
 
@@ -36,32 +36,32 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## Documentation:
 
-- [Introduction](https://docs.basedhardware.com/)
-- [App setup](https://docs.basedhardware.com/get_started/Setup/)
-- [Buying Guide](https://docs.basedhardware.com/assembly/Buying_Guide/)
-- [Build the device](https://docs.basedhardware.com/assembly/Build_the_device/)
-- [Install firmware](https://docs.basedhardware.com/assembly/Install_firmware/)
-- [3rd Party Integrations](https://docs.basedhardware.com/developer/plugins/Introduction/).
+- [Introduction](https://docs.omi.me/)
+- [App setup](https://docs.omi.me/get_started/Setup/)
+- [Buying Guide](https://docs.omi.me/assembly/Buying_Guide/)
+- [Build the device](https://docs.omi.me/assembly/Build_the_device/)
+- [Install firmware](https://docs.omi.me/assembly/Install_firmware/)
+- [3rd Party Integrations](https://docs.omi.me/developer/plugins/Introduction/).
 
 ## Contributions
 
-* Check out our [contributions guide](https://docs.basedhardware.com/developer/Contribution/).
+* Check out our [contributions guide](https://docs.omi.me/developer/Contribution/).
 * Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
 * Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
 * Join the [Discord](https://discord.gg/ZutWMTJnwA).
-* Build your own [Plugins/Integrations](https://docs.basedhardware.com/developer/plugins/Introduction/).
+* Build your own [Plugins/Integrations](https://docs.omi.me/developer/plugins/Introduction/).
 
 [//]: # (## More links:)
 
 [//]: # ()
 
-[//]: # (- [Contributing]&#40;https://docs.basedhardware.com/developer/Contribution/&#41;)
+[//]: # (- [Contributing]&#40;https://docs.omi.me/developer/Contribution/&#41;)
 
-[//]: # (- [Support]&#40;https://docs.basedhardware.com/info/Support/&#41;)
+[//]: # (- [Support]&#40;https://docs.omi.me/info/Support/&#41;)
 
-[//]: # (- [BLE Protocol]&#40;https://docs.basedhardware.com/developer/Protocol/&#41;)
+[//]: # (- [BLE Protocol]&#40;https://docs.omi.me/developer/Protocol/&#41;)
 
-[//]: # (- [Plugins]&#40;https://docs.basedhardware.com/developer/Plugins/&#41;)
+[//]: # (- [Plugins]&#40;https://docs.omi.me/developer/Plugins/&#41;)
 
 ## Made by the Community, with -❤️-:
 

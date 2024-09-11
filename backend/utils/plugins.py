@@ -41,7 +41,14 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
         plugin_dict['enabled'] = plugin['id'] in user_enabled
         if include_reviews:
             reviews = get_plugin_reviews(plugin['id'])
-            sorted_reviews = sorted(reviews.values(), key=lambda x: datetime.fromisoformat(x['rated_at']), reverse=True)
+            try:
+                # sometimes fail, to be fixed later
+                sorted_reviews = sorted(
+                    reviews.values(), key=lambda x: datetime.fromisoformat(x['rated_at']), reverse=True
+                )
+            except:
+                sorted_reviews = []
+
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if sorted_reviews else None
             plugin_dict['reviews'] = []
             plugin_dict['user_review'] = reviews.get(uid)

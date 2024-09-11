@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -153,7 +154,9 @@ class WavBytesUtil {
         for (var entity in entities) {
           if (entity is File && entity.path.endsWith('.wav')) {
             debugPrint('Removing file: ${entity.path}');
-            await entity.delete();
+            if (entity.existsSync()) {
+              await entity.delete();
+            }
           }
         }
       }
@@ -208,9 +211,14 @@ class WavBytesUtil {
       // wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.mulaw8 ? 8000 : 16000);
     } else if (codec == BleAudioCodec.opus) {
       List<int> decodedSamples = [];
-      for (var frame in frames) {
-        decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
+      try {
+        for (var frame in frames) {
+          decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
+        }
+      } catch (e) {
+        Logger.handle(e, StackTrace.current, message: 'Error decoding audio. Please check your device and try again.');
       }
+
       wavBytes = getUInt8ListBytes(decodedSamples, 16000);
     } else {
       CrashReporting.reportHandledCrash(UnimplementedError('unknown codec'), StackTrace.current,
