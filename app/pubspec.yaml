@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.35+125
+version: 1.0.35+126
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -64,7 +64,6 @@ dependencies:
   crypto: ^3.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
-  record: ^5.1.2
   flutter_background_service: ^5.0.7
   flutter_background_service_android: 6.2.4
   flutter_background_service_platform_interface: 5.1.1
