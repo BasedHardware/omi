@@ -10,6 +10,7 @@ from models.transcript_segment import TranscriptSegment
 class ProcessingMemory(BaseModel):
     id: str
     session_id: Optional[str] = None
+    audio_url: Optional[str] = None
     created_at: datetime
     timer_start: float
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'

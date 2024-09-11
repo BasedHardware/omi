@@ -1,4 +1,5 @@
 from ._client import db
+from google.cloud import firestore
 
 
 def upsert_processing_memory(uid: str, processing_memory_data: dict):
@@ -29,3 +30,14 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
         if doc.exists:
             memories.append(doc.to_dict())
     return memories
+
+def get_last(uid: str):
+    processing_memories_ref = (
+        db.collection('users').document(uid).collection('processing_memories')
+    )
+    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    processing_memories_ref = processing_memories_ref.limit(1)
+    docs = [doc.to_dict() for doc in processing_memories_ref.stream()]
+    if len(docs) > 0:
+        return docs[0]
+    return None

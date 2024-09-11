@@ -3,19 +3,21 @@ import os
 import threading
 import time
 import uuid
+from typing import List
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from starlette.websockets import WebSocketState
 
+from utils.other.storage import upload_postprocessing_audio, download_postprocessing_audio
 import database.processing_memories as processing_memories_db
 from database.redis_db import get_user_speech_profile, get_user_speech_profile_duration
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
 from routers.postprocessing import postprocess_memory_util
-from utils.audio import create_wav_from_bytes
+from utils.audio import create_wav_from_bytes, merge_wav_files
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import process_audio_dg, send_initial_file
 from utils.stt.streaming import process_segments
@@ -65,26 +67,26 @@ router = APIRouter()
 #       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
 #
 
-def _combine_segments(segments, new_segments):
+def _combine_segments(segments: [], new_segments: []):
     if not new_segments or len(new_segments) == 0:
         return segments
 
     joined_similar_segments = []
     for new_segment in new_segments:
         if (joined_similar_segments and
-                (joined_similar_segments[-1]["speaker"] == new_segment["speaker"] or
-                 (joined_similar_segments[-1]["is_user"] and new_segment["is_user"]))):
-            joined_similar_segments[-1]["text"] += f' {new_segment["text"]}'
-            joined_similar_segments[-1]["end"] = new_segment["end"]
+                (joined_similar_segments[-1].speaker == new_segment.speaker or
+                 (joined_similar_segments[-1].is_user and new_segment.is_user))):
+            joined_similar_segments[-1].text += f' {new_segment.text}'
+            joined_similar_segments[-1].end = new_segment.end
         else:
             joined_similar_segments.append(new_segment)
 
     if (segments and
-            (segments[-1]["speaker"] == joined_similar_segments[0]["speaker"] or
-             (segments[-1]["is_user"] and joined_similar_segments[0]["is_user"])) and
-            (joined_similar_segments[0]["start"] - segments[-1]["end"] < 30)):
-        segments[-1]["text"] += f' {joined_similar_segments[0]["text"]}'
-        segments[-1]["end"] = joined_similar_segments[0]["end"]
+            (segments[-1].speaker == joined_similar_segments[0].speaker or
+             (segments[-1].is_user and joined_similar_segments[0].is_user)) and
+            (joined_similar_segments[0].start - segments[-1].end < 30)):
+        segments[-1].text += f' {joined_similar_segments[0].text}'
+        segments[-1].end = joined_similar_segments[0].end
         joined_similar_segments.pop(0)
 
     segments.extend(joined_similar_segments)
@@ -109,6 +111,9 @@ async def _websocket_util(
 
     flush_new_memory_lock = threading.Lock()
 
+    min_seconds_limit = 120
+    min_words_limit = 1
+
     # Processing memory
     memory_watching = new_memory_watch
     processing_memory: ProcessingMemory = None
@@ -118,12 +123,12 @@ async def _websocket_util(
 
     # Stream transcript
     memory_stream_id = 1
-    memory_transcript_segements = []
+    memory_transcript_segements: List[TranscriptSegment] = []
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
     # Soft timeout
-    TIMEOUT_SECONDS = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    timeout_seconds = 420  # 7m ~ MODAL_TIME_OUT - 3m
     started_at = time.time()
 
     def stream_transcript(segments, stream_id):
@@ -141,13 +146,15 @@ async def _websocket_util(
         # memory segments
         # Warn: need double check should we still seperate the memory and speech profile stream or not?
         if (stream_id == memory_stream_id or stream_id == speech_profile_stream_id) and new_memory_watch:
-            memory_transcript_segements = _combine_segments(memory_transcript_segements, segments)
+            memory_transcript_segements = _combine_segments(memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)))
+            print("hey")
+            print(len(list(map(lambda m: TranscriptSegment(**m), segments))))
+            print(len(memory_transcript_segements))
 
             # Sync processing transcript, periodly
             if processing_memory and len(memory_transcript_segements) % 3 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
-                processing_memory.transcript_segments = list(
-                    map(lambda m: TranscriptSegment(**m), memory_transcript_segements))
+                processing_memory.transcript_segments = memory_transcript_segements
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
     def stream_audio(audio_buffer):
@@ -251,8 +258,8 @@ async def _websocket_util(
                     break
 
                 # timeout
-                if time.time() - started_at >= TIMEOUT_SECONDS:
-                    print(f"Session timeout is hit by soft timeout {TIMEOUT_SECONDS}, session {session_id}")
+                if time.time() - started_at >= timeout_seconds:
+                    print(f"Session timeout is hit by soft timeout {timeout_seconds}, session {session_id}")
                     websocket_close_code = 1001
                     websocket_active = False
         except WebSocketDisconnect:
@@ -280,17 +287,34 @@ async def _websocket_util(
         nonlocal processing_memory
         nonlocal memory_transcript_segements
         nonlocal processing_memory_synced
-        processing_memory = ProcessingMemory(
-            id=str(uuid.uuid4()),
-            session_id=session_id,
-            created_at=datetime.now(timezone.utc),
-            timer_start=timer_start,
-            language=language,
-        )
+
+        # Check the last processing memory
+        last_processing_memory_data = processing_memories_db.get_last(uid)
+        if not last_processing_memory_data:
+            last_processing_memory = ProcessingMemory(**last_processing_memory_data)
+            segment_end = 0
+            for segment in last_processing_memory.transcript_segments:
+                segment_end = max(segment_end, segment.end)
+            if last_processing_memory.timer_start + segment_end + min_seconds_limit > time.time():
+                processing_memory = last_processing_memory
+                memory_transcript_segements = last_processing_memory.transcript_segments + memory_transcript_segements
+
+        # Or create new
+        if not processing_memory:
+            processing_memory = ProcessingMemory(
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(timezone.utc),
+                timer_start=timer_start,
+                language=language,
+            )
+
+        # Track session changes
+        if processing_memory.session_id and processing_memory.session_id != session_id:
+            print(f"Processing memory {processing_memory.id} session id changes, old: {processing_memory.session_id}, new: {session_id}")
+        processing_memory.session_id = session_id
 
         processing_memory_synced = len(memory_transcript_segements)
-        processing_memory.transcript_segments = list(
-            map(lambda m: TranscriptSegment(**m), memory_transcript_segements[:processing_memory_synced]))
+        processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
         processing_memories_db.upsert_processing_memory(uid, processing_memory.dict())
 
         # Message: New processing memory created
@@ -312,12 +336,34 @@ async def _websocket_util(
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced],
                               frame_rate=sample_rate, channels=channels, codec=codec, )
 
+        # Merge with the previous
+        previous_file_path = None
+        if processing_memory.audio_url:
+            previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+            download_postprocessing_audio(processing_memory.audio_url, previous_file_path)
+        if previous_file_path:
+            merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+            merge_wav_files(merge_file_path, [previous_file_path, file_path])
+
+            # clean
+            os.remove(previous_file_path)
+            os.remove(file_path)
+
+            # new
+            file_path = merge_file_path
+
+        # Process
         emotional_feedback = processing_memory.emotional_feedback
         (status, new_memory) = postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
         if status == 200:
             memory = new_memory
         else:
             print(f"Post processing failed {memory.id}")
+
+        # Store postprocessing audio file
+        signed_url = upload_postprocessing_audio(file_path)
+        processing_memory.audio_url = signed_url
+        processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
         os.remove(file_path)
 
@@ -337,30 +383,38 @@ async def _websocket_util(
             await _create_processing_memory()
         else:
             # or ensure synced processing transcript
-            if processing_memory:
-                processing_memory_synced = len(memory_transcript_segements)
-                processing_memory.transcript_segments = list(map(lambda m: TranscriptSegment(**m),
-                                                                 memory_transcript_segements[
-                                                                 :processing_memory_synced]))
-                processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+            processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [processing_memory.id])
+            if len(processing_memories) == 0:
+                print("processing memory is not found")
+                return
+            processing_memory = ProcessingMemory(**processing_memories[0])
+
+            processing_memory_synced = len(memory_transcript_segements)
+            processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
+            processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
         if not ok:
             print("Can not send message event new_memory_creating")
 
-        # Create memory
-        (memory, messages, updated_processing_memory) = await create_memory_by_processing_memory(uid,
-                                                                                                 processing_memory.id)
-        if not memory:
-            print("Can not create new memory")
+        # Not existed memory then create new one
+        memory = None
+        messages = []
+        if not processing_memory.memory_id:
+            (new_memory, new_messages, updated_processing_memory) = await create_memory_by_processing_memory(uid, processing_memory.id)
+            if not new_memory:
+                print("Can not create new memory")
 
-            # Message: failed
-            ok = await _send_message_event(MessageEvent(event_type="new_memory_create_failed"))
-            if not ok:
-                print("Can not send message event new_memory_create_failed")
-            return
-        processing_memory = updated_processing_memory
+                # Message: failed
+                ok = await _send_message_event(MessageEvent(event_type="new_memory_create_failed"))
+                if not ok:
+                    print("Can not send message event new_memory_create_failed")
+                return
+
+            memory = new_memory
+            messages = new_messages
+            processing_memory = updated_processing_memory
 
         # Post processing
         new_memory = await _post_process_memory(memory)
@@ -408,7 +462,7 @@ async def _websocket_util(
         last_segment = None
         if len(memory_transcript_segements) > 0:
             last_segment = memory_transcript_segements[-1]
-        if not last_segment or "end" not in last_segment:
+        if not last_segment:
             print("Not last segment or last segment invalid")
             if last_segment:
                 print(f"{last_segment.dict()}")
@@ -422,20 +476,18 @@ async def _websocket_util(
 
         # Validate transcript
         # Longer 120s
-        segment_end = int(last_segment["end"])
-        min_seconds_limit = 120
+        segment_end = last_segment.end
         now = time.time()
         should_create_memory_time = True
         if time_validate:
             should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
-        min_words_limit = 1
         should_create_memory_time_words = min_words_limit == 0
         if min_words_limit > 0 and should_create_memory_time:
             wc = 0
             for segment in memory_transcript_segements:
-                wc = wc + len(segment["text"].split(" "))
+                wc = wc + len(segment.text.split(" "))
                 if wc >= min_words_limit:
                     should_create_memory_time_words = True
                     break

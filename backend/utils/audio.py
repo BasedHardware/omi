@@ -1,6 +1,17 @@
 import io
 import wave
 from pyogg import OpusDecoder
+from pydub import AudioSegment
+
+def merge_wav_files(dest_file_path: str, source_files: [str]):
+    if len(source_files) == 0 or not dest_file_path:
+        return
+
+    combined_sounds = None
+    for file_path in source_files:
+        sound = AudioSegment.from_wav(file_path)
+        combined_sounds = combined_sounds + sound
+    combined_sounds.export(dest_file_path, format="wav")
 
 
 # frames is 2darray
