@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from google.cloud import firestore
@@ -67,7 +67,7 @@ def edit_fact(uid: str, fact_id: str, value: str):
     user_ref = db.collection('users').document(uid)
     facts_ref = user_ref.collection('facts')
     fact_ref = facts_ref.document(fact_id)
-    fact_ref.update({'content': value, 'edited': True, 'updated_at': datetime.utcnow()})
+    fact_ref.update({'content': value, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
 
 
 def delete_fact(uid: str, fact_id: str):

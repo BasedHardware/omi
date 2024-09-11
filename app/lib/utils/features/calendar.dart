@@ -69,7 +69,6 @@ class CalendarUtil {
       bool hasAccess = await enableCalendarAccess();
       if (!hasAccess) return [];
       print('getCalendars $hasAccess');
-
       final calendarsResult = await _calendarPlugin!.retrieveCalendars();
       print('calendarsResult: ${calendarsResult.data}');
       if (calendarsResult.isSuccess && calendarsResult.data != null) {
@@ -98,14 +97,21 @@ class CalendarUtil {
     bool hasAccess = await enableCalendarAccess();
     if (!hasAccess) return false;
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    final currentLocation = timeZoneDatabase.locations[currentTimeZone];
+    var currentLocation = timeZoneDatabase.locations[currentTimeZone];
     String calendarId = SharedPreferencesUtil().calendarId;
+
+    TZDateTime eventStart = currentLocation == null
+        ? TZDateTime.local(startsAt.year, startsAt.month, startsAt.day, startsAt.hour, startsAt.minute)
+        : TZDateTime.from(startsAt, currentLocation);
+
+    TZDateTime eventEnd = eventStart.add(Duration(minutes: durationMinutes));
+
     var event = Event(
       calendarId,
       title: title,
       description: description,
-      start: TZDateTime.from(startsAt, currentLocation!),
-      end: TZDateTime.from(startsAt.add(Duration(minutes: durationMinutes)), currentLocation),
+      start: eventStart,
+      end: eventEnd,
       availability: Availability.Tentative,
     );
     final createResult = await _calendarPlugin!.createOrUpdateEvent(event);

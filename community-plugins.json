@@ -427,7 +427,7 @@
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/news-checker/README.md"
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "note-to-self",
@@ -577,7 +577,7 @@
       "webhook_url": "https://based-hardware--plugins-api.modal.run/emotional-support",
       "setup_instructions_file_path": ""
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "warren-buffett-advisor",
@@ -692,7 +692,7 @@
     "name": "BookWatch Friend Plugin",
     "author": "Alex Toska - Miran Antamian",
     "description": "This plugin enables you to add bookmarks for books you want to watch in BookWatch later",
-    "image": "/plugins/logos/bookwatch.jpg",
+    "image": "/plugins/logos/bookwatch.png",
     "capabilities": [
       "external_integration"
     ],
@@ -700,9 +700,9 @@
       "triggers_on": "memory_creation",
       "webhook_url": "https://friend-integration.vercel.app/process_bookmark",
       "setup_completed_url": "https://friend-integration.vercel.app/check_setup",
-      "setup_instructions_file_path": "https://friend-integration.vercel.app/static/README.md"
+      "setup_instructions_file_path": "/plugins/instructions/bookwatch/README.md"
     },
-    "deleted": true
+    "deleted": false
   },
   {
     "id": "multion-amazon",
