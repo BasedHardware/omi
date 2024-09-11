@@ -4,6 +4,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -35,7 +36,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        context.read<MemoryDetailProvider>().updateMemory(widget.memory);
+        context.read<MemoryDetailProvider>().updateMemory(widget.memory, widget.memoryIdx);
         var result = await Navigator.of(context).push(MaterialPageRoute(
           builder: (c) => MemoryDetailPage(
             memory: widget.memory,
@@ -48,43 +49,87 @@ class _MemoryListItemState extends State<MemoryListItem> {
           SharedPreferencesUtil().modifiedMemoryDetails = null;
         }
       },
-      child: Container(
-        margin: const EdgeInsets.only(top: 12, left: 16, right: 16),
-        width: double.maxFinite,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade900,
-          borderRadius: BorderRadius.circular(16.0),
-        ),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _getMemoryHeader(),
-              const SizedBox(height: 16),
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : Text(
-                      structured.title,
-                      style: Theme.of(context).textTheme.titleLarge,
-                      maxLines: 1,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+        child: Container(
+          width: double.maxFinite,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade900,
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16.0),
+            child: Dismissible(
+              key: Key(widget.memory.id),
+              background: Container(
+                color: Colors.red,
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(left: 30),
+                      child: Icon(
+                        Icons.delete,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
-              widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-              widget.memory.discarded
-                  ? const SizedBox.shrink()
-                  : Text(
-                      structured.overview,
-                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                      maxLines: 2,
+                    Spacer(),
+                    Padding(
+                      padding: EdgeInsets.only(right: 30),
+                      child: Icon(
+                        Icons.delete,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
-              widget.memory.discarded
-                  ? Text(
-                      widget.memory.getTranscript(maxCount: 100),
-                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                    )
-                  : const SizedBox(height: 8),
-            ],
+                  ],
+                ),
+              ),
+              onDismissed: (direction) {
+                context.read<MemoryProvider>().deleteMemory(widget.memory, widget.memoryIdx);
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('Memory deleted successfully')));
+              },
+              child: Padding(
+                padding: const EdgeInsetsDirectional.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _getMemoryHeader(),
+                    const SizedBox(height: 16),
+                    widget.memory.discarded
+                        ? const SizedBox.shrink()
+                        : Text(
+                            structured.title,
+                            style: Theme.of(context).textTheme.titleLarge,
+                            maxLines: 1,
+                          ),
+                    widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+                    widget.memory.discarded
+                        ? const SizedBox.shrink()
+                        : Text(
+                            structured.overview,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium!
+                                .copyWith(color: Colors.grey.shade300, height: 1.3),
+                            maxLines: 2,
+                          ),
+                    widget.memory.discarded
+                        ? Text(
+                            widget.memory.getTranscript(maxCount: 100),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium!
+                                .copyWith(color: Colors.grey.shade300, height: 1.3),
+                          )
+                        : const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
