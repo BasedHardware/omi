@@ -49,8 +49,8 @@ class Person {
     return Person(
       id: json['id'],
       name: json['name'],
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      updatedAt: DateTime.parse(json['updated_at']).toLocal(),
       speechSamples: json['speech_samples'] != null ? List<String>.from(json['speech_samples']) : [],
       colorIdx: json['color_idx'] ?? json['id'].hashCode % speakerColors.length,
     );
@@ -60,8 +60,8 @@ class Person {
     return {
       'id': id,
       'name': name,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
       'speech_samples': speechSamples ?? [],
       'color_idx': colorIdx,
     };

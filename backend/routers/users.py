@@ -1,6 +1,6 @@
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -65,8 +65,8 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
     data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
-        'created_at': datetime.utcnow(),
-        'updated_at': datetime.utcnow(),
+        'created_at': datetime.now(timezone.utc),
+        'updated_at': datetime.now(timezone.utc),
         'deleted': False,
     }
     result = create_person(uid, data)

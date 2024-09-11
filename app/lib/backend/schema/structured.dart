@@ -135,7 +135,7 @@ class Event {
   toJson() {
     return {
       'title': title,
-      'startsAt': startsAt.toIso8601String(),
+      'startsAt': startsAt.toUtc().toIso8601String(),
       'duration': duration,
       'description': description,
       'created': created,
