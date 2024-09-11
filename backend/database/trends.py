@@ -3,9 +3,9 @@ from typing import Dict, List
 
 from google.api_core.retry import Retry
 from google.cloud.firestore_v1 import FieldFilter
+
 from models.memory import Memory
 from models.trend import Trend
-
 from ._client import db
 
 
@@ -33,16 +33,8 @@ def save_trends(memory: Memory, trends: List[str]):
     print(f"trend_data: {mem_data}")
     trends_ref = db.collection('trends')
     for trend in trends:
-        print(f"extracted_trend: {trend}")
-        trend_ref = trends_ref.where(
-            filter=FieldFilter('name', '==', trend)).get()
-        print(f"trend_ref: {trend_ref}")
+        trend_ref = trends_ref.where(filter=FieldFilter('name', '==', trend)).get()
         if len(trend_ref) == 0:
-            trends_ref.add({
-                "created_at": datetime.now(),
-                "name": trend
-            })
-            trend_ref = trends_ref.where(
-                filter=FieldFilter('name', '==', trend)).get()
-        print(f"trend_ref: {trend_ref}")
+            trends_ref.add({"created_at": datetime.now(), "name": trend})
+            trend_ref = trends_ref.where(filter=FieldFilter('name', '==', trend)).get()
         trend_ref[0].reference.collection('data').add(mem_data)
