@@ -21,7 +21,7 @@ Future<DeviceBase?> getDevice(String deviceId) async {
         return null;
       }
     }
-
+    //where the codecs get initialized?
     final deviceType = deviceTypeMap[deviceId];
     if (deviceType == DeviceType.friend) {
       deviceMap[deviceId] = FriendDevice(deviceId);
@@ -51,8 +51,25 @@ Future<StreamSubscription?> getBleAudioBytesListener(
     (await getDevice(deviceId))?.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived) ??
     Future.value(null);
 
+
 Future<BleAudioCodec> getAudioCodec(String deviceId) async =>
     (await getDevice(deviceId))?.getAudioCodec() ?? Future.value(BleAudioCodec.pcm8);
+
+
+
+Future<StreamSubscription?> getBleStorageBytesListener(
+  String deviceId, {
+  required void Function(List<int>) onStorageBytesReceived,
+}) async =>
+    (await getDevice(deviceId))?.getBleStorageBytesListener(
+            onStorageBytesReceived: onStorageBytesReceived) ??
+        Future.value(null);   
+
+Future<bool> writeToStorage(String deviceId,int numFile) async => 
+    (await getDevice(deviceId))?.writeToStorage(numFile) ?? Future.value(false);
+
+Future<List<int>> getStorageList(String deviceId) async =>
+    (await getDevice(deviceId))?.getStorageList() ?? Future.value(null); 
 
 Future cameraStartPhotoController(String deviceId) async =>
     (await getDevice(deviceId))?.cameraStartPhotoController() ?? Future.value(null);
