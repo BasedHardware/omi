@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -35,7 +33,6 @@ import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
@@ -66,7 +63,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   get bleBytesStream => _bleBytesStream;
 
-  var record = AudioRecorder();
   RecordingState recordingState = RecordingState.stop;
 
 // -----------------------
@@ -717,20 +713,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  startStreamRecording() async {
-    await Permission.microphone.request();
-    var stream = await record.startStream(
-      const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1),
-    );
-    updateRecordingState(RecordingState.record);
-    stream.listen((data) async {
-      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.websocketChannel?.sink.add(data);
-      }
-    });
-  }
-
-  streamRecordingOnAndroid() async {
+  streamRecording() async {
     await Permission.microphone.request();
 
     // record
@@ -747,34 +730,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     });
   }
 
-  CaptureProvider callback() => this;
-
-  listenToBackgroundService() async {
-    if (await FlutterBackgroundService().isRunning()) {
-      FlutterBackgroundService().on('audioBytes').listen((event) {
-        Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
-          webSocketProvider?.websocketChannel?.sink.add(convertedList);
-      });
-      FlutterBackgroundService().on('stateUpdate').listen((event) {
-        if (event!['state'] == 'recording') {
-          updateRecordingState(RecordingState.record);
-        } else if (event['state'] == 'initializing') {
-          updateRecordingState(RecordingState.initialising);
-        } else if (event['state'] == 'stopped') {
-          updateRecordingState(RecordingState.stop);
-        }
-      });
-    }
-  }
-
-  stopStreamRecording() async {
-    if (await record.isRecording()) await record.stop();
-    updateRecordingState(RecordingState.stop);
-    notifyListeners();
-  }
-
-  stopStreamRecordingOnAndroid() {
+  stopStreamRecording() {
     ServiceManager.instance().mic.stop();
   }
 }
