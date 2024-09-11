@@ -12,6 +12,7 @@ from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
+from models.trend import TrendEnum, Trend
 from utils.memories.facts import get_prompt_facts
 
 llm = ChatOpenAI(model='gpt-4o')
@@ -246,6 +247,10 @@ class TopicsContext(BaseModel):
     topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
 
 
+class TrendsContext(BaseModel):
+    trends: List[TrendEnum] = Field(default=[], description="List of trends.")
+
+
 class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
@@ -470,4 +475,35 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
         return response.facts
     except Exception as e:
         # print(f'Error extracting new facts: {e}')
+        return []
+
+
+# **********************************
+# ************* TRENDS **************
+# **********************************
+
+
+def trends_extractor(memory: Memory) -> List[str]:
+    print("llm.trends_extractor()")
+
+    transcript = memory.get_transcript(False)
+    if len(transcript) == 0:
+        return []
+
+    prompt = f'''
+    Based on the current transcript of a conversation.
+
+    Your task is to extract the correct and most accurate trends in the conversation, to be used to retrieve more information. Classify the identified trends within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    Provide a list of trends identified from the current context of the conversation about, in order to understand what topics the user was talking about.
+
+    Conversation:
+    {transcript}
+    '''.replace('    ', '').strip()
+
+    try:
+        with_parser = llm.with_structured_output(TrendsContext)
+        response: TrendsContext = with_parser.invoke(prompt)
+        return response.trends
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
         return []

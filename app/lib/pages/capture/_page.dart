@@ -244,11 +244,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
   _recordingToggled(CaptureProvider provider) async {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
-      if (Platform.isAndroid) {
-        provider.stopStreamRecordingOnAndroid();
-      } else {
-        provider.stopStreamRecording();
-      }
+      provider.stopStreamRecording();
       provider.updateRecordingState(RecordingState.stop);
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().tryCreateMemoryManually();
@@ -264,11 +260,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             provider.updateRecordingState(RecordingState.initialising);
             context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
-            if (Platform.isAndroid) {
-              await provider.streamRecordingOnAndroid();
-            } else {
-              await provider.startStreamRecording();
-            }
+            await provider.streamRecording();
             Navigator.pop(context);
           },
           'Limited Capabilities',
