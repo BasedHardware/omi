@@ -106,7 +106,7 @@ static int setup_storage_tx() {
     k_msleep(1000);
     int res = move_read_pointer(current_read_num);
     if (res) {
-        LOG_ERR("bad pointer\n");
+        LOG_INF("bad pointer");
         transport_started = 0;
         // current_read_num++;
         current_read_num = 1;
@@ -114,7 +114,7 @@ static int setup_storage_tx() {
         return -1;
     }
 
-    printk("current read ptr %d\n",current_read_num);
+    LOG_INF("current read ptr %d",current_read_num);
    
     remaining_length = file_num_array[current_read_num-1];
     if(current_read_num == file_count) {
@@ -124,18 +124,18 @@ static int setup_storage_tx() {
     remaining_length = remaining_length - offset;
     
     // offset=offset_;
-    printk("remaining length: %d\n",remaining_length);
-    LOG_INF("offset: %d\n",offset);
-    printk("file: %d\n",current_read_num);
+    LOG_INF("remaining length: %d",remaining_length);
+    LOG_INF("offset: %d",offset);
+    LOG_INF("file: %d",current_read_num);
     
     return 0;
 
 }
-
+uint8_t delete_num = 0;
 static uint8_t parse_storage_command(void *buf,uint16_t len) {
 
     if (len != 6 && len != 2) {
-        printk("invalid command");
+        LOG_INF("invalid command");
         return INVALID_COMMAND;
     }
     uint8_t command = ((uint8_t*)buf)[0];
@@ -149,43 +149,44 @@ static uint8_t parse_storage_command(void *buf,uint16_t len) {
     printk("command successful: command: %d file: %d size: %d \n",command,file_num,size);
 
     if (file_num == 0) {
-      printk("invalid file count 0\n");
+      LOG_INF("invalid file count 0");
       return INVALID_FILE_SIZE;
     }
     if (file_num > file_count) { //invalid file count 
-    printk("invalid file count\n");
+    LOG_INF("invalid file count");
       return INVALID_FILE_SIZE;
 //add audio all?
     }
     if (command == READ_COMMAND) { //read 
         uint32_t temp = file_num_array[file_num-1];
         if ( file_num == (file_count ) ) {
-            printk("valid command, setting up \n");
+            LOG_INF("file_count == final file");
             offset = size;
             current_read_num = file_num;
             transport_started = 1;           
         }
         else if (temp == 0) {
-            printk("file size is 0\n");
+            LOG_INF("file size is 0");
             return ZERO_FILE_SIZE;
         }
         else if (size > temp) {
-            printk("requested size is too large\n");
+            LOG_INF("requested size is too large");
             return 5;
         }
         else {
-            printk("valid command, setting up \n");
+            LOG_INF("valid command, setting up ");
             offset = size;
             current_read_num = file_num;
             transport_started = 1;
         }
     }
     else if (command == DELETE_COMMAND) {
-          printk("delete something\n");
-
+  
+        delete_num = file_num;
+        delete_started = 1;
     }
     else {
-        printk("invalid command \n");
+        LOG_INF("invalid command \n");
         return 6;
     }
     return 0;
@@ -195,15 +196,15 @@ static uint8_t parse_storage_command(void *buf,uint16_t len) {
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) {
 
     LOG_INF("about to schedule the storage");
-    printk("was sent %d \n ", ((uint8_t*)buf)[0] );
+    LOG_INF("was sent %d  ", ((uint8_t*)buf)[0] );
 
     uint8_t result_buffer[1] = {0};
     uint8_t result = parse_storage_command(buf,len);
     result_buffer[0] = result; 
-    printk("length of storage write: %d\n",len);
-    printk("result: %d \n", result);
+    LOG_INF("length of storage write: %d",len);
+    LOG_INF("result: %d ", result);
     bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer,1);
-    k_msleep(1000);
+    k_msleep(500);
     return len;
 }
 
@@ -233,11 +234,17 @@ void storage_write(void) {
         LOG_INF("transpor started in side : %d",transport_started);
         setup_storage_tx();
     }
-
-    // if (delete_started) {
+   
+    if (delete_started) {
         
-    //     delete_started = 0;
-    // }
+        
+       LOG_INF("delete:%d\n",delete_started);
+        int err = clear_audio_file(delete_num);
+        if (err) {
+            LOG_INF("error clearing\n");
+        }
+        delete_started = 0;
+    }
 
     if(remaining_length > 0 ) {
 
@@ -250,7 +257,7 @@ void storage_write(void) {
 
         transport_started = 0;
         if (remaining_length == 0) {
-           printk("done. attempting to download more files\n");
+           LOG_INF("done. attempting to download more files\n");
            uint8_t stop_result[1] = {100};
            int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
            k_sleep(K_MSEC(10));
