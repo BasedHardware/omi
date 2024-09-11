@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -69,7 +70,7 @@ Future onStart(ServiceInstance service) async {
   // Recorder
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
-    recorder = MicRecorderService();
+    recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
     recorder?.start(onByteReceived: (bytes) {
       Uint8List audioBytes = bytes;
       List<dynamic> audioBytesList = audioBytes.toList();
@@ -261,8 +262,11 @@ class MicRecorderService implements IMicRecorderService {
   Function? _onRecording;
   Function? _onStop;
 
-  MicRecorderService() {
+  bool _isInBG = false;
+
+  MicRecorderService({bool isInBG = false}) {
     _recorder = FlutterSoundRecorder();
+    _isInBG = isInBG;
   }
 
   get status => _status;
@@ -292,7 +296,7 @@ class MicRecorderService implements IMicRecorderService {
     }
 
     // new record
-    await _recorder.openRecorder(isBGService: true);
+    await _recorder.openRecorder(isBGService: _isInBG);
     _controller = StreamController<Uint8List>();
 
     await _recorder.startRecorder(
