@@ -63,11 +63,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   get bleBytesStream => _bleBytesStream;
 
-
   StreamSubscription? _storageStream;
   get storageStream => _storageStream;
-
-  var record = AudioRecorder();
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -128,10 +125,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
+  // This func was added by @kevvz partially, not sure about the use
   //create the memory here
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
-
-
+  Future<bool?> createMemory({bool forcedCreation = false}) async {}
   void _onMemoryCreating() {
     setMemoryCreating(true);
   }
@@ -289,7 +285,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<bool?> _createMemory({bool forcedCreation = false}) async {
-
     debugPrint('_createMemory forcedCreation: $forcedCreation');
 
     if (memoryCreating) return null;
@@ -309,7 +304,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       } // in case was a local recording and not a BLE recording
     }
 
-    ServerMemory? memory = await processTranscriptContent( //create mmeory "shell"
+    ServerMemory? memory = await processTranscriptContent(
+      //create mmeory "shell"
       segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
@@ -359,7 +355,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
       setMemoryCreating(false);
       try {
-        memoryPostProcessing(file, memory.id).then((postProcessed) { //tyoe ServerMemory
+        memoryPostProcessing(file, memory.id).then((postProcessed) {
+          //tyoe ServerMemory
           if (postProcessed != null) {
             memoryProvider?.updateMemory(postProcessed);
           } else {
@@ -575,52 +572,49 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (_storageStream != null) {
       _storageStream?.cancel();
     }
-    _storageStream = await getBleStorageBytesListener(
-      id,
-      onStorageBytesReceived: (List<int> value) async {
-        if (value.isEmpty) return;
+    _storageStream = await getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
 
-        storageUtil!.storeFrameStoragePacket(value);
-        if (value.length == 1) { //result codes i guess
-          debugPrint('returned $value');
-          if (value[0] == 0) { //valid command
+      storageUtil!.storeFrameStoragePacket(value);
+      if (value.length == 1) {
+        //result codes i guess
+        debugPrint('returned $value');
+        if (value[0] == 0) {
+          //valid command
           debugPrint('good to go');
-          } 
-          else if (value[0] == 3) {
-            debugPrint('bad file size. finishing...');
-          }
-          else if (value[0] == 4) { //file size is zero.
+        } else if (value[0] == 3) {
+          debugPrint('bad file size. finishing...');
+        } else if (value[0] == 4) {
+          //file size is zero.
           debugPrint('file size is zero. going to next one....');
-          getFileFromDevice(storageUtil.getFileNum()+1);
-          } 
-          else if (value[0] == 100) { //valid end command
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else if (value[0] == 100) {
+          //valid end command
           debugPrint('done. sending to backend....trying to dl more');
-          File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+          File storageFile = (await storageUtil.createWavFile(removeLastNSeconds: 0)).item1;
           List<ServerMemory> result = await sendStorageToBackend(storageFile, "hi");
           for (ServerMemory memory in result) {
             memoryProvider?.addMemory(memory);
           }
           storageUtil.clearAudioBytes();
-          getFileFromDevice(storageUtil.getFileNum()+1);
-          } 
-          else { //bad bit
-            debugPrint('Error bit returned');
-          }
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else {
+          //bad bit
+          debugPrint('Error bit returned');
         }
-        
       }
-    );
+    });
 
     getFileFromDevice(storageUtil.getFileNum());
 
-  //  notifyListeners();
+    //  notifyListeners();
   }
 
-Future getFileFromDevice(int fileNum) async {
-  storageUtil.fileNum = fileNum;
-  writeToStorage(connectedDevice!.id,storageUtil.fileNum);
+  Future getFileFromDevice(int fileNum) async {
+    storageUtil.fileNum = fileNum;
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum);
+  }
 
-}
   // Future saveAndSendStorageWav() async {
   // }
 // Future storageHandler() async {
@@ -717,7 +711,7 @@ Future getFileFromDevice(int fileNum) async {
   Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
     print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
-    
+
     BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
@@ -813,6 +807,4 @@ Future getFileFromDevice(int fileNum) async {
   stopStreamRecording() {
     ServiceManager.instance().mic.stop();
   }
-
-
 }
