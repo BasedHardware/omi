@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
 
+import 'permissions/background_permission.dart';
+
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});
 
@@ -33,7 +36,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: 7, vsync: this);
+    _controller = TabController(length: Platform.isAndroid ? 8 : 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -141,6 +144,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           MixpanelManager().onboardingStepICompleted('Permissions');
                         },
                       ),
+                      if (Platform.isAndroid)
+                        BackgroundPermissionWidget(
+                          goNext: () {
+                            _goNext();
+                            MixpanelManager().onboardingStepICompleted('Background Permissions');
+                          },
+                        ),
+
                       WelcomePage(
                         goNext: () {
                           _goNext();
