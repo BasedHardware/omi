@@ -151,28 +151,30 @@ _getNoFriendConnectedYet(BuildContext context) {
           //     )),
           // const SizedBox(height: 32),
           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              decoration: BoxDecoration(
-                border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            decoration: BoxDecoration(
+              border: const GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 2,
               ),
-              child: TextButton(
-                  onPressed: () {
-                    launchUrl(Uri.parse('https://basedhardware.com'));
-                    MixpanelManager().getFriendClicked();
-                  },
-                  child: const Text(
-                    'Get a Friend',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ))),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextButton(
+              onPressed: () {
+                launchUrl(Uri.parse('https://omi.me'));
+                MixpanelManager().getFriendClicked();
+              },
+              child: const Text(
+                'Get a Friend',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
           const SizedBox(height: 4),
           TextButton(
             onPressed: () async {
