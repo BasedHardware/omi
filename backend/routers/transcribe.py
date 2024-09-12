@@ -76,6 +76,10 @@ def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
 
     joined_similar_segments = []
     for new_segment in new_segments:
+        if delta_seconds > 0:
+            new_segment.start += delta_seconds
+            new_segment.end += delta_seconds
+
         if (joined_similar_segments and
                 (joined_similar_segments[-1].speaker == new_segment.speaker or
                  (joined_similar_segments[-1].is_user and new_segment.is_user))):
@@ -84,10 +88,6 @@ def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
         else:
             joined_similar_segments.append(new_segment)
 
-        # delta
-        if delta_seconds > 0:
-            joined_similar_segments[-1].start += delta_seconds
-            joined_similar_segments[-1].end += delta_seconds
 
     if (segments and
             (segments[-1].speaker == joined_similar_segments[0].speaker or
@@ -160,7 +160,7 @@ async def _websocket_util(
             memory_transcript_segements = _combine_segments(memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds)
 
             # Sync processing transcript, periodly
-            if processing_memory and len(memory_transcript_segements) % 3 == 0:
+            if processing_memory and len(memory_transcript_segements) % 2 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
                 processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
@@ -303,7 +303,6 @@ async def _websocket_util(
             segment_end = 0
             for segment in last_processing_memory.transcript_segments:
                 segment_end = max(segment_end, segment.end)
-            print(f"go {last_processing_memory.timer_start} {segment_end} {min_seconds_limit} {time.time()}")
             if last_processing_memory.timer_start + segment_end + min_seconds_limit > time.time():
                 processing_memory = last_processing_memory
 
@@ -319,6 +318,9 @@ async def _websocket_util(
         # Track session changes
         processing_memory.session_id = session_id
         processing_memory.session_ids.append(session_id)
+
+        # Track timer start
+        processing_memory.timer_starts.append(timer_start)
 
         # Transcript with delta
         memory_transcript_segements = _combine_segments(processing_memory.transcript_segments, memory_transcript_segements, timer_start - processing_memory.timer_start)
