@@ -116,7 +116,7 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void openPrivacyPolicy() {
-    _launchUrl('https://basedhardware.com/privacy-policy');
+    _launchUrl('https://www.omi.me/pages/privacy');
   }
 
   void _launchUrl(String url) async {
