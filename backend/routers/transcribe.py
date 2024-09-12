@@ -1,3 +1,4 @@
+import requests
 import asyncio
 import os
 import threading
@@ -348,19 +349,25 @@ async def _websocket_util(
         # Try merge new audio with the previous
         if processing_memory.audio_url:
             try:
-                previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                download_postprocessing_audio(processing_memory.audio_url, previous_file_path)
+                response = requests.get(processing_memory.audio_url, timeout=30,)
+                if response.status_code == 200:
+                    previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+                    with open(previous_file_path, "wb") as file:
+                        file.write(response.content)
 
-                # merge
-                merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                merge_wav_files(merge_file_path, [previous_file_path, file_path])
+                    # merge
+                    merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+                    merge_wav_files(merge_file_path, [previous_file_path, file_path])
 
-                # clean
-                os.remove(previous_file_path)
-                os.remove(file_path)
+                    # clean
+                    os.remove(previous_file_path)
+                    os.remove(file_path)
 
-                # new
-                file_path = merge_file_path
+                    # new
+                    file_path = merge_file_path
+                else:
+                    print("Failed to download the file.")
+
             except Exception as e:
                 print(f"Can not merge wav files {str(e)}")
 
