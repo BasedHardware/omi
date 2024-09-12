@@ -69,7 +69,7 @@ router = APIRouter()
 #       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
 #
 
-def _combine_segments(segments: [], new_segments: []):
+def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
     if not new_segments or len(new_segments) == 0:
         return segments
 
@@ -82,6 +82,11 @@ def _combine_segments(segments: [], new_segments: []):
             joined_similar_segments[-1].end = new_segment.end
         else:
             joined_similar_segments.append(new_segment)
+
+        # delta
+        if delta_seconds > 0:
+            joined_similar_segments[-1].start += delta_seconds
+            joined_similar_segments[-1].end += delta_seconds
 
     if (segments and
             (segments[-1].speaker == joined_similar_segments[0].speaker or
@@ -148,10 +153,10 @@ async def _websocket_util(
         # memory segments
         # Warn: need double check should we still seperate the memory and speech profile stream or not?
         if (stream_id == memory_stream_id or stream_id == speech_profile_stream_id) and new_memory_watch:
-            memory_transcript_segements = _combine_segments(memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)))
-            print("hey")
-            print(len(list(map(lambda m: TranscriptSegment(**m), segments))))
-            print(len(memory_transcript_segements))
+            delta_seconds = 0
+            if processing_memory and processing_memory.timer_start > 0:
+                delta_seconds = timer_start - processing_memory.timer_start
+            memory_transcript_segements = _combine_segments(memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds)
 
             # Sync processing transcript, periodly
             if processing_memory and len(memory_transcript_segements) % 3 == 0:
@@ -292,14 +297,14 @@ async def _websocket_util(
 
         # Check the last processing memory
         last_processing_memory_data = processing_memories_db.get_last(uid)
-        if not last_processing_memory_data:
+        if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
             segment_end = 0
             for segment in last_processing_memory.transcript_segments:
                 segment_end = max(segment_end, segment.end)
+            print(f"go {last_processing_memory.timer_start} {segment_end} {min_seconds_limit} {time.time()}")
             if last_processing_memory.timer_start + segment_end + min_seconds_limit > time.time():
                 processing_memory = last_processing_memory
-                memory_transcript_segements = last_processing_memory.transcript_segments + memory_transcript_segements
 
         # Or create new
         if not processing_memory:
@@ -311,9 +316,11 @@ async def _websocket_util(
             )
 
         # Track session changes
-        if processing_memory.session_id and processing_memory.session_id != session_id:
-            print(f"Processing memory {processing_memory.id} session id changes, old: {processing_memory.session_id}, new: {session_id}")
         processing_memory.session_id = session_id
+        processing_memory.session_ids.append(session_id)
+
+        # Transcript with delta
+        memory_transcript_segements = _combine_segments(processing_memory.transcript_segments, memory_transcript_segements, timer_start - processing_memory.timer_start)
 
         processing_memory_synced = len(memory_transcript_segements)
         processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
@@ -428,7 +435,7 @@ async def _websocket_util(
             # Update transcripts
             memory.transcript_segments = processing_memory.transcript_segments
             memories_db.update_memory_segments(uid, memory.id, [segment.dict() for segment in memory.transcript_segments])
-            
+
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
 
