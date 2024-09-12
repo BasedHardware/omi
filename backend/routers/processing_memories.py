@@ -25,7 +25,7 @@ def update_processing_memory(
     print(f"Update processing memory {processing_memory_id}")
 
     update_processing_memory.id = processing_memory_id
-    processing_memory = processing_memory_utils.update_processing_memory(uid, update_processing_memory)
+    processing_memory = processing_memory_utils.update_basic_processing_memory(uid, update_processing_memory)
     if not processing_memory:
         raise HTTPException(status_code=404, detail="Processing memory not found")
 
