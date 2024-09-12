@@ -88,7 +88,6 @@ def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
         else:
             joined_similar_segments.append(new_segment)
 
-
     if (segments and
             (segments[-1].speaker == joined_similar_segments[0].speaker or
              (segments[-1].is_user and joined_similar_segments[0].is_user)) and
@@ -160,10 +159,11 @@ async def _websocket_util(
             memory_transcript_segements = _combine_segments(memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds)
 
             # Sync processing transcript, periodly
-            if processing_memory and len(memory_transcript_segements) % 2 == 0:
+            if processing_memory and int(time.time()) % 3 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
-                processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+                processing_memories_db.update_processing_memory_segments(uid, processing_memory.id,
+                                                                         list(map(lambda m: m.dict(), processing_memory.transcript_segments)))
 
     def stream_audio(audio_buffer):
         if not new_memory_watch:
@@ -384,7 +384,7 @@ async def _websocket_util(
         # Store postprocessing audio file
         signed_url = upload_postprocessing_audio(file_path)
         processing_memory.audio_url = signed_url
-        processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+        processing_memories_db.update_audio_url(uid, processing_memory.id, processing_memory.audio_url)
 
         os.remove(file_path)
 
@@ -412,7 +412,8 @@ async def _websocket_util(
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
-            processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
+            processing_memories_db.update_processing_memory_segments(uid, processing_memory.id,
+                                                                     list(map(lambda m: m.dict(), processing_memory.transcript_segments)))
 
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))

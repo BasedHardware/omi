@@ -45,6 +45,13 @@ def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool)
         'geolocation':geolocation,
     })
 
+def update_audio_url(uid: str, id: str, audio_url: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({
+        'audio_url': audio_url,
+    })
+
 def get_last(uid: str):
     processing_memories_ref = (
         db.collection('users').document(uid).collection('processing_memories')
