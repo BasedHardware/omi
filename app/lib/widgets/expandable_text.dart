@@ -2,24 +2,24 @@ import 'package:flutter/material.dart';
 
 class ExpandableTextWidget extends StatefulWidget {
   final String text;
+  final bool isExpanded;
+  final Function toggleExpand;
   final TextStyle style;
   final int maxLines;
   final String expandText;
   final String collapseText;
   final Color linkColor;
-  final bool isExpanded;
-  final Function toggleExpand;
 
   const ExpandableTextWidget({
     super.key,
     required this.text,
     required this.style,
-    required this.isExpanded,
-    required this.toggleExpand,
     this.maxLines = 3,
     this.expandText = 'show more ↓',
     this.collapseText = 'show less ↑',
     this.linkColor = Colors.deepPurple,
+    required this.isExpanded,
+    required this.toggleExpand,
   });
 
   @override
