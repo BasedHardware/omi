@@ -7,7 +7,7 @@ def merge_wav_files(dest_file_path: str, source_files: [str]):
     if len(source_files) == 0 or not dest_file_path:
         return
 
-    combined_sounds = None
+    combined_sounds = AudioSegment.empty()
     for file_path in source_files:
         sound = AudioSegment.from_wav(file_path)
         combined_sounds = combined_sounds + sound
