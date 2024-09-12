@@ -819,7 +819,10 @@ class GetSheetMainOptions extends StatelessWidget {
                       : () async {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
-                            await provider.reprocessMemory();
+                            var res = await provider.reprocessMemory();
+                            if (res) {
+                              context.read<MemoryProvider>().updateMemory(provider.memory);
+                            }
                           } else {
                             showDialog(
                               builder: (c) => getDialog(
@@ -853,7 +856,6 @@ class GetSheetMainOptions extends StatelessWidget {
                                 () => Navigator.pop(context),
                                 () {
                                   context.read<MemoryProvider>().deleteMemory(provider.memory, provider.memoryIdx);
-                                  // deleteMemoryServer(provider.memory.id);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
@@ -919,67 +921,3 @@ class ShowOptionsBottomSheet extends StatelessWidget {
     );
   }
 }
-
-
-// showOptionsBottomSheet(
-//   BuildContext context,
-//   StateSetter setState,
-//   ServerMemory memory,
-// ) async {
-//   // bool displayDevTools = false;
-//   // bool displayShareOptions = false;
-//   // bool loadingPluginIntegrationTest = false;
-//   // bool loadingShareMemoryTranscript = false;
-//   // bool loadingShareMemorySummary = false;
-//   // bool loadingShareMemoryViaURL = false;
-
-//   var result = await showModalBottomSheet(
-//       context: context,
-//       shape: const RoundedRectangleBorder(
-//         borderRadius: BorderRadius.only(
-//           topLeft: Radius.circular(16),
-//           topRight: Radius.circular(16),
-//         ),
-//       ),
-//       builder: (context) => StatefulBuilder(builder: (context, setModalState) {
-//             // changeDisplayDevOptions(bool value) => setModalState(() => displayDevTools = value);
-//             // changeDisplayShareOptions(bool value) => setModalState(() => displayShareOptions = value);
-//             // changeLoadingReprocessMemory(bool value) {
-//             //   if (context.mounted) {
-//             //     setModalState(() => loadingReprocessMemory = value);
-//             //   }
-//             // }
-
-//             // changeLoadingPluginIntegrationTest(bool value) => setModalState(() => loadingPluginIntegrationTest = value);
-//             // changeLoadingShareMemoryTranscript(bool value) => setModalState(() => loadingShareMemoryTranscript = value);
-//             // changeLoadingShareMemorySummary(bool value) => setModalState(() => loadingShareMemorySummary = value);
-//             // changeLoadingShareMemoryViaURL(bool value) => setModalState(() => loadingShareMemoryViaURL = value);
-
-//             return Container(
-//               decoration: BoxDecoration(
-//                 color: Theme.of(context).colorScheme.surface,
-//                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-//               ),
-//               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-//               child: Column(
-//                 mainAxisSize: MainAxisSize.min,
-//                 children: [
-//                   GetSheetTitle(),
-//                   (displayDevTools
-//                       ? GetDevToolsOptions(
-//                           memory: memory,
-//                         )
-//                       : displayShareOptions
-//                           ? GetShareOptions(
-//                               memory: memory,
-//                             )
-//                           : GetSheetMainOptions(
-//                             )),
-//                   const SizedBox(height: 40),
-//                 ],
-//               ),
-//             );
-//           }));
-//   if (result == true) setState(() {});
-//   debugPrint('showBottomSheet result: $result');
-// }
