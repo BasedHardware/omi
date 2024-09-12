@@ -37,16 +37,21 @@ def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({'transcript_segments': segments})
 
+def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({
+        'emotional_feedback': emotional_feedback,
+        'geolocation':geolocation,
+    })
 
 def get_last(uid: str):
-    print(f"get last uid: {uid}")
     processing_memories_ref = (
         db.collection('users').document(uid).collection('processing_memories')
     )
     processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     processing_memories_ref = processing_memories_ref.limit(1)
     docs = [doc.to_dict() for doc in processing_memories_ref.stream()]
-    print(f"uid: {uid} {len(docs)}")
     if len(docs) > 0:
         return docs[0]
     return None
