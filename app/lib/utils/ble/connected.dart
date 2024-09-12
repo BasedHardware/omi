@@ -4,17 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/utils/logger.dart';
 
 Future<BTDeviceStruct?> getConnectedDevice() async {
   var deviceId = SharedPreferencesUtil().btDeviceStruct.id;
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
-      return BTDeviceStruct(
-        id: device.remoteId.str,
-        name: device.platformName,
-        rssi: await device.readRssi(),
-        type: SharedPreferencesUtil().btDeviceStruct.type,
-      );
+      try {
+        int rssi = await device.readRssi();
+        return BTDeviceStruct(
+          id: device.remoteId.str,
+          name: device.platformName,
+          rssi: rssi,
+          type: SharedPreferencesUtil().btDeviceStruct.type,
+        );
+      } catch (e) {
+        debugPrint('Error reading RSSI: $e');
+        debugPrint('Device is disconnected');
+        Logger.handle(e, StackTrace.current,
+            message: 'Oops! Looks like the device is disconnected. Please connect to the device and try again.');
+        return null;
+      }
     }
   }
   debugPrint('getConnectedDevice: device not found');

@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -20,21 +18,21 @@ import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
@@ -65,7 +63,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   get bleBytesStream => _bleBytesStream;
 
-  var record = AudioRecorder();
+  StreamSubscription? _storageStream;
+  get storageStream => _storageStream;
+
   RecordingState recordingState = RecordingState.stop;
 
 // -----------------------
@@ -79,7 +79,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
-
+  List<int> currentStorageFiles = <int>[];
+  StorageBytesUtil storageUtil = StorageBytesUtil();
   // -----------------------
 
   String? processingMemoryId;
@@ -124,6 +125,9 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
+  // This func was added by @kevvz partially, not sure about the use
+  //create the memory here
+  Future<bool?> createMemory({bool forcedCreation = false}) async {}
   void _onMemoryCreating() {
     setMemoryCreating(true);
   }
@@ -301,6 +305,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     ServerMemory? memory = await processTranscriptContent(
+      //create mmeory "shell"
       segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
@@ -351,6 +356,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       setMemoryCreating(false);
       try {
         memoryPostProcessing(file, memory.id).then((postProcessed) {
+          //tyoe ServerMemory
           if (postProcessed != null) {
             memoryProvider?.updateMemory(postProcessed);
           } else {
@@ -560,6 +566,62 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
+  Future sendStorage(String id) async {
+    storageUtil = StorageBytesUtil();
+
+    if (_storageStream != null) {
+      _storageStream?.cancel();
+    }
+    _storageStream = await getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+
+      storageUtil!.storeFrameStoragePacket(value);
+      if (value.length == 1) {
+        //result codes i guess
+        debugPrint('returned $value');
+        if (value[0] == 0) {
+          //valid command
+          debugPrint('good to go');
+        } else if (value[0] == 3) {
+          debugPrint('bad file size. finishing...');
+        } else if (value[0] == 4) {
+          //file size is zero.
+          debugPrint('file size is zero. going to next one....');
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else if (value[0] == 100) {
+          //valid end command
+          debugPrint('done. sending to backend....trying to dl more');
+          File storageFile = (await storageUtil.createWavFile(removeLastNSeconds: 0)).item1;
+          List<ServerMemory> result = await sendStorageToBackend(storageFile, "hi");
+          for (ServerMemory memory in result) {
+            memoryProvider?.addMemory(memory);
+          }
+          storageUtil.clearAudioBytes();
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else {
+          //bad bit
+          debugPrint('Error bit returned');
+        }
+      }
+    });
+
+    getFileFromDevice(storageUtil.getFileNum());
+
+    //  notifyListeners();
+  }
+
+  Future getFileFromDevice(int fileNum) async {
+    storageUtil.fileNum = fileNum;
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum);
+  }
+
+  // Future saveAndSendStorageWav() async {
+  // }
+// Future storageHandler() async {
+//     File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+//     sendStorageToBackend(storageFile, "hi");
+//     writeToStorage(id,2);
+// }
   void clearTranscripts() {
     segments = [];
     SharedPreferencesUtil().transcriptSegments = [];
@@ -599,6 +661,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     await initiateFriendAudioStreaming(isFromSpeechProfile);
+    // TODO: Commenting this for now as DevKit 2 is not yet used in production
+    // await initiateStorageBytesStreaming();
 
     setResetStateAlreadyCalled(false);
     notifyListeners();
@@ -657,25 +721,27 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       await _manageWebSocketConnection(true, isFromSpeechProfile);
     }
 
+    // Why is the connectedDevice null at this point?
     if (!audioBytesConnected) {
-      await streamAudioToWs(connectedDevice!.id, codec);
+      if (connectedDevice != null) {
+        await streamAudioToWs(connectedDevice!.id, codec);
+      } else {
+        // Is the app in foreground when this happens?
+        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      }
     }
 
     notifyListeners();
   }
 
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments: segments,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
+  Future<void> initiateStorageBytesStreaming() async {
+    debugPrint('initiateStorageBytesStreaming');
+    if (connectedDevice == null) return;
+    currentStorageFiles = await getStorageList(connectedDevice!.id);
+    debugPrint('Storage files: $currentStorageFiles');
+    await sendStorage(connectedDevice!.id);
+    notifyListeners();
   }
 
   Future<void> startOpenGlass() async {
@@ -709,53 +775,24 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  startStreamRecording() async {
+  streamRecording() async {
     await Permission.microphone.request();
-    var stream = await record.startStream(
-      const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1),
-    );
-    updateRecordingState(RecordingState.record);
-    stream.listen((data) async {
+
+    // record
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
       if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.websocketChannel?.sink.add(data);
+        webSocketProvider?.websocketChannel?.sink.add(bytes);
       }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
     });
   }
 
-  streamRecordingOnAndroid() async {
-    await Permission.microphone.request();
-    updateRecordingState(RecordingState.initialising);
-    await initializeMicBackgroundService();
-    startBackgroundService();
-    await listenToBackgroundService();
-  }
-
-  listenToBackgroundService() async {
-    if (await FlutterBackgroundService().isRunning()) {
-      FlutterBackgroundService().on('audioBytes').listen((event) {
-        Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
-          webSocketProvider?.websocketChannel?.sink.add(convertedList);
-      });
-      FlutterBackgroundService().on('stateUpdate').listen((event) {
-        if (event!['state'] == 'recording') {
-          updateRecordingState(RecordingState.record);
-        } else if (event['state'] == 'initializing') {
-          updateRecordingState(RecordingState.initialising);
-        } else if (event['state'] == 'stopped') {
-          updateRecordingState(RecordingState.stop);
-        }
-      });
-    }
-  }
-
-  stopStreamRecording() async {
-    if (await record.isRecording()) await record.stop();
-    updateRecordingState(RecordingState.stop);
-    notifyListeners();
-  }
-
-  stopStreamRecordingOnAndroid() {
-    stopBackgroundService();
+  stopStreamRecording() {
+    ServiceManager.instance().mic.stop();
   }
 }

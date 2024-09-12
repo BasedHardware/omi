@@ -103,7 +103,9 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
       url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
-    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
+    var body = utf8.decode(response.bodyBytes);
+    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
   }
@@ -250,4 +252,36 @@ Future<bool> setMemoryEventsState(
   if (response == null) return false;
   debugPrint('setMemoryEventsState: ${response.body}');
   return response.statusCode == 200;
+}
+
+//should return a storage unit
+Future<List<ServerMemory>> sendStorageToBackend(File file, String memoryId) async {
+  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
+    } else {
+      debugPrint('Failed to storageSend. Status code: ${response.statusCode}');
+      return [];
+    }
+
+    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    debugPrint('getMemories length: ${memories.length}');
+    //  for (var memory in memories) {
+    //   debugPrint('memory: ${memory}');
+    // }
+    return memories;
+  } catch (e) {
+    debugPrint('An error occurred storageSend: $e');
+    return [];
+  }
 }

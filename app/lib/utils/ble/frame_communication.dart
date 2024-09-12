@@ -466,4 +466,25 @@ class FrameDevice extends DeviceBase {
     // not yet implemented
     return null;
   }
+  @override
+   Future<List<int>> performGetStorageList() {
+
+    return Future.value(<int>[]);
+   }
+
+  // @override
+  //  Future<List<int>> performGetStorageList() {
+
+  //   return <int>[];
+  //  }
+@override
+Future<StreamSubscription?> performGetBleStorageBytesListener({
+  required void Function(List<int>) onStorageBytesReceived,
+}) {
+  return Future.value(null);
+}
+@override
+Future<bool> performWriteToStorage(int numFile) {
+  return Future.value(false);
+}
 }
