@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
@@ -43,11 +42,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
             isFromOnboarding: widget.isFromOnboarding,
           ),
         ));
-        if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
-        if (SharedPreferencesUtil().modifiedMemoryDetails?.id == widget.memory.id) {
-          widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!, widget.memoryIdx);
-          SharedPreferencesUtil().modifiedMemoryDetails = null;
-        }
+        // if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
       },
       child: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
@@ -61,30 +56,12 @@ class _MemoryListItemState extends State<MemoryListItem> {
             borderRadius: BorderRadius.circular(16.0),
             child: Dismissible(
               key: Key(widget.memory.id),
+              direction: DismissDirection.endToStart,
               background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20.0),
                 color: Colors.red,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(left: 30),
-                      child: Icon(
-                        Icons.delete,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    Spacer(),
-                    Padding(
-                      padding: EdgeInsets.only(right: 30),
-                      child: Icon(
-                        Icons.delete,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                  ],
-                ),
+                child: const Icon(Icons.delete, color: Colors.white),
               ),
               onDismissed: (direction) {
                 context.read<MemoryProvider>().deleteMemory(widget.memory, widget.memoryIdx);
