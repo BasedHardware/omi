@@ -19,7 +19,6 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:provider/provider.dart';
-import 'package:tuple/tuple.dart';
 
 import 'memory_detail_provider.dart';
 
@@ -182,7 +181,6 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   indicatorSize: TabBarIndicatorSize.label,
                   isScrollable: false,
                   onTap: (value) {
-                    // provider.updateSelectedTab(value);
                     context.read<MemoryDetailProvider>().updateSelectedTab(value);
                   },
                   padding: EdgeInsets.zero,
@@ -221,7 +219,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                                         ),
                                         const SizedBox(height: 32)
                                       ]
-                                    : [const TransccriptWidgets()]);
+                                    : [const TranscriptWidgets()]);
                           }),
                           ListView(
                             shrinkWrap: true,
@@ -243,311 +241,259 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       ),
     );
   }
+}
 
-  void editSegment(int segmentIdx, MemoryDetailProvider provider) {
-    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-    if (!connectivityProvider.isConnected) {
-      ConnectivityProvider.showNoInternetDialog(context);
-      return;
-    }
-    List<Person> people = SharedPreferencesUtil().cachedPeople;
+class TranscriptWidgets extends StatelessWidget {
+  const TranscriptWidgets({super.key});
 
-    showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-        ),
-        builder: (ctx) {
-          bool isUserSegment = provider.memory.transcriptSegments[segmentIdx].isUser;
-          String? personId = provider.memory.transcriptSegments[segmentIdx].personId;
-          bool loading = false;
-          return StatefulBuilder(builder: (BuildContext context, StateSetter setModalState) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-              ),
-              height: 320,
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    child: ListView(
-                      children: [
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            children: [
-                              Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: () {
-                                  MixpanelManager().unassignedSegment();
-                                  provider.memory.transcriptSegments[segmentIdx].isUser = false;
-                                  provider.memory.transcriptSegments[segmentIdx].personId = null;
-                                  assignMemoryTranscriptSegment(provider.memory.id, segmentIdx);
-                                  setModalState(() {
-                                    personId = null;
-                                    isUserSegment = false;
-                                  });
-                                  setState(() {});
-                                  Navigator.pop(context);
-                                },
-                                child: const Text('Un-assign',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      decoration: TextDecoration.underline,
-                                    )),
-                              ),
-                            ],
-                          ),
-                        ),
-                        !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                        !provider.hasAudioRecording
-                            ? GestureDetector(
-                                onTap: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (c) => getDialog(
-                                      context,
-                                      () => Navigator.pop(context),
-                                      () {
-                                        Navigator.pop(context);
-                                        routeToPage(context, const RecordingsStoragePermission());
-                                      },
-                                      'Can\'t be used for speech training',
-                                      'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                      okButtonText: 'View',
-                                    ),
-                                  );
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Text('Can\'t be used for speech training',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium!
-                                              .copyWith(decoration: TextDecoration.underline)),
-                                      const Padding(
-                                        padding: EdgeInsets.only(right: 12),
-                                        child: Icon(Icons.info, color: Colors.grey, size: 20),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : const SizedBox(),
-                        const SizedBox(height: 12),
-                        CheckboxListTile(
-                          title: const Text('Yours'),
-                          value: isUserSegment,
-                          checkboxShape:
-                              const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                          onChanged: (bool? value) async {
-                            if (loading) return;
-                            setModalState(() => loading = true);
-
-                            MixpanelManager().assignedSegment('User');
-                            provider.memory.transcriptSegments[segmentIdx].isUser = true;
-                            provider.memory.transcriptSegments[segmentIdx].personId = null;
-                            bool result = await assignMemoryTranscriptSegment(
-                              provider.memory.id,
-                              segmentIdx,
-                              isUser: true,
-                              useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
-                            );
-                            try {
-                              setModalState(() {
-                                personId = null;
-                                isUserSegment = true;
-                                loading = false;
-                              });
-                              setState(() {});
-                              Navigator.pop(context);
-                              if (SharedPreferencesUtil().hasSpeakerProfile) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(result
-                                        ? 'Segment assigned, and speech profile updated!'
-                                        : 'Segment assigned, but speech profile failed to update. Please try again later.'),
-                                  ),
-                                );
-                              }
-                            } catch (e) {}
-                          },
-                        ),
-                        for (var person in people)
-                          CheckboxListTile(
-                            title: Text('${person.name}\'s'),
-                            value: personId == person.id,
-                            checkboxShape:
-                                const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                            onChanged: (bool? value) async {
-                              if (loading) return;
-                              setModalState(() => loading = true);
-                              MixpanelManager().assignedSegment('User Person');
-                              setState(() {
-                                provider.memory.transcriptSegments[segmentIdx].isUser = false;
-                                provider.memory.transcriptSegments[segmentIdx].personId = person.id;
-                              });
-                              bool result = await assignMemoryTranscriptSegment(provider.memory.id, segmentIdx,
-                                  personId: person.id);
-                              // TODO: make this un-closable or in a way that they receive the result
-                              try {
-                                setModalState(() {
-                                  personId = person.id;
-                                  isUserSegment = false;
-                                  loading = false;
-                                });
-                                Navigator.pop(context);
-                                setState(() {});
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(result
-                                        ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
-                                        : 'Segment assigned, but speech profile failed to update. Please try again later.'),
-                                  ),
-                                );
-                              } catch (e) {}
-                            },
-                          ),
-                        ListTile(
-                          title: const Text('Someone else\'s'),
-                          trailing: const Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: Icon(Icons.add),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            routeToPage(context, const UserPeoplePage());
-                          },
-                        ),
-                      ],
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(
+      builder: (context, provider, child) {
+        return ListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
+            provider.memory.isPostprocessing()
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ),
-                  if (loading)
-                    Container(
-                      color: Colors.black.withOpacity(0.3),
-                      child: const Center(
-                          child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
-                      )),
-                    ),
-                ],
-              ),
-            );
-          });
-        });
-  }
-
-  List<Widget> _getTranscriptWidgets(MemoryDetailProvider provider) {
-    String decodedRawText = (provider.memory.externalIntegration?.text ?? '').decodeSting;
-    bool isPostprocessing = provider.memory.isPostprocessing();
-    return [
-      SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-      isPostprocessing
-          ? Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade800,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
-            )
-          : const SizedBox(height: 0),
-      SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-      provider.memory.transcriptSegments.isEmpty
-          ? ExpandableTextWidget(
-              text: decodedRawText,
-              maxLines: 10000,
-              linkColor: Colors.grey.shade300,
-              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-              toggleExpand: () {
-                provider.toggleIsTranscriptExpanded();
-              },
-              isExpanded: provider.isTranscriptExpanded,
-            )
-          : TranscriptWidget(
-              segments: provider.memory.transcriptSegments,
-              horizontalMargin: false,
-              topMargin: false,
-              canDisplaySeconds: provider.canDisplaySeconds,
-              isMemoryDetail: true,
-              editSegment: !isPostprocessing
-                  ? (i) {
-                      editSegment(i, provider);
-                    }
-                  : (_) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Memory still processing. Please wait...'),
-                        duration: Duration(seconds: 1),
-                      ));
+                    child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+                  )
+                : const SizedBox(height: 0),
+            SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
+            provider.memory.transcriptSegments.isEmpty
+                ? ExpandableTextWidget(
+                    text: (provider.memory.externalIntegration?.text ?? '').decodeSting,
+                    maxLines: 10000,
+                    linkColor: Colors.grey.shade300,
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                    toggleExpand: () {
+                      provider.toggleIsTranscriptExpanded();
                     },
-            ),
-      const SizedBox(height: 32)
-    ];
+                    isExpanded: provider.isTranscriptExpanded,
+                  )
+                : TranscriptWidget(
+                    segments: provider.memory.transcriptSegments,
+                    horizontalMargin: false,
+                    topMargin: false,
+                    canDisplaySeconds: provider.canDisplaySeconds,
+                    isMemoryDetail: true,
+                    editSegment: !provider.memory.isPostprocessing()
+                        ? (i) {
+                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                            if (!connectivityProvider.isConnected) {
+                              ConnectivityProvider.showNoInternetDialog(context);
+                              return;
+                            }
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              isDismissible: provider.editSegmentLoading ? false : true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                              ),
+                              builder: (context) {
+                                return EditSegmentWidget(
+                                  segmentIdx: i,
+                                  people: SharedPreferencesUtil().cachedPeople,
+                                );
+                              },
+                            );
+                          }
+                        : (_) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Memory still processing. Please wait...'),
+                              duration: Duration(seconds: 1),
+                            ));
+                          },
+                  ),
+            const SizedBox(height: 32)
+          ],
+        );
+      },
+    );
   }
 }
 
-class TransccriptWidgets extends StatelessWidget {
-  const TransccriptWidgets({super.key});
+class EditSegmentWidget extends StatelessWidget {
+  final int segmentIdx;
+  final List<Person> people;
+  const EditSegmentWidget({super.key, required this.segmentIdx, required this.people});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-      return ListView(
-        shrinkWrap: true,
-        children: [
-          SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-          provider.memory.isPostprocessing()
-              ? Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
-                    borderRadius: BorderRadius.circular(8),
+      return Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+        ),
+        height: 320,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              child: ListView(
+                children: [
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      children: [
+                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            MixpanelManager().unassignedSegment();
+                            provider.unassignMemoryTranscriptSegment(provider.memory.id, segmentIdx);
+                            // setModalState(() {
+                            //   personId = null;
+                            //   isUserSegment = false;
+                            // });
+                            // setState(() {});
+                            Navigator.pop(context);
+                          },
+                          child: const Text(
+                            'Un-assign',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
-                )
-              : const SizedBox(height: 0),
-          SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-          provider.memory.transcriptSegments.isEmpty
-              ? ExpandableTextWidget(
-                  text: (provider.memory.externalIntegration?.text ?? '').decodeSting,
-                  maxLines: 10000,
-                  linkColor: Colors.grey.shade300,
-                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                  toggleExpand: () {
-                    provider.toggleIsTranscriptExpanded();
-                  },
-                  isExpanded: provider.isTranscriptExpanded,
-                )
-              : TranscriptWidget(
-                  segments: provider.memory.transcriptSegments,
-                  horizontalMargin: false,
-                  topMargin: false,
-                  canDisplaySeconds: provider.canDisplaySeconds,
-                  isMemoryDetail: true,
-                  editSegment: !provider.memory.isPostprocessing()
-                      ? (i) {
-                          // editSegment(i, provider);
+                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  !provider.hasAudioRecording
+                      ? GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  routeToPage(context, const RecordingsStoragePermission());
+                                },
+                                'Can\'t be used for speech training',
+                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                okButtonText: 'View',
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text('Can\'t be used for speech training',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(decoration: TextDecoration.underline)),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    title: const Text('Yours'),
+                    value: provider.memory.transcriptSegments[segmentIdx].isUser,
+                    checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                    onChanged: (bool? value) async {
+                      if (provider.editSegmentLoading) return;
+                      // setModalState(() => loading = true);
+                      provider.toggleEditSegmentLoading(true);
+                      MixpanelManager().assignedSegment('User');
+                      provider.memory.transcriptSegments[segmentIdx].isUser = true;
+                      provider.memory.transcriptSegments[segmentIdx].personId = null;
+                      bool result = await assignMemoryTranscriptSegment(
+                        provider.memory.id,
+                        segmentIdx,
+                        isUser: true,
+                        useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
+                      );
+                      try {
+                        provider.toggleEditSegmentLoading(false);
+                        Navigator.pop(context);
+                        if (SharedPreferencesUtil().hasSpeakerProfile) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result
+                                  ? 'Segment assigned, and speech profile updated!'
+                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                            ),
+                          );
                         }
-                      : (_) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Memory still processing. Please wait...'),
-                            duration: Duration(seconds: 1),
-                          ));
-                        },
-                ),
-          const SizedBox(height: 32)
-        ],
+                      } catch (e) {}
+                    },
+                  ),
+                  for (var person in people)
+                    CheckboxListTile(
+                      title: Text('${person.name}\'s'),
+                      value: provider.memory.transcriptSegments[segmentIdx].personId == person.id,
+                      checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                      onChanged: (bool? value) async {
+                        if (provider.editSegmentLoading) return;
+                        provider.toggleEditSegmentLoading(true);
+                        MixpanelManager().assignedSegment('User Person');
+                        provider.memory.transcriptSegments[segmentIdx].isUser = false;
+                        provider.memory.transcriptSegments[segmentIdx].personId = person.id;
+                        bool result =
+                            await assignMemoryTranscriptSegment(provider.memory.id, segmentIdx, personId: person.id);
+                        // TODO: make this un-closable or in a way that they receive the result
+                        try {
+                          provider.toggleEditSegmentLoading(false);
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result
+                                  ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
+                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                            ),
+                          );
+                        } catch (e) {}
+                      },
+                    ),
+                  ListTile(
+                    title: const Text('Someone else\'s'),
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.add),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      routeToPage(context, const UserPeoplePage());
+                    },
+                  ),
+                ],
+              ),
+            ),
+            if (provider.editSegmentLoading)
+              Container(
+                color: Colors.black.withOpacity(0.3),
+                child: const Center(
+                    child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                )),
+              ),
+          ],
+        ),
       );
     });
   }

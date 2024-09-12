@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -43,6 +42,13 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
 
   bool displayDevToolsInSheet = false;
   bool displayShareOptionsInSheet = false;
+
+  bool editSegmentLoading = false;
+
+  void toggleEditSegmentLoading(bool value) {
+    editSegmentLoading = value;
+    notifyListeners();
+  }
 
   Future populatePhotosData() async {
     if (photos.isEmpty) return;
@@ -124,7 +130,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  Future reprocessMemory() async {
+  Future<bool> reprocessMemory() async {
     debugPrint('_reProcessMemory');
     updateReprocessMemoryLoadingState(true);
     try {
@@ -134,11 +140,13 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       if (updatedMemory == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
+        return false;
       } else {
         updateMemory(updatedMemory, memoryIdx);
         SharedPreferencesUtil().modifiedMemoryDetails = updatedMemory;
         notifyInfo('REPROCESS_SUCCESS');
         notifyListeners();
+        return true;
       }
     } catch (err, stacktrace) {
       print(err);
@@ -150,6 +158,14 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       notifyError('REPROCESS_FAILED');
       updateReprocessMemoryLoadingState(false);
       notifyListeners();
+      return false;
     }
+  }
+
+  void unassignMemoryTranscriptSegment(String memoryId, int segmentIdx) {
+    memory.transcriptSegments[segmentIdx].isUser = false;
+    memory.transcriptSegments[segmentIdx].personId = null;
+    assignMemoryTranscriptSegment(memoryId, segmentIdx);
+    notifyListeners();
   }
 }
