@@ -22,7 +22,7 @@ This guide will walk you through the process of flashing the latest firmware ont
 4. **Check for Recognition:** After pressing the button twice, your computer should recognize a new drive.
 5. **Verify the Drive Name:** Look for a drive named "/Volumes/XIAO-SENSE" on your computer. This indicates that the FRIEND device has successfully entered DFU mode.
 
-   <img src="/images/dfu-dev-kit-reset-button.png" alt="DFU Button Location" width="300"> 
+   <img src="/images/dfu_dev_kit_reset_button.png" alt="DFU Button Location" width="300"> 
    
 
 ## Flashing the Firmware
