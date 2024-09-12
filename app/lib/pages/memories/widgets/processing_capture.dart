@@ -105,11 +105,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           context,
           () => Navigator.pop(context),
           () async {
+            Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
             context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
-            Navigator.pop(context);
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
