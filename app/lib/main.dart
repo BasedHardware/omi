@@ -251,10 +251,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         data.message ?? 'Something went wrong! Please try again later.',
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.share, color: Colors.white),
-                        onPressed: () {},
-                      ),
                     ),
                   );
                 },
@@ -303,7 +299,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;
 
-  CustomErrorWidget({required this.errorMessage});
+  const CustomErrorWidget({super.key, required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {
