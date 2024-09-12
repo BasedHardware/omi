@@ -661,7 +661,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     await initiateFriendAudioStreaming(isFromSpeechProfile);
-    await initiateStorageBytesStreaming();
+    // TODO: Commenting this for now as DevKit 2 is not yet used in production
+    // await initiateStorageBytesStreaming();
 
     setResetStateAlreadyCalled(false);
     notifyListeners();
@@ -736,6 +737,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
+    if (connectedDevice == null) return;
     currentStorageFiles = await getStorageList(connectedDevice!.id);
     debugPrint('Storage files: $currentStorageFiles');
     await sendStorage(connectedDevice!.id);
