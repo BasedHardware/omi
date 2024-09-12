@@ -661,7 +661,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     await initiateFriendAudioStreaming(isFromSpeechProfile);
-    await initiateStorageBytesStreaming();
+    // TODO: Commenting this for now as DevKit 2 is not yet used in production
+    // await initiateStorageBytesStreaming();
 
     setResetStateAlreadyCalled(false);
     notifyListeners();
@@ -736,24 +737,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
+    if (connectedDevice == null) return;
     currentStorageFiles = await getStorageList(connectedDevice!.id);
     debugPrint('Storage files: $currentStorageFiles');
     await sendStorage(connectedDevice!.id);
     notifyListeners();
-  }
-
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments: segments,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
   }
 
   Future<void> startOpenGlass() async {
