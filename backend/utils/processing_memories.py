@@ -55,7 +55,7 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
 
     return (memory, messages, processing_memory)
 
-def update_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> ProcessingMemory:
+def update_basic_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> ProcessingMemory:
     # Fetch new
     processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [update_processing_memory.id])
     if len(processing_memories) == 0:
@@ -63,9 +63,14 @@ def update_processing_memory(uid: str, update_processing_memory: UpdateProcessin
         return
     processing_memory = ProcessingMemory(**processing_memories[0])
 
+    # geolocation
     if update_processing_memory.geolocation:
         processing_memory.geolocation = update_processing_memory.geolocation
+    # emotional feedback
     processing_memory.emotional_feedback = update_processing_memory.emotional_feedback
-    processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
+    # update
+    processing_memories_db.update_basic(uid, processing_memory.id,
+                                        processing_memory.geolocation.dict() if processing_memory.geolocation else None,
+                                        processing_memory.emotional_feedback,)
     return processing_memory
