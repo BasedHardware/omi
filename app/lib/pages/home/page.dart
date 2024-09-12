@@ -436,34 +436,49 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                     return Padding(
                       padding: const EdgeInsets.only(left: 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: DropdownButton<String>(
-                          menuMaxHeight: 350,
-                          value: SharedPreferencesUtil().selectedChatPluginId,
-                          onChanged: (s) async {
-                            if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) ||
-                                s == 'enable') {
-                              await routeToPage(context, const PluginsPage(filterChatOnly: true));
-                              return;
-                            }
-                            print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
-                            if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
-                            SharedPreferencesUtil().selectedChatPluginId = s;
-                            var plugin = provider.plugins.firstWhereOrNull((p) => p.id == s);
-                            chatPageKey.currentState?.sendInitialPluginMessage(plugin);
-                          },
-                          icon: Container(),
-                          alignment: Alignment.center,
-                          dropdownColor: Colors.black,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          underline: Container(height: 0, color: Colors.transparent),
-                          isExpanded: false,
-                          itemHeight: 48,
-                          padding: EdgeInsets.zero,
-                          items: _getPluginsDropdownItems(context, provider),
-                        ),
-                      ),
+                      child: provider.plugins.where((p) => p.enabled).isEmpty
+                          ? GestureDetector(
+                              onTap: () {
+                                Navigator.of(context)
+                                    .push(MaterialPageRoute(builder: (c) => const PluginsPage(filterChatOnly: true)));
+                              },
+                              child: const Row(
+                                children: [
+                                  Icon(size: 20, Icons.chat, color: Colors.white),
+                                  SizedBox(width: 10),
+                                  Text('Enable Plugins',
+                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16)),
+                                ],
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: DropdownButton<String>(
+                                menuMaxHeight: 350,
+                                value: SharedPreferencesUtil().selectedChatPluginId,
+                                onChanged: (s) async {
+                                  if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) ||
+                                      s == 'enable') {
+                                    await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                                    return;
+                                  }
+                                  print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
+                                  if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
+                                  SharedPreferencesUtil().selectedChatPluginId = s;
+                                  var plugin = provider.plugins.firstWhereOrNull((p) => p.id == s);
+                                  chatPageKey.currentState?.sendInitialPluginMessage(plugin);
+                                },
+                                icon: Container(),
+                                alignment: Alignment.center,
+                                dropdownColor: Colors.black,
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                                underline: Container(height: 0, color: Colors.transparent),
+                                isExpanded: false,
+                                itemHeight: 48,
+                                padding: EdgeInsets.zero,
+                                items: _getPluginsDropdownItems(context, provider),
+                              ),
+                            ),
                     );
                   },
                 ),
