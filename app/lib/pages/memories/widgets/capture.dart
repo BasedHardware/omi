@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -7,7 +5,6 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/pages/capture/location_service.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -18,7 +15,6 @@ import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
 class LiteCaptureWidget extends StatefulWidget {
@@ -93,6 +89,42 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     }
     return connection.getAudioCodec();
   }
+  // Future requestLocationPermission() async {
+  //   LocationService locationService = LocationService();
+  //   bool serviceEnabled = await locationService.enableService();
+  //   if (!serviceEnabled) {
+  //     debugPrint('Location service not enabled');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text(
+  //             'Location services are disabled. Enable them for a better experience.',
+  //             style: TextStyle(color: Colors.white, fontSize: 14),
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //   } else {
+  //     PermissionStatus permissionGranted = await locationService.requestPermission();
+  //     SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
+  //     MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+  //     if (permissionGranted == PermissionStatus.denied) {
+  //       debugPrint('Location permission not granted');
+  //     } else if (permissionGranted == PermissionStatus.deniedForever) {
+  //       debugPrint('Location permission denied forever');
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(
+  //             content: Text(
+  //               'If you change your mind, you can enable location services in your device settings.',
+  //               style: TextStyle(color: Colors.white, fontSize: 14),
+  //             ),
+  //           ),
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
