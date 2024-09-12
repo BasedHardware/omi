@@ -122,7 +122,7 @@ class MemoryProvider extends ChangeNotifier {
         memories[i] = memory;
       }
     }
-    filterMemories('');
+    initFilteredMemories();
     notifyListeners();
   }
 
