@@ -16,6 +16,7 @@ import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -182,6 +183,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             create: (context) => SpeechProfileProvider(),
             update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
+          ),
+          ChangeNotifierProxyProvider<PluginProvider, MemoryDetailProvider>(
+            create: (context) => MemoryDetailProvider(),
+            update: (BuildContext context, value, MemoryDetailProvider? previous) =>
+                (previous?..setPluginProvider(value)) ?? MemoryDetailProvider(),
           ),
         ],
         builder: (context, child) {
