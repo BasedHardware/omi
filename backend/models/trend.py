@@ -6,12 +6,21 @@ from pydantic import BaseModel
 
 
 class TrendEnum(str, Enum):
-    health = 'health'
-    finance = 'finance'
-    science = 'science'
-    entrepreneurship = 'entrepreneurship'
-    technology = 'technology'
-    sports = 'sports'
+    technologies = "technologies"
+    ceos = "ceos"
+    events = "events"
+    companies = "companies"
+    startups = "startups"
+    innovations = "innovations"
+    products = "products"
+    acquisitions = "acquisitions"
+    investments = "investments"
+    partnerships = "partnerships"
+    founders = "founders"
+    industry = "industry"
+    regulations = "regulations"
+    research = "research"
+    failures = "failures"
 
 
 class TrendData(BaseModel):
@@ -23,4 +32,3 @@ class Trend(BaseModel):
     id: str
     name: str
     created_at: datetime
-    data: int
