@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
@@ -13,12 +14,10 @@ import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/websocket_provider.dart';
@@ -108,24 +107,24 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
-      if (await LocationService().displayPermissionsDialog()) {
-        await showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () async {
-              await requestLocationPermission();
-              await LocationService().requestBackgroundPermission();
-              if (mounted) Navigator.of(context).pop();
-            },
-            'Enable Location?  🌍',
-            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
-            singleButton: false,
-            okButtonText: 'Continue',
-          ),
-        );
-      }
+      // if (await LocationService().displayPermissionsDialog()) {
+      //   await showDialog(
+      //     context: context,
+      //     builder: (c) => getDialog(
+      //       context,
+      //       () => Navigator.of(context).pop(),
+      //       () async {
+      //         await requestLocationPermission();
+      //         await LocationService().requestBackgroundPermission();
+      //         if (mounted) Navigator.of(context).pop();
+      //       },
+      //       'Enable Location?  🌍',
+      //       'Allow location access to tag your memories. Set to "Always Allow" in Settings',
+      //       singleButton: false,
+      //       okButtonText: 'Continue',
+      //     ),
+      //   );
+      // }
       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
       if (!connectivityProvider.isConnected) {
         context.read<CaptureProvider>().cancelMemoryCreationTimer();
@@ -142,42 +141,42 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
     super.dispose();
   }
 
-  Future requestLocationPermission() async {
-    LocationService locationService = LocationService();
-    bool serviceEnabled = await locationService.enableService();
-    if (!serviceEnabled) {
-      debugPrint('Location service not enabled');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location services are disabled. Enable them for a better experience.',
-              style: TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        );
-      }
-    } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
-      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
-      if (permissionGranted == PermissionStatus.denied) {
-        debugPrint('Location permission not granted');
-      } else if (permissionGranted == PermissionStatus.deniedForever) {
-        debugPrint('Location permission denied forever');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'If you change your mind, you can enable location services in your device settings.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        }
-      }
-    }
-  }
+  // Future requestLocationPermission() async {
+  //   LocationService locationService = LocationService();
+  //   bool serviceEnabled = await locationService.enableService();
+  //   if (!serviceEnabled) {
+  //     debugPrint('Location service not enabled');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text(
+  //             'Location services are disabled. Enable them for a better experience.',
+  //             style: TextStyle(color: Colors.white, fontSize: 14),
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //   } else {
+  // PermissionStatus permissionGranted = await locationService.requestPermission();
+  // SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
+  // MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+  // if (permissionGranted == PermissionStatus.denied) {
+  //   debugPrint('Location permission not granted');
+  // } else if (permissionGranted == PermissionStatus.deniedForever) {
+  //   debugPrint('Location permission denied forever');
+  //   if (mounted) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text(
+  //           'If you change your mind, you can enable location services in your device settings.',
+  //           style: TextStyle(color: Colors.white, fontSize: 14),
+  //         ),
+  //       ),
+  //     );
+  //   }
+  // }
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
