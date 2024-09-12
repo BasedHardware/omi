@@ -63,7 +63,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      await context.read<CaptureProvider>().processCachedTranscript();
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
