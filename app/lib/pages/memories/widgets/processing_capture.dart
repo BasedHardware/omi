@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/capture/connect.dart';
+import 'package:friend_private/pages/capture/location_service.dart';
+import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -11,6 +14,8 @@ import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
