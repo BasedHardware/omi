@@ -63,31 +63,14 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      await context.read<CaptureProvider>().processCachedTranscript();
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopFindDeviceTimer();
       }
-      if (await LocationService().displayPermissionsDialog()) {
-        await showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () async {
-              await requestLocationPermission();
-              await LocationService().requestBackgroundPermission();
-              if (mounted) Navigator.of(context).pop();
-            },
-            'Enable Location?  🌍',
-            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
-            singleButton: false,
-            okButtonText: 'Continue',
-          ),
-        );
-      }
-      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-      if (!connectivityProvider.isConnected) {
-        context.read<CaptureProvider>().cancelMemoryCreationTimer();
+      if (mounted) {
+        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+        if (!connectivityProvider.isConnected) {
+          context.read<CaptureProvider>().cancelMemoryCreationTimer();
+        }
       }
     });
 
@@ -99,43 +82,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     WidgetsBinding.instance.removeObserver(this);
     // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
-  }
-
-  Future requestLocationPermission() async {
-    LocationService locationService = LocationService();
-    bool serviceEnabled = await locationService.enableService();
-    if (!serviceEnabled) {
-      debugPrint('Location service not enabled');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location services are disabled. Enable them for a better experience.',
-              style: TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        );
-      }
-    } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
-      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
-      if (permissionGranted == PermissionStatus.denied) {
-        debugPrint('Location permission not granted');
-      } else if (permissionGranted == PermissionStatus.deniedForever) {
-        debugPrint('Location permission denied forever');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'If you change your mind, you can enable location services in your device settings.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        }
-      }
-    }
   }
 
   @override

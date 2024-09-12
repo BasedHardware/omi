@@ -59,6 +59,42 @@ abstract class DeviceBase {
   }
 
   Future<BleAudioCodec> performGetAudioCodec();
+//storage here
+
+  Future<List<int>> getStorageList() async {
+    if (await isConnected()) {
+      return await performGetStorageList();
+    }
+    _showDeviceDisconnectedNotification();
+    return Future.value(<int>[]);
+  }
+
+  Future<List<int>> performGetStorageList();
+
+  Future<bool> performWriteToStorage(int numFile);
+
+  Future<bool> writeToStorage(int numFile) async {
+ 
+    if (await isConnected()) {
+      return await performWriteToStorage(numFile);
+    } 
+    _showDeviceDisconnectedNotification();
+    return Future.value(false);
+  }
+
+  Future<StreamSubscription?> getBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    if (await isConnected()) {
+      return await performGetBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
+    }
+    _showDeviceDisconnectedNotification();
+    return null;
+  }
+
+  Future<StreamSubscription?> performGetBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  });
 
   Future cameraStartPhotoController() async {
     if (await isConnected()) {

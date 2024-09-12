@@ -93,12 +93,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   _recordingToggled(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
-      if (Platform.isAndroid) {
-        provider.stopStreamRecordingOnAndroid();
-      } else {
-        provider.stopStreamRecording();
-      }
-      provider.updateRecordingState(RecordingState.stop);
+      provider.stopStreamRecording();
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().tryCreateMemoryManually();
     } else if (recordingState == RecordingState.initialising) {
@@ -110,15 +105,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           context,
           () => Navigator.pop(context),
           () async {
+            Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
             context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
-            if (Platform.isAndroid) {
-              await provider.streamRecordingOnAndroid();
-            } else {
-              await provider.startStreamRecording();
-            }
-            Navigator.pop(context);
+            await provider.streamRecording();
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',

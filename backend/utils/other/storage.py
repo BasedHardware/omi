@@ -155,6 +155,11 @@ def upload_postprocessing_audio_bytes(file_path: str, audio_buffer: bytes):
     blob.upload_from_string(audio_buffer)
     return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
 
+def download_postprocessing_audio(file_path: str, destination_file_path: str):
+    bucket = storage_client.bucket(postprocessing_audio_bucket)
+    blob = bucket.blob(file_path)
+    blob.download_to_filename(destination_file_path)
+
 
 # ************************************************
 # ************* MEMORIES RECORDINGS **************
