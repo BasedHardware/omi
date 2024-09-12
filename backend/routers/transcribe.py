@@ -345,21 +345,24 @@ async def _websocket_util(
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced],
                               frame_rate=sample_rate, channels=channels, codec=codec, )
 
-        # Merge new audio with the previous
+        # Try merge new audio with the previous
         if processing_memory.audio_url:
-            previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-            download_postprocessing_audio(processing_memory.audio_url, previous_file_path)
+            try:
+                previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+                download_postprocessing_audio(processing_memory.audio_url, previous_file_path)
 
-            # merge
-            merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-            merge_wav_files(merge_file_path, [previous_file_path, file_path])
+                # merge
+                merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
+                merge_wav_files(merge_file_path, [previous_file_path, file_path])
 
-            # clean
-            os.remove(previous_file_path)
-            os.remove(file_path)
+                # clean
+                os.remove(previous_file_path)
+                os.remove(file_path)
 
-            # new
-            file_path = merge_file_path
+                # new
+                file_path = merge_file_path
+            except Exception as e:
+                print(f"Can not merge wav files {str(e)}")
 
         # Process
         emotional_feedback = processing_memory.emotional_feedback
