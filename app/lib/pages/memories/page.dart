@@ -49,7 +49,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
               if (await LocationService().isServiceEnabled()) {
                 var res = await Geolocator.requestPermission();
                 print('Location permission: $res');
-
                 if (res == LocationPermission.whileInUse) {
                   await Geolocator.openAppSettings();
                 } else if (res != LocationPermission.always && res != LocationPermission.whileInUse) {
@@ -79,43 +78,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
       }
     });
     super.initState();
-  }
-
-  Future requestLocationPermission() async {
-    LocationService locationService = LocationService();
-    bool serviceEnabled = await locationService.enableService();
-    if (!serviceEnabled) {
-      debugPrint('Location service not enabled');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location services are disabled. Enable them for a better experience.',
-              style: TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        );
-      }
-    } else {
-      PermissionStatus permissionGranted = await locationService.requestPermission();
-      SharedPreferencesUtil().locationEnabled = permissionGranted == PermissionStatus.granted;
-      MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
-      if (permissionGranted == PermissionStatus.denied) {
-        debugPrint('Location permission not granted');
-      } else if (permissionGranted == PermissionStatus.deniedForever) {
-        debugPrint('Location permission denied forever');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'If you change your mind, you can enable location services in your device settings.',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          );
-        }
-      }
-    }
   }
 
   @override
