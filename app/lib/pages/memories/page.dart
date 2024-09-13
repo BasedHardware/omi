@@ -42,43 +42,46 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
       // if (mounted) {
       //   Provider.of<MemoryProvider>(context, listen: false).initFilteredMemories();
       // }
-      // if (await LocationService().displayPermissionsDialog()) {
-      await showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.of(context).pop(),
-          () async {
-            await Location().requestService();
-            print('Location permission2: ${await Location().serviceEnabled()}');
-            var res = await Geolocator.requestPermission();
-            print('Location permission: $res');
-            if (res == LocationPermission.whileInUse) {
-              await Geolocator.openAppSettings();
-            } else if (res != LocationPermission.always && res != LocationPermission.whileInUse) {
-              SharedPreferencesUtil().locationEnabled = res == LocationPermission.always;
-              MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
-              debugPrint('Location permission denied forever');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'If you change your mind, you can enable location services in your device settings.',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                );
+      if (await LocationService().displayPermissionsDialog()) {
+        await showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.of(context).pop(),
+            () async {
+              await LocationService().enableService();
+              print('Location permission2: ${await LocationService().isServiceEnabled()}');
+              if (await LocationService().isServiceEnabled()) {
+                var res = await Geolocator.requestPermission();
+                print('Location permission: $res');
+                if (res == LocationPermission.whileInUse) {
+                  await Geolocator.openAppSettings();
+                } else if (res != LocationPermission.always && res != LocationPermission.whileInUse) {
+                  SharedPreferencesUtil().locationEnabled = res == LocationPermission.always;
+                  MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+                  debugPrint('Location permission denied forever');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'If you change your mind, you can change location permission in your device settings.',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      ),
+                    );
+                  }
+                }
               }
-            }
-            if (mounted) Navigator.of(context).pop();
-          },
-          'Enable Location?  🌍',
-          'Allow location access to tag your memories. Set to "Always Allow" in Settings',
-          singleButton: false,
-          okButtonText: 'Continue',
-        ),
-      );
-      // }
+
+              if (mounted) Navigator.of(context).pop();
+            },
+            'Enable Location?  🌍',
+            'Allow location access to tag your memories. Set to "Always Allow" in Settings',
+            singleButton: false,
+            okButtonText: 'Continue',
+          ),
+        );
+      }
     });
     super.initState();
   }
