@@ -6,7 +6,6 @@ import 'package:tuple/tuple.dart';
 
 class PhotosGridComponent extends StatelessWidget {
   final List<Tuple2<String, String>> photos;
-
   const PhotosGridComponent({super.key, required this.photos});
 
   @override
