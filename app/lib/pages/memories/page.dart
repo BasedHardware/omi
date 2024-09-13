@@ -11,7 +11,6 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -39,9 +38,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
       if (Provider.of<MemoryProvider>(context, listen: false).memories.isEmpty) {
         await Provider.of<MemoryProvider>(context, listen: false).getInitialMemories();
       }
-      // if (mounted) {
-      //   Provider.of<MemoryProvider>(context, listen: false).initFilteredMemories();
-      // }
       if (await LocationService().displayPermissionsDialog()) {
         await showDialog(
           context: context,
@@ -50,15 +46,13 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             () => Navigator.of(context).pop(),
             () async {
               await LocationService().enableService();
-              print('Location permission2: ${await LocationService().isServiceEnabled()}');
               if (await LocationService().isServiceEnabled()) {
                 var res = await Geolocator.requestPermission();
                 print('Location permission: $res');
+
                 if (res == LocationPermission.whileInUse) {
                   await Geolocator.openAppSettings();
                 } else if (res != LocationPermission.always && res != LocationPermission.whileInUse) {
-                  SharedPreferencesUtil().locationEnabled = res == LocationPermission.always;
-                  MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
                   debugPrint('Location permission denied forever');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -71,8 +65,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     );
                   }
                 }
+                SharedPreferencesUtil().locationEnabled = res == LocationPermission.always;
+                MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
               }
-
               if (mounted) Navigator.of(context).pop();
             },
             'Enable Location?  🌍',
