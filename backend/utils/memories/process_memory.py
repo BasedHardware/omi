@@ -1,22 +1,23 @@
 import datetime
-from datetime import timezone
 import random
 import threading
 import uuid
+from datetime import timezone
 from typing import Union, Tuple
 
 from fastapi import HTTPException
 
 import database.facts as facts_db
-import database.trends as trends_db
 import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
+import database.trends as trends_db
 from database.vector_db import upsert_vector
 from models.facts import FactDB
 from models.memory import *
 from models.plugin import Plugin
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
+from models.trend import Trend
 from utils.llm import obtain_emotional_message
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
@@ -126,12 +127,9 @@ def _extract_facts(uid: str, memory: Memory):
 
 
 def _extract_trends(memory: Memory):
-    mem_trends = trends_extractor(memory)
-    parsed_trends = []
-    for trend in mem_trends:
-        print(f"extracted_trend: {trend}")
-        parsed_trends.append(trend)        
-    trends_db.save_trends(memory, parsed_trends)
+    extracted_items = trends_extractor(memory)
+    parsed = [Trend(category=item.category, topics=[item.topic]) for item in extracted_items]
+    trends_db.save_trends(memory, parsed)
 
 
 def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
@@ -144,6 +142,7 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
         upsert_vector(uid, memory, vector)
         _trigger_plugins(uid, memory)
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
+        # if not force_process:  # means it's only creating
         threading.Thread(target=_extract_trends, args=(memory,)).start()
 
     memories_db.upsert_memory(uid, memory.dict())

@@ -127,7 +127,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiatePlugins();
-      ForegroundUtil.requestPermissions();
+      // ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
@@ -203,7 +203,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     actions: [
                       TextButton(
                         onPressed: () {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                          if (mounted) {
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                          }
                         },
                         child: const Text('Dismiss'),
                       ),

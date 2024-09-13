@@ -12,6 +12,7 @@ import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/ble/find.dart';
@@ -36,6 +37,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   bool hasBluetoothPermission = false;
   bool hasLocationPermission = false;
   bool hasNotificationPermission = false;
+  bool hasBackgroundPermission = false; // Android only
 
   Future updatePermissions() async {
     hasBluetoothPermission = await Permission.bluetooth.isGranted;
@@ -62,6 +64,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     hasNotificationPermission = value;
     SharedPreferencesUtil().notificationsEnabled = value;
     MixpanelManager().setUserProperty('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+    notifyListeners();
+  }
+
+  void updateBackgroundPermission(bool value) {
+    hasBackgroundPermission = value;
+    MixpanelManager().setUserProperty('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
 
@@ -96,6 +104,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   Future askForNotificationPermissions() async {
     var isAllowed = await NotificationService.instance.requestNotificationPermissions();
     updateNotificationPermission(isAllowed);
+    notifyListeners();
+  }
+
+  Future askForBackgroundPermissions() async {
+    await ForegroundUtil.requestPermissions();
+    var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
+    updateBackgroundPermission(isAllowed);
     notifyListeners();
   }
   //----------------- Onboarding Permissions -----------------
