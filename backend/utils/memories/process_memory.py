@@ -129,8 +129,7 @@ def _extract_trends(memory: Memory):
     mem_trends = trends_extractor(memory)
     parsed_trends = []
     for trend in mem_trends:
-        print(f"extracted_trend: {trend}")
-        parsed_trends.append(trend)        
+        parsed_trends.append(trend)
     trends_db.save_trends(memory, parsed_trends)
 
 
