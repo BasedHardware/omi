@@ -16,6 +16,7 @@ import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -150,60 +151,119 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ListenableProvider(create: (context) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-        ChangeNotifierProvider(create: (context) => MemoryProvider()),
-        ListenableProvider(create: (context) => PluginProvider()),
-        ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
-          create: (context) => MessageProvider(),
-          update: (BuildContext context, value, MessageProvider? previous) =>
-              (previous?..updatePluginProvider(value)) ?? MessageProvider(),
-        ),
-        ChangeNotifierProvider(create: (context) => WebSocketProvider()),
-        ChangeNotifierProxyProvider3<MemoryProvider, MessageProvider, WebSocketProvider, CaptureProvider>(
-          create: (context) => CaptureProvider(),
-          update: (BuildContext context, memory, message, wsProvider, CaptureProvider? previous) =>
-              (previous?..updateProviderInstances(memory, message, wsProvider)) ?? CaptureProvider(),
-        ),
-        ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
-          create: (context) => DeviceProvider(),
-          update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider, wsProvider)) ?? DeviceProvider(),
-        ),
-        ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
-          create: (context) => OnboardingProvider(),
-          update: (BuildContext context, value, OnboardingProvider? previous) =>
-              (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
-        ),
-        ListenableProvider(create: (context) => HomeProvider()),
-        ChangeNotifierProxyProvider3<DeviceProvider, CaptureProvider, WebSocketProvider, SpeechProfileProvider>(
-          create: (context) => SpeechProfileProvider(),
-          update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
-              (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
-        ),
-      ],
-      builder: (context, child) {
-        return WithForegroundTask(
-          child: MaterialApp(
-            navigatorObservers: [
-              if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
-            ],
-            debugShowCheckedModeBanner: F.env == Environment.dev,
-            title: F.title,
-            navigatorKey: MyApp.navigatorKey,
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: const [Locale('en')],
-            theme: ThemeData(
-                useMaterial3: false,
-                colorScheme: const ColorScheme.dark(
-                  primary: Colors.black,
-                  secondary: Colors.deepPurple,
-                  surface: Colors.black38,
+        providers: [
+          ListenableProvider(create: (context) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
+          ChangeNotifierProvider(create: (context) => MemoryProvider()),
+          ListenableProvider(create: (context) => PluginProvider()),
+          ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
+            create: (context) => MessageProvider(),
+            update: (BuildContext context, value, MessageProvider? previous) =>
+                (previous?..updatePluginProvider(value)) ?? MessageProvider(),
+          ),
+          ChangeNotifierProvider(create: (context) => WebSocketProvider()),
+          ChangeNotifierProxyProvider3<MemoryProvider, MessageProvider, WebSocketProvider, CaptureProvider>(
+            create: (context) => CaptureProvider(),
+            update: (BuildContext context, memory, message, wsProvider, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(memory, message, wsProvider)) ?? CaptureProvider(),
+          ),
+          ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
+            create: (context) => DeviceProvider(),
+            update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
+                (previous?..setProviders(captureProvider, wsProvider)) ?? DeviceProvider(),
+          ),
+          ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
+            create: (context) => OnboardingProvider(),
+            update: (BuildContext context, value, OnboardingProvider? previous) =>
+                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+          ),
+          ListenableProvider(create: (context) => HomeProvider()),
+          ChangeNotifierProxyProvider3<DeviceProvider, CaptureProvider, WebSocketProvider, SpeechProfileProvider>(
+            create: (context) => SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
+          ),
+          ChangeNotifierProxyProvider<PluginProvider, MemoryDetailProvider>(
+            create: (context) => MemoryDetailProvider(),
+            update: (BuildContext context, value, MemoryDetailProvider? previous) =>
+                (previous?..setPluginProvider(value)) ?? MemoryDetailProvider(),
+          ),
+        ],
+        builder: (context, child) {
+          return WithForegroundTask(
+            child: MaterialApp(
+              navigatorObservers: [
+                if (Env.instabugApiKey != null) InstabugNavigatorObserver(),
+              ],
+              debugShowCheckedModeBanner: F.env == Environment.dev,
+              title: F.title,
+              navigatorKey: MyApp.navigatorKey,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [Locale('en')],
+              theme: ThemeData(
+                  useMaterial3: false,
+                  colorScheme: const ColorScheme.dark(
+                    primary: Colors.black,
+                    secondary: Colors.deepPurple,
+                    surface: Colors.black38,
+                  ),
+                  snackBarTheme: SnackBarThemeData(
+                    backgroundColor: Colors.grey.shade900,
+                    contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+                  ),
+                  textTheme: TextTheme(
+                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+                  ),
+                  textSelectionTheme: const TextSelectionThemeData(
+                    cursorColor: Colors.white,
+                    selectionColor: Colors.deepPurple,
+                  )),
+              themeMode: ThemeMode.dark,
+              builder: (context, child) {
+                FlutterError.onError = (FlutterErrorDetails details) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    Logger.instance.talker.handle(details.exception, details.stack);
+                  });
+                };
+                ErrorWidget.builder = (errorDetails) {
+                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                };
+                return child!;
+              },
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: TalkerWrapperOptions(
+                  enableErrorAlerts: true,
+                  enableExceptionAlerts: true,
+                  exceptionAlertBuilder: (context, data) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(0),
+                        leading: const Icon(Icons.error_outline, color: Colors.white),
+                        title: Text(
+                          data.message ?? 'Something went wrong! Please try again later.',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.share, color: Colors.white),
+                          onPressed: () {},
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 snackBarTheme: SnackBarThemeData(
                   backgroundColor: Colors.grey.shade900,
