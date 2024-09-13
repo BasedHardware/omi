@@ -247,10 +247,6 @@ class TopicsContext(BaseModel):
     topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
 
 
-class TrendsContext(BaseModel):
-    trends: List[TrendEnum] = Field(default=[], description="List of trends.")
-
-
 class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
@@ -483,9 +479,11 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
 # **********************************
 
 
-def trends_extractor(memory: Memory) -> List[str]:
-    print("llm.trends_extractor()")
+class TrendsContext(BaseModel):
+    trends: List[Trend] = Field(default=[], description="List of trends.")
 
+
+def trends_extractor(memory: Memory) -> List[str]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
@@ -493,13 +491,13 @@ def trends_extractor(memory: Memory) -> List[str]:
     prompt = f'''
     Based on the current transcript of a conversation.
 
-    Your task is to extract the correct and most accurate trends in the conversation, to be used to retrieve more information. Classify the identified trends within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
-    Provide a list of trends identified from the current context of the conversation about, in order to understand what topics the user was talking about.
+    Your task is to extract the tpics in the conversation and classify the identified topics within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    Then, extract the specific subjects, things, people, companies, etc. that are being talked about in the conversation according to each identified topic. Limit each finding to one keyword, name, topic, etc. that encompasses the whole topic
+    Provide a list of lists where each sub-list contains only two elements being one of them the specific identified topic and the other one its corresponding category from the current context of the conversation, to understand the details the user was talking about.
 
     Conversation:
     {transcript}
     '''.replace('    ', '').strip()
-
     try:
         with_parser = llm.with_structured_output(TrendsContext)
         response: TrendsContext = with_parser.invoke(prompt)
