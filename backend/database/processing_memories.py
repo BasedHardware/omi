@@ -1,4 +1,6 @@
 from ._client import db
+from google.cloud import firestore
+from typing import List
 
 
 def upsert_processing_memory(uid: str, processing_memory_data: dict):
@@ -29,3 +31,34 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
         if doc.exists:
             memories.append(doc.to_dict())
     return memories
+
+def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({'transcript_segments': segments})
+
+def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({
+        'emotional_feedback': emotional_feedback,
+        'geolocation':geolocation,
+    })
+
+def update_audio_url(uid: str, id: str, audio_url: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({
+        'audio_url': audio_url,
+    })
+
+def get_last(uid: str):
+    processing_memories_ref = (
+        db.collection('users').document(uid).collection('processing_memories')
+    )
+    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    processing_memories_ref = processing_memories_ref.limit(1)
+    docs = [doc.to_dict() for doc in processing_memories_ref.stream()]
+    if len(docs) > 0:
+        return docs[0]
+    return None
