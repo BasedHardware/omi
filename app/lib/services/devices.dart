@@ -68,46 +68,7 @@ class DeviceService implements IDeviceService {
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = FlutterBluePlus.scanResults.listen(
       (results) async {
-        _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
-        _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
-
-        // Set devices
-        _devices = _bleDevices.map<BTDeviceStruct>((deviceResult) {
-          DeviceType? deviceType;
-          if (deviceResult.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
-            deviceType = DeviceType.friend;
-          } else if (deviceResult.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
-            deviceType = DeviceType.frame;
-          }
-          if (deviceType != null) {
-            deviceTypeMap[deviceResult.device.remoteId.toString()] = deviceType;
-          } else if (deviceTypeMap.containsKey(deviceResult.device.remoteId.toString())) {
-            deviceType = deviceTypeMap[deviceResult.device.remoteId.toString()];
-          }
-          return BTDeviceStruct(
-            name: deviceResult.device.platformName,
-            id: deviceResult.device.remoteId.str,
-            rssi: deviceResult.rssi,
-            type: deviceType,
-          );
-        }).toList();
-        onDevices(devices);
-
-        // Check desirable device
-        if (_desirableDeviceId != null) {
-          for (var device in devices) {
-            // next
-            if (device.id != _desirableDeviceId) {
-              continue;
-            }
-
-            onDesirableDevice(device);
-            break;
-          }
-
-          // Connect automatically
-          await _connectToDevice(_desirableDeviceId!);
-        }
+        await _onBleDiscovered(results);
       },
       onError: (e) {
         debugPrint('bleFindDevices error: $e');
@@ -122,6 +83,49 @@ class DeviceService implements IDeviceService {
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
+  }
+
+  Future<void> _onBleDiscovered(List<ScanResult> results) async {
+    _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
+    _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
+
+    // Set devices
+    _devices = _bleDevices.map<BTDeviceStruct>((deviceResult) {
+      DeviceType? deviceType;
+      if (deviceResult.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
+        deviceType = DeviceType.friend;
+      } else if (deviceResult.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
+        deviceType = DeviceType.frame;
+      }
+      if (deviceType != null) {
+        deviceTypeMap[deviceResult.device.remoteId.toString()] = deviceType;
+      } else if (deviceTypeMap.containsKey(deviceResult.device.remoteId.toString())) {
+        deviceType = deviceTypeMap[deviceResult.device.remoteId.toString()];
+      }
+      return BTDeviceStruct(
+        name: deviceResult.device.platformName,
+        id: deviceResult.device.remoteId.str,
+        rssi: deviceResult.rssi,
+        type: deviceType,
+      );
+    }).toList();
+    onDevices(devices);
+
+    // Check desirable device
+    if (_desirableDeviceId != null) {
+      for (var device in devices) {
+        // next
+        if (device.id != _desirableDeviceId) {
+          continue;
+        }
+
+        onDesirableDevice(device);
+        break;
+      }
+
+      // Connect automatically
+      await _connectToDevice(_desirableDeviceId!);
+    }
   }
 
   Future<void> _connectToDevice(String id) async {
