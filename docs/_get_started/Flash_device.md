@@ -26,15 +26,13 @@ This guide will walk you through the process of flashing the latest firmware ont
 
 ## Flashing the Firmware
 
-### **UPDATE | OTA Bootloader needs to be booted first, then DFU mode, then firmware**
-
 1. Locate the `.uf2` files you downloaded earlier.
 2. Drag and drop the bootloader `.uf2` file onto the `/Volumes/XIAO-SENSE` drive:
-   - **Bootloader:** `/devices/Friend/firmware/bootloader/bootloader0.9.0.uf2`
+   - **Bootloader:** [bootloader0.9.0.uf2](https://github.com/BasedHardware/Omi/devices/Friend/firmware/bootloader/bootloader0.9.0.uf2)
 3. The device will automatically eject itself once the bootloader flashing process is complete.
 4. After the device forcibly ejects, set the FRIEND device back into DFU mode by double-tapping the reset button.
 5. Drag and drop the FRIEND firmware file onto the `/Volumes/XIAO-SENSE` drive:
-   - **Firmware:** `/devices/Friend/firmware/firmware1.0.4.uf2`
+   - **Firmware:** [firmware1.0.4.uf2](https://github.com/BasedHardware/Omi/devices/Friend/firmware/firmware1.0.4.uf2)
 
 ## Congratulations!
 
