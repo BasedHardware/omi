@@ -1,8 +1,9 @@
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/logger.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // TODO: handle this cases
 // - Process reminders during the transcription? if they include smth like "Hey Friend..."
@@ -22,89 +23,48 @@ class CalendarUtil {
     _calendarPlugin = DeviceCalendarPlugin();
   }
 
-  Future<bool> enableCalendarAccess() async {
-    print('enableCalendarAccess');
+  Future<bool> checkCalendarPermission() async {
     try {
-      var permissionsGranted = await _calendarPlugin!.hasPermissions();
-      print('permissionsGranted: ${permissionsGranted.data}');
-
-      if (permissionsGranted.isSuccess && (permissionsGranted.data == null || permissionsGranted.data == false)) {
-        permissionsGranted = await _calendarPlugin!.requestPermissions();
-        print('permissionsGranted after request: ${permissionsGranted.data}');
+      var status = await Permission.calendarFullAccess.status;
+      if (status.isGranted) {
+        return true;
+      } else if (status.isDenied || status.isPermanentlyDenied) {
+        return false;
       }
-
-      bool hasAccess = permissionsGranted.isSuccess && permissionsGranted.data == true;
-      print('enableCalendarAccess: $hasAccess');
-      return hasAccess;
-    } on PlatformException catch (e) {
-      print('PlatformException in enableCalendarAccess: ${e.message}');
       return false;
-    }
-  }
-
-  Future<bool> hasCalendarAccess() async {
-    print('hasCalendarAccess');
-    try {
-      final permissionsGranted = await _calendarPlugin!.hasPermissions();
-      return permissionsGranted.isSuccess && permissionsGranted.data == true;
-    } on PlatformException catch (e) {
-      print('PlatformException in hasCalendarAccess: ${e.message}');
-      return false;
-    }
-  }
-
-  Future<bool> calendarPermissionAsked() async {
-    try {
-      final permissionsGranted = await _calendarPlugin!.hasPermissions();
-      return permissionsGranted.isSuccess;
-    } on PlatformException catch (e) {
-      print('PlatformException in calendarPermissionAsked: ${e.message}');
-      return false;
-    }
-  }
-
-  Future<List<Calendar>> getCalendars() async {
-    print('getCalendars');
-    try {
-      bool hasAccess = await enableCalendarAccess();
-      if (!hasAccess) return [];
-      print('getCalendars $hasAccess');
-      final calendarsResult = await _calendarPlugin!.retrieveCalendars();
-      print('calendarsResult: ${calendarsResult.data}');
-      if (calendarsResult.isSuccess && calendarsResult.data != null) {
-        return calendarsResult.data!;
-      }
-    } on PlatformException catch (e) {
-      print('PlatformException in getCalendars: ${e.message}');
-      if (e.code == '401') {
-        // Try to request permissions again
-        var permissionsGranted = await _calendarPlugin!.requestPermissions();
-        if (permissionsGranted.isSuccess && permissionsGranted.data == true) {
-          // If permissions are granted, try to retrieve calendars again
-          return await getCalendars();
-        } else {
-          print('Calendar modification permission denied even after re-requesting');
-          return [];
-        }
-      }
     } catch (e) {
-      print('Failed to get calendars: $e');
+      Logger.error('Error in checkCalendarPermission: $e');
+      return false;
     }
-    return [];
+  }
+
+  Future<List<Calendar>> fetchCalendars() async {
+    await _calendarPlugin!.requestPermissions();
+    final calendarsResult = await _calendarPlugin!.retrieveCalendars();
+    Logger.log('calendarsResult: ${calendarsResult.data}');
+    if (calendarsResult.isSuccess && calendarsResult.data != null) {
+      return calendarsResult.data!;
+    } else {
+      return [];
+    }
   }
 
   Future<bool> createEvent(String title, DateTime startsAt, int durationMinutes, {String? description}) async {
-    bool hasAccess = await enableCalendarAccess();
+    bool hasAccess = await checkCalendarPermission();
     if (!hasAccess) return false;
     final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
     var currentLocation = timeZoneDatabase.locations[currentTimeZone];
     String calendarId = SharedPreferencesUtil().calendarId;
 
     TZDateTime eventStart = currentLocation == null
-        ? TZDateTime.local(startsAt.year, startsAt.month, startsAt.day, startsAt.hour, startsAt.minute)
-        : TZDateTime.from(startsAt, currentLocation);
+        ? TZDateTime.utc(startsAt.year, startsAt.month, startsAt.day, startsAt.hour, startsAt.minute).toLocal()
+        : TZDateTime.from(startsAt, currentLocation).toLocal();
 
     TZDateTime eventEnd = eventStart.add(Duration(minutes: durationMinutes));
+
+    Duration utcOffset = DateTime.now().timeZoneOffset;
+    eventStart = eventStart.subtract(utcOffset);
+    eventEnd = eventEnd.subtract(utcOffset);
 
     var event = Event(
       calendarId,
