@@ -480,7 +480,7 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
 
 
 class TrendsContext(BaseModel):
-    trends: List[List[str]] = Field(default=[], description="List of trends.")
+    trends: List[Trend] = Field(default=[], description="List of trends.")
 
 
 def trends_extractor(memory: Memory) -> List[str]:
@@ -491,9 +491,8 @@ def trends_extractor(memory: Memory) -> List[str]:
     prompt = f'''
     Based on the current transcript of a conversation.
 
-    Your task is to extract the correct and most accurate topics in the conversation, to be used to retrieve more information.
-    Classify the identified topics within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
-    Then, extract the specific thing, person, company, etc. that's being talked about in the conversation according to each identified topic. Limit this finding to one keyword, name, topic, etc.
+    Your task is to extract the tpics in the conversation and classify the identified topics within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    Then, extract the specific subjects, things, people, companies, etc. that are being talked about in the conversation according to each identified topic. Limit each finding to one keyword, name, topic, etc. that encompasses the whole topic
     Provide a list of lists where each sub-list contains only two elements being one of them the specific identified topic and the other one its corresponding category from the current context of the conversation, to understand the details the user was talking about.
 
     Conversation:
