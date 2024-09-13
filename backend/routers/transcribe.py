@@ -180,11 +180,12 @@ async def _websocket_util(
     duration = 0
     try:
         if language == 'en' and codec == 'opus' and include_speech_profile:
+            second_per_frame: float = 0.01
             speech_profile = get_user_speech_profile(uid)
-            duration = get_user_speech_profile_duration(uid)
+            duration = len(speech_profile) * second_per_frame
             print('speech_profile', len(speech_profile), duration)
             if duration:
-                duration *= 2
+                duration += 10
         else:
             speech_profile, duration = [], 0
 
