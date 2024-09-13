@@ -265,62 +265,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     );
                   },
                 ),
-                snackBarTheme: SnackBarThemeData(
-                  backgroundColor: Colors.grey.shade900,
-                  contentTextStyle: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-                ),
-                textTheme: TextTheme(
-                  titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                  titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                  bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                  labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-                ),
-                textSelectionTheme: const TextSelectionThemeData(
-                  cursorColor: Colors.white,
-                  selectionColor: Colors.deepPurple,
-                )),
-            themeMode: ThemeMode.dark,
-            builder: (context, child) {
-              FlutterError.onError = (FlutterErrorDetails details) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  Logger.instance.talker.handle(details.exception, details.stack);
-                });
-              };
-              ErrorWidget.builder = (errorDetails) {
-                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-              };
-              return child!;
-            },
-            home: TalkerWrapper(
-              talker: Logger.instance.talker,
-              options: TalkerWrapperOptions(
-                enableErrorAlerts: true,
-                enableExceptionAlerts: true,
-                exceptionAlertBuilder: (context, data) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(0),
-                      leading: const Icon(Icons.error_outline, color: Colors.white),
-                      title: Text(
-                        data.message ?? 'Something went wrong! Please try again later.',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  );
-                },
+                child: const DeciderWidget(),
               ),
-              child: const DeciderWidget(),
             ),
-          ),
-        );
-      },
-    );
+          );
+        });
   }
 }
 
@@ -359,7 +308,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;
 
-  const CustomErrorWidget({super.key, required this.errorMessage});
+  CustomErrorWidget({required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {
