@@ -12,7 +12,7 @@ from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
-from models.trend import TrendEnum, Trend
+from models.trend import TrendEnum
 from utils.memories.facts import get_prompt_facts
 
 llm = ChatOpenAI(model='gpt-4o')
@@ -247,10 +247,6 @@ class TopicsContext(BaseModel):
     topics: List[CategoryEnum] = Field(default=[], description="List of topics.")
 
 
-class TrendsContext(BaseModel):
-    trends: List[TrendEnum] = Field(default=[], description="List of trends.")
-
-
 class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
@@ -483,27 +479,41 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
 # **********************************
 
 
-def trends_extractor(memory: Memory) -> List[str]:
-    print("llm.trends_extractor()")
+class Item(BaseModel):
+    category: TrendEnum = Field(description="The category identified")
+    topic: str = Field(description="The specific topic corresponding the category")
 
+
+class ExpectedOutput(BaseModel):
+    items: List[Item] = Field(default=[], description="List of items.")
+
+
+def trends_extractor(memory: Memory) -> List[Item]:
     transcript = memory.get_transcript(False)
     if len(transcript) == 0:
         return []
 
     prompt = f'''
-    Based on the current transcript of a conversation.
-
-    Your task is to extract the correct and most accurate trends in the conversation, to be used to retrieve more information. Classify the identified trends within the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
-    Provide a list of trends identified from the current context of the conversation about, in order to understand what topics the user was talking about.
-
+    You will be given a finished conversation transcript.
+    You are responsible for extracting the topics of the conversation and classifying each one within one the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    
+    Each topic must be a person, company, event, technology, product, research, innovation, acquisition, partnership, investment, founder, CEO, industry, or any other relevant topic.
+    It can't be a non-specific topic like "the weather" or "the economy".
+    
+    For example,
+    
+    If you identify the topic "Tesla", you should classify it as "company".
+    If you identify the topic "Elon Musk", you should classify it as "ceo".
+    If you identify the topic "Dreamforce", you should classify it as "event".
+    If you identify the topic "GPT O1", you should classify it as "tool".
+    
     Conversation:
     {transcript}
     '''.replace('    ', '').strip()
-
     try:
-        with_parser = llm.with_structured_output(TrendsContext)
-        response: TrendsContext = with_parser.invoke(prompt)
-        return response.trends
+        with_parser = llm.with_structured_output(ExpectedOutput)
+        response: ExpectedOutput = with_parser.invoke(prompt)
+        return response.items
     except Exception as e:
         print(f'Error determining memory discard: {e}')
         return []
