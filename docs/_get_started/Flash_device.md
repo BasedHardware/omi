@@ -3,6 +3,8 @@ layout: default
 title: Flashing FRIEND Firmware
 nav_order: 3
 ---
+# Video Tutorial
+For a visual walkthrough of the flashing process, watch the [Updating Your FRIEND](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/docs/images/updating_your_friend.mov) video.
 
 # Flashing FRIEND Firmware
 
@@ -42,3 +44,5 @@ You have successfully flashed the latest firmware onto your FRIEND device. You c
 - **Apple App Store:** [Download the FRIEND app from the App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163).
 
 Once you've installed the app, follow the in-app instructions to connect your FRIEND device and start exploring its features.
+
+i just added this video to the repo docs/images/updating_your_friend.mov add it to this
