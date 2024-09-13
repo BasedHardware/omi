@@ -2,16 +2,22 @@ from datetime import datetime
 from enum import Enum
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TrendEnum(str, Enum):
-    health = 'health'
-    finance = 'finance'
-    science = 'science'
-    entrepreneurship = 'entrepreneurship'
-    technology = 'technology'
-    sports = 'sports'
+    acquisitions = "acquisitions"
+    ceos = "ceos"
+    companies = "companies"
+    events = "events"
+    founders = "founders"
+    industries = "industries"
+    innovations = "innovations"
+    investments = "investments"
+    partnerships = "partnerships"
+    products = "products"
+    research = "research"
+    technologies = "technologies"
 
 
 class TrendData(BaseModel):
@@ -20,7 +26,6 @@ class TrendData(BaseModel):
 
 
 class Trend(BaseModel):
-    id: str
-    name: str
-    created_at: datetime
-    data: int
+    category: TrendEnum = Field(description="The category of the trend")
+    topics: List[str] = Field(
+        description="List of the topics for the corresponding category")
