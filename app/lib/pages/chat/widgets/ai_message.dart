@@ -172,7 +172,7 @@ class _AIMessageState extends State<AIMessage> {
                           children: [
                             Expanded(
                               child: Text(
-                                '${utf8.decode(data.$2.structured.emoji.codeUnits)} ${data.$2.structured.title}',
+                                '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -199,6 +199,14 @@ class _AIMessageState extends State<AIMessage> {
         ),
       ],
     );
+  }
+
+  String tryDecodeText(String text) {
+    try {
+      return utf8.decode(text.codeUnits);
+    } catch (e) {
+      return text;
+    }
   }
 
   _getCopyButton(BuildContext context) {
