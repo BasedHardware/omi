@@ -6,7 +6,7 @@ nav_order: 3
 # Video Tutorial
 For a visual walkthrough of the flashing process, watch the [Updating Your FRIEND](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/docs/images/updating_your_friend.mov) video.
 
-# Flashing FRIEND Firmware
+# Flashing FRIEND Firmware`   
 
 {: .note }
 This guide will walk you through the process of flashing the latest firmware onto your FRIEND device.
