@@ -203,7 +203,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     actions: [
                       TextButton(
                         onPressed: () {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                          if (mounted) {
+                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                          }
                         },
                         child: const Text('Dismiss'),
                       ),
