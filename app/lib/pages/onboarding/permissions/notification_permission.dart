@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -22,6 +24,27 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
+            Platform.isAndroid
+                ? CheckboxListTile(
+                    value: provider.hasBackgroundPermission,
+                    onChanged: (s) async {
+                      if (s != null) {
+                        if (s) {
+                          await provider.askForBackgroundPermissions();
+                        } else {
+                          provider.updateBackgroundPermission(false);
+                        }
+                      }
+                    },
+                    title: const Text(
+                      'Allow Omi to run in the background to improve stability',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    contentPadding: const EdgeInsets.only(left: 8),
+                    // controlAffinity: ListTileControlAffinity.leading,
+                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  )
+                : const SizedBox.shrink(),
             CheckboxListTile(
               value: provider.hasNotificationPermission,
               onChanged: (s) async {
@@ -62,24 +85,46 @@ class _NotificationPermissionWidgetState extends State<NotificationPermissionWid
                     child: MaterialButton(
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       onPressed: () {
-                        if (provider.hasNotificationPermission) {
-                          widget.goNext();
+                        if (Platform.isAndroid) {
+                          if (provider.hasNotificationPermission && provider.hasBackgroundPermission) {
+                            widget.goNext();
+                          } else {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () {
+                                  Navigator.of(context).pop();
+                                },
+                                () {
+                                  Navigator.of(context).pop();
+                                },
+                                'Allow Permissions',
+                                'This app needs notification and background permissions to improve your experience.',
+                                singleButton: true,
+                              ),
+                            );
+                          }
                         } else {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () {
-                                Navigator.of(context).pop();
-                              },
-                              () {
-                                Navigator.of(context).pop();
-                              },
-                              'Allow Notifications',
-                              'This app needs notification permissions to improve your experience.',
-                              singleButton: true,
-                            ),
-                          );
+                          if (provider.hasNotificationPermission) {
+                            widget.goNext();
+                          } else {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () {
+                                  Navigator.of(context).pop();
+                                },
+                                () {
+                                  Navigator.of(context).pop();
+                                },
+                                'Allow Notifications',
+                                'This app needs notification permissions to improve your experience.',
+                                singleButton: true,
+                              ),
+                            );
+                          }
                         }
                       },
                       child: const Text(
