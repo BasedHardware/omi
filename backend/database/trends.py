@@ -4,12 +4,13 @@ from typing import Dict, List
 from google.api_core.retry import Retry
 from google.cloud.firestore_v1 import FieldFilter
 from models.memory import Memory
+from models.trend import Trend
 
 from ._client import db, document_id_from_seed
 
 
 def get_trends_data() -> Dict[str, List[Dict]]:
-    trends_ref = db.collection('trends') # db ref
+    trends_ref = db.collection('trends')
     trends_docs = [doc for doc in trends_ref.stream(retry=Retry())]
     trends_data = {}
     for category in trends_docs:
@@ -21,35 +22,29 @@ def get_trends_data() -> Dict[str, List[Dict]]:
             td = topic.to_dict()
             count = topic.reference.collection('data').count().get()[0][0].value
             trends_data[cd['category']].append({
-				"topic": td['topic'],
-				"count": count,
-			})
-    print(f"trends_data pre: {trends_data}")
+                "topic": td['topic'],
+                "count": count,
+            })
     for k in trends_data.keys():
         trends_data[k] = sorted(trends_data[k], key=lambda e: e['count'], reverse=True)
-    print(f"trends_data post: {trends_data}")
     return trends_data
 
 
-def save_trends(memory: Memory, trends: List[str]):
-    mapped_trends = {trend[1]: {t[0]
-                                for t in trends if t[1] == trend[1]} for trend in trends}
-    print(f"trends.py -- mapped_trends: {mapped_trends}")
+def save_trends(memory: Memory, trends: List[Trend]):
+    mapped_trends = {trend.category.value: trend.topics for trend in trends}
     topic_data = {
         'date': memory.created_at,
         'memory_id': memory.id
     }
-    print(f"trend_data: {topic_data}")
+    print(f"topic_data: {topic_data}")
     trends_coll_ref = db.collection('trends')
-    for trend in trends:
-        topic, category = tuple(trend)
-        print(f"trends.py -- topic: {topic}, category: {category}")
+    for category, topics in mapped_trends.items():
+        print(f"trends.py -- category: {category}")
         category_ref = trends_coll_ref.where(
             filter=FieldFilter('category', '>=', category)).where(
             filter=FieldFilter('category', '<=', str(category + '\uf8ff'))).get()
         if len(category_ref) == 0:
             category_id = document_id_from_seed(category)
-            print(f"trends.py -- category_id: {category_id}")
             trends_coll_ref.document(category_id).set({
                 "id": category_id,
                 "category": category,
@@ -57,15 +52,20 @@ def save_trends(memory: Memory, trends: List[str]):
             })
             category_ref = trends_coll_ref.where(
                 filter=FieldFilter('category', '==', category)).get()
-        topic_id = document_id_from_seed(topic)
-        print(f"trends.py -- topic_id: {topic_id}")
-        print(f"trends.py -- category_ref: {category_ref}")
-        if len(category_ref) > 0:
+        for topic in topics:
+            print(f"trends.py -- topic: {topic}")
             topic_ref = category_ref[0].reference.collection(
-                'topics').document(topic_id)
-            topic_ref.set({
-                "id": topic_id,
-                "topic": topic
-            })
-            topic_ref.collection('data').document(
+                'topics').where(
+                filter=FieldFilter('topic', '>=', topic)).where(
+                filter=FieldFilter('topic', '<=', str(topic + '\uf8ff'))).get()
+            if len(topic_ref) == 0:
+                topic_id = document_id_from_seed(topic)
+                category_ref[0].reference.collection('topics').document(document_id_from_seed(topic)).set({
+                    "id": topic_id,
+                    "topic": topic
+                })
+                topic_ref = category_ref[0].reference.collection(
+                    'topics').where(
+                    filter=FieldFilter('id', '==', topic_id)).get()
+            topic_ref[0].reference.collection('data').document(
                 document_id_from_seed(memory.id)).set(topic_data)
