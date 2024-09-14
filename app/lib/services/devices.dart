@@ -53,7 +53,7 @@ class DeviceService implements IDeviceService {
     String? desirableDeviceId,
     int timeout = 5,
   }) async {
-    debugPrint("discovering...");
+    debugPrint("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
       throw Exception("Device service is not ready, may busying or stop");
     }
@@ -63,13 +63,13 @@ class DeviceService implements IDeviceService {
     }
 
     if (FlutterBluePlus.isScanningNow) {
-      throw Exception("Device service is scanning");
+      debugPrint("Device service is scanning...");
+      return;
     }
 
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = FlutterBluePlus.scanResults.listen(
       (results) async {
-        debugPrint("discovering...results...");
         await _onBleDiscovered(results, desirableDeviceId);
       },
       onError: (e) {
@@ -85,8 +85,6 @@ class DeviceService implements IDeviceService {
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
-
-    debugPrint("discovering...done...");
   }
 
   Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
@@ -136,7 +134,7 @@ class DeviceService implements IDeviceService {
 
     // Check exist ble device connection, force disconnect
     if (bleDevice.device.isConnected) {
-      bleDevice.device.disconnect();
+      await bleDevice.device.disconnect();
     }
 
     // Then create new connection
@@ -147,8 +145,8 @@ class DeviceService implements IDeviceService {
 
   @override
   void subscribe(IDeviceServiceSubsciption subscription, Object context) {
-    _subscriptions.remove(context);
-    _subscriptions.putIfAbsent(context, () => subscription);
+    _subscriptions.remove(context.hashCode);
+    _subscriptions.putIfAbsent(context.hashCode, () => subscription);
 
     // Retains
     subscription.onDevices(_devices);
@@ -157,7 +155,7 @@ class DeviceService implements IDeviceService {
 
   @override
   void unsubscribe(Object context) {
-    _subscriptions.remove(context);
+    _subscriptions.remove(context.hashCode);
   }
 
   @override
@@ -193,30 +191,39 @@ class DeviceService implements IDeviceService {
   }
 
   void onDevices(List<BTDeviceStruct> devices) {
-    debugPrint("${devices.length}");
-
     for (var s in _subscriptions.values) {
       s.onDevices(devices);
     }
   }
 
+  // Warn: Should use a better solution to prevent race conditions
+  bool mutex = false;
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId) async {
-    if (_connection?.status == DeviceConnectionState.connected) {
-      var ok = await _connection?.ping() ?? false;
-      if (!ok) {
-        await _connection?.disconnect();
+    while (mutex) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+    mutex = true;
 
-        // try re-connecting
-        await _connectToDevice(deviceId);
+    try {
+      if (_connection?.status == DeviceConnectionState.connected) {
+        var ok = await _connection?.ping() ?? false;
+        if (!ok) {
+          await _connection?.disconnect();
+
+          // try re-connecting
+          await _connectToDevice(deviceId);
+          return _connection;
+        }
+
         return _connection;
       }
 
+      // connect
+      await _connectToDevice(deviceId);
       return _connection;
+    } finally {
+      mutex = false;
     }
-
-    // connect
-    await _connectToDevice(deviceId);
-    return _connection;
   }
 }
