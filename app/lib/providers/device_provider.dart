@@ -20,7 +20,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BTDeviceStruct? connectedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
-  var timer;
+  Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
 
   Timer? _disconnectNotificationTimer;
@@ -75,12 +75,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future periodicConnect(String printer) async {
     debugPrint("period connect");
-    if (timer != null) return;
-    timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
+    _reconnectionTimer?.cancel();
+    _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       debugPrint("period connect...");
-      if (timer == null) return;
-
-      debugPrint("period connect...x...");
       print(printer);
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
@@ -180,7 +177,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     isConnected = value;
     if (isConnected) {
       connectionCheckSeconds = 8;
-      timer?.cancel();
+      _reconnectionTimer?.cancel();
     } else {
       connectionCheckSeconds = 4;
     }
@@ -190,7 +187,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void dispose() {
     _bleBatteryLevelListener?.cancel();
-    timer?.cancel();
+    _reconnectionTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -236,6 +233,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
+    debugPrint("provider > device connection state changed...${deviceId}...${state}...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
         var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
