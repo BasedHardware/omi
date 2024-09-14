@@ -38,6 +38,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  // TODO: thinh, use connection directly
   Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
     String deviceId, {
     void Function(int)? onBatteryLevelChange,
@@ -49,6 +50,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
+  }
+
+  Future<BTDeviceStruct?> _getConnectedDevice() async {
+    var deviceId = SharedPreferencesUtil().btDeviceStruct.id;
+    if (deviceId.isEmpty) {
+      return null;
+    }
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return connection?.device;
   }
 
   initiateBleBatteryListener() async {
@@ -84,15 +94,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         t.cancel();
       }
     });
-  }
-
-  Future<BTDeviceStruct?> _getConnectedDevice() async {
-    var deviceId = SharedPreferencesUtil().btDeviceStruct.id;
-    if (deviceId.isEmpty) {
-      return null;
-    }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.device;
   }
 
   Future<BTDeviceStruct?> _scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
@@ -252,6 +253,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void onDevices(List<BTDeviceStruct> devices) async {
     if (connectedDevice != null) {
+      return;
+    }
+
+    if (devices.length <= 0) {
       return;
     }
 
