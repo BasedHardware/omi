@@ -9,6 +9,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -73,7 +74,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
 }
 
 Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
-  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+  var optEmotionalFeedback = GrowthbookUtil().isOmiFeedbackEnabled();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
@@ -256,7 +257,7 @@ Future<bool> setMemoryEventsState(
 
 //should return a storage unit
 Future<List<ServerMemory>> sendStorageToBackend(File file, String memoryId) async {
-  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+  var optEmotionalFeedback = GrowthbookUtil().isOmiFeedbackEnabled();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),

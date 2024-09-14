@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 
 final Map<String, String> availableLanguages = {
   'Bulgarian': 'bg',
@@ -193,62 +194,66 @@ getPreferencesWidgets({
         ),
       ),
     ),
-    Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-      child: InkWell(
-        onTap: (SharedPreferencesUtil().hasSpeakerProfile || optInEmotionalFeedback) ? onOptInEmotionalFeedback : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Enable Omi Feedback',
-                    style: TextStyle(
-                      color: Color.fromARGB(255, 150, 150, 150),
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(
-                    width: 8,
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: optInEmotionalFeedback
-                          ? const Color.fromARGB(255, 150, 150, 150)
-                          : Colors.transparent, // Fill color when checked
-                      border: Border.all(
-                        color: const Color.fromARGB(255, 150, 150, 150),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    width: 22,
-                    height: 22,
-                    child: optInEmotionalFeedback // Show the icon only when checked
-                        ? const Icon(
-                            Icons.check,
-                            color: Colors.white, // Tick color
-                            size: 18,
-                          )
-                        : null, // No icon when unchecked
-                  ),
-                ],
-              ),
-              !SharedPreferencesUtil().hasSpeakerProfile
-                  ? const Text(
-                      'Set-up your speech profile to enable Omi Feedback',
+    Visibility(
+      visible: GrowthbookUtil().displayOmiFeedback(),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+        child: InkWell(
+          onTap:
+              (SharedPreferencesUtil().hasSpeakerProfile || optInEmotionalFeedback) ? onOptInEmotionalFeedback : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Enable Omi Feedback',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
+                        color: Color.fromARGB(255, 150, 150, 150),
+                        fontSize: 16,
                       ),
-                    )
-                  : const SizedBox(),
-            ],
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: optInEmotionalFeedback
+                            ? const Color.fromARGB(255, 150, 150, 150)
+                            : Colors.transparent, // Fill color when checked
+                        border: Border.all(
+                          color: const Color.fromARGB(255, 150, 150, 150),
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      width: 22,
+                      height: 22,
+                      child: optInEmotionalFeedback // Show the icon only when checked
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white, // Tick color
+                              size: 18,
+                            )
+                          : null, // No icon when unchecked
+                    ),
+                  ],
+                ),
+                !SharedPreferencesUtil().hasSpeakerProfile
+                    ? const Text(
+                        'Set-up your speech profile to enable Omi Feedback',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const SizedBox(),
+              ],
+            ),
           ),
         ),
       ),
