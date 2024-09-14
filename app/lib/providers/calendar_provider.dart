@@ -1,9 +1,10 @@
-import 'package:device_calendar/device_calendar.dart';
+// import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CalenderProvider extends ChangeNotifier {
@@ -12,6 +13,12 @@ class CalenderProvider extends ChangeNotifier {
   final CalendarUtil _calendarUtil = CalendarUtil();
   final MixpanelManager _mixpanelManager = MixpanelManager();
   final SharedPreferencesUtil _sharedPreferencesUtil = SharedPreferencesUtil();
+  bool isLoading = false;
+
+  void setLoading(bool value) {
+    isLoading = value;
+    notifyListeners();
+  }
 
   Future<void> initialize() async {
     calendarEnabled = await hasCalendarAccess();
@@ -35,7 +42,10 @@ class CalenderProvider extends ChangeNotifier {
       bool hasAccess = await hasCalendarAccess();
       print('hasAccess: $hasAccess');
       if (res.isGranted || hasAccess) {
+        setLoading(true);
+
         await _getCalendars();
+        setLoading(false);
         if (calendars.isEmpty) {
           AppSnackbar.showSnackbar(
             'No calendars found. Please check your device settings.',
