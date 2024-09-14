@@ -5,22 +5,19 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/scan.dart';
-import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-class DeviceProvider extends ChangeNotifier {
+class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
   WebSocketProvider? webSocketProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
   BTDeviceStruct? connectedDevice;
-  StreamSubscription? statusSubscription;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   var timer;
@@ -41,73 +38,23 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future initiateConnectionListener() async {
-    print('initiateConnectionListener called');
-    if (statusSubscription != null) return;
-    if (connectedDevice == null) {
-      connectedDevice = await getConnectedDevice();
-      if (connectedDevice == null) {
-        print('connectedDevice is null, unable to connect as well');
-        Logger.handle(Exception('Unable to connect to device'), StackTrace.current,
-            message: 'Unable to connect to device. Please make sure the device is turned on and nearby.');
-        return;
+  Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
+    String deviceId, {
+    void Function(int)? onBatteryLevelChange,
+  }) async {
+    {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        return Future.value(null);
       }
-      SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice!.name;
-      MixpanelManager().deviceConnected();
-      if (connectedDevice == null) {
-        print('connectedDevice is null, unable to connect as well');
-        return;
-      }
+      return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
-    statusSubscription?.cancel();
-    statusSubscription = getConnectionStateListener(
-      deviceId: connectedDevice!.id,
-      onDisconnected: () async {
-        debugPrint('onDisconnected inside: $connectedDevice');
-        setConnectedDevice(null);
-        setIsConnected(false);
-        updateConnectingStatus(false);
-        periodicConnect('coming from onDisconnect');
-        await captureProvider?.resetState(restartBytesProcessing: false);
-        captureProvider?.setAudioBytesConnected(false);
-        print('after resetState inside initiateConnectionListener');
-
-        InstabugLog.logInfo('Friend Device Disconnected');
-        _disconnectNotificationTimer?.cancel();
-        _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-          NotificationService.instance.createNotification(
-            title: 'Friend Device Disconnected',
-            body: 'Please reconnect to continue using your Friend.',
-          );
-        });
-        MixpanelManager().deviceDisconnected();
-      },
-      onConnected: (device) async {
-        debugPrint('_onConnected inside: $connectedDevice');
-        _disconnectNotificationTimer?.cancel();
-        NotificationService.instance.clearNotification(1);
-        setConnectedDevice(device);
-        setIsConnected(true);
-        updateConnectingStatus(false);
-        await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
-        //  initiateBleBatteryListener();
-        // The device is still disconnected for some reason
-        if (connectedDevice != null) {
-          MixpanelManager().deviceConnected();
-          SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
-          SharedPreferencesUtil().deviceName = connectedDevice!.name;
-        }
-        notifyListeners();
-      },
-    );
-    notifyListeners();
   }
 
   initiateBleBatteryListener() async {
     if (_bleBatteryLevelListener != null) return;
     _bleBatteryLevelListener?.cancel();
-    _bleBatteryLevelListener = await getBleBatteryLevelListener(
+    _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
@@ -139,11 +86,42 @@ class DeviceProvider extends ChangeNotifier {
     });
   }
 
+  Future<BTDeviceStruct?> _getConnectedDevice() async {
+    var deviceId = SharedPreferencesUtil().btDeviceStruct.id;
+    if (deviceId.isEmpty) {
+      return null;
+    }
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return connection?.device;
+  }
+
+  Future<BTDeviceStruct?> _scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
+    var device = await _getConnectedDevice();
+    if (device != null) {
+      return device;
+    }
+
+    int timeoutCounter = 0;
+    while (true) {
+      if (timeout && timeoutCounter >= 10) return null;
+      await ServiceManager.instance().device.discover();
+      if (connectedDevice != null) {
+        return connectedDevice;
+      }
+
+      // If the device is not found, wait for a bit before retrying.
+      await Future.delayed(const Duration(seconds: 2));
+      timeoutCounter += 2;
+    }
+  }
+
   Future scanAndConnectToDevice() async {
+    ServiceManager.instance().device.subscribe(this, this);
+
     updateConnectingStatus(true);
     if (isConnected) {
       if (connectedDevice == null) {
-        connectedDevice = await getConnectedDevice();
+        connectedDevice = await _getConnectedDevice();
         SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
         SharedPreferencesUtil().deviceName = connectedDevice!.name;
         MixpanelManager().deviceConnected();
@@ -152,10 +130,10 @@ class DeviceProvider extends ChangeNotifier {
       setIsConnected(true);
       updateConnectingStatus(false);
     } else {
-      var device = await scanAndConnectDevice();
+      var device = await _scanAndConnectDevice();
       print('inside scanAndConnectToDevice $device in device_provider');
       if (device != null) {
-        var cDevice = await getConnectedDevice();
+        var cDevice = await _getConnectedDevice();
         if (cDevice != null) {
           setConnectedDevice(cDevice);
           SharedPreferencesUtil().btDeviceStruct = cDevice;
@@ -174,9 +152,6 @@ class DeviceProvider extends ChangeNotifier {
     // if (captureProvider?.webSocketConnected == false) {
     //   restartWebSocket();
     // }
-    if (statusSubscription == null) {
-      await initiateConnectionListener();
-    }
 
     notifyListeners();
   }
@@ -210,9 +185,86 @@ class DeviceProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    statusSubscription?.cancel();
     _bleBatteryLevelListener?.cancel();
     timer?.cancel();
+    ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
+  }
+
+  void onDeviceDisconnected() async {
+    debugPrint('onDisconnected inside: $connectedDevice');
+    setConnectedDevice(null);
+    setIsConnected(false);
+    updateConnectingStatus(false);
+    periodicConnect('coming from onDisconnect');
+    await captureProvider?.resetState(restartBytesProcessing: false);
+    captureProvider?.setAudioBytesConnected(false);
+    print('after resetState inside initiateConnectionListener');
+
+    InstabugLog.logInfo('Friend Device Disconnected');
+    _disconnectNotificationTimer?.cancel();
+    _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+      NotificationService.instance.createNotification(
+        title: 'Friend Device Disconnected',
+        body: 'Please reconnect to continue using your Friend.',
+      );
+    });
+    MixpanelManager().deviceDisconnected();
+  }
+
+  void onDeviceReconnected(BTDeviceStruct device) async {
+    debugPrint('_onConnected inside: $connectedDevice');
+    _disconnectNotificationTimer?.cancel();
+    NotificationService.instance.clearNotification(1);
+    setConnectedDevice(device);
+    setIsConnected(true);
+    updateConnectingStatus(false);
+    await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    //  initiateBleBatteryListener();
+    // The device is still disconnected for some reason
+    if (connectedDevice != null) {
+      MixpanelManager().deviceConnected();
+      SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
+      SharedPreferencesUtil().deviceName = connectedDevice!.name;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
+    switch (state) {
+      case DeviceConnectionState.connected:
+        var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+        if (connection == null) {
+          return;
+        }
+        onDeviceReconnected(connection.device);
+        break;
+      case DeviceConnectionState.disconnected:
+        if (deviceId == connectedDevice?.id) {
+          onDeviceDisconnected();
+        }
+      default:
+        debugPrint("Device connection state is not supported $state");
+    }
+  }
+
+  @override
+  void onDevices(List<BTDeviceStruct> devices) async {
+    if (connectedDevice != null) {
+      return;
+    }
+
+    // Connect to first founded device
+    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id);
+    if (connection == null) {
+      return;
+    }
+    connectedDevice = connection.device;
+  }
+
+  @override
+  void onStatusChanged(DeviceServiceStatus status) {
+    // TODO: implement onStatusChanged
   }
 }
