@@ -819,10 +819,7 @@ class GetSheetMainOptions extends StatelessWidget {
                       : () async {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
-                            var res = await provider.reprocessMemory();
-                            if (res) {
-                              context.read<MemoryProvider>().updateMemory(provider.memory);
-                            }
+                            await provider.reprocessMemory();
                           } else {
                             showDialog(
                               builder: (c) => getDialog(
