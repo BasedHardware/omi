@@ -35,7 +35,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        context.read<MemoryDetailProvider>().updateMemory(widget.memory, widget.memoryIdx);
+        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx);
         var result = await Navigator.of(context).push(MaterialPageRoute(
           builder: (c) => MemoryDetailPage(
             memory: widget.memory,
