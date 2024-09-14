@@ -185,6 +185,7 @@ class DeviceService implements IDeviceService {
   }
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
+    debugPrint("device connection state changed...${deviceId}...${state}");
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
