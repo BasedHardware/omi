@@ -110,7 +110,7 @@ class FriendDeviceConnection extends DeviceConnection {
       }
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     return listener;
@@ -135,7 +135,7 @@ class FriendDeviceConnection extends DeviceConnection {
       // TODO: Unknown GATT error here (code 133) on Android. StackOverflow says that it has to do with smaller MTU size
       // The creator of the plugin says not to use autoConnect
       // https://github.com/chipweinberger/flutter_blue_plus/issues/612
-      final device = BluetoothDevice.fromId(deviceId);
+      final device = bleDevice;
       if (device.isConnected) {
         if (Platform.isAndroid && device.mtuNow < 512) {
           await device.requestMtu(512); // This might fix the code 133 error
@@ -157,7 +157,7 @@ class FriendDeviceConnection extends DeviceConnection {
       if (value.isNotEmpty) onAudioBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // This will cause a crash in OpenGlass devices
@@ -282,7 +282,7 @@ class FriendDeviceConnection extends DeviceConnection {
       if (value.isNotEmpty) onStorageBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // await storageDataStreamCharacteristic.write([0x00,0x01]);
@@ -387,7 +387,7 @@ class FriendDeviceConnection extends DeviceConnection {
       if (value.isNotEmpty) onImageBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // This will cause a crash in OpenGlass devices
@@ -508,7 +508,7 @@ class FriendDeviceConnection extends DeviceConnection {
       }
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     return listener;
@@ -569,19 +569,15 @@ abstract class DeviceConnection {
     device.cancelWhenDisconnected(subscription, delayed: true, next: true);
     await device.connect();
     await device.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
+    debugPrint("connection...ok ${device.remoteId.str}");
 
     // Mtu
     if (Platform.isAndroid && device.mtuNow < 512) {
       await device.requestMtu(512); // This might fix the code 133 error
     }
 
-    // Read rssi
-    try {
-      int rssi = await device.readRssi();
-      this.device.rssi = rssi;
-    } catch (e) {
-      debugPrint('Error reading RSSI: $e');
-    }
+    // Check connection
+    await ping();
 
     // Discover services
     _services = await device.discoverServices();
@@ -593,9 +589,22 @@ abstract class DeviceConnection {
   }
 
   Future<void> disconnect() async {
-    var device = bleDevice;
-    await device.disconnect();
+    await bleDevice.disconnect();
     _services.clear();
+    _connectionState = DeviceConnectionState.disconnected;
+  }
+
+  Future<bool> ping() async {
+    var device = bleDevice;
+    try {
+      int rssi = await device.readRssi();
+      this.device.rssi = rssi;
+      return true;
+    } catch (e) {
+      debugPrint('Error reading RSSI: $e');
+    }
+
+    return false;
   }
 
   void read() {}

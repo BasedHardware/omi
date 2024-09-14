@@ -11,6 +11,7 @@ abstract class IDeviceService {
   void start();
   void stop();
   Future<void> discover({String? desirableDeviceId, int timeout = 5});
+
   Future<DeviceConnection?> ensureConnection(String deviceId);
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
@@ -202,14 +203,13 @@ class DeviceService implements IDeviceService {
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId) async {
     if (_connection?.status == DeviceConnectionState.connected) {
-      // Check rssi
-      try {
-        _connection?.device.rssi = await _connection?.bleDevice.readRssi();
-      } catch (e) {
-        debugPrint('Error reading RSSI: $e');
+      var ok = await _connection?.ping() ?? false;
+      if (!ok) {
+        await _connection?.disconnect();
 
-        // TODO: Force disconnect
-        return null;
+        // try re-connecting
+        await _connectToDevice(deviceId);
+        return _connection;
       }
 
       return _connection;

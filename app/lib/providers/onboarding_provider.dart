@@ -217,6 +217,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     });
   }
 
+  // TODO: thinh, use connection directly
   Future<BTDeviceStruct?> _getConnectedDevice(String deviceId) async {
     if (deviceId.isEmpty) {
       return null;
