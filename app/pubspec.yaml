@@ -11,8 +11,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  manage_calendar_events: ^2.0.3
   
   # State management
   provider: ^6.1.2
@@ -73,7 +71,7 @@ dependencies:
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1
-  device_calendar: ^4.3.2
+  manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_button: ^3.2.0
   sign_in_with_apple: ^6.1.1
