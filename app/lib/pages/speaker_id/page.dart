@@ -8,7 +8,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -32,6 +32,15 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
       await context.read<SpeechProfileProvider>().updateDevice();
     });
     super.initState();
+  }
+
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
   }
 
   @override
@@ -273,7 +282,7 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                       onPressed: () async {
                                         BleAudioCodec codec;
                                         try {
-                                          codec = await getAudioCodec(provider.device!.id);
+                                          codec = await _getAudioCodec(provider.device!.id);
                                         } catch (e) {
                                           showDialog(
                                             context: context,

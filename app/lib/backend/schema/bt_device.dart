@@ -1,5 +1,6 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/utils/ble/frame_communication.dart';
+import 'package:friend_private/services/device_connections.dart';
+import 'package:friend_private/services/frame_connection.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
 enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
@@ -145,25 +146,28 @@ class DeviceInfo {
 
   DeviceInfo(this.modelNumber, this.firmwareRevision, this.hardwareRevision, this.manufacturerName, this.type);
 
-  static Future<DeviceInfo> getDeviceInfo(BTDeviceStruct? device) async {
+  static Future<DeviceInfo> getDeviceInfo(BTDeviceStruct? device, DeviceConnection? conn) async {
     if (device == null) {
       return DeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
     }
+    if (conn == null) {
+      return DeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
+    }
 
-    device.type ??= await getTypeOfBluetoothDevice(BluetoothDevice.fromId(device.id));
+    device.type ??= await getTypeOfBluetoothDevice(conn.bleDevice);
 
     if (device.type == DeviceType.friend) {
-      return getDeviceInfoFromFriend(device);
+      return _getDeviceInfoFromFriend(device, conn);
     } else if (device.type == DeviceType.openglass) {
-      return getDeviceInfoFromFriend(device);
+      return _getDeviceInfoFromFriend(device, conn);
     } else if (device.type == DeviceType.frame) {
-      return getDeviceInfoFromFrame(device);
+      return _getDeviceInfoFromFrame(device, conn as FrameDeviceConnection);
     } else {
-      return getDeviceInfoFromFriend(device);
+      return _getDeviceInfoFromFriend(device, conn);
     }
   }
 
-  static Future<DeviceInfo> getDeviceInfoFromFriend(BTDeviceStruct? device) async {
+  static Future<DeviceInfo> _getDeviceInfoFromFriend(BTDeviceStruct? device, DeviceConnection conn) async {
     var modelNumber = 'Friend';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
@@ -173,29 +177,27 @@ class DeviceInfo {
       return DeviceInfo(modelNumber, firmwareRevision, hardwareRevision, manufacturerName, DeviceType.friend);
     }
 
-    String deviceId = device.id;
-
-    var deviceInformationService = await getServiceByUuid(deviceId, deviceInformationServiceUuid);
+    var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
     if (deviceInformationService != null) {
-      var modelNumberCharacteristic = getCharacteristicByUuid(deviceInformationService, modelNumberCharacteristicUuid);
+      var modelNumberCharacteristic = conn.getCharacteristic(deviceInformationService, modelNumberCharacteristicUuid);
       if (modelNumberCharacteristic != null) {
         modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
       }
 
       var firmwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, firmwareRevisionCharacteristicUuid);
+          conn.getCharacteristic(deviceInformationService, firmwareRevisionCharacteristicUuid);
       if (firmwareRevisionCharacteristic != null) {
         firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
       }
 
       var hardwareRevisionCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, hardwareRevisionCharacteristicUuid);
+          conn.getCharacteristic(deviceInformationService, hardwareRevisionCharacteristicUuid);
       if (hardwareRevisionCharacteristic != null) {
         hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
       }
 
       var manufacturerNameCharacteristic =
-          getCharacteristicByUuid(deviceInformationService, manufacturerNameCharacteristicUuid);
+          conn.getCharacteristic(deviceInformationService, manufacturerNameCharacteristicUuid);
       if (manufacturerNameCharacteristic != null) {
         manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
       }
@@ -205,10 +207,10 @@ class DeviceInfo {
     if (device.type == DeviceType.openglass) {
       type = DeviceType.openglass;
     } else {
-      final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
+      final friendService = await conn.getService(friendServiceUuid);
       if (friendService != null) {
         var imageCaptureControlCharacteristic =
-            getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
+            conn.getCharacteristic(friendService, imageDataStreamCharacteristicUuid);
         if (imageCaptureControlCharacteristic != null) {
           type = DeviceType.openglass;
         }
@@ -224,14 +226,13 @@ class DeviceInfo {
     );
   }
 
-  static Future<DeviceInfo> getDeviceInfoFromFrame(BTDeviceStruct? device) async {
-    FrameDevice frameDevice = await FrameDevice.fromId(device!.id);
-    await frameDevice.init();
+  static Future<DeviceInfo> _getDeviceInfoFromFrame(BTDeviceStruct? device, FrameDeviceConnection conn) async {
+    await conn.init();
     return DeviceInfo(
-      frameDevice.modelNumber,
-      frameDevice.firmwareRevision,
-      frameDevice.hardwareRevision,
-      frameDevice.manufacturerName,
+      conn.modelNumber,
+      conn.firmwareRevision,
+      conn.hardwareRevision,
+      conn.manufacturerName,
       DeviceType.frame,
     );
   }

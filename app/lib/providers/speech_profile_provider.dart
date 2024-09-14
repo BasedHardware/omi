@@ -15,15 +15,15 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/services/devices.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
-import 'package:friend_private/utils/ble/connected.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:uuid/uuid.dart';
 
-class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
+class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
   CaptureProvider? captureProvider;
   WebSocketProvider? webSocketProvider;
@@ -117,17 +117,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
 
   initiateConnectionListener() async {
     if (device == null || connectionStateListener != null) return;
-    connectionStateListener = getConnectionStateListener(
-        deviceId: device!.id,
-        onDisconnected: () {
-          device = null;
-          notifyListeners();
-        },
-        onConnected: ((d) {
-          device = d;
-          notifyListeners();
-          initiateFriendAudioStreaming();
-        }));
+    ServiceManager.instance().device.subscribe(this, this);
   }
 
   Future<void> initiateWebsocket(bool isFromOnboarding) async {
@@ -222,8 +212,20 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
+  // TODO: use connection directly
+  Future<StreamSubscription?> _getBleAudioBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onAudioBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
   Future<void> initiateFriendAudioStreaming() async {
-    _bleBytesStream = await getBleAudioBytesListener(
+    _bleBytesStream = await _getBleAudioBytesListener(
       device!.id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
@@ -360,6 +362,35 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin {
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
+
+  @override
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
+    switch (state) {
+      case DeviceConnectionState.connected:
+        var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+        if (connection == null) {
+          return;
+        }
+        device = connection.device;
+        notifyListeners();
+        initiateFriendAudioStreaming();
+        break;
+      case DeviceConnectionState.disconnected:
+        if (deviceId == device?.id) {
+          device = null;
+          notifyListeners();
+        }
+      default:
+        debugPrint("Device connection state is not supported $state");
+    }
+  }
+
+  @override
+  void onDevices(List<BTDeviceStruct> devices) {}
+
+  @override
+  void onStatusChanged(DeviceServiceStatus status) {}
 }
