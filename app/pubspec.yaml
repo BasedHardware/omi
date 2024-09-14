@@ -11,6 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  manage_calendar_events: ^2.0.3
   
   # State management
   provider: ^6.1.2
