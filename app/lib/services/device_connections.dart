@@ -272,8 +272,8 @@ abstract class DeviceConnection {
 
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(
-      title: '$device.name Disconnected',
-      body: 'Please reconnect to continue using your $device.name.',
+      title: '${device.name} Disconnected',
+      body: 'Please reconnect to continue using your ${device.name}.',
     );
   }
 }

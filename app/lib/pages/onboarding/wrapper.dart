@@ -14,8 +14,8 @@ import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
@@ -51,6 +51,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   _goNext() => _controller!.animateTo(_controller!.index + 1);
+
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +170,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             if (provider.deviceId.isEmpty) {
                               _goNext();
                             } else {
-                              var codec = await getAudioCodec(provider.deviceId);
+                              var codec = await _getAudioCodec(provider.deviceId);
                               if (codec == BleAudioCodec.opus) {
                                 _goNext();
                               } else {

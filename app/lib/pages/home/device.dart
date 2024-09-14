@@ -31,13 +31,25 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     return connection.disconnect();
   }
 
+  Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
+    if (deviceId == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+    return await DeviceInfo.getDeviceInfo(connection.device, connection);
+  }
+
   @override
   Widget build(BuildContext context) {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
     return FutureBuilder<DeviceInfo>(
-      future: DeviceInfo.getDeviceInfo(widget.device),
+      future: _getDeviceInfo(widget.device?.id),
       builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
