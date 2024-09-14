@@ -43,6 +43,7 @@ class AuthenticationProvider extends BaseProvider {
           debugPrint('Failed to get token: $e');
         }
       }
+      notifyListeners();
     });
   }
 
