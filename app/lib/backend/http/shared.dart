@@ -50,7 +50,6 @@ Future<http.Response?> makeApiCall({
     final client = InstabugHttpClient();
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
-
     if (response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       // Refresh the token
@@ -61,6 +60,17 @@ Future<http.Response?> makeApiCall({
         // Retry the request with the new token
         response = await _performRequest(client, url, headers, body, method);
         Logger.log('Token refreshed and request retried');
+        if (response.statusCode == 401) {
+          // Force user to sign in again
+          await signOut();
+          Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
+              message: 'Authentication failed. Please sign in again.');
+        }
+      } else {
+        // Force user to sign in again
+        await signOut();
+        Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
+            message: 'Authentication failed. Please sign in again.');
       }
     }
 
