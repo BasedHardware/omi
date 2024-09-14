@@ -13,6 +13,7 @@ abstract class IDeviceService {
   Future<void> discover({String? desirableDeviceId, int timeout = 5});
 
   Future<DeviceConnection?> ensureConnection(String deviceId);
+
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
 }
@@ -80,6 +81,7 @@ class DeviceService implements IDeviceService {
 
     // Only look for devices that implement Friend or Frame main service
     _status = DeviceServiceStatus.scanning;
+    await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
     await FlutterBluePlus.startScan(
       timeout: Duration(seconds: timeout),
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],

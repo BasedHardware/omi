@@ -46,6 +46,8 @@ import 'package:talker_flutter/talker_flutter.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
+
+  // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
   // Firebase
