@@ -18,6 +18,7 @@ class ServiceManager {
     sm._mic = MicRecorderBackgroundService(
       runner: BackgroundService(),
     );
+    sm._device = DeviceService();
 
     return sm;
   }

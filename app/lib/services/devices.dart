@@ -1,15 +1,19 @@
 import 'dart:async';
-import 'dart:nativewrappers/_internal/vm/lib/ffi_allocation_patch.dart';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/services/device_connections.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
 abstract class IDeviceService {
   void start();
   void stop();
-  void discover({String? desirableDeviceId, int timeout = 5});
+  Future<void> discover({String? desirableDeviceId, int timeout = 5});
+  Future<DeviceConnection?> ensureConnection(String deviceId);
+  void subscribe(IDeviceServiceSubsciption subscription, Object context);
+  void unsubscribe(Object context);
 }
 
 enum DeviceServiceStatus {
@@ -24,11 +28,10 @@ enum DeviceConnectionState {
   disconnected,
 }
 
-abstract class DeviceServiceSubsciption {
+abstract class IDeviceServiceSubsciption {
   void onDevices(List<BTDeviceStruct> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDesirableDevice(BTDeviceStruct device);
-  void onDesirableDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 class DeviceService implements IDeviceService {
@@ -36,10 +39,9 @@ class DeviceService implements IDeviceService {
   List<BTDeviceStruct> _devices = [];
   List<ScanResult> _bleDevices = [];
 
-  final Map<Object, DeviceServiceSubsciption> _subscriptions = {};
+  final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
-  String? _desirableDeviceId;
-  DeviceConnectionState _connectionState = DeviceConnectionState.disconnected;
+  DeviceConnection? _connection;
 
   List<BTDeviceStruct> get devices => _devices;
 
@@ -50,6 +52,7 @@ class DeviceService implements IDeviceService {
     String? desirableDeviceId,
     int timeout = 5,
   }) async {
+    debugPrint("discovering...");
     if (_status != DeviceServiceStatus.ready) {
       throw Exception("Device service is not ready, may busying or stop");
     }
@@ -62,13 +65,11 @@ class DeviceService implements IDeviceService {
       throw Exception("Device service is scanning");
     }
 
-    // Desirable device
-    _desirableDeviceId = desirableDeviceId;
-
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = FlutterBluePlus.scanResults.listen(
       (results) async {
-        await _onBleDiscovered(results);
+        debugPrint("discovering...results...");
+        await _onBleDiscovered(results, desirableDeviceId);
       },
       onError: (e) {
         debugPrint('bleFindDevices error: $e');
@@ -83,9 +84,11 @@ class DeviceService implements IDeviceService {
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
+
+    debugPrint("discovering...done...");
   }
 
-  Future<void> _onBleDiscovered(List<ScanResult> results) async {
+  Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
     _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
     _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
 
@@ -112,46 +115,37 @@ class DeviceService implements IDeviceService {
     onDevices(devices);
 
     // Check desirable device
-    if (_desirableDeviceId != null) {
-      for (var device in devices) {
-        // next
-        if (device.id != _desirableDeviceId) {
-          continue;
-        }
-
-        onDesirableDevice(device);
-        break;
-      }
-
-      // Connect automatically
-      await _connectToDevice(_desirableDeviceId!);
+    if (desirableDeviceId != null) {
+      await _connectToDevice(desirableDeviceId);
     }
   }
 
   Future<void> _connectToDevice(String id) async {
-    for (var bleDevice in _bleDevices) {
-      var device = bleDevice.device;
-      // next
-      if (device.remoteId.str != _desirableDeviceId) {
-        continue;
-      }
-
-      var subscription = device.connectionState.listen((BluetoothConnectionState state) async {
-        _connectionState = DeviceConnectionState.disconnected;
-        if (state == BluetoothConnectionState.connected) {
-          _connectionState = DeviceConnectionState.connected;
-        }
-        onDesirableDeviceConnectionStateChanged(device.remoteId.str, _connectionState);
-      });
-      device.cancelWhenDisconnected(subscription, delayed: true, next: true);
-      await device.connect();
-      break;
+    var bleDevice = _bleDevices.firstWhereOrNull((f) => f.device.remoteId.str == id);
+    var device = _devices.firstWhereOrNull((f) => f.id == id);
+    if (bleDevice == null || device == null) {
+      debugPrint("bleDevice or device is null");
+      return;
     }
 
+    // Drop exist connection first
+    if (_connection != null && _connection?.status == DeviceConnectionState.connected) {
+      await _connection?.disconnect();
+    }
+
+    // Check exist ble device connection, force disconnect
+    if (bleDevice.device.isConnected) {
+      bleDevice.device.disconnect();
+    }
+
+    // Then create new connection
+    _connection = DeviceConnectionFactory.create(device, bleDevice.device);
+    await _connection?.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     return;
   }
 
-  void subscribe(DeviceServiceSubsciption subscription, Object context) {
+  @override
+  void subscribe(IDeviceServiceSubsciption subscription, Object context) {
     _subscriptions.remove(context);
     _subscriptions.putIfAbsent(context, () => subscription);
 
@@ -160,6 +154,7 @@ class DeviceService implements IDeviceService {
     subscription.onStatusChanged(_status);
   }
 
+  @override
   void unsubscribe(Object context) {
     _subscriptions.remove(context);
   }
@@ -176,7 +171,7 @@ class DeviceService implements IDeviceService {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
-    if (FlutterBluePlus.isScanning()) {
+    if (FlutterBluePlus.isScanningNow) {
       FlutterBluePlus.stopScan();
     }
     _subscriptions.clear();
@@ -190,21 +185,38 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  void onDesirableDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     for (var s in _subscriptions.values) {
-      s.onDesirableDeviceConnectionStateChanged(deviceId, state);
+      s.onDeviceConnectionStateChanged(deviceId, state);
     }
   }
 
   void onDevices(List<BTDeviceStruct> devices) {
+    debugPrint("${devices.length}");
+
     for (var s in _subscriptions.values) {
       s.onDevices(devices);
     }
   }
 
-  void onDesirableDevice(BTDeviceStruct device) {
-    for (var s in _subscriptions.values) {
-      s.onDesirableDevice(device);
+  @override
+  Future<DeviceConnection?> ensureConnection(String deviceId) async {
+    if (_connection?.status == DeviceConnectionState.connected) {
+      // Check rssi
+      try {
+        _connection?.device.rssi = await _connection?.bleDevice.readRssi();
+      } catch (e) {
+        debugPrint('Error reading RSSI: $e');
+
+        // TODO: Force disconnect
+        return null;
+      }
+
+      return _connection;
     }
+
+    // connect
+    await _connectToDevice(deviceId);
+    return _connection;
   }
 }
