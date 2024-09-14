@@ -29,10 +29,12 @@ class CalenderProvider extends ChangeNotifier {
 
   Future<void> onCalendarSwitchChanged(bool s) async {
     if (s) {
-      await Permission.calendarFullAccess.request();
+      var res = await Permission.calendarFullAccess.request();
+      print('res: $res');
       _sharedPreferencesUtil.calendarPermissionAlreadyRequested = true;
       bool hasAccess = await hasCalendarAccess();
-      if (hasAccess) {
+      print('hasAccess: $hasAccess');
+      if (res.isGranted || hasAccess) {
         await _getCalendars();
         if (calendars.isEmpty) {
           AppSnackbar.showSnackbar(
