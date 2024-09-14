@@ -548,6 +548,8 @@ abstract class DeviceConnection {
 
   DeviceConnectionState get status => _connectionState;
 
+  late StreamSubscription<BluetoothConnectionState> _connectionStateSubscription;
+
   DeviceConnection(
     this.device,
     this.bleDevice,
@@ -556,49 +558,53 @@ abstract class DeviceConnection {
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
+    if (_connectionState == DeviceConnectionState.connected) {
+      throw Exception("Connection already established, please disconnect before start new connection");
+    }
+
     // Connect
-    var device = bleDevice;
-    var subscription = device.connectionState.listen((BluetoothConnectionState state) async {
-      if (state == BluetoothConnectionState.disconnected) {
-        _connectionState = DeviceConnectionState.disconnected;
-      }
-      if (onConnectionStateChanged != null) {
-        onConnectionStateChanged(device.remoteId.str, _connectionState);
-      }
+    _connectionStateSubscription = bleDevice.connectionState.listen((BluetoothConnectionState state) async {
+      _onBleConnectionStateChanged(state, onConnectionStateChanged);
     });
-    device.cancelWhenDisconnected(subscription, delayed: true, next: true);
-    await device.connect();
-    await device.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
-    debugPrint("connection...ok ${device.remoteId.str}");
+    await bleDevice.connect();
+    await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
 
     // Mtu
-    if (Platform.isAndroid && device.mtuNow < 512) {
-      await device.requestMtu(512); // This might fix the code 133 error
+    if (Platform.isAndroid && bleDevice.mtuNow < 512) {
+      await bleDevice.requestMtu(512); // This might fix the code 133 error
     }
 
     // Check connection
     await ping();
 
     // Discover services
-    _services = await device.discoverServices();
-    debugPrint("services ${_services.map((s) => s.uuid.str128.toLowerCase()).toList().join(",")}");
-    _connectionState = DeviceConnectionState.connected;
-    if (onConnectionStateChanged != null) {
-      onConnectionStateChanged(device.remoteId.str, _connectionState);
+    _services = await bleDevice.discoverServices();
+  }
+
+  void _onBleConnectionStateChanged(
+      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) {
+    if (state == BluetoothConnectionState.disconnected) {
+      _connectionState = DeviceConnectionState.disconnected;
+    }
+    if (state == BluetoothConnectionState.connected) {
+      _connectionState = DeviceConnectionState.connected;
+    }
+    if (callback != null) {
+      callback(device.id, _connectionState);
     }
   }
 
   Future<void> disconnect() async {
     await bleDevice.disconnect();
+    _connectionStateSubscription.cancel();
     _services.clear();
     _connectionState = DeviceConnectionState.disconnected;
   }
 
   Future<bool> ping() async {
-    var device = bleDevice;
     try {
-      int rssi = await device.readRssi();
-      this.device.rssi = rssi;
+      int rssi = await bleDevice.readRssi();
+      device.rssi = rssi;
       return true;
     } catch (e) {
       debugPrint('Error reading RSSI: $e');
