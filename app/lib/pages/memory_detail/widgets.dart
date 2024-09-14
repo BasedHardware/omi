@@ -144,56 +144,121 @@ class GetSummaryWidgets extends StatelessWidget {
                     ],
                   )
                 : const SizedBox.shrink(),
-            ...memory.structured.events.mapIndexed<Widget>((idx, event) {
-              print(event.toJson());
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  event.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${event.duration} minutes.',
-                    style: const TextStyle(color: Colors.grey, fontSize: 15),
-                  ),
-                ),
-                trailing: IconButton(
-                  onPressed: event.created
-                      ? null
-                      : () {
-                          var calEnabled = SharedPreferencesUtil().calendarEnabled;
-                          var calSelected = SharedPreferencesUtil().calendarId.isNotEmpty;
-                          if (!calEnabled || !calSelected) {
-                            routeToPage(context, const CalendarPage());
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(!calEnabled
-                                  ? 'Enable calendar integration to add events'
-                                  : 'Select a calendar to add events to'),
-                            ));
-                            return;
-                          }
-                          context.read<MemoryDetailProvider>().updateEventState(true, idx);
-                          setMemoryEventsState(memory.id, [idx], [true]);
-                          CalendarUtil().createEvent(
-                            event.title,
-                            event.startsAt,
-                            event.duration,
-                            description: event.description,
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Event added to calendar'),
-                            ),
-                          );
-                        },
-                  icon: Icon(event.created ? Icons.check : Icons.add, color: Colors.white),
-                ),
-              );
-            }),
+            const EventsListWidget(),
+            // ...memory.structured.events.mapIndexed<Widget>((idx, event) {
+            //   print(event.toJson());
+            //   return ListTile(
+            //     contentPadding: EdgeInsets.zero,
+            //     title: Text(
+            //       event.title,
+            //       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+            //     ),
+            //     subtitle: Padding(
+            //       padding: const EdgeInsets.only(top: 4.0),
+            //       child: Text(
+            //         '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${event.duration} minutes.',
+            //         style: const TextStyle(color: Colors.grey, fontSize: 15),
+            //       ),
+            //     ),
+            //     trailing: IconButton(
+            //       onPressed: event.created
+            //           ? null
+            //           : () {
+            //               var calEnabled = SharedPreferencesUtil().calendarEnabled;
+            //               var calSelected = SharedPreferencesUtil().calendarId.isNotEmpty;
+            //               if (!calEnabled || !calSelected) {
+            //                 routeToPage(context, const CalendarPage());
+            //                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            //                   content: Text(!calEnabled
+            //                       ? 'Enable calendar integration to add events'
+            //                       : 'Select a calendar to add events to'),
+            //                 ));
+            //                 return;
+            //               }
+            //               context.read<MemoryDetailProvider>().updateEventState(true, idx);
+            //               setMemoryEventsState(memory.id, [idx], [true]);
+            //               CalendarUtil().createEvent(
+            //                 event.title,
+            //                 event.startsAt,
+            //                 event.duration,
+            //                 description: event.description,
+            //               );
+            //               ScaffoldMessenger.of(context).showSnackBar(
+            //                 const SnackBar(
+            //                   content: Text('Event added to calendar'),
+            //                 ),
+            //               );
+            //             },
+            //       icon: Icon(event.created ? Icons.check : Icons.add, color: Colors.white),
+            //     ),
+            //   );
+            // }),
             memory.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
+        );
+      },
+    );
+  }
+}
+
+class EventsListWidget extends StatelessWidget {
+  const EventsListWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(
+      builder: (context, provider, child) {
+        return ListView.builder(
+          itemCount: provider.memory.structured.events.length,
+          shrinkWrap: true,
+          itemBuilder: (context, idx) {
+            var event = provider.memory.structured.events[idx];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                event.title,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${event.duration} minutes.',
+                  style: const TextStyle(color: Colors.grey, fontSize: 15),
+                ),
+              ),
+              trailing: IconButton(
+                onPressed: event.created
+                    ? null
+                    : () {
+                        var calEnabled = SharedPreferencesUtil().calendarEnabled;
+                        var calSelected = SharedPreferencesUtil().calendarId.isNotEmpty;
+                        if (!calEnabled || !calSelected) {
+                          routeToPage(context, const CalendarPage());
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(!calEnabled
+                                ? 'Enable calendar integration to add events'
+                                : 'Select a calendar to add events to'),
+                          ));
+                          return;
+                        }
+                        context.read<MemoryDetailProvider>().updateEventState(true, idx);
+                        setMemoryEventsState(provider.memory.id, [idx], [true]);
+                        CalendarUtil().createEvent(
+                          event.title,
+                          event.startsAt,
+                          event.duration,
+                          description: event.description,
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Event added to calendar'),
+                          ),
+                        );
+                      },
+                icon: Icon(event.created ? Icons.check : Icons.add, color: Colors.white),
+              ),
+            );
+          },
         );
       },
     );
