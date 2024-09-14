@@ -58,10 +58,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                onTap: () {
-                  widget.editSegment?.call(idx - 1);
-                  MixpanelManager().assignSheetOpened();
-                },
+                // onTap: () {
+                //   widget.editSegment?.call(idx - 1);
+                //   MixpanelManager().assignSheetOpened();
+                // },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
