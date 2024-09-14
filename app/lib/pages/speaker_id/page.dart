@@ -340,14 +340,14 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
-                              TextButton(
-                                  onPressed: () {
-                                    routeToPage(context, const UserPeoplePage());
-                                  },
-                                  child: const Text(
-                                    'Recognizing others 👀',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                  )),
+                              // TextButton(
+                              //     onPressed: () {
+                              //       routeToPage(context, const UserPeoplePage());
+                              //     },
+                              //     child: const Text(
+                              //       'Recognizing others 👀',
+                              //       style: TextStyle(color: Colors.white, fontSize: 16),
+                              //     )),
                             ],
                           )
                         : provider.profileCompleted
