@@ -23,6 +23,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/communication.dart';
@@ -142,7 +143,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
       id: processingMemoryId!,
       geolocation: geolocation,
-      emotionalFeedback: SharedPreferencesUtil().optInEmotionalFeedback,
+      emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
     );
     if (result?.result == null) {
       print("Can not update processing memory, result null");
