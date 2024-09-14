@@ -74,9 +74,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future periodicConnect(String printer) async {
+    debugPrint("period connect");
     if (timer != null) return;
     timer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
+      debugPrint("period connect...");
       if (timer == null) return;
+
+      debugPrint("period connect...x...");
       print(printer);
       print('seconds: $connectionCheckSeconds');
       print('triggered timer at ${DateTime.now()}');
@@ -118,7 +122,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future scanAndConnectToDevice() async {
     ServiceManager.instance().device.subscribe(this, this);
-
     updateConnectingStatus(true);
     if (isConnected) {
       if (connectedDevice == null) {
