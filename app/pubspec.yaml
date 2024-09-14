@@ -168,7 +168,7 @@ flutter:
 flutter_native_splash:
   background_image: "assets/images/splash.png"
   android_12:
-    #    image: assets/images/herologo.png
+    image: assets/images/splash_icon.png
     color: "#000000" # TODO: improve hero banner on android12
 
   android: true
