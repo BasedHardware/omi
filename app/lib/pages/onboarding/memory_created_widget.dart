@@ -56,9 +56,9 @@ class MemoryCreatedWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 onPressed: () async {
                   // goNext();
-                  context.read<MemoryDetailProvider>().updateMemory(provider.memory!, 0);
-                  MixpanelManager().memoryListItemClicked(provider.memory!, 0);
                   context.read<MemoryProvider>().addMemory(provider.memory!);
+                  context.read<MemoryDetailProvider>().updateMemory(0);
+                  MixpanelManager().memoryListItemClicked(provider.memory!, 0);
                   var result = await Navigator.of(context).push(MaterialPageRoute(
                     builder: (c) => MemoryDetailPage(
                       memory: provider.memory!,
