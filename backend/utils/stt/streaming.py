@@ -1,19 +1,20 @@
 import asyncio
 import os
+import threading
 import time
 from typing import List
 
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
+from starlette.websockets import WebSocket
 
 import database.notifications as notification_db
 from utils.plugins import trigger_realtime_integrations
 
-
-# headers = {
-#     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
-#     "Content-Type": "audio/*"
-# }
+headers = {
+    "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
+    "Content-Type": "audio/*"
+}
 
 
 # def transcribe_file_deepgram(file_path: str, language: str = 'en'):
@@ -76,10 +77,9 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
 
 
-async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, codec: str, channels: int,
-        preseconds: int = 0,
-):
+async def process_audio_dg(stream_transcript, stream_id: int, language: str, sample_rate: int, codec: str, channels: int,
+                           preseconds: int = 0,
+                           ):
     print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
 
     def on_message(self, result, **kwargs):
@@ -161,69 +161,3 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         return dg_connection
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
-
-
-# *****
-import assemblyai as aai
-
-aai.settings.api_key = os.getenv('ASSEMBLY_AI_API_KEY')
-
-
-# config = aai.TranscriptionConfig(
-#     dual_channel=False,
-#     filter_profanity=False,
-#     speaker_labels=True,
-#     punctuate=True,
-#     auto_highlights=True,
-#     format_text=True,
-#     disfluencies=True,
-#     language_code='en',
-#     speech_model=aai.SpeechModel.best,
-#     word_boost=['AI', 'GCP', 'API', 'OMI', 'friend', 'SF', 'founders', 'bro'],
-#     boost_param=aai.WordBoost.default,
-# )
-
-def process_audio_assembly(
-        stream_transcript, stream_id: int, language: str, preseconds: int = 0,
-) -> aai.RealtimeTranscriber:
-    def on_open(session_opened: aai.RealtimeSessionOpened):
-        """This function is called when the connection has been established."""
-        print("Session ID:", session_opened.session_id)
-
-    def on_data(transcript: aai.RealtimeTranscript):
-        """This function is called when a new transcript has been received."""
-
-        if not transcript.text:
-            return
-
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            for word in transcript.words:
-                print(word)
-            print('assemblyai', transcript.words)
-            print('assemblyai', transcript.dict)
-            print(transcript.text, end="\r\n")
-        else:
-            print(transcript.text, end="\r")
-        # stream_transcript(segments, stream_id)
-
-    def on_error(error: aai.RealtimeError):
-        """This function is called when the connection has been closed."""
-        print("An error occured:", error)
-
-    def on_close():
-        """This function is called when the connection has been closed."""
-        print("Closing Session")
-
-    print("Connecting to AssemblyAI")  # Log before connection attempt
-    transcriber = aai.RealtimeTranscriber(
-        on_data=on_data,
-        on_error=on_error,
-        sample_rate=16000,
-        on_open=on_open,  # optional
-        on_close=on_close,  # optional
-        encoding=aai.types.AudioEncoding.pcm_s16le,
-        word_boost=['AI', 'GCP', 'API', 'OMI', 'friend', 'SF', 'founders', 'bro'],
-    )
-    print('transcriber', transcriber)
-    transcriber.connect()
-    return transcriber

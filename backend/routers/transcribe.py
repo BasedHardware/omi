@@ -7,7 +7,6 @@ import uuid
 from typing import List
 from datetime import datetime, timezone
 
-import opuslib
 from fastapi import APIRouter
 from fastapi.websockets import (WebSocketDisconnect, WebSocket)
 from starlette.websockets import WebSocketState
@@ -173,7 +172,6 @@ async def _websocket_util(
         processing_audio_frames.append(audio_buffer)
 
     # Process
-    # transcript_socket3 = None
     transcript_socket2 = None
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
@@ -191,12 +189,9 @@ async def _websocket_util(
         else:
             speech_profile, duration = [], 0
 
-        transcript_socket = await process_audio_dg(
-            stream_transcript, memory_stream_id, language, sample_rate, codec, channels, preseconds=duration
-        )
-        # transcript_socket3 = process_audio_assembly(
-        #     stream_transcript, memory_stream_id, language, preseconds=duration
-        # )
+        transcript_socket = await process_audio_dg(stream_transcript, memory_stream_id,
+                                                   language, sample_rate, codec, channels,
+                                                   preseconds=duration)
 
         if duration:
             transcript_socket2 = await process_audio_dg(stream_transcript, speech_profile_stream_id,
@@ -212,7 +207,6 @@ async def _websocket_util(
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
-    decoder = opuslib.Decoder(sample_rate, channels)
 
     async def receive_audio(socket1, socket2):
         nonlocal websocket_active
@@ -231,10 +225,6 @@ async def _websocket_util(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 audio_buffer.extend(data)
-
-                # if socket3:
-                #     decoded_opus = decoder.decode(bytes(audio_buffer), frame_size=160)
-                #     socket3.stream(decoded_opus)
 
                 elapsed_seconds = time.time() - timer_start
                 if elapsed_seconds > duration or not socket2:
