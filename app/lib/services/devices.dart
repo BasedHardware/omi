@@ -209,9 +209,7 @@ class DeviceService implements IDeviceService {
     mutex = true;
 
     try {
-      if (_connection != null && _connection?.device.id != deviceId) {
-        throw Exception("There is a connected device ${_connection?.device.id}, you have to disconnect it first.");
-      }
+      debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status}");
       if (_connection?.status == DeviceConnectionState.connected) {
         var pongAt = _connection?.pongAt;
         var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
