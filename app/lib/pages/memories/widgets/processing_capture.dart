@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -50,7 +48,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ));
         },
         child: Container(
-          margin: const EdgeInsets.only(top: 12, left: 16, right: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           width: double.maxFinite,
           decoration: const BoxDecoration(
             color: Colors.black,
