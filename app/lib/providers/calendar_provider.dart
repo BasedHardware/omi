@@ -1,9 +1,11 @@
-import 'package:device_calendar/device_calendar.dart';
+// import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:manage_calendar_events/manage_calendar_events.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class CalenderProvider extends ChangeNotifier {
   List<Calendar> calendars = [];
@@ -11,23 +13,39 @@ class CalenderProvider extends ChangeNotifier {
   final CalendarUtil _calendarUtil = CalendarUtil();
   final MixpanelManager _mixpanelManager = MixpanelManager();
   final SharedPreferencesUtil _sharedPreferencesUtil = SharedPreferencesUtil();
-  void initialize() {
-    calendarEnabled = _sharedPreferencesUtil.calendarEnabled;
-    if (calendarEnabled) _getCalendars();
-  }
+  bool isLoading = false;
 
-  Future<void> _getCalendars() async {
-    calendars = await _calendarUtil.getCalendars();
+  void setLoading(bool value) {
+    isLoading = value;
     notifyListeners();
   }
 
+  Future<void> initialize() async {
+    calendarEnabled = await hasCalendarAccess();
+    if (await hasCalendarAccess()) await _getCalendars();
+  }
+
+  Future<void> _getCalendars() async {
+    calendars = await _calendarUtil.fetchCalendars();
+    notifyListeners();
+  }
+
+  Future<bool> hasCalendarAccess() async {
+    return await _calendarUtil.checkCalendarPermission();
+  }
 
   Future<void> onCalendarSwitchChanged(bool s) async {
     if (s) {
-      bool hasAccess = await _calendarUtil.enableCalendarAccess();
-      print('onCalendarSwitchChanged: hasAccess: $hasAccess');
-      if (hasAccess) {
+      var res = await Permission.calendarFullAccess.request();
+      print('res: $res');
+      _sharedPreferencesUtil.calendarPermissionAlreadyRequested = true;
+      bool hasAccess = await hasCalendarAccess();
+      print('hasAccess: $hasAccess');
+      if (res.isGranted || hasAccess) {
+        setLoading(true);
+
         await _getCalendars();
+        setLoading(false);
         if (calendars.isEmpty) {
           AppSnackbar.showSnackbar(
             'No calendars found. Please check your device settings.',
@@ -38,23 +56,23 @@ class CalenderProvider extends ChangeNotifier {
           calendarEnabled = true;
           _mixpanelManager.calendarEnabled();
         }
+      } else if ((await Permission.calendarFullAccess.isDenied ||
+              await Permission.calendarFullAccess.isPermanentlyDenied) &&
+          _sharedPreferencesUtil.calendarPermissionAlreadyRequested) {
+        AppSnackbar.showSnackbar(
+          'Calendar access was denied. Please enable it in your app settings.',
+          duration: const Duration(seconds: 5),
+          // action: SnackBarAction(
+          //   label: 'Open Settings',
+          //   onPressed: () => _calendarUtil.openAppSettings(),
+          // ),
+        );
+        calendarEnabled = false;
       } else {
-        bool wasAsked = await _calendarUtil.calendarPermissionAsked();
-        if (wasAsked) {
-          AppSnackbar.showSnackbar(
-            'Calendar access was denied. Please enable it in your app settings.',
-            duration: const Duration(seconds: 5),
-            // action: SnackBarAction(
-            //   label: 'Open Settings',
-            //   onPressed: () => _calendarUtil.openAppSettings(),
-            // ),
-          );
-        } else {
-          AppSnackbar.showSnackbar(
-            'Failed to request calendar access. Please try again.',
-            duration: const Duration(seconds: 5),
-          );
-        }
+        AppSnackbar.showSnackbar(
+          'Failed to request calendar access. Please try again.',
+          duration: const Duration(seconds: 5),
+        );
         calendarEnabled = false;
       }
     } else {
@@ -63,11 +81,10 @@ class CalenderProvider extends ChangeNotifier {
       _mixpanelManager.calendarDisabled();
       calendarEnabled = false;
     }
-
-    _sharedPreferencesUtil.calendarPermissionAlreadyRequested = await _calendarUtil.calendarPermissionAsked();
     _sharedPreferencesUtil.calendarEnabled = calendarEnabled;
     notifyListeners();
   }
+
   void onCalendarTypeChanged(String? v) {
     _sharedPreferencesUtil.calendarType = v!;
     _mixpanelManager.calendarTypeChanged(v);

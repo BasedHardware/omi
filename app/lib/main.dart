@@ -19,6 +19,7 @@ import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
@@ -190,6 +191,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, MemoryDetailProvider? previous) =>
                 (previous?..setPluginProvider(value)) ?? MemoryDetailProvider(),
           ),
+          ChangeNotifierProvider(create: (context) => CalenderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
