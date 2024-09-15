@@ -6,6 +6,7 @@ import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -102,6 +103,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
     super.build(context);
     return Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
       bool isEmpty = memoryProvider.memories.isEmpty && !memoryProvider.isLoadingMemories;
+      bool displaySearchBar = GrowthbookUtil().displayMemoriesSearchBar();
       return RefreshIndicator(
         backgroundColor: Colors.black,
         color: Colors.white,
@@ -110,8 +112,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: SizedBox(height: isEmpty ? 8 : 32)),
-            isEmpty
+            SliverToBoxAdapter(child: SizedBox(height: isEmpty || !displaySearchBar ? 0 : 32)),
+            isEmpty || !displaySearchBar
                 ? const SliverToBoxAdapter(child: SizedBox())
                 : SliverToBoxAdapter(
                     child: Container(
@@ -169,36 +171,31 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             isEmpty || !memoryProvider.hasNonDiscardedMemories
                 ? const SliverToBoxAdapter(child: SizedBox())
                 : SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0, top: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const SizedBox(width: 1),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: GestureDetector(
-                              onTap: () {
-                                memoryProvider.toggleDiscardMemories();
-                              },
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    memoryProvider.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-                                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    memoryProvider.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                                    color: Colors.white,
-                                  ),
-                                ],
-                              ),
+                    child: GestureDetector(
+                      onTap: memoryProvider.toggleDiscardMemories,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const SizedBox(width: 1),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  memoryProvider.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  memoryProvider.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
+                                  color: Colors.white,
+                                ),
+                              ],
                             ),
-                          )
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
