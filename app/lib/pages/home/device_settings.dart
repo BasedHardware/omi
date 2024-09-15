@@ -115,11 +115,11 @@ class DeviceSettings extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextButton(
-                  onPressed: () {
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
+                  onPressed: () async {
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
                     SharedPreferencesUtil().deviceName = '';
                     if (device != null) {
-                      _bleDisconnectDevice(device!);
+                      await _bleDisconnectDevice(device!);
                     }
                     context.read<DeviceProvider>().setIsConnected(false);
                     context.read<DeviceProvider>().setConnectedDevice(null);
