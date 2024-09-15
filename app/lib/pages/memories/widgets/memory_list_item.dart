@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -36,12 +36,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         context.read<MemoryDetailProvider>().updateMemory(widget.memory, widget.memoryIdx);
-        var result = await Navigator.of(context).push(MaterialPageRoute(
-          builder: (c) => MemoryDetailPage(
-            memory: widget.memory,
-            isFromOnboarding: widget.isFromOnboarding,
-          ),
-        ));
+        routeToPage(
+          context,
+          MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
+        );
         // if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
       },
       child: Padding(

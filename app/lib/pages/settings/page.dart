@@ -209,17 +209,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
-class _MockNotification extends StatelessWidget {
-  const _MockNotification({super.key, required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    // Forgive me, should be a goog dynamic layout but not static image, btw I have no time.
-    return Image.asset(
-      path,
-      fit: BoxFit.fitWidth,
-    );
-  }
-}
+// class _MockNotification extends StatelessWidget {
+//   const _MockNotification({super.key, required this.path});
+//
+//   final String path;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     // Forgive me, should be a goog dynamic layout but not static image, btw I have no time.
+//     return Image.asset(
+//       path,
+//       fit: BoxFit.fitWidth,
+//     );
+//   }
+// }
