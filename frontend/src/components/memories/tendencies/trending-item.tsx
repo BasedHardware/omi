@@ -1,18 +1,17 @@
 'use client';
 
+import { Trend } from '@/src/types/trends/trends.types';
 import { useSearchBox } from 'react-instantsearch';
 
 interface TrendingItemProps {
-  title: string;
-  count: number;
-  raking?: number;
+  trend: Trend;
 }
 
-export default function TrendingItem({ title, count, raking }: TrendingItemProps) {
+export default function TrendingItem({ trend }: TrendingItemProps) {
   const { refine } = useSearchBox();
 
   const updateSearch = () => {
-    refine(title);
+    // refine(title);
   };
 
   return (
