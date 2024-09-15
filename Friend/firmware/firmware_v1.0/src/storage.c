@@ -11,6 +11,7 @@
 #include "sdcard.h"
 #include <string.h>
 #include <stdio.h>
+#include "transport.h"
 
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -20,6 +21,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define READ_COMMAND 0
 #define DELETE_COMMAND 1
+#define NUKE 2
 
 #define INVALID_FILE_SIZE 3
 #define ZERO_FILE_SIZE 4
@@ -36,7 +38,7 @@ K_THREAD_STACK_DEFINE(storage_stack, 2048);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
-extern uint32_t file_num_array[20];
+extern uint32_t file_num_array[40];
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
@@ -88,7 +90,7 @@ uint8_t transport_started = 0;
 
 static uint16_t packet_next_index = 0;
 
-static uint8_t storage_write_buffer[256];
+static uint8_t storage_write_buffer[400];
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
@@ -108,7 +110,6 @@ static int setup_storage_tx() {
     if (res) {
         LOG_INF("bad pointer");
         transport_started = 0;
-        // current_read_num++;
         current_read_num = 1;
         remaining_length = 0;
         return -1;
@@ -132,6 +133,7 @@ static int setup_storage_tx() {
 
 }
 uint8_t delete_num = 0;
+uint8_t nuke_started = 0;
 static uint8_t parse_storage_command(void *buf,uint16_t len) {
 
     if (len != 6 && len != 2) {
@@ -185,6 +187,9 @@ static uint8_t parse_storage_command(void *buf,uint16_t len) {
         delete_num = file_num;
         delete_started = 1;
     }
+    else if (command == NUKE) {
+        nuke_started = 1;
+    }
     else {
         LOG_INF("invalid command \n");
         return 6;
@@ -225,6 +230,17 @@ static void write_to_gatt(struct bt_conn *conn) {
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
 }
 
+// static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max speeds. udp?
+
+//     uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH*5);
+
+//     int r = read_audio_data(storage_write_buffer,packet_size,offset);
+//     offset = offset + packet_size;
+//     remaining_length = remaining_length - packet_size;
+//     printk("remaining length%d\n",remaining_length);
+//     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
+// }
+
 
 
 void storage_write(void) {
@@ -234,16 +250,25 @@ void storage_write(void) {
         LOG_INF("transpor started in side : %d",transport_started);
         setup_storage_tx();
     }
-   
+    //probably prefer to implement using work orders for delete,nuke,etc...
     if (delete_started) {
         
         
        LOG_INF("delete:%d\n",delete_started);
         int err = clear_audio_file(delete_num);
         if (err) {
-            LOG_INF("error clearing\n");
+            printk("error clearing\n");
+        }
+        else{
+        uint8_t result_buffer[1] = {100};
+        bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer,1);
         }
         delete_started = 0;
+        k_msleep(10);
+    }
+    if (nuke_started) {
+        clear_audio_directory();
+        nuke_started = 0;
     }
 
     if(remaining_length > 0 ) {

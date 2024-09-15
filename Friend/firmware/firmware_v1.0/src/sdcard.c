@@ -5,6 +5,7 @@
 #include <zephyr/fs/fs.h>
 #include <ff.h>
 #include <zephyr/fs/fs_sys.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/check.h>
 #include "sdcard.h"
 
@@ -16,6 +17,8 @@ static struct fs_mount_t mount_point = {
 	.type = FS_FATFS,
 	.fs_data = &fat_fs,
 };
+
+struct gpio_dt_spec sd_en_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=19, .dt_flags = GPIO_INT_DISABLE};
 
 static char *current_header;
 #define MAX_PATH_LENGTH 32
@@ -37,9 +40,9 @@ uint32_t get_file_size(uint8_t num){
  }
 
 int move_read_pointer(uint8_t num) {
-   char *read_ptr = generate_new_audio_header(num);
-   snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
-//    free(read_ptr);
+    char *read_ptr = generate_new_audio_header(num);
+    snprintf(read_buffer, sizeof(read_buffer), "%s%s", disk_mount_pt, read_ptr);
+    k_free(read_ptr);
     struct fs_dirent entry; 
     int res = fs_stat(&read_buffer,&entry);
     if (res) {
@@ -53,6 +56,7 @@ int move_read_pointer(uint8_t num) {
 int move_write_pointer(uint8_t num) {
     char *write_ptr = generate_new_audio_header(num);
     snprintf(write_buffer, sizeof(write_buffer), "%s%s", disk_mount_pt, write_ptr);
+    k_free(write_ptr);
     struct fs_dirent entry;
     int res = fs_stat(&write_buffer,&entry);
     if (res) {
@@ -60,17 +64,28 @@ int move_write_pointer(uint8_t num) {
         
     return -1;  
     }
-    k_free(write_ptr);
+    
     return 0;   
 }
 
-uint32_t file_num_array[20];
+uint32_t file_num_array[40];
 
 int mount_sd_card(void)
 {
-	uint64_t memory_size_mb;
-	uint32_t block_count;
-	uint32_t block_size;
+
+    if (gpio_is_ready_dt(&sd_en_gpio_pin)) {
+		printk("Haptic Pin ready\n");
+	}
+    else {
+		printk("Error setting up Haptic Pin\n");
+        return 1;
+	}
+
+	if (gpio_pin_configure_dt(&sd_en_gpio_pin, GPIO_OUTPUT_ACTIVE) < 0) {
+		printk("Error setting up Haptic Pin\n");
+        return 1;
+	}
+
     static const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
     LOG_INF("disk_access_init: %d\n", err);
@@ -90,6 +105,7 @@ int mount_sd_card(void)
         LOG_ERR("f_mount failed: %d", res);
         return -1;
     }
+    
     res = fs_mkdir("/SD:/audio");
     if (res == FR_OK) {
         LOG_INF("audio directory created successfully");
@@ -133,7 +149,8 @@ int mount_sd_card(void)
         LOG_ERR("error while moving the reader pointer\n");
         return -1;
     }
-
+    printk("file count: %d\n",file_count);
+    clear_audio_directory();
     struct fs_dirent entry; //check if the info file exists. if not, generate new info file
     const char *info_path = "/SD:/info.txt";
     res = fs_stat(info_path,&entry);
@@ -281,22 +298,74 @@ int get_next_item(struct fs_dir_t *zdp, struct fs_dirent *entry) {
 //we should clear instead of delete since we lose fifo structure 
 int clear_audio_file(uint8_t num) {
 
-    char *ptr = generate_new_audio_header(num);
-    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
-    k_free(ptr);
+    char *clear_header = generate_new_audio_header(num);
+    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, clear_header);
+    k_free(clear_header);
     int res = fs_unlink(current_full_path);
     if (res) {
         LOG_ERR("error deleting file");
         return -1;
     }
-    char *ptr2 = generate_new_audio_header(num);
+    char *create_file_header = generate_new_audio_header(num);
     k_msleep(10);
-    res = create_file(ptr2);
-    k_free(ptr2);
+    res = create_file(create_file_header);
+    k_free(create_file_header);
     if (res) {
         LOG_ERR("error creating file");
         return -1;
     }
 
     return 0;
+}
+
+int delete_audio_file(uint8_t num) {
+
+    char *ptr = generate_new_audio_header(num);
+    snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
+    k_free(ptr);
+    int res = fs_unlink(current_full_path);
+    if (res) {
+        printk("error deleting file in delete\n");
+        return -1;
+    }
+
+    return 0;
+}
+//the nuclear option.
+int clear_audio_directory() {
+    if (file_count == 1) {
+        return 0;
+    }
+    //check if all files are zero
+    // char* path_ = "/SD:/audio";
+    // clear_audio_file(file_count);
+    int res=0;
+    for (uint8_t i = file_count ; i > 0; i-- ) {
+        res = delete_audio_file(i);
+        k_msleep(10);
+        if (res) {
+        printk("error on %d\n",i);
+            return -1;
+        }  
+    }
+     res = fs_unlink("/SD:/audio");
+    if (res) {
+        printk("error deleting file\n");
+        return -1;
+    }
+    res = fs_mkdir("/SD:/audio");
+    if (res) {
+        printk("failed to make directory \n");
+        return -1;
+    }
+    res = create_file("audio/a01.txt");
+     if (res) {
+        printk("failed to make new file in directory files\n");
+        return -1;
+    }
+    printk("done with clearing\n");
+    file_count = 1;  
+    move_write_pointer(1);
+    return 0;
+    //if files are cleared, then directory is oked for destrcution.
 }
