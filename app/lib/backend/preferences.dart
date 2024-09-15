@@ -31,6 +31,10 @@ class SharedPreferencesUtil {
     saveString('btDeviceStruct', jsonEncode(value.toJson()));
   }
 
+  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
+    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
+
   BTDeviceStruct get btDeviceStruct {
     final String device = getString('btDeviceStruct') ?? '';
     if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
