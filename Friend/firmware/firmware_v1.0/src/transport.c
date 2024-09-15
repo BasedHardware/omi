@@ -557,7 +557,7 @@ bool write_to_storage(void) {
 
     return true;
 }
-
+//for improving ble bandwidth
 // bool write_to_storage(void) {//max possible packing
 //     if (!read_from_tx_queue())
 //     {
