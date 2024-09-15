@@ -518,7 +518,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Row(
                   children: [
                     Consumer2<MemoryProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
-                      if (home.selectedIndex != 0) return const SizedBox.shrink();
+                      if (home.selectedIndex != 0 ||
+                          !memoryProvider.hasNonDiscardedMemories ||
+                          memoryProvider.isLoadingMemories) {
+                        return const SizedBox.shrink();
+                      }
                       return IconButton(
                           onPressed: memoryProvider.toggleDiscardMemories,
                           icon: Icon(
