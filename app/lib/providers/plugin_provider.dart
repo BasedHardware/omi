@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
@@ -14,6 +15,22 @@ class PluginProvider extends BaseProvider {
   String searchQuery = '';
 
   List<bool> pluginLoading = [];
+
+  String selectedChatPluginId = 'no_selected';
+
+  void setSelectedChatPluginId(String? pluginId) {
+    if (pluginId == null) {
+      selectedChatPluginId = SharedPreferencesUtil().selectedChatPluginId;
+    } else {
+      selectedChatPluginId = pluginId;
+      SharedPreferencesUtil().selectedChatPluginId = pluginId;
+    }
+    notifyListeners();
+  }
+
+  Plugin? getSelectedPlugin() {
+    return plugins.firstWhereOrNull((p) => p.id == selectedChatPluginId);
+  }
 
   void setPluginLoading(int index, bool value) {
     pluginLoading[index] = value;
