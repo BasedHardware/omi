@@ -247,19 +247,22 @@ class ReprocessDiscardedWidget extends StatelessWidget {
     return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
       if (provider.loadingReprocessMemory) {
         return const Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-              SizedBox(width: 16),
-              Text(
-                'Reprocessing memory...\nThis may take a few seconds',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ],
+          child: Padding(
+            padding: EdgeInsets.only(top: 18.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(width: 16),
+                Text(
+                  'Re-summarizing memory...\nThis may take a few seconds',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
           ),
         );
       }
@@ -268,7 +271,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'This memory was discarded as no meaningful content was found.\n\nYou can re-summarize it to see if we can find something useful.',
+            'Nothing interesting found,\nwant to retry?',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
