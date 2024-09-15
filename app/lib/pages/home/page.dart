@@ -53,6 +53,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
+      context.read<PluginProvider>().setSelectedChatPluginId(null);
     });
     super.initState();
   }
@@ -457,17 +458,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: DropdownButton<String>(
                                 menuMaxHeight: 350,
-                                value: SharedPreferencesUtil().selectedChatPluginId,
+                                value: provider.selectedChatPluginId,
                                 onChanged: (s) async {
                                   if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) ||
                                       s == 'enable') {
                                     await routeToPage(context, const PluginsPage(filterChatOnly: true));
                                     return;
                                   }
-                                  print('Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
-                                  if (s == null || s == SharedPreferencesUtil().selectedChatPluginId) return;
-                                  SharedPreferencesUtil().selectedChatPluginId = s;
-                                  var plugin = provider.plugins.firstWhereOrNull((p) => p.id == s);
+                                  if (s == null || s == provider.selectedChatPluginId) return;
+                                  provider.setSelectedChatPluginId(s);
+                                  var plugin = provider.getSelectedPlugin();
                                   chatPageKey.currentState?.sendInitialPluginMessage(plugin);
                                 },
                                 icon: Container(),
