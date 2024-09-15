@@ -117,6 +117,10 @@ class SharedPreferencesUtil {
 
   set locationPermissionState(String value) => saveString('locationPermissionState', value);
 
+  bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
+
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());

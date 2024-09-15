@@ -168,40 +168,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                       }),
                     ),
                   ),
-            isEmpty || !memoryProvider.hasNonDiscardedMemories
-                ? const SliverToBoxAdapter(child: SizedBox())
-                : SliverToBoxAdapter(
-                    child: GestureDetector(
-                      onTap: memoryProvider.toggleDiscardMemories,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const SizedBox(width: 1),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text(
-                                  memoryProvider.displayDiscardMemories ? 'Hide Discarded' : 'Show Discarded',
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  memoryProvider.displayDiscardMemories ? Icons.cancel_outlined : Icons.filter_list,
-                                  color: Colors.white,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-            SliverToBoxAdapter(
-              child: getMemoryCaptureWidget(),
-            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            SliverToBoxAdapter(child: getMemoryCaptureWidget()),
             if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(
                 child: Center(

@@ -32,7 +32,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-      return GestureDetector(
+      return /*provider.memoryCreating ||
+              deviceProvider.connectedDevice != null ||
+              provider.recordingState == RecordingState.record
+          ? */
+          GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty && provider.photos.isEmpty) return;
           routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
@@ -64,7 +68,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
           ),
         ),
-      );
+      ) /* : const SizedBox.shrink()*/;
     });
   }
 
