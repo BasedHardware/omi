@@ -116,9 +116,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       isConnected = true;
     }
 
-    // var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
-    //     captureProvider.recordingState == RecordingState.initialising ||
-    //     captureProvider.recordingState == RecordingState.pause;
+    var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+        captureProvider.recordingState == RecordingState.initialising ||
+        captureProvider.recordingState == RecordingState.pause;
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
@@ -126,6 +126,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // mic
+          // TODO: improve phone recording UI
           deviceProvider.connectedDevice == null && !deviceProvider.isConnecting
               ? Center(
                   child: getPhoneMicRecordingButton(
@@ -135,7 +136,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                   ),
                 )
               : const SizedBox.shrink(),
-          isConnected
+          isConnected && !isUsingPhoneMic
               ? Row(
                   children: [
                     const Text(
@@ -160,7 +161,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                   ],
                 )
               : const SizedBox.shrink(),
-          isConnected
+          isConnected && !isUsingPhoneMic
               ? Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
