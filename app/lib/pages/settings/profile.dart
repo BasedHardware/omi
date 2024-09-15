@@ -5,6 +5,7 @@ import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/personal_details.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
+import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -42,18 +43,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: const TextStyle(color: Colors.white)),
               subtitle: const Text('What Omi has learned about you 👀'),
               trailing: const Icon(Icons.self_improvement, size: 20),
-              onTap: () {
-                routeToPage(context, const FactsPage());
-              },
+              onTap: () => routeToPage(context, const FactsPage()),
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               title: const Text('Speech Profile', style: TextStyle(color: Colors.white)),
               subtitle: const Text('Teach Omi your voice'),
               trailing: const Icon(Icons.multitrack_audio, size: 20),
-              onTap: () {
-                routeToPage(context, const FactsPage());
-              },
+              onTap: () => routeToPage(context, const SpeakerIdPage()),
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
