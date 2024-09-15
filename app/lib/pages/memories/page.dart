@@ -112,62 +112,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: SizedBox(height: isEmpty || !displaySearchBar ? 0 : 32)),
-            isEmpty || !displaySearchBar
-                ? const SliverToBoxAdapter(child: SizedBox())
-                : SliverToBoxAdapter(
-                    child: Container(
-                      width: double.maxFinite,
-                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-                      margin: const EdgeInsets.fromLTRB(18, 0, 18, 0),
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                        border: GradientBoxBorder(
-                          gradient: LinearGradient(colors: [
-                            Color.fromARGB(127, 208, 208, 208),
-                            Color.fromARGB(127, 188, 99, 121),
-                            Color.fromARGB(127, 86, 101, 182),
-                            Color.fromARGB(127, 126, 190, 236)
-                          ]),
-                          width: 1,
-                        ),
-                        shape: BoxShape.rectangle,
-                      ),
-                      child: Consumer<HomeProvider>(builder: (context, home, child) {
-                        return TextField(
-                          enabled: true,
-                          controller: textController,
-                          onChanged: (s) {
-                            memoryProvider.filterMemories(s);
-                          },
-                          obscureText: false,
-                          autofocus: false,
-                          focusNode: home.memoryFieldFocusNode,
-                          decoration: InputDecoration(
-                            hintText: 'Search for memories...',
-                            hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            suffixIcon: textController.text.isEmpty
-                                ? const SizedBox.shrink()
-                                : IconButton(
-                                    icon: const Icon(
-                                      Icons.cancel,
-                                      color: Color(0xFFF7F4F4),
-                                      size: 28.0,
-                                    ),
-                                    onPressed: () {
-                                      textController.clear();
-                                      memoryProvider.initFilteredMemories();
-                                    },
-                                  ),
-                          ),
-                          style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                        );
-                      }),
-                    ),
-                  ),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             SliverToBoxAdapter(child: getMemoryCaptureWidget()),
             if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
