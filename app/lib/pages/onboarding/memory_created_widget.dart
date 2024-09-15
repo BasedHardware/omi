@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -55,6 +56,7 @@ class MemoryCreatedWidget extends StatelessWidget {
                 onPressed: () async {
                   // goNext();
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
+                  context.read<MemoryProvider>().addMemory(provider.memory!);
                   var result = await Navigator.of(context).push(MaterialPageRoute(
                     builder: (c) => MemoryDetailPage(
                       memory: provider.memory!,
