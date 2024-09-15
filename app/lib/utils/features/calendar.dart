@@ -1,16 +1,16 @@
-import 'package:device_calendar/device_calendar.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/logger.dart';
+import 'package:manage_calendar_events/manage_calendar_events.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 // TODO: handle this cases
 // - Process reminders during the transcription? if they include smth like "Hey Friend..."
 // - If there's a event to be created that was in 10 minutes, but the conversation was 20 minutes
 //    - we shouldn't create the event, but that edge cases still happens.
+
 class CalendarUtil {
   static final CalendarUtil _instance = CalendarUtil._internal();
-  static DeviceCalendarPlugin? _calendarPlugin;
+  static CalendarPlugin? _calendarPlugin;
 
   factory CalendarUtil() {
     return _instance;
@@ -19,107 +19,56 @@ class CalendarUtil {
   CalendarUtil._internal();
 
   static void init() {
-    _calendarPlugin = DeviceCalendarPlugin();
+    _calendarPlugin = CalendarPlugin();
   }
 
-  Future<bool> enableCalendarAccess() async {
-    print('enableCalendarAccess');
+  Future<bool> checkCalendarPermission() async {
     try {
-      var permissionsGranted = await _calendarPlugin!.hasPermissions();
-      print('permissionsGranted: ${permissionsGranted.data}');
-
-      if (permissionsGranted.isSuccess && (permissionsGranted.data == null || permissionsGranted.data == false)) {
-        permissionsGranted = await _calendarPlugin!.requestPermissions();
-        print('permissionsGranted after request: ${permissionsGranted.data}');
+      var status = await Permission.calendarFullAccess.status;
+      if (status.isGranted) {
+        return true;
+      } else if (status.isDenied || status.isPermanentlyDenied) {
+        return false;
       }
-
-      bool hasAccess = permissionsGranted.isSuccess && permissionsGranted.data == true;
-      print('enableCalendarAccess: $hasAccess');
-      return hasAccess;
-    } on PlatformException catch (e) {
-      print('PlatformException in enableCalendarAccess: ${e.message}');
       return false;
-    }
-  }
-
-  Future<bool> hasCalendarAccess() async {
-    print('hasCalendarAccess');
-    try {
-      final permissionsGranted = await _calendarPlugin!.hasPermissions();
-      return permissionsGranted.isSuccess && permissionsGranted.data == true;
-    } on PlatformException catch (e) {
-      print('PlatformException in hasCalendarAccess: ${e.message}');
-      return false;
-    }
-  }
-
-  Future<bool> calendarPermissionAsked() async {
-    try {
-      final permissionsGranted = await _calendarPlugin!.hasPermissions();
-      return permissionsGranted.isSuccess;
-    } on PlatformException catch (e) {
-      print('PlatformException in calendarPermissionAsked: ${e.message}');
-      return false;
-    }
-  }
-
-  Future<List<Calendar>> getCalendars() async {
-    print('getCalendars');
-    try {
-      bool hasAccess = await enableCalendarAccess();
-      if (!hasAccess) return [];
-      print('getCalendars $hasAccess');
-      final calendarsResult = await _calendarPlugin!.retrieveCalendars();
-      print('calendarsResult: ${calendarsResult.data}');
-      if (calendarsResult.isSuccess && calendarsResult.data != null) {
-        return calendarsResult.data!;
-      }
-    } on PlatformException catch (e) {
-      print('PlatformException in getCalendars: ${e.message}');
-      if (e.code == '401') {
-        // Try to request permissions again
-        var permissionsGranted = await _calendarPlugin!.requestPermissions();
-        if (permissionsGranted.isSuccess && permissionsGranted.data == true) {
-          // If permissions are granted, try to retrieve calendars again
-          return await getCalendars();
-        } else {
-          print('Calendar modification permission denied even after re-requesting');
-          return [];
-        }
-      }
     } catch (e) {
-      print('Failed to get calendars: $e');
+      Logger.error('Error in checkCalendarPermission: $e');
+      return false;
     }
-    return [];
+  }
+
+  Future<List<Calendar>> fetchCalendars() async {
+    final calendarsResult = await _calendarPlugin!.getCalendars();
+    Logger.log('calendarsResult: $calendarsResult');
+    if (calendarsResult != null) {
+      return calendarsResult;
+    } else {
+      return [];
+    }
   }
 
   Future<bool> createEvent(String title, DateTime startsAt, int durationMinutes, {String? description}) async {
-    bool hasAccess = await enableCalendarAccess();
+    bool hasAccess = await checkCalendarPermission();
     if (!hasAccess) return false;
-    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    var currentLocation = timeZoneDatabase.locations[currentTimeZone];
+    DateTime startDate = startsAt.toLocal();
+    DateTime endDate = startDate.add(Duration(minutes: durationMinutes));
     String calendarId = SharedPreferencesUtil().calendarId;
-
-    TZDateTime eventStart = currentLocation == null
-        ? TZDateTime.local(startsAt.year, startsAt.month, startsAt.day, startsAt.hour, startsAt.minute)
-        : TZDateTime.from(startsAt, currentLocation);
-
-    TZDateTime eventEnd = eventStart.add(Duration(minutes: durationMinutes));
-
-    var event = Event(
-      calendarId,
+    Duration utcOffset = DateTime.now().timeZoneOffset;
+    startDate = startDate.subtract(utcOffset);
+    endDate = endDate.subtract(utcOffset);
+    CalendarEvent newEvent = CalendarEvent(
       title: title,
       description: description,
-      start: eventStart,
-      end: eventEnd,
-      availability: Availability.Tentative,
+      startDate: startDate,
+      endDate: endDate,
     );
-    final createResult = await _calendarPlugin!.createOrUpdateEvent(event);
-    if (createResult?.isSuccess == true) {
-      debugPrint('Event created successfully ${createResult!.data}');
+    var res = await _calendarPlugin!.createEvent(calendarId: calendarId, event: newEvent);
+
+    if (res != null && res.isNotEmpty) {
+      print('Event created successfully');
       return true;
     } else {
-      debugPrint('Failed to create event: ${createResult!.errors}');
+      print('Failed to create event: $res');
     }
     return false;
   }

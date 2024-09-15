@@ -9,6 +9,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -73,7 +74,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
 }
 
 Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
-  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+  var optEmotionalFeedback = GrowthbookUtil().isOmiFeedbackEnabled();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
@@ -257,9 +258,9 @@ Future<bool> setMemoryEventsState(
 //this is expected to return complete memories
 Future<List<ServerMemory>> sendStorageToBackend(File file, String dateTimeStorageString) async {
   var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+
   var request = http.MultipartRequest(
     'POST',
-    // Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
     Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$dateTimeStorageString'),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
@@ -277,9 +278,7 @@ Future<List<ServerMemory>> sendStorageToBackend(File file, String dateTimeStorag
 
     var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
-    //  for (var memory in memories) {
-    //   debugPrint('memory: ${memory}');
-    // }
+
     return memories;
   } catch (e) {
     debugPrint('An error occurred storageSend: $e');

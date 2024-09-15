@@ -23,9 +23,9 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
@@ -143,7 +143,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
       id: processingMemoryId!,
       geolocation: geolocation,
-      emotionalFeedback: SharedPreferencesUtil().optInEmotionalFeedback,
+      emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
     );
     if (result?.result == null) {
       print("Can not update processing memory, result null");
@@ -550,7 +550,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
-    _bleBytesStream = await getBleAudioBytesListener(
+    _bleBytesStream = await _getBleAudioBytesListener(
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
@@ -573,7 +573,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (_storageStream != null) {
       _storageStream?.cancel();
     }
-    _storageStream = await getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
+    _storageStream = await _getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
       storageUtil!.storeFrameStoragePacket(value);
@@ -611,7 +611,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     });
 
     getFileFromDevice(storageUtil.getFileNum());
-
     //  notifyListeners();
   }
 
@@ -626,14 +625,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     int command = 1;
     writeToStorage(connectedDevice!.id, storageUtil.fileNum,command);
   }
-
-  // Future saveAndSendStorageWav() async {
-  // }
-// Future storageHandler() async {
-//     File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
-//     sendStorageToBackend(storageFile, "hi");
-//     writeToStorage(id,2);
-// }
   void clearTranscripts() {
     segments = [];
     SharedPreferencesUtil().transcriptSegments = [];
@@ -673,7 +664,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     await initiateFriendAudioStreaming(isFromSpeechProfile);
-    await initiateStorageBytesStreaming();
+    // TODO: Commenting this for now as DevKit 2 is not yet used in production
+    // await initiateStorageBytesStreaming();
 
     setResetStateAlreadyCalled(false);
     notifyListeners();
@@ -699,9 +691,64 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
   }
 
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
+
+  Future<StreamSubscription?> _getBleStorageBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
+  }
+
+  Future<StreamSubscription?> _getBleAudioBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onAudioBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
+  Future<bool> _writeToStorage(String deviceId, int numFile) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.writeToStorage(numFile);
+  }
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
+  }
+
+  Future<bool> _hasPhotoStreamingCharacteristic(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return false;
+    }
+    return connection.hasPhotoStreamingCharacteristic();
+  }
+
   Future<bool> _checkCodecChange() async {
     if (connectedDevice != null) {
-      BleAudioCodec newCodec = await getAudioCodec(connectedDevice!.id);
+      BleAudioCodec newCodec = await _getAudioCodec(connectedDevice!.id);
       if (SharedPreferencesUtil().deviceCodec != newCodec) {
         debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
         SharedPreferencesUtil().deviceCodec = newCodec;
@@ -724,7 +771,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
 
-    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+    BleAudioCodec codec = await _getAudioCodec(connectedDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
@@ -748,29 +795,16 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
-    currentStorageFiles = await getStorageList(connectedDevice!.id);
+    if (connectedDevice == null) return;
+    currentStorageFiles = await _getStorageList(connectedDevice!.id);
     debugPrint('Storage files: $currentStorageFiles');
     await sendStorage(connectedDevice!.id);
     notifyListeners();
   }
 
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments: segments,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
-  }
-
   Future<void> startOpenGlass() async {
     if (connectedDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
+    isGlasses = await _hasPhotoStreamingCharacteristic(connectedDevice!.id);
     if (!isGlasses) return;
     await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
     webSocketProvider?.closeWebSocketWithoutReconnect('reset state open glass');

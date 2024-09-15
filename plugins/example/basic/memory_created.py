@@ -8,7 +8,7 @@ router = APIRouter()
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 
-@router.post('/conversation-feedback', tags=['basic', 'memory_created'], response_model=EndpointResponse)
+@router.post('/conversation-feedback', tags=['memory-created-example'], response_model=EndpointResponse)
 def conversation_feedback(memory: Memory):
     prompt = f'''
       The following is the structuring from a transcript of a conversation that just finished.
