@@ -278,7 +278,7 @@ Future<StreamSubscription?> performGetBleStorageBytesListener({
 
 
 Future<bool> performWriteToStorage(
-           int numFile
+           int numFile,int command
 ) async {
     final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
     if (storageService == null) {
@@ -293,7 +293,7 @@ Future<bool> performWriteToStorage(
     }
     debugPrint('About to write to storage bytes');
    debugPrint('about to send $numFile');
-   await storageDataStreamCharacteristic.write([0x00,numFile & 0xFF]);
+    await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF]);
 
     return true;
   }
