@@ -6,6 +6,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -13,7 +14,8 @@ import 'package:tuple/tuple.dart';
 
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   PluginProvider? pluginProvider;
-  late ServerMemory memory;
+  MemoryProvider? memoryProvider;
+  // late ServerMemory memory;
 
   int memoryIdx = 0;
 
@@ -26,7 +28,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   final focusOverviewField = FocusNode();
   List<Plugin> pluginsList = [];
 
-  Structured get structured => memory.structured;
+  Structured get structured => memoryProvider!.memoriesWithDates[memoryIdx].structured;
+  ServerMemory get memory => memoryProvider!.memoriesWithDates[memoryIdx];
   List<bool> pluginResponseExpanded = [];
 
   bool editingTitle = false;
@@ -75,8 +78,10 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void setPluginProvider(PluginProvider provider) {
+  void setProviders(PluginProvider provider, MemoryProvider memoryProvider) {
+    this.memoryProvider = memoryProvider;
     pluginProvider = provider;
+    notifyListeners();
   }
 
   updateSelectedTab(int index) {
@@ -94,10 +99,9 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateMemory(ServerMemory memory, int memIdx) {
+  void updateMemory(int memIdx) {
     memoryIdx = memIdx;
     pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
-    this.memory = memory;
     notifyListeners();
   }
 
@@ -142,7 +146,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
         notifyListeners();
         return false;
       } else {
-        updateMemory(updatedMemory, memoryIdx);
+        memoryProvider!.updateMemory(updatedMemory);
         SharedPreferencesUtil().modifiedMemoryDetails = updatedMemory;
         notifyInfo('REPROCESS_SUCCESS');
         notifyListeners();
