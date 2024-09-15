@@ -254,15 +254,16 @@ Future<bool> setMemoryEventsState(
   return response.statusCode == 200;
 }
 
-//should return a storage unit
-Future<List<ServerMemory>> sendStorageToBackend(File file, String memoryId) async {
+//this is expected to return complete memories
+Future<List<ServerMemory>> sendStorageToBackend(File file, String dateTimeStorageString) async {
   var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
+    // Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
+    Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$dateTimeStorageString'),
   );
+  request.headers.addAll({'Authorization': await getAuthHeader()});
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);

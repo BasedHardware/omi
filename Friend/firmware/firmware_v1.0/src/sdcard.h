@@ -22,3 +22,4 @@ uint32_t get_file_size(uint8_t num);
 int move_read_pointer(uint8_t num);
 int move_write_pointer(uint8_t num);
 int clear_audio_file(uint8_t num);
+int clear_audio_directory();

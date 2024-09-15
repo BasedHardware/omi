@@ -9,6 +9,7 @@
 #include "codec.h"
 #include "sdcard.h"
 #include "storage.h"
+#include "speaker.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -146,7 +147,7 @@ int main(void)
     k_msleep(500);
     storage_init();
 
-
+    init_haptic_pin();
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
