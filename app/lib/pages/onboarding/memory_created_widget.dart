@@ -5,11 +5,13 @@ import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCreatedWidget extends StatelessWidget {
   final VoidCallback goNext;
+
   const MemoryCreatedWidget({super.key, required this.goNext});
 
   @override
@@ -59,12 +61,7 @@ class MemoryCreatedWidget extends StatelessWidget {
                   context.read<MemoryProvider>().addMemory(provider.memory!);
                   context.read<MemoryDetailProvider>().updateMemory(0);
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
-                  var result = await Navigator.of(context).push(MaterialPageRoute(
-                    builder: (c) => MemoryDetailPage(
-                      memory: provider.memory!,
-                      isFromOnboarding: true,
-                    ),
-                  ));
+                  routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
                 },
                 child: const Text(
                   'Check it out',
