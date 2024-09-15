@@ -110,7 +110,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       stateText = "No connection";
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
-      isConnected = true;
+      isConnected = deviceProvider.connectedDevice != null;
     } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
       stateText = "Listening";
       isConnected = true;
@@ -231,6 +231,7 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         state == RecordingState.initialising
             ? const SizedBox(
@@ -249,7 +250,7 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
           state == RecordingState.initialising
               ? 'Initialising Recorder'
               : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 4),
       ],
