@@ -105,12 +105,15 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     var stateText = "";
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
+    bool isConnected = false;
     if (!connectivityProvider.isConnected) {
       stateText = "No connection";
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
+      isConnected = true;
     } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
       stateText = "Listening";
+      isConnected = true;
     }
 
     // var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
@@ -132,7 +135,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                   ),
                 )
               : const SizedBox.shrink(),
-          stateText.isNotEmpty
+          isConnected
               ? Row(
                   children: [
                     const Text(
@@ -157,7 +160,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                   ],
                 )
               : const SizedBox.shrink(),
-          stateText.isNotEmpty
+          isConnected
               ? Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
