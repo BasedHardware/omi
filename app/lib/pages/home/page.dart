@@ -21,7 +21,6 @@ import 'package:friend_private/providers/memory_provider.dart' as mp;
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
-import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -352,17 +351,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Consumer<DeviceProvider>(builder: (context, deviceProvider, child) {
+                Consumer2<DeviceProvider, HomeProvider>(builder: (context, deviceProvider, home, child) {
+                  bool isMemoriesPage = home.selectedIndex == 0;
+
+                  var deviceText = "";
+                  if (deviceProvider.connectedDevice != null) {
+                    var deviceName = deviceProvider.connectedDevice?.name ?? SharedPreferencesUtil().deviceName;
+                    // var deviceShortId = deviceProvider.connectedDevice?.getShortId() ??
+                    //     SharedPreferencesUtil().btDeviceStruct.getShortId();
+                    deviceText = deviceName;
+                  }
                   if (deviceProvider.connectedDevice != null && deviceProvider.batteryLevel != -1) {
                     return GestureDetector(
                       onTap: deviceProvider.connectedDevice == null
                           ? null
                           : () {
-                              Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (c) => ConnectedDevice(
-                                        device: deviceProvider.connectedDevice!,
-                                        batteryLevel: deviceProvider.batteryLevel,
-                                      )));
+                              routeToPage(
+                                context,
+                                ConnectedDevice(
+                                  device: deviceProvider.connectedDevice!,
+                                  batteryLevel: deviceProvider.batteryLevel,
+                                ),
+                              );
                               MixpanelManager().batteryIndicatorClicked();
                             },
                       child: Container(
@@ -377,6 +387,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
                                 width: 10,
@@ -391,21 +402,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 ),
                               ),
                               const SizedBox(width: 8.0),
+                              isMemoriesPage
+                                  ? Text(
+                                      deviceText,
+                                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    )
+                                  : const SizedBox.shrink(),
+                              isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                               Text(
                                 '${deviceProvider.batteryLevel.toString()}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ],
                           )),
                     );
                   } else {
-                    print(deviceProvider.connectedDevice?.id);
-                    return TextButton(
-                      onPressed: () async {
+                    return GestureDetector(
+                      onTap: () async {
                         if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
                           routeToPage(context, const ConnectDevicePage());
                           MixpanelManager().connectFriendClicked();
@@ -417,15 +430,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         }
                         // setState(() {});
                       },
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        // backgroundColor: Colors.transparent,
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Colors.white, width: 1),
+                          border: Border.all(color: Colors.grey, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                            isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
+                            deviceProvider.isConnecting && isMemoriesPage
+                                ? Text(
+                                    "Connecting",
+                                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                  )
+                                : isMemoriesPage
+                                    ? Text(
+                                        "No device found",
+                                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                      )
+                                    : const SizedBox.shrink(),
+                          ],
                         ),
                       ),
-                      child: Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
                     );
                   }
                 }),
