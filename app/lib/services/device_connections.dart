@@ -36,6 +36,7 @@ class DeviceConnectionFactory {
 abstract class DeviceConnection {
   BTDeviceStruct device;
   BluetoothDevice bleDevice;
+  DateTime? _pongAt;
 
   DeviceConnectionState _connectionState = DeviceConnectionState.disconnected;
 
@@ -44,6 +45,8 @@ abstract class DeviceConnection {
   DeviceConnectionState get status => _connectionState;
 
   DeviceConnectionState get connectionState => _connectionState;
+
+  DateTime? get pongAt => _pongAt;
 
   late StreamSubscription<BluetoothConnectionState> _connectionStateSubscription;
 
@@ -104,6 +107,7 @@ abstract class DeviceConnection {
     try {
       int rssi = await bleDevice.readRssi();
       device.rssi = rssi;
+      _pongAt = DateTime.now();
       return true;
     } catch (e) {
       debugPrint('Error reading RSSI: $e');
