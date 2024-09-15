@@ -77,6 +77,8 @@ class ForegroundUtil {
     }
   }
 
+  Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+
   static Future<void> initializeForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) return;
     debugPrint('initializeForegroundService');
