@@ -34,7 +34,7 @@ const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805
 
 const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
 
-Future<List<BluetoothService>> _getBleServices(String deviceId) async {
+Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
     // Check if the device is connected before discovering services
@@ -54,12 +54,12 @@ Future<List<BluetoothService>> _getBleServices(String deviceId) async {
   }
 }
 
-Future<BluetoothService?> _getServiceByUuid(String deviceId, String uuid) async {
-  final services = await _getBleServices(deviceId);
+Future<BluetoothService?> getServiceByUuid(String deviceId, String uuid) async {
+  final services = await getBleServices(deviceId);
   return services.firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == uuid);
 }
 
-BluetoothCharacteristic? _getCharacteristicByUuid(BluetoothService service, String uuid) {
+BluetoothCharacteristic? getCharacteristicByUuid(BluetoothService service, String uuid) {
   return service.characteristics.firstWhereOrNull(
     (characteristic) => characteristic.uuid.str128.toLowerCase() == uuid.toLowerCase(),
   );
