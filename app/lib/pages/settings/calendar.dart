@@ -5,30 +5,18 @@ import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-class CalendarPage extends StatelessWidget {
+class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => CalenderProvider(),
-      child: const _CalendarPage(),
-    );
-  }
+  State<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalendarPage extends StatefulWidget {
-  const _CalendarPage({super.key});
-
-  @override
-  State<_CalendarPage> createState() => __CalendarPageState();
-}
-
-class __CalendarPageState extends State<_CalendarPage> {
+class _CalendarPageState extends State<CalendarPage> {
   @override
   void initState() {
-    () {
-      Provider.of<CalenderProvider>(context, listen: false).initialize();
+    () async {
+      await Provider.of<CalenderProvider>(context, listen: false).initialize();
     }.withPostFrameCallback();
     super.initState();
   }
@@ -67,7 +55,9 @@ class __CalendarPageState extends State<_CalendarPage> {
                     ),
                     Switch(
                       value: provider.calendarEnabled,
-                      onChanged: provider.onCalendarSwitchChanged,
+                      onChanged: (v) async {
+                        await provider.onCalendarSwitchChanged(v);
+                      },
                     ),
                   ],
                 ),

@@ -25,7 +25,7 @@ externally.
 - Create a personalized social platform based on conversations and interests
 - Generate a knowledge graph of interests, experiences, and relationships
 
-### 2. 🏎️ Real-Time Transcript Processors
+### 2. 🏎️ Real-Time Transcript Processors (@DEPRECATED / NOT READY YET)
 
 These plugins process conversation transcripts as they occur, enabling real-time analysis and actions.
 

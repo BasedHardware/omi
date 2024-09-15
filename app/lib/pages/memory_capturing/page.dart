@@ -7,8 +7,8 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
-  String? topMemoryId;
-  MemoryCapturingPage({
+  final String? topMemoryId;
+  const MemoryCapturingPage({
     super.key,
     this.topMemoryId,
   });

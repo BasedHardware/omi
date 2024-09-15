@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/ble/connect.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -22,11 +22,20 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isInstalled = false;
   int installProgress = 1;
 
+  // TODO: thinh, use connection directly
+  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.disconnect();
+  }
+
   Future<void> startDfu(BTDeviceStruct btDevice, {bool fileInAssets = false}) async {
     setState(() {
       isInstalling = true;
     });
-    bleDisconnectDevice(btDevice);
+    _bleDisconnectDevice(btDevice);
     await Future.delayed(const Duration(seconds: 2));
 
     String firmwareFile = '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';

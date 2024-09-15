@@ -31,15 +31,17 @@ class GrowthbookUtil {
       },
       hostURL: 'https://cdn.growthbook.io/',
       qaMode: true,
-      gbFeatures: {
-        // 'server-transcript': GBFeature(defaultValue: true),
-        'streaming-transcript': GBFeature(defaultValue: false),
-      },
     ).initialize();
     _gb!.setAttributes(attr);
   }
 
-  bool hasStreamingTranscriptFeatureOn() {
-    return true;
+  bool displayOmiFeedback() {
+    return (_gb?.feature('omi-feedback').on) ?? true;
+  }
+
+  bool isOmiFeedbackEnabled() {
+    if (_gb == null) return false;
+    if (_gb!.feature('omi-feedback').off) return false;
+    return SharedPreferencesUtil().optInEmotionalFeedback;
   }
 }

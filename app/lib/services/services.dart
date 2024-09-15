@@ -5,9 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:friend_private/services/devices.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
+  late IDeviceService _device;
 
   static ServiceManager? _instance;
 
@@ -16,6 +18,7 @@ class ServiceManager {
     sm._mic = MicRecorderBackgroundService(
       runner: BackgroundService(),
     );
+    sm._device = DeviceService();
 
     return sm;
   }
@@ -30,6 +33,8 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
+  IDeviceService get device => _device;
+
   static void init() {
     if (_instance != null) {
       throw Exception("Service manager is initiated");
@@ -37,10 +42,13 @@ class ServiceManager {
     _instance = ServiceManager._create();
   }
 
-  Future<void> start() async {}
+  Future<void> start() async {
+    _device.start();
+  }
 
   void deinit() {
     _mic.stop();
+    _device.stop();
   }
 }
 

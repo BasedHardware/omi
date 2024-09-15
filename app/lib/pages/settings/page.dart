@@ -235,9 +235,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   getItemAddOn('Speech Recognition', () {
                     routeToPage(context, const SpeakerIdPage());
                   }, icon: Icons.multitrack_audio),
-                  getItemAddOn('Identifying Others', () {
-                    routeToPage(context, const UserPeoplePage());
-                  }, icon: Icons.people),
+                  // getItemAddOn('Identifying Others', () {
+                  //   routeToPage(context, const UserPeoplePage());
+                  // }, icon: Icons.people),
                   const Divider(
                     color: Colors.transparent,
                   ),
@@ -264,7 +264,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     MixpanelManager().devModePageOpened();
                     await routeToPage(context, const DeveloperSettingsPage());
                     setState(() {});
-                  }, icon: Icons.code, visibility: devModeEnabled),
+                  }, icon: Icons.code, visibility: true),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Need help?', style: TextStyle(color: Colors.white)),

@@ -16,8 +16,10 @@ import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
@@ -39,13 +41,14 @@ import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
+
+  // TODO: thinh, move to app start
   await ServiceManager.instance().start();
 
   // Firebase
@@ -183,6 +186,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
           ),
+          ChangeNotifierProxyProvider<PluginProvider, MemoryDetailProvider>(
+            create: (context) => MemoryDetailProvider(),
+            update: (BuildContext context, value, MemoryDetailProvider? previous) =>
+                (previous?..setPluginProvider(value)) ?? MemoryDetailProvider(),
+          ),
+          ChangeNotifierProvider(create: (context) => CalenderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
