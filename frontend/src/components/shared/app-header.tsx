@@ -23,8 +23,8 @@ export default function AppHeader() {
 
   return (
     <header
-      className={`fixed top-0 z-30 flex w-full bg-black/40 md:bg-transparent items-center justify-between p-4 px-4 text-white transition-all duration-500 md:px-12 ${
-        scrollPosition > 100 ? 'md:!bg-black md:!bg-opacity-10 backdrop-blur-md' : ''
+      className={`fixed top-0 z-30 flex w-full items-center justify-between bg-black/40 p-4 px-4 text-white transition-all duration-500 md:bg-transparent md:px-12 ${
+        scrollPosition > 100 ? 'backdrop-blur-md md:!bg-black md:!bg-opacity-10' : ''
       }`}
     >
       <h1 className="flex items-center gap-2 text-xl">
