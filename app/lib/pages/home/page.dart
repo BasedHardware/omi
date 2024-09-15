@@ -18,6 +18,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
@@ -514,19 +515,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     );
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                  onPressed: () async {
-                    MixpanelManager().settingsOpened();
-                    String language = SharedPreferencesUtil().recordingsLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    await routeToPage(context, const SettingsPage());
-                    // TODO: this fails like 10 times, connects reconnects, until it finally works.
-                    if (language != SharedPreferencesUtil().recordingsLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
-                      context.read<DeviceProvider>().restartWebSocket();
-                    }
-                  },
+                Row(
+                  children: [
+                    Consumer2<MemoryProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
+                      if (home.selectedIndex != 0) return const SizedBox.shrink();
+                      return IconButton(
+                          onPressed: memoryProvider.toggleDiscardMemories,
+                          icon: Icon(
+                            SharedPreferencesUtil().showDiscardedMemories
+                                ? Icons.filter_list_off_sharp
+                                : Icons.filter_list,
+                            color: Colors.white,
+                            size: 24,
+                          ));
+                    }),
+                    IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                      onPressed: () async {
+                        MixpanelManager().settingsOpened();
+                        String language = SharedPreferencesUtil().recordingsLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        await routeToPage(context, const SettingsPage());
+                        // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                        if (language != SharedPreferencesUtil().recordingsLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
+                          context.read<DeviceProvider>().restartWebSocket();
+                        }
+                      },
+                    ),
+                  ],
                 )
               ],
             ),
