@@ -197,7 +197,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(null);
     setIsConnected(false);
     updateConnectingStatus(false);
-    periodicConnect('coming from onDisconnect');
     await captureProvider?.resetState(restartBytesProcessing: false);
     captureProvider?.setAudioBytesConnected(false);
     print('after resetState inside initiateConnectionListener');
@@ -211,6 +210,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     });
     MixpanelManager().deviceDisconnected();
+
+    // Retired 1s to prevent the race condition made by standby power of ble device
+    Future.delayed(const Duration(seconds: 1), () {
+      periodicConnect('coming from onDisconnect');
+    });
   }
 
   void onDeviceReconnected(BTDeviceStruct device) async {

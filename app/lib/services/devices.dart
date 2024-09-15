@@ -209,14 +209,19 @@ class DeviceService implements IDeviceService {
     mutex = true;
 
     try {
+      debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status}");
       if (_connection?.status == DeviceConnectionState.connected) {
-        var ok = await _connection?.ping() ?? false;
-        if (!ok) {
-          await _connection?.disconnect();
+        var pongAt = _connection?.pongAt;
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        if (shouldPing) {
+          var ok = await _connection?.ping() ?? false;
+          if (!ok) {
+            await _connection?.disconnect();
 
-          // try re-connecting
-          await _connectToDevice(deviceId);
-          return _connection;
+            // try re-connecting
+            await _connectToDevice(deviceId);
+            return _connection;
+          }
         }
 
         return _connection;
