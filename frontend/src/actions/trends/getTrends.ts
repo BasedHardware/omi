@@ -1,7 +1,7 @@
 'use server';
 
-import envConfig from "@/src/constants/envConfig";
-import { ResponseTrends } from "@/src/types/trends/trends.types";
+import envConfig from '@/src/constants/envConfig';
+import { ResponseTrends } from '@/src/types/trends/trends.types';
 
 export default async function getTrends(): Promise<ResponseTrends> {
   const response = await fetch(`${envConfig.API_URL}/v1/trends`);

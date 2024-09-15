@@ -1,6 +1,6 @@
-import getTrends from "@/src/actions/trends/getTrends";
+import getTrends from '@/src/actions/trends/getTrends';
 
-export default async function GetTrends(){
+export default async function GetTrends() {
   const trends = await getTrends();
 
   return (
@@ -9,5 +9,5 @@ export default async function GetTrends(){
         <TrendingItem trend={trend} />
       ))} */}
     </div>
-  )
+  );
 }
