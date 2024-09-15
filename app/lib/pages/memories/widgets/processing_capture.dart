@@ -32,43 +32,47 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-      return /*provider.memoryCreating ||
-              deviceProvider.connectedDevice != null ||
-              provider.recordingState == RecordingState.record
-          ? */
-          GestureDetector(
-        onTap: () async {
-          if (provider.segments.isEmpty && provider.photos.isEmpty) return;
-          routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
-        },
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          width: double.maxFinite,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: BorderRadius.circular(16.0),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _getMemoryHeader(context),
-                provider.segments.isNotEmpty
-                    ? const Column(
-                        children: [
-                          SizedBox(height: 8),
-                          LiteCaptureWidget(),
-                          SizedBox(height: 8),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ],
-            ),
-          ),
-        ),
-      ) /* : const SizedBox.shrink()*/;
+
+      bool showPhoneMic = deviceProvider.connectedDevice == null && !deviceProvider.isConnecting;
+      bool isConnected = deviceProvider.connectedDevice != null ||
+          provider.recordingState == RecordingState.record ||
+          (provider.memoryCreating && deviceProvider.connectedDevice != null);
+
+      return (showPhoneMic || isConnected)
+          ? GestureDetector(
+              onTap: () async {
+                if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+                routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                width: double.maxFinite,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900,
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _getMemoryHeader(context),
+                      provider.segments.isNotEmpty
+                          ? const Column(
+                              children: [
+                                SizedBox(height: 8),
+                                LiteCaptureWidget(),
+                                SizedBox(height: 8),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox.shrink();
     });
   }
 

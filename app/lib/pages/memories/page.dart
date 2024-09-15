@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/location_service.dart';
+import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
-import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -18,9 +16,7 @@ import 'widgets/empty_memories.dart';
 import 'widgets/memory_list_item.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({
-    super.key,
-  });
+  const MemoriesPage({super.key});
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
@@ -102,8 +98,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
     print('building memories page');
     super.build(context);
     return Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
-      bool isEmpty = memoryProvider.memories.isEmpty && !memoryProvider.isLoadingMemories;
-      bool displaySearchBar = GrowthbookUtil().displayMemoriesSearchBar();
       return RefreshIndicator(
         backgroundColor: Colors.black,
         color: Colors.white,
@@ -113,6 +107,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         child: CustomScrollView(
           slivers: [
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            SliverToBoxAdapter(child: speechProfileWidget(context)),
             SliverToBoxAdapter(child: getMemoryCaptureWidget()),
             if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(
