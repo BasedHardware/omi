@@ -57,15 +57,13 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
               backgroundColor: Theme.of(context).colorScheme.primary,
               title: const Text('Developer Settings'),
               actions: [
-                MaterialButton(
+                TextButton(
                   onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                  color: Colors.transparent,
-                  elevation: 0,
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4.0),
                     child: Text(
                       'Save',
-                      style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 16),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
                     ),
                   ),
                 )
@@ -231,7 +229,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'On Memory Created:',
+                    'On memory created:',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   // const SizedBox(height: 4),
@@ -250,7 +248,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Real-Time Transcript Processing:',
+                    'Real-time transcript received:',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   // const SizedBox(height: 4),
