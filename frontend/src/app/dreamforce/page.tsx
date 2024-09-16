@@ -13,7 +13,7 @@ export default function DreamforcePage() {
         <div className="mx-auto my-44 w-full max-w-screen-xl">
           <TrendsTitle>
             <ErrorBoundary errorComponent={TrendsError}>
-              <Suspense fallback={null}>
+              <Suspense fallback={<></>}>
                 <GetTrendsMainPage />
               </Suspense>
             </ErrorBoundary>
