@@ -1,6 +1,6 @@
-import getTrends from '@/src/actions/trends/getTrends';
 import TrendItem from './trend-item';
 import Animation from './animation';
+import getTrends from '@/src/actions/trends/get-trends';
 
 const trendMock = [
   {
@@ -48,7 +48,7 @@ export default async function GetTrendsMainPage() {
   const trends = await getTrends();
   return (
     <Animation>
-      {trendMock.map((trend, index) => (
+      {trends.map((trend, index) => (
         <TrendItem key={index} trend={trend} />
       ))}
     </Animation>

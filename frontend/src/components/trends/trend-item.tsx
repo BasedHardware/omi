@@ -12,17 +12,17 @@ const container = {
     scale: 1,
     transition: {
       delayChildren: 0.3,
-      staggerChildren: 0.2
-    }
-  }
+      staggerChildren: 0.2,
+    },
+  },
 };
 
 const item = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
-    opacity: 1
-  }
+    opacity: 1,
+  },
 };
 
 const visible = { opacity: 1, y: 0, transition: { duration: 0.8 } };
@@ -38,9 +38,12 @@ export default function TrendItem({ trend }: { trend: Trend }) {
       <h2 className="text-center text-2xl font-light text-white md:text-4xl">
         {capitalizeFirstLetter(trend.category)}
       </h2>
-      <motion.div    variants={container}
-    initial="hidden"
-    animate="visible" className={`mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5`}>
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="visible"
+        className={`mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5`}
+      >
         {trend.topics.map((topic, index) => (
           <TrendTopicItem key={index} topic={topic} trend={trend} variants={item} />
         ))}
