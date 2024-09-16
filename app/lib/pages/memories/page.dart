@@ -149,8 +149,6 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     return MemoryListItem(
                       memoryIdx: memoryProvider.memoriesWithDates.indexOf(memory),
                       memory: memory,
-                      updateMemory: memoryProvider.updateMemory,
-                      deleteMemory: memoryProvider.deleteMemory,
                     );
                   },
                   childCount: memoryProvider.memoriesWithDates.length + 1,
