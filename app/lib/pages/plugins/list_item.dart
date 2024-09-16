@@ -15,14 +15,14 @@ class PluginListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
-      child: GestureDetector(
-        onTap: () async {
-          await routeToPage(context, PluginDetailPage(plugin: plugin));
-          provider.setPlugins();
-        },
+    return GestureDetector(
+      onTap: () async {
+        await routeToPage(context, PluginDetailPage(plugin: plugin));
+        provider.setPlugins();
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

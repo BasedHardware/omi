@@ -475,7 +475,8 @@
     "_comment": "NEW STRUCTURE FOR PLUGINS BELOW",
     "capabilities": [
       "memories",
-      "chat"
+      "chat",
+      "external_integration"
     ],
     "external_integration": {
       "triggers_on": "memory_creation",
