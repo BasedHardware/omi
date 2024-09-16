@@ -28,7 +28,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     if (connection == null) {
       return Future.value(null);
     }
-    return connection.disconnect();
+    return await connection.disconnect();
   }
 
   Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
