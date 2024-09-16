@@ -123,6 +123,33 @@ class MemoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /////////////////////////////////////////////////////////////////
+  ////////// Delete Memory With Undo Functionality ///////////////
+
+  Map<String, ServerMemory> memoriesToDelete = {};
+
+  void deleteMemoryLocally(ServerMemory memory, int index) {
+    memoriesToDelete[memory.id] = memory;
+    memories.removeWhere((element) => element.id == memory.id);
+    filterMemories('');
+    notifyListeners();
+  }
+
+  void deleteMemoryOnServer(String memoryId) {
+    deleteMemoryServer(memoryId);
+    memoriesToDelete.remove(memoryId);
+  }
+
+  void undoDeleteMemory(String memoryId, int index) {
+    if (memoriesToDelete.containsKey(memoryId)) {
+      ServerMemory memory = memoriesToDelete.remove(memoryId)!;
+      memories.insert(index, memory);
+      filterMemories('');
+    }
+    notifyListeners();
+  }
+  /////////////////////////////////////////////////////////////////
+
   void deleteMemory(ServerMemory memory, int index) {
     memories.removeWhere((element) => element.id == memory.id);
     deleteMemoryServer(memory.id);
