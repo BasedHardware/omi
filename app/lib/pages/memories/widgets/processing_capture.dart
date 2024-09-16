@@ -1,22 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
@@ -38,55 +32,47 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-      return GestureDetector(
-        onTap: () async {
-          if (provider.segments.isEmpty && provider.photos.isEmpty) {
-            return;
-          }
-          await Navigator.of(context).push(MaterialPageRoute(
-            builder: (c) => MemoryCapturingPage(
-              topMemoryId: topMemoryId,
-            ),
-          ));
-        },
-        child: Container(
-          margin: const EdgeInsets.only(top: 12, left: 16, right: 16),
-          width: double.maxFinite,
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.all(Radius.circular(16)),
-            border: GradientBoxBorder(
-              gradient: LinearGradient(colors: [
-                Color.fromARGB(127, 208, 208, 208),
-                Color.fromARGB(127, 188, 99, 121),
-                Color.fromARGB(127, 86, 101, 182),
-                Color.fromARGB(127, 126, 190, 236)
-              ]),
-              width: 1,
-            ),
-            shape: BoxShape.rectangle,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _getMemoryHeader(context),
-                provider.segments.isNotEmpty
-                    ? const Column(
-                        children: [
-                          SizedBox(height: 8),
-                          LiteCaptureWidget(),
-                          SizedBox(height: 8),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ],
-            ),
-          ),
-        ),
-      );
+
+      bool showPhoneMic = deviceProvider.connectedDevice == null && !deviceProvider.isConnecting;
+      bool isConnected = deviceProvider.connectedDevice != null ||
+          provider.recordingState == RecordingState.record ||
+          (provider.memoryCreating && deviceProvider.connectedDevice != null);
+
+      return (showPhoneMic || isConnected)
+          ? GestureDetector(
+              onTap: () async {
+                if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+                routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                width: double.maxFinite,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900,
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _getMemoryHeader(context),
+                      provider.segments.isNotEmpty
+                          ? const Column(
+                              children: [
+                                SizedBox(height: 8),
+                                LiteCaptureWidget(),
+                                SizedBox(height: 8),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox.shrink();
     });
   }
 
@@ -122,119 +108,78 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   _getMemoryHeader(BuildContext context) {
     // Connected device
     var deviceProvider = context.read<DeviceProvider>();
-    var deviceText = "";
-    if (deviceProvider.connectedDevice != null) {
-      var deviceName = deviceProvider.connectedDevice?.name ?? SharedPreferencesUtil().deviceName;
-      var deviceShortId =
-          deviceProvider.connectedDevice?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId();
-      deviceText = '$deviceName ($deviceShortId)';
-    }
 
     // State
     var stateText = "";
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
+    bool isConnected = false;
     if (!connectivityProvider.isConnected) {
       stateText = "No connection";
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
+      isConnected = deviceProvider.connectedDevice != null;
     } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
       stateText = "Listening";
+      isConnected = true;
     }
 
     var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    var shouldShowDevice = !(isUsingPhoneMic ||
-        (deviceProvider.connectedDevice == null &&
-            !deviceProvider.isConnecting &&
-            (["Processing"].contains(stateText))));
-
     return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
+      padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          shouldShowDevice
-              ? GestureDetector(
-                  onTap: () async {
-                    if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
-                      routeToPage(context, const ConnectDevicePage());
-                      MixpanelManager().connectFriendClicked();
-                    } else {
-                      await routeToPage(
-                          context,
-                          ConnectedDevice(
-                              device: deviceProvider.connectedDevice, batteryLevel: deviceProvider.batteryLevel));
-                    }
-                  },
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
-                      border: GradientBoxBorder(
-                        gradient: LinearGradient(colors: [
-                          Color.fromARGB(127, 208, 208, 208),
-                          Color.fromARGB(127, 188, 99, 121),
-                          Color.fromARGB(127, 86, 101, 182),
-                          Color.fromARGB(127, 126, 190, 236)
-                        ]),
-                        width: 1,
-                      ),
-                      shape: BoxShape.rectangle,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: deviceProvider.connectedDevice != null
-                        ? Row(
-                            children: [
-                              Image.asset(
-                                "assets/images/recording_green_circle_icon.png",
-                                width: 10,
-                                height: 10,
-                              ),
-                              const SizedBox(
-                                width: 4,
-                              ),
-                              Text(
-                                deviceText,
-                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                                maxLines: 1,
-                              )
-                            ],
-                          )
-                        : deviceProvider.isConnecting
-                            ? Text(
-                                "Connecting",
-                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                              )
-                            : Text(
-                                "No device found",
-                                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                              ),
-                  ),
-                )
-              : SizedBox.shrink(),
-
           // mic
+          // TODO: improve phone recording UI
           deviceProvider.connectedDevice == null && !deviceProvider.isConnecting
               ? Center(
                   child: getPhoneMicRecordingButton(
-                      context, () => _recordingToggled(context, captureProvider), captureProvider.recordingState),
+                    context,
+                    () => _recordingToggled(context, captureProvider),
+                    captureProvider.recordingState,
+                  ),
                 )
               : const SizedBox.shrink(),
-
-          stateText.isNotEmpty
+          isConnected && !isUsingPhoneMic
+              ? Row(
+                  children: [
+                    const Text(
+                      '🎙️',
+                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        captureProvider.segments.isNotEmpty || captureProvider.photos.isNotEmpty
+                            ? 'In progress...'
+                            : 'Say something...',
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
+          isConnected && !isUsingPhoneMic
               ? Expanded(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      SizedBox(
+                      const SizedBox(
                         width: 16,
                         height: 16,
                         child: RecordingStatusIndicator(),
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Text(
                         stateText,
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -244,7 +189,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                     ],
                   ),
                 )
-              : SizedBox.shrink(),
+              : const SizedBox.shrink(),
         ],
       ),
     );
@@ -258,26 +203,18 @@ class RecordingStatusIndicator extends StatefulWidget {
   _RecordingStatusIndicatorState createState() => _RecordingStatusIndicatorState();
 }
 
-class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> with TickerProviderStateMixin {
+class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<Color?> _colorAnim;
+  late Animation<double> _opacityAnim;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(seconds: 2), // adjust duration as needed
+      duration: const Duration(milliseconds: 1000), // Blink every half second
       vsync: this,
-    )
-      ..forward()
-      ..repeat();
-
-    final Animation<double> curve = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-
-    _colorAnim = ColorTween(
-      begin: Colors.grey,
-      end: Colors.blue,
-    ).animate(curve);
+    )..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
   }
 
   @override
@@ -288,16 +225,10 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-        animation: _colorAnim,
-        builder: (context, child) {
-          var indicator = CircularProgressIndicator(
-            color: _colorAnim.value,
-            strokeWidth: 1.0,
-            value: 1.0,
-          );
-          return indicator;
-        });
+    return FadeTransition(
+      opacity: _opacityAnim,
+      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
+    );
   }
 }
 
@@ -308,6 +239,7 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         state == RecordingState.initialising
             ? const SizedBox(
@@ -326,7 +258,7 @@ getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingStat
           state == RecordingState.initialising
               ? 'Initialising Recorder'
               : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 4),
       ],

@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';

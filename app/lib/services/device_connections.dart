@@ -26,7 +26,6 @@ class DeviceConnectionFactory {
         return FriendDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
-        return null;
       default:
         return null;
     }
@@ -36,6 +35,7 @@ class DeviceConnectionFactory {
 abstract class DeviceConnection {
   BTDeviceStruct device;
   BluetoothDevice bleDevice;
+  DateTime? _pongAt;
 
   DeviceConnectionState _connectionState = DeviceConnectionState.disconnected;
 
@@ -44,6 +44,8 @@ abstract class DeviceConnection {
   DeviceConnectionState get status => _connectionState;
 
   DeviceConnectionState get connectionState => _connectionState;
+
+  DateTime? get pongAt => _pongAt;
 
   late StreamSubscription<BluetoothConnectionState> _connectionStateSubscription;
 
@@ -81,29 +83,36 @@ abstract class DeviceConnection {
   }
 
   void _onBleConnectionStateChanged(
-      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) {
-    if (state == BluetoothConnectionState.disconnected) {
+      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) async {
+    if (state == BluetoothConnectionState.disconnected && _connectionState == DeviceConnectionState.connected) {
       _connectionState = DeviceConnectionState.disconnected;
+      await disconnect(callback: callback);
+      return;
     }
-    if (state == BluetoothConnectionState.connected) {
+
+    if (state == BluetoothConnectionState.connected && _connectionState == DeviceConnectionState.disconnected) {
       _connectionState = DeviceConnectionState.connected;
-    }
-    if (callback != null) {
-      callback(device.id, _connectionState);
+      if (callback != null) {
+        callback(device.id, _connectionState);
+      }
     }
   }
 
-  Future<void> disconnect() async {
+  Future<void> disconnect({Function(String deviceId, DeviceConnectionState state)? callback}) async {
+    _connectionState = DeviceConnectionState.disconnected;
+    if (callback != null) {
+      callback(device.id, _connectionState);
+    }
     await bleDevice.disconnect();
     _connectionStateSubscription.cancel();
     _services.clear();
-    _connectionState = DeviceConnectionState.disconnected;
   }
 
   Future<bool> ping() async {
     try {
       int rssi = await bleDevice.readRssi();
       device.rssi = rssi;
+      _pongAt = DateTime.now();
       return true;
     } catch (e) {
       debugPrint('Error reading RSSI: $e');

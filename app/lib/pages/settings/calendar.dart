@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class CalendarPage extends StatefulWidget {
@@ -63,17 +62,24 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
               ),
               const Text(
-                'Friend can automatically schedule events from your conversations, or ask for your confirmation first.',
+                'Omi can automatically schedule events from your conversations, or ask for your confirmation first.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
+              provider.calendarEnabled
+                  ? Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: const Text('Mode', style: TextStyle(fontSize: 18)),
+                    )
+                  : const SizedBox(),
               if (provider.calendarEnabled) ...[
                 RadioListTile(
                   title: const Text('Automatic'),
-                  subtitle: const Text('AI Will automatically scheduled your events.'),
+                  subtitle: const Text('Omi Will automatically scheduled your events.'),
                   value: 'auto',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,
@@ -86,7 +92,14 @@ class _CalendarPageState extends State<CalendarPage> {
                   onChanged: provider.onCalendarTypeChanged,
                 ),
               ],
-              const SizedBox(height: 24),
+              provider.calendarEnabled ? const SizedBox(height: 48) : const SizedBox(),
+              provider.calendarEnabled
+                  ? Divider(
+                      color: Colors.grey.shade400,
+                      height: 1,
+                    )
+                  : const SizedBox(),
+              const SizedBox(height: 12),
               if (provider.calendarEnabled) ..._displayCalendars(provider),
             ],
           );
@@ -100,34 +113,14 @@ class _CalendarPageState extends State<CalendarPage> {
       const SizedBox(height: 16),
       Container(
         margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: const BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-          border: GradientBoxBorder(
-            gradient: LinearGradient(colors: [
-              Color.fromARGB(127, 208, 208, 208),
-              Color.fromARGB(127, 188, 99, 121),
-              Color.fromARGB(127, 86, 101, 182),
-              Color.fromARGB(127, 126, 190, 236)
-            ]),
-            width: 2,
-          ),
-          shape: BoxShape.rectangle,
-        ),
-        child: const Center(
-            child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 4),
-          child: Text('Calendars'),
-        )),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: const Text('Select a calendar', style: TextStyle(fontSize: 18)),
       ),
       const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8.0),
+        padding: EdgeInsets.symmetric(horizontal: 32),
         child: Text(
-          'Select to which calendar you want your Friend to connect to.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey,
-          ),
+          'Which calendar Omi will schedule to?',
+          style: TextStyle(color: Colors.grey),
         ),
       ),
       const SizedBox(height: 16),
@@ -135,7 +128,7 @@ class _CalendarPageState extends State<CalendarPage> {
         RadioListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 24),
           title: Text(calendar.name!),
-          subtitle: Text(calendar.accountName!),
+          subtitle: (calendar.accountName?.isNotEmpty ?? false) ? Text(calendar.accountName!) : null,
           value: calendar.id!,
           groupValue: SharedPreferencesUtil().calendarId,
           onChanged: (v) => provider.selectCalendar(v, calendar),

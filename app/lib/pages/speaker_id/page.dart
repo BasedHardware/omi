@@ -5,7 +5,6 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';

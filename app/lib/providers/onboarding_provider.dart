@@ -145,10 +145,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     isClicked = true; // Prevent further clicks
     connectingToDeviceId = device.id; // Mark this device as being connected to
     notifyListeners();
-    await ServiceManager.instance().device.ensureConnection(device.id);
+    await ServiceManager.instance().device.ensureConnection(device.id, force: true);
     print('Connected to device: ${device.name}');
     deviceId = device.id;
-    SharedPreferencesUtil().btDeviceStruct = device;
+    await SharedPreferencesUtil().btDeviceStructSet(device);
     deviceName = device.name;
     var cDevice = await _getConnectedDevice(deviceId);
     if (cDevice != null) {

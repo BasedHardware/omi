@@ -304,6 +304,78 @@ class _GetEditTextFieldState extends State<GetEditTextField> {
   }
 }
 
+class ReprocessDiscardedWidget extends StatelessWidget {
+  const ReprocessDiscardedWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      if (provider.loadingReprocessMemory) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.only(top: 18.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                SizedBox(width: 16),
+                Text(
+                  'Re-summarizing memory...\nThis may take a few seconds',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return ListView(
+        shrinkWrap: true,
+        children: [
+          const SizedBox(height: 32),
+          Text(
+            'Nothing interesting found,\nwant to retry?',
+            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  border: const GradientBoxBorder(
+                    gradient: LinearGradient(colors: [
+                      Color.fromARGB(127, 208, 208, 208),
+                      Color.fromARGB(127, 188, 99, 121),
+                      Color.fromARGB(127, 86, 101, 182),
+                      Color.fromARGB(127, 126, 190, 236)
+                    ]),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: MaterialButton(
+                  onPressed: () async {
+                    await provider.reprocessMemory();
+                  },
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text('Re-summarise', style: TextStyle(color: Colors.white, fontSize: 16))),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+        ],
+      );
+    });
+  }
+}
+
 class GetPluginsWidgets extends StatelessWidget {
   const GetPluginsWidgets({super.key});
 
@@ -884,10 +956,7 @@ class GetSheetMainOptions extends StatelessWidget {
                       : () async {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
-                            var res = await provider.reprocessMemory();
-                            if (res) {
-                              context.read<MemoryProvider>().updateMemory(provider.memory);
-                            }
+                            await provider.reprocessMemory();
                           } else {
                             showDialog(
                               builder: (c) => getDialog(

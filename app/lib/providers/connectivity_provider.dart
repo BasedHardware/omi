@@ -8,6 +8,7 @@ class ConnectivityProvider extends ChangeNotifier {
   final InternetConnection _internetConnection = InternetConnection();
 
   bool get isConnected => _isConnected;
+
   bool get previousConnection => _previousConnection;
 
   ConnectivityProvider() {
