@@ -200,7 +200,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   )
                 : const SizedBox.shrink(),
             isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            isIntegration
+            isIntegration && widget.plugin.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true
                 ? ListTile(
                     onTap: () async {
                       await routeToPage(
