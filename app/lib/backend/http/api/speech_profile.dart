@@ -73,8 +73,6 @@ Future<bool> uploadProfile(File file) async {
   }
 }
 
-/**/
-
 Future<List<String>> getExpandedProfileSamples() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/speech-profile/expand',
