@@ -25,10 +25,11 @@ def _get_memory_by_id(uid: str, memory_id: str) -> dict:
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
-        uid: str = Depends(auth.get_current_user_uid)
+        source: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     Create Memory endpoint.
+    :param source:
     :param create_memory: data to create memory
     :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
     :param language_code: language.
@@ -50,9 +51,10 @@ def create_memory(
         create_memory.language = language_code
 
     if create_memory.processing_memory_id:
-        print(f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}, processing_memory_id: {create_memory.processing_memory_id}")
+        print(
+            f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}, processing_memory_id: {create_memory.processing_memory_id}")
 
-    memory = process_memory(uid, language_code, create_memory, force_process=False)
+    memory = process_memory(uid, language_code, create_memory, force_process=source == 'speech_profile_onboarding')
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 

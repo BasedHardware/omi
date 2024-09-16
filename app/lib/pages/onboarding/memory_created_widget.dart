@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCreatedWidget extends StatelessWidget {
   final VoidCallback goNext;
+
   const MemoryCreatedWidget({super.key, required this.goNext});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return Column(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -22,20 +26,18 @@ class MemoryCreatedWidget extends StatelessWidget {
                 ? const SizedBox()
                 : Text(
                     'Your first memory is ready! 🎉',
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 18),
                     textAlign: TextAlign.center,
                   ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             context.read<SpeechProfileProvider>().memory == null
                 ? const SizedBox()
                 : MemoryListItem(
                     memory: context.read<SpeechProfileProvider>().memory!,
-                    updateMemory: (d, i) {},
                     memoryIdx: 0,
-                    deleteMemory: (d, i) {},
                     isFromOnboarding: true,
                   ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -54,13 +56,10 @@ class MemoryCreatedWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 onPressed: () async {
                   // goNext();
+                  context.read<MemoryProvider>().addMemory(provider.memory!);
+                  context.read<MemoryDetailProvider>().updateMemory(0);
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
-                  var result = await Navigator.of(context).push(MaterialPageRoute(
-                    builder: (c) => MemoryDetailPage(
-                      memory: provider.memory!,
-                      isFromOnboarding: true,
-                    ),
-                  ));
+                  routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
                 },
                 child: const Text(
                   'Check it out',

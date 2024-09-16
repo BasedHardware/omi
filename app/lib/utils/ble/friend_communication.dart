@@ -13,9 +13,6 @@ import 'package:friend_private/utils/ble/errors.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/utils/logger.dart';
 
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/services/notification_service.dart';
-
 class FriendDevice extends DeviceBase {
   @override
   final String deviceId;
@@ -188,6 +185,7 @@ class FriendDevice extends DeviceBase {
     // debugPrint('Codec is $codec');
     return codec;
   }
+
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
       debugPrint('storage list called');
@@ -197,7 +195,7 @@ class FriendDevice extends DeviceBase {
     debugPrint('storage list error');
     return Future.value(<int>[]);
   }
-  
+
   // @override
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
@@ -218,27 +216,27 @@ class FriendDevice extends DeviceBase {
       //parse the list
       int totalEntries = (storageValue.length / 4).toInt();
       debugPrint('Storage list: ${totalEntries} items');
-      
+
       for (int i = 0; i < totalEntries; i++) {
-            int baseIndex = i * 4;
-            var result = ((storageValue[baseIndex] |
-                        (storageValue[baseIndex + 1] << 8) |
-                        (storageValue[baseIndex + 2] << 16) |
-                        (storageValue[baseIndex + 3] << 24)) &
-                         0xFFFFFFFF as int)
-                        .toSigned(32);
-            storageLengths.add(result);
-                }
+        int baseIndex = i * 4;
+        var result = ((storageValue[baseIndex] |
+                    (storageValue[baseIndex + 1] << 8) |
+                    (storageValue[baseIndex + 2] << 16) |
+                    (storageValue[baseIndex + 3] << 24)) &
+                0xFFFFFFFF as int)
+            .toSigned(32);
+        storageLengths.add(result);
+      }
     }
     debugPrint('storage list finished');
     debugPrint('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
     return storageLengths;
   }
 
-@override
-Future<StreamSubscription?> performGetBleStorageBytesListener({
-  required void Function(List<int>) onStorageBytesReceived,
-}) async {
+  @override
+  Future<StreamSubscription?> performGetBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
     final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
     if (storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
@@ -277,9 +275,11 @@ Future<StreamSubscription?> performGetBleStorageBytesListener({
   }
 
 
+
 Future<bool> performWriteToStorage(
            int numFile,int command
 ) async {
+
     final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
     if (storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
@@ -294,9 +294,9 @@ Future<bool> performWriteToStorage(
     debugPrint('About to write to storage bytes');
    debugPrint('about to send $numFile');
     await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF]);
-
     return true;
   }
+
   // Future<List<int>> performGetStorageList();
 
   @override

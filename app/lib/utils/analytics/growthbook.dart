@@ -17,6 +17,7 @@ class GrowthbookUtil {
 
   static Future<void> init() async {
     if (Env.growthbookApiKey == null) return;
+    print('GrowthbookUtil init');
     var attr = {
       'id': SharedPreferencesUtil().uid,
       'device': Platform.isAndroid ? 'android' : 'ios',
@@ -36,7 +37,11 @@ class GrowthbookUtil {
   }
 
   bool displayOmiFeedback() {
-    return (_gb?.feature('omi-feedback').on) ?? true;
+    return (_gb?.feature('omi-feedback').on) ?? false;
+  }
+
+  bool displayMemoriesSearchBar() {
+    return (_gb?.feature('memories-search-bar').on) ?? false;
   }
 
   bool isOmiFeedbackEnabled() {

@@ -21,10 +21,9 @@ import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
@@ -32,11 +31,12 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -186,10 +186,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
           ),
-          ChangeNotifierProxyProvider<PluginProvider, MemoryDetailProvider>(
+          ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
             create: (context) => MemoryDetailProvider(),
-            update: (BuildContext context, value, MemoryDetailProvider? previous) =>
-                (previous?..setPluginProvider(value)) ?? MemoryDetailProvider(),
+            update: (BuildContext context, plugin, memory, MemoryDetailProvider? previous) =>
+                (previous?..setProviders(plugin, memory)) ?? MemoryDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
         ],
@@ -299,7 +299,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted && authProvider.isSignedIn()) {
+        if (SharedPreferencesUtil().onboardingCompleted && authProvider.user != null) {
           return const HomePageWrapper();
         } else {
           return const OnboardingWrapper();
