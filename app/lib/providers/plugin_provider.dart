@@ -86,18 +86,18 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
   }
 
-  List<Plugin> get filteredPlugins {
-    var pluginList = plugins
-        .where((p) =>
-            (p.worksWithChat() && filterChat) ||
-            (p.worksWithMemories() && filterMemories) ||
-            (p.worksExternally() && filterExternal))
-        .toList();
-
-    return searchQuery.isEmpty
-        ? pluginList
-        : pluginList.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
-  }
+  // List<Plugin> get filteredPlugins {
+  //   var pluginList = plugins
+  //       .where((p) =>
+  //           (p.worksWithChat() && filterChat) ||
+  //           (p.worksWithMemories() && filterMemories) ||
+  //           (p.worksExternally() && filterExternal))
+  //       .toList();
+  //
+  //   return searchQuery.isEmpty
+  //       ? pluginList
+  //       : pluginList.where((plugin) => plugin.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+  // }
 
   void updateSearchQuery(String query) {
     searchQuery = query;

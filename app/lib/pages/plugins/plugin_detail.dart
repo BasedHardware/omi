@@ -179,7 +179,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
-                      'Chat Prompt',
+                      'Chat Personality',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   )
