@@ -167,7 +167,7 @@ class NotificationService {
     final data = message.data;
     if (data.isNotEmpty) {
       if (message.data['notification_type'] == 'daily_summary') {
-        SharedPreferencesUtil().pageToShowFromNotification = 2;
+        SharedPreferencesUtil().pageToShowFromNotification = 1;
         MyApp.navigatorKey.currentState
             ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
       }

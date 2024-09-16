@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
@@ -22,13 +22,34 @@ class ConnectedDevice extends StatefulWidget {
 }
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
+  // TODO: thinh, use connection directly
+  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return await connection.disconnect();
+  }
+
+  Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
+    if (deviceId == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+    return await DeviceInfo.getDeviceInfo(connection.device, connection);
+  }
+
   @override
   Widget build(BuildContext context) {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
     return FutureBuilder<DeviceInfo>(
-      future: DeviceInfo.getDeviceInfo(widget.device),
+      future: _getDeviceInfo(widget.device?.id),
       builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -150,15 +171,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 ),
                 child: TextButton(
                   onPressed: () async {
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
+                    SharedPreferencesUtil().deviceName = '';
                     if (widget.device != null) {
-                      await bleDisconnectDevice(widget.device!);
+                      await _bleDisconnectDevice(widget.device!);
                     }
                     context.read<DeviceProvider>().setIsConnected(false);
                     context.read<DeviceProvider>().setConnectedDevice(null);
                     context.read<DeviceProvider>().updateConnectingStatus(false);
                     Navigator.of(context).pop();
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
-                    SharedPreferencesUtil().deviceName = '';
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(

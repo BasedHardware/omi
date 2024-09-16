@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -29,6 +29,10 @@ class SharedPreferencesUtil {
 
   set btDeviceStruct(BTDeviceStruct value) {
     saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
+
+  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
+    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
   }
 
   BTDeviceStruct get btDeviceStruct {
@@ -116,6 +120,10 @@ class SharedPreferencesUtil {
   String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
 
   set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
+  bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
+
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
@@ -328,13 +336,9 @@ class SharedPreferencesUtil {
 
   bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
 
-  set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
-
-  bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
-
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
 
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
 
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 

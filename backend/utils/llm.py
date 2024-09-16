@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,13 +11,13 @@ from models.chat import Message
 from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
-from models.transcript_segment import TranscriptSegment, ImprovedTranscript
+from models.transcript_segment import TranscriptSegment
+from models.trend import TrendEnum
 from utils.memories.facts import get_prompt_facts
 
-llm = ChatOpenAI(model='gpt-4o')
+llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
-llm_with_parser = llm.with_structured_output(Structured)
 
 encoding = tiktoken.encoding_for_model('gpt-4')
 
@@ -58,7 +57,7 @@ def should_discard_memory(transcript: str) -> bool:
     
     {format_instructions}'''.replace('    ', '').strip()
     ])
-    chain = prompt | llm | parser
+    chain = prompt | llm_mini | parser
     try:
         response: DiscardMemory = chain.invoke({
             'transcript': transcript.strip(),
@@ -87,7 +86,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
 
         {format_instructions}'''.replace('    ', '').strip()
     )])
-    chain = prompt | llm | parser
+    chain = prompt | ChatOpenAI(model='gpt-4o') | parser
 
     response = chain.invoke({
         'transcript': transcript.strip(),
@@ -95,6 +94,12 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         'language_code': language_code,
         'started_at': started_at.isoformat(),
     })
+
+    for event in (response.events or []):
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+
     return response
 
 
@@ -114,81 +119,11 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
     Make sure to be concise and clear.
     '''
 
-    response = llm.invoke(prompt)
+    response = llm_mini.invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     if len(content) < 5:
         return ''
     return content
-
-
-# *******************************************
-# ************* POSTPROCESSING **************
-# *******************************************
-
-def transcript_user_speech_fix(prev_transcript: str, new_transcript: str) -> int:
-    prev_transcript_tokens = num_tokens_from_string(prev_transcript)
-    count_user_appears = prev_transcript.count('User:')
-    if count_user_appears == 0:
-        return -1
-    elif prev_transcript_tokens > 10000:
-        # if count_user_appears == 1: # most likely matching was a mistake
-        #     return -1
-        first_user_appears = new_transcript.index('User:')
-        # trim first user appears
-        prev_transcript = prev_transcript[first_user_appears:min(first_user_appears + 10000, len(prev_transcript))]
-        # new_transcript = new_transcript[first_user_appears:min(first_user_appears + 10000, len(new_transcript))]
-        # further improvement
-
-    print(f'transcript_user_speech_fix prev_transcript: {len(prev_transcript)} new_transcript: {len(new_transcript)}')
-    prompt = f'''
-    You will be given a previous transcript and a improved transcript, previous transcript has the user voice identified, but the improved transcript does not have it.
-    Your task is to determine on the improved transcript, which speaker id corresponds to the user voice, based on the previous transcript.
-    It is possible that the previous transcript has wrongly detected the user, in that case, output -1.
-
-    Previous Transcript:
-    {prev_transcript}
-
-    Improved Transcript:
-    {new_transcript}
-    '''
-    with_parser = llm.with_structured_output(SpeakerIdMatch)
-    response: SpeakerIdMatch = with_parser.invoke(prompt)
-    return response.speaker_id
-
-
-def improve_transcript_prompt(segments: List[TranscriptSegment]) -> List[TranscriptSegment]:
-    cleaned = []
-    has_user = any([item.is_user for item in segments])
-    for item in segments:
-        speaker_id = item.speaker_id
-        if has_user:
-            speaker_id = item.speaker_id + 1 if not item.is_user else 0
-        cleaned.append({'speaker_id': speaker_id, 'text': item.text})
-
-    prompt = f'''
-You are a helpful assistant for correcting transcriptions of recordings. You will be given a list of voice segments, each segment contains the fields (speaker id, text, and seconds [start, end])
-
-The transcription has a Word Error Rate of about 15% in english, in other languages could be up to 25%, and it is specially bad at speaker diarization.
-
-Your task is to improve the transcript by taking the following steps:
-
-1. Make the conversation coherent, if someone reads it, it should be clear what the conversation is about, remember the estimate percentage of WER, this could include missing words, incorrectly transcribed words, missing connectors, punctuation signs, etc.
-
-2. The speakers ids are most likely inaccurate, make sure to assign the correct speaker id to each segment, by understanding the whole conversation. For example, 
-- The transcript could have 4 different speakers, but by analyzing the overall context, one can discover that it was only 2, and the speaker identification, took incorrectly multiple people.
-- The transcript could have 1 single speaker, or 2, but in reality was 3.
-- The speaker id might be assigned incorrectly, a conversation could have speaker 0 said "Hi, how are you", and then also speaker 0 said "I'm doing great, thanks for asking" which of course would be incorrect.
-
-Considerations:
-- Return a list of segments same size as the input.
-- Do not change the order of the segments.
-
-Transcript segments:
-{json.dumps(cleaned, indent=2)}'''
-
-    with_parser = llm.with_structured_output(ImprovedTranscript)
-    response: ImprovedTranscript = with_parser.invoke(prompt)
-    return response.result
 
 
 # **************************************
@@ -207,24 +142,12 @@ def summarize_open_glass(photos: List[MemoryPhoto]) -> Structured:
     
       Photos Descriptions: ```{photos_str}```
       '''.replace('    ', '').strip()
-    return llm_with_parser.invoke(prompt)
+    return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
 # **************************************************
 # ************* EXTERNAL INTEGRATIONS **************
 # **************************************************
-
-def summarize_screen_pipe(description: str) -> Structured:
-    prompt = f'''The user took a series of screenshots from his laptop, and used OCR to obtain the text from the screen.
-
-      For the title, use the main topic of the scenes.
-      For the overview, condense the descriptions into a brief summary with the main topics discussed, make sure to capture the key points and important details.
-      For the category, classify the scenes into one of the available categories.
-    
-      Screenshots: ```{description}```
-      '''.replace('    ', '').strip()
-    # return groq_llm_with_parser.invoke(prompt)
-    return llm_with_parser.invoke(prompt)
 
 
 def summarize_experience_text(text: str) -> Structured:
@@ -236,8 +159,7 @@ def summarize_experience_text(text: str) -> Structured:
     
       Text: ```{text}```
       '''.replace('    ', '').strip()
-    # return groq_llm_with_parser.invoke(prompt)
-    return llm_with_parser.invoke(prompt)
+    return llm_mini.with_structured_output(Structured).invoke(prompt)
 
 
 def get_memory_summary(uid: str, memories: List[Memory]) -> str:
@@ -249,11 +171,10 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
     You are advising {user_name} right now, {facts_str}
     
-    
-    The following are a list of ${user_name}'s conversations from today, with the transcripts and a slight summary of each, that ${user_name} had during his day.
+    The following are a list of {user_name}'s conversations from today, with the transcripts and a slight summary of each, that {user_name} had during his day.
     {user_name} wants to get a summary of the key action items {user_name} has to take based on today's conversations.
 
-    Remember ${user_name} is busy so this has to be very efficient and concise.
+    Remember {user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.
   
     Output your response in plain text, without markdown.
@@ -262,7 +183,7 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     ```
     """.replace('    ', '').strip()
     # print(prompt)
-    return llm.invoke(prompt).content
+    return llm_mini.invoke(prompt).content
 
 
 def generate_embedding(content: str) -> List[float]:
@@ -303,7 +224,7 @@ def initial_chat_message(uid: str, plugin: Optional[Plugin] = None) -> str:
         Output your response in plain text, without markdown.
         '''
     prompt = prompt.replace('    ', '').strip()
-    return llm.invoke(prompt).content
+    return llm_mini.invoke(prompt).content
 
 
 # *********************************************
@@ -331,7 +252,7 @@ def requires_context(messages: List[Message]) -> bool:
     Conversation History:    
     {Message.get_messages_as_string(messages)}
     '''
-    with_parser = llm.with_structured_output(RequiresContext)
+    with_parser = llm_mini.with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     return response.value
 
@@ -350,7 +271,7 @@ def retrieve_context_topics(messages: List[Message]) -> List[str]:
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(TopicsContext)
+    with_parser = llm_mini.with_structured_output(TopicsContext)
     response: TopicsContext = with_parser.invoke(prompt)
     topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
     return topics
@@ -371,7 +292,7 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
-    with_parser = llm.with_structured_output(DatesContext)
+    with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
@@ -394,7 +315,7 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
 
     Topics: {topics}
     '''
-    with_parser = llm.with_structured_output(SummaryOutput)
+    with_parser = llm_mini.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
@@ -429,7 +350,7 @@ def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plu
     Answer:
     """.replace('    ', '').strip()
     print(prompt)
-    return llm.invoke(prompt).content
+    return llm_mini.invoke(prompt).content
 
 
 # **************************************************
@@ -452,7 +373,7 @@ def retrieve_memory_context_params(memory: Memory) -> List[str]:
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = llm.with_structured_output(TopicsContext)
+        with_parser = llm_mini.with_structured_output(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
@@ -485,7 +406,7 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
     {context}
     ```
     """.replace('    ', '').strip()
-    return llm.invoke(prompt).content
+    return llm_mini.invoke(prompt).content
 
 
 # **********************************
@@ -534,11 +455,56 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = llm.with_structured_output(Facts)
+        with_parser = llm_mini.with_structured_output(Facts)
         response: Facts = with_parser.invoke(prompt)
         # for fact in response:
         #     fact.content = fact.content.replace(user_name, '').replace('The User', '').replace('User', '').strip()
         return response.facts
     except Exception as e:
         # print(f'Error extracting new facts: {e}')
+        return []
+
+
+# **********************************
+# ************* TRENDS **************
+# **********************************
+
+
+class Item(BaseModel):
+    category: TrendEnum = Field(description="The category identified")
+    topic: str = Field(description="The specific topic corresponding the category")
+
+
+class ExpectedOutput(BaseModel):
+    items: List[Item] = Field(default=[], description="List of items.")
+
+
+def trends_extractor(memory: Memory) -> List[Item]:
+    transcript = memory.get_transcript(False)
+    if len(transcript) == 0:
+        return []
+
+    prompt = f'''
+    You will be given a finished conversation transcript.
+    You are responsible for extracting the topics of the conversation and classifying each one within one the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    
+    Each topic must be a person, company, event, technology, product, research, innovation, acquisition, partnership, investment, founder, CEO, industry, or any other relevant topic.
+    It can't be a non-specific topic like "the weather" or "the economy".
+    
+    For example,
+    
+    If you identify the topic "Tesla", you should classify it as "company".
+    If you identify the topic "Elon Musk", you should classify it as "ceo".
+    If you identify the topic "Dreamforce", you should classify it as "event".
+    If you identify the topic "GPT O1", you should classify it as "tool".
+    
+    Conversation:
+    {transcript}
+    '''.replace('    ', '').strip()
+    try:
+        with_parser = llm_mini.with_structured_output(ExpectedOutput)
+        response: ExpectedOutput = with_parser.invoke(prompt)
+        return response.items
+    except Exception as e:
+        print(f'Error determining memory discard: {e}')
         return []

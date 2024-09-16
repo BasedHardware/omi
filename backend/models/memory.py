@@ -30,6 +30,7 @@ class CategoryEnum(str, Enum):
     politics = 'politics'
     literature = 'literature'
     history = 'history'
+    architecture = 'architecture'
     other = 'other'
 
 
@@ -153,6 +154,8 @@ class Memory(BaseModel):
     deleted: bool = False
     visibility: MemoryVisibility = MemoryVisibility.private
 
+    processing_memory_id: Optional[str] = None
+
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:
         result = []
@@ -189,6 +192,8 @@ class CreateMemory(BaseModel):
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
 
+    processing_memory_id: Optional[str] = None
+
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
@@ -215,3 +220,8 @@ class WorkflowCreateMemory(BaseModel):
 class CreateMemoryResponse(BaseModel):
     memory: Memory
     messages: List[Message] = []
+
+
+class SetMemoryEventsStateRequest(BaseModel):
+    events_idx: List[int]
+    values: List[bool]

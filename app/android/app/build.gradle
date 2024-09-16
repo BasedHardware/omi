@@ -40,12 +40,12 @@ android {
         prod {
             dimension "flavor-type"
             applicationId "com.friend.ios"
-            resValue "string", "app_name", "Friend"
+            resValue "string", "app_name", "Omi"
         }
         dev {
             dimension "flavor-type"
             applicationId "com.friend.ios.dev"
-            resValue "string", "app_name", "Friend Dev"
+            resValue "string", "app_name", "Omi Dev"
         }
     }
 
@@ -121,4 +121,5 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
     implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }
