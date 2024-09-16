@@ -28,14 +28,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     if (connection == null) {
       return Future.value(null);
     }
-    return connection.disconnect();
+    return await connection.disconnect();
   }
 
   Future<void> startDfu(BTDeviceStruct btDevice, {bool fileInAssets = false}) async {
     setState(() {
       isInstalling = true;
     });
-    _bleDisconnectDevice(btDevice);
+    await _bleDisconnectDevice(btDevice);
     await Future.delayed(const Duration(seconds: 2));
 
     String firmwareFile = '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
