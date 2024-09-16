@@ -45,7 +45,13 @@ export default function TrendItem({ trend }: { trend: Trend }) {
         className={`mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5`}
       >
         {trend.topics.map((topic, index) => (
-          <TrendTopicItem key={index} topic={topic} trend={trend} variants={item} index={index}/>
+          <TrendTopicItem
+            key={index}
+            topic={topic}
+            trend={trend}
+            variants={item}
+            index={index}
+          />
         ))}
       </motion.div>
     </motion.div>

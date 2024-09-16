@@ -49,7 +49,7 @@ const trendMock: Trend[] = [
 export default function DreamforcePage() {
   return (
     <Fragment>
-        <DreamforceHeader />
+      <DreamforceHeader />
       <div className="flex min-h-screen w-full bg-gradient-to-t from-[#d2e3ff] via-white via-55% to-white px-4">
         <div className="mx-auto my-44 w-full max-w-screen-xl">
           <TrendsTitle>
