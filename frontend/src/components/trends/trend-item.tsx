@@ -35,7 +35,7 @@ const itemVariants = {
 export default function TrendItem({ trend }: { trend: Trend }) {
   return (
     <motion.div className="mt-10" variants={itemVariants}>
-      <h2 className="text-center text-2xl font-light text-white md:text-4xl">
+      <h2 className="text-center text-2xl font-semibold text-[#5867e8] md:text-4xl">
         {capitalizeFirstLetter(trend.category)}
       </h2>
       <motion.div
