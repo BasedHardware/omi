@@ -22,6 +22,11 @@
   }
 } */
 
+input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 ::selection {
   background-color: #ffffff;
   /* Color de fondo de la selección */
@@ -29,6 +34,11 @@
   /* Color del texto seleccionado */
 }
 body {
-  background: #0f0f0f;
+  background: #181818;
   color: rgba(var(--foreground-rgb), 1);
+}
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
 }
