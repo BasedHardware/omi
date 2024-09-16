@@ -1,5 +1,6 @@
 import getTrends from '@/src/actions/trends/getTrends';
 import TrendItem from './trend-item';
+import Animation from './animation';
 
 const trendMock = [
   {
@@ -46,10 +47,10 @@ const trendMock = [
 export default async function GetTrendsMainPage() {
   const trends = await getTrends();
   return (
-    <div className="mx-auto mt-32 flex max-w-screen-sm flex-col gap-10">
+    <Animation>
       {trendMock.map((trend, index) => (
         <TrendItem key={index} trend={trend} />
       ))}
-    </div>
+    </Animation>
   );
 }

@@ -10,14 +10,17 @@ const itemVariants = {
   visible,
 };
 
-export default function TrendsTitle() {
+interface TrendsTitleProps {
+  children: React.ReactNode;
+}
+
+export default function TrendsTitle({ children }: TrendsTitleProps) {
   return (
     <Fragment>
       <motion.div
         initial="hidden"
         animate="visible"
         exit={{ opacity: 0, transition: { duration: 1 } }}
-        variants={{ visible: { transition: { staggerChildren: 0.3 } } }}
       >
         <motion.h1
           variants={{
@@ -37,6 +40,7 @@ export default function TrendsTitle() {
           </motion.p>
           <div className="absolute top-3 aspect-video h-32 w-full bg-[#dbaafe38] blur-[120px]"></div>
         </div>
+        {children}
       </motion.div>
     </Fragment>
   );
