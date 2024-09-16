@@ -97,10 +97,10 @@ abstract class DeviceConnection {
   }
 
   Future<void> disconnect() async {
+    _connectionState = DeviceConnectionState.disconnected;
     await bleDevice.disconnect();
     _connectionStateSubscription.cancel();
     _services.clear();
-    _connectionState = DeviceConnectionState.disconnected;
   }
 
   Future<bool> ping() async {
