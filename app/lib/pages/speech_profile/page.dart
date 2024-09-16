@@ -5,7 +5,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
+import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -15,16 +15,16 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class SpeakerIdPage extends StatefulWidget {
+class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
 
-  const SpeakerIdPage({super.key, this.onbording = false});
+  const SpeechProfilePage({super.key, this.onbording = false});
 
   @override
-  State<SpeakerIdPage> createState() => _SpeakerIdPageState();
+  State<SpeechProfilePage> createState() => _SpeechProfilePageState();
 }
 
-class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin {
+class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProviderStateMixin {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {

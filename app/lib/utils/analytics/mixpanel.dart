@@ -83,7 +83,7 @@ class MixpanelManager {
 
   void settingsSaved() => track('Developer Settings Saved');
 
-  void pluginsOpened() => track('Plugins Opened');
+  void pageOpened(String name) => track('$name Opened');
 
   void pluginEnabled(String pluginId) {
     track('Plugin Enabled', properties: {'plugin_id': pluginId});
@@ -218,10 +218,6 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void privacyDetailsPageOpened() => track('Privacy Details Page Opened');
-
-  void joinDiscordClicked() => track('Join Discord Clicked');
-
   void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
 
@@ -237,13 +233,6 @@ class MixpanelManager {
 
   void batteryIndicatorClicked() => track('Battery Indicator Clicked');
 
-  void devModeEnabled() => track('Dev Mode Enabled');
-
-  void devModeDisabled() => track('Dev Mode Disabled');
-
-  void devModePageOpened() => track('Dev Mode Page Opened');
-
-  void advancedModeDocsOpened() => track('Advanced Mode Docs Opened');
 
   void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
 
