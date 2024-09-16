@@ -40,12 +40,12 @@ android {
         prod {
             dimension "flavor-type"
             applicationId "com.friend.ios"
-            resValue "string", "app_name", "Friend"
+            resValue "string", "app_name", "Omi"
         }
         dev {
             dimension "flavor-type"
             applicationId "com.friend.ios.dev"
-            resValue "string", "app_name", "Friend Dev"
+            resValue "string", "app_name", "Omi Dev"
         }
     }
 
