@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -12,6 +11,7 @@ import 'package:provider/provider.dart';
 class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
   final VoidCallback onSkip;
+
   const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
 
   @override
@@ -21,9 +21,7 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      context.read<SpeechProfileProvider>().initialise(true);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {});
     SharedPreferencesUtil().onboardingCompleted = true;
     super.initState();
   }
@@ -182,40 +180,46 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
                     child: !provider.startedRecording
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              const SizedBox(height: 20),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                                decoration: BoxDecoration(
-                                  border: const GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ]),
-                                    width: 2,
+                        ? (provider.isInitialising
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  const SizedBox(height: 20),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                                    decoration: BoxDecoration(
+                                      border: const GradientBoxBorder(
+                                        gradient: LinearGradient(colors: [
+                                          Color.fromARGB(127, 208, 208, 208),
+                                          Color.fromARGB(127, 188, 99, 121),
+                                          Color.fromARGB(127, 86, 101, 182),
+                                          Color.fromARGB(127, 126, 190, 236)
+                                        ]),
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: TextButton(
+                                      onPressed: () async {
+                                        await provider.initialise(true);
+                                        provider.forceCompletionTimer =
+                                            Timer(Duration(seconds: provider.maxDuration), () async {
+                                          provider.finalize(true);
+                                        });
+                                        provider.updateStartedRecording(true);
+                                      },
+                                      child: const Text(
+                                        'Get Started',
+                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                      ),
+                                    ),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: TextButton(
-                                  onPressed: () {
-                                    provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
-                                      provider.finalize(true);
-                                    });
-                                    provider.updateStartedRecording(true);
-                                  },
-                                  child: const Text(
-                                    'Get Started',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                          )
+                                  const SizedBox(height: 10),
+                                ],
+                              ))
                         : provider.profileCompleted
                             ? Container(
                                 margin: const EdgeInsets.only(top: 40),
@@ -234,6 +238,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                 ),
                                 child: TextButton(
                                   onPressed: () {
+                                    provider.close();
                                     widget.goNext();
                                   },
                                   child: const Text(

@@ -15,7 +15,7 @@ Future<List<Plugin>> retrievePlugins() async {
     body: '',
     method: 'GET',
   );
-  if (response?.statusCode == 200) {
+  if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
       log('plugins: ${response?.body}');
       var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
@@ -76,9 +76,8 @@ Future<void> migrateUserServer(String prevUid, String newUid) async {
 }
 
 Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath',
+    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$pluginMarkdownPath',
     method: 'GET',
     headers: {},
     body: '',
@@ -95,7 +94,16 @@ Future<bool> isPluginSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data = jsonDecode(response?.body ?? '{}');
-  print(data);
-  return data['is_setup_completed'] ?? false;
+  var data;
+  try {
+    data = jsonDecode(response?.body ?? '{}');
+    print(data);
+    return data['is_setup_completed'] ?? false;
+  } on FormatException catch (e) {
+    debugPrint('Response not a valid json: $e');
+    return false;
+  } catch (e) {
+    debugPrint('Error triggering memory request at endpoint: $e');
+    return false;
+  }
 }

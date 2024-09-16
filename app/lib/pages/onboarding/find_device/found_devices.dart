@@ -2,8 +2,8 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
@@ -41,12 +41,25 @@ class _FoundDevicesState extends State<FoundDevices> {
         },
         showInfo: (info) {
           if (info == "DEVICE_CONNECTED") {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => const HomePageWrapper(),
-              ),
-              (route) => false,
-            );
+            // Navigator.of(context).pushAndRemoveUntil(
+            //   MaterialPageRoute(
+            //     builder: (context) => const HomePageWrapper(),
+            //   ),
+            //   (route) => false,
+            // );
+            Navigator.pop(context);
+          } else if (info == 'OPENGLASS_NOT_SUPPORTED') {
+            showDialog(
+                context: context,
+                builder: (context) {
+                  return getDialog(context, () {
+                    Navigator.pop(context);
+                  }, () {
+                    Navigator.pop(context);
+                  }, "OpenGlass isn't supported",
+                      "OpenGlass isn’t available in this version of the app. It will be added in a future update once it's ready",
+                      singleButton: true);
+                });
           } else {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(info),

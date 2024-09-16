@@ -1,7 +1,7 @@
 workflows:
   ios-prod-testflight:
     name: Release iOS to Testflight
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v2
@@ -131,11 +131,12 @@ workflows:
         submit_to_testflight: true
         beta_groups:
           - Internal
+          - Discord Folks
         submit_to_app_store: false
 
   android-prod-internal:
     name: Release Android Internal Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
       android_signing:
@@ -147,7 +148,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -287,12 +287,14 @@ workflows:
           failure: false
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: $GOOGLE_PLAY_TRACK
+        track: "internal"
         submit_as_draft: false
+        release_promotion:
+          track: "alpha"
 
   ios-prod-patch:
     name: Patch iOS to Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v2
@@ -427,7 +429,7 @@ workflows:
 
   android-prod-patch:
     name: Patch Android to Production
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
       android_signing:
@@ -438,7 +440,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        GOOGLE_PLAY_TRACK: "internal"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2

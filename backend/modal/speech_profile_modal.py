@@ -95,6 +95,7 @@ image = (
     .pip_install("pydub")
     .pip_install("requests")
     .pip_install("google-cloud-storage")
+    .pip_install("redis")
 )
 
 os.makedirs('_temp', exist_ok=True)

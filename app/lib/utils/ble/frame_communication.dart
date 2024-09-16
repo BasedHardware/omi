@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_sdk/bluetooth.dart';
 import 'package:frame_sdk/frame_sdk.dart';
 import 'package:friend_private/utils/ble/device_base.dart';
+
 import '../../backend/schema/bt_device.dart';
 
 const String _photoHeader =
@@ -465,5 +465,27 @@ class FrameDevice extends DeviceBase {
   }) async {
     // not yet implemented
     return null;
+  }
+
+  @override
+  Future<List<int>> performGetStorageList() {
+    return Future.value(<int>[]);
+  }
+
+  // @override
+  //  Future<List<int>> performGetStorageList() {
+
+  //   return <int>[];
+  //  }
+  @override
+  Future<StreamSubscription?> performGetBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  }) {
+    return Future.value(null);
+  }
+
+  @override
+  Future<bool> performWriteToStorage(int numFile) {
+    return Future.value(false);
   }
 }

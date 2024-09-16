@@ -26,7 +26,6 @@ nav_order: 2
 Welcome to the Omi backend! This document provides a comprehensive overview of Omi's architecture and code, guiding you through its key components, functionalities, and how it all works together to
 power a unique and intelligent AI assistant experience.
 
-
 ## Understanding the Omi Ecosystem 🗺️
 
 Omi is a multimodal AI assistant designed to understand and interact with users in a way that's both intelligent and human-centered. The backend plays a crucial role in this by:
@@ -318,7 +317,7 @@ We hope this deep dive into the Omi backend has provided valuable insights into 
 ## Contributing 🤝
 
 We welcome contributions from the open source community! Whether it's improving documentation, adding new features, or reporting bugs, your input is valuable. Check out
-our [Contribution Guide](https://docs.basedhardware.com/developer/Contribution/) for more information.
+our [Contribution Guide](https://docs.omi.me/developer/Contribution/) for more information.
 
 ## Support 🆘
 
@@ -326,6 +325,6 @@ If you're stuck, have questions, or just want to chat about Omi:
 
 - **GitHub Issues:** 🐛 For bug reports and feature requests
 - **Community Forum:** 💬 Join our [community forum](https://discord.gg/ZutWMTJnwA) for discussions and questions
-- **Documentation:** 📚 Check out our [full documentation](https://docs.basedhardware.com/) for in-depth guides
+- **Documentation:** 📚 Check out our [full documentation](https://docs.omi.me/) for in-depth guides
 
 Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.

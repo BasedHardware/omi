@@ -5,10 +5,9 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speaker_id/user_speech_samples.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/utils/ble/communication.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -28,7 +27,19 @@ class SpeakerIdPage extends StatefulWidget {
 class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateMixin {
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      await context.read<SpeechProfileProvider>().updateDevice();
+    });
     super.initState();
+  }
+
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
   }
 
   @override
@@ -57,7 +68,11 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        context.read<SpeechProfileProvider>().close();
+        if (context.read<SpeechProfileProvider>().isInitialised) {
+          WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+            await context.read<SpeechProfileProvider>().close();
+          });
+        }
       },
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return MessageListener<SpeechProfileProvider>(
@@ -258,66 +273,70 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              MaterialButton(
-                                onPressed: () async {
-                                  context.read<SpeechProfileProvider>().initialise(false);
-                                  BleAudioCodec codec;
-                                  try {
-                                    codec = await getAudioCodec(provider.device!.id);
-                                  } catch (e) {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () {
-                                          Navigator.of(context).pop();
-                                          Navigator.of(context).pop();
-                                        },
-                                        () => {},
-                                        'Device Disconnected',
-                                        'Please make sure your device is turned on and nearby, and try again.',
-                                        singleButton: true,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                              provider.isInitialising
+                                  ? CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : MaterialButton(
+                                      onPressed: () async {
+                                        BleAudioCodec codec;
+                                        try {
+                                          codec = await _getAudioCodec(provider.device!.id);
+                                        } catch (e) {
+                                          showDialog(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (c) => getDialog(
+                                              context,
+                                              () {
+                                                Navigator.of(context).pop();
+                                                Navigator.of(context).pop();
+                                              },
+                                              () => {},
+                                              'Device Disconnected',
+                                              'Please make sure your device is turned on and nearby, and try again.',
+                                              singleButton: true,
+                                            ),
+                                          );
+                                          return;
+                                        }
 
-                                  if (codec != BleAudioCodec.opus) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () => Navigator.pop(context),
-                                        () {
-                                          Navigator.pop(context);
-                                          launchUrl(Uri.parse(
-                                              'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
-                                        },
-                                        'Firmware Update Required',
-                                        'Please update your device firmware to set-up your speech profile.',
-                                        okButtonText: 'Do now',
+                                        if (codec != BleAudioCodec.opus) {
+                                          showDialog(
+                                            context: context,
+                                            builder: (c) => getDialog(
+                                              context,
+                                              () => Navigator.pop(context),
+                                              () {
+                                                Navigator.pop(context);
+                                                launchUrl(Uri.parse(
+                                                    'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
+                                              },
+                                              'Firmware Update Required',
+                                              'Please update your device firmware to set-up your speech profile.',
+                                              okButtonText: 'Do now',
+                                            ),
+                                            barrierDismissible: false,
+                                          );
+                                          return;
+                                        }
+                                        await provider.initialise(false);
+                                        // provider.initiateWebsocket(false);
+                                        // 1.5 minutes seems reasonable
+                                        provider.forceCompletionTimer =
+                                            Timer(Duration(seconds: provider.maxDuration), () {
+                                          provider.finalize(false);
+                                        });
+                                        provider.updateStartedRecording(true);
+                                      },
+                                      color: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                      child: Text(
+                                        SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                        style: const TextStyle(color: Colors.black),
                                       ),
-                                      barrierDismissible: false,
-                                    );
-                                    return;
-                                  }
-
-                                  provider.initiateWebsocket(false);
-                                  // 1.5 minutes seems reasonable
-                                  provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
-                                    provider.finalize(false);
-                                  });
-                                  provider.updateStartedRecording(true);
-                                },
-                                color: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                child: Text(
-                                  SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
-                                  style: const TextStyle(color: Colors.black),
-                                ),
-                              ),
+                                    ),
                               const SizedBox(height: 24),
                               SharedPreferencesUtil().hasSpeakerProfile
                                   ? TextButton(
@@ -329,14 +348,14 @@ class _SpeakerIdPageState extends State<SpeakerIdPage> with TickerProviderStateM
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
-                              TextButton(
-                                  onPressed: () {
-                                    routeToPage(context, const UserPeoplePage());
-                                  },
-                                  child: const Text(
-                                    'Recognizing others 👀',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                  )),
+                              // TextButton(
+                              //     onPressed: () {
+                              //       routeToPage(context, const UserPeoplePage());
+                              //     },
+                              //     child: const Text(
+                              //       'Recognizing others 👀',
+                              //       style: TextStyle(color: Colors.white, fontSize: 16),
+                              //     )),
                             ],
                           )
                         : provider.profileCompleted
