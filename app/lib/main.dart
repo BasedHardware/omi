@@ -300,7 +300,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (SharedPreferencesUtil().onboardingCompleted && authProvider.isSignedIn()) {
-          return const HomePageWrapper();
+          return const OnboardingWrapper();
         } else {
           return const OnboardingWrapper();
         }
