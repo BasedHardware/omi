@@ -14,7 +14,7 @@ export default function TrendTopicItem({ topic, trend, variants, index }: TrendT
   return (
     <motion.div
       variants={variants}
-      className={`items-center relative rounded-md border border-solid border-zinc-600 bg-white/5 p-3 text-white backdrop-blur-[4px] md:p-4 ${
+      className={`items-center relative rounded-md border border-solid border-zinc-300 bg-white p-3 text-white backdrop-blur-[4px] md:p-4 ${
         numberOfTopics === 1  ? 'col-span-3' : ''
       }`}
     >
@@ -24,17 +24,17 @@ export default function TrendTopicItem({ topic, trend, variants, index }: TrendT
               ? 'bg-yellow-400 text-black/60 shadow-yellow-600'
               : index === 1
               ? 'bg-gray-400 text-black/60'
-              : 'bg-gray-500 text-black'
+              : 'bg-gray-500 text-white'
           }`}>
             {index + 1}
             <sup className="text-[10px]">st</sup>
           </span>
         )}
-      <p className="bg-gradient-to-b from-[#6d49a6] line-clamp-1 to-[#ffffff] bg-clip-text text-base text-transparent md:text-lg">
+      <p className="bg-gradient-to-b from-[#000da1] line-clamp-1 to-[#849fd9] bg-clip-text text-base text-transparent md:text-lg">
         {capitalizeFirstLetter(topic.topic)}
       </p>
       <div>
-        <p className="text-sm text-zinc-400 md:text-base">
+        <p className="text-sm text-zinc-700 md:text-base">
           {topic.memories_count} {topic.memories_count > 1 ? 'memories' : 'memory'}
         </p>
       </div>
