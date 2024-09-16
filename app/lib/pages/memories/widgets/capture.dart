@@ -125,7 +125,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
             SnackBar(
               content: Text(
                 error,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );
