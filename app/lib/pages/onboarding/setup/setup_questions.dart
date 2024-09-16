@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/pages/speaker_id/page.dart';
 
 class SetupQuestionsPage extends StatefulWidget {
   const SetupQuestionsPage({super.key});
@@ -82,7 +82,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
                   if (selectedProfession != null && selectedUsage != null && selectedAge != null) {
                     MixpanelManager().setUserProperties(selectedProfession!, selectedUsage!, selectedAge!);
                     Navigator.of(context)
-                        .pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
+                        .pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('You haven\'t answered all the questions yet! 🥺',
@@ -104,7 +104,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
               child: GestureDetector(
                 onTap: () {
                   Navigator.of(context)
-                      .pushReplacement(MaterialPageRoute(builder: (c) => const SpeakerIdPage(onbording: true)));
+                      .pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));
                 },
                 child: const Text(
                   'Skip, I don\'t want to help :C',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/plugin_detail.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
@@ -17,6 +18,7 @@ class PluginListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
+        MixpanelManager().pageOpened('Plugin Detail');
         await routeToPage(context, PluginDetailPage(plugin: plugin));
         provider.setPlugins();
       },
