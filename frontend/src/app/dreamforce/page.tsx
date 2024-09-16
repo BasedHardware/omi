@@ -49,10 +49,11 @@ export default function DreamforcePage() {
   return (
     <div className="flex min-h-screen w-full bg-[#09090b] bg-[url(/noise-texture.svg)] px-4">
       <div className="mx-auto my-44 w-full max-w-screen-xl">
-        <TrendsTitle />
-        <Suspense fallback={null}>
-          <GetTrendsMainPage />
-        </Suspense>
+        <TrendsTitle>
+          <Suspense fallback={null}>
+            <GetTrendsMainPage />
+          </Suspense>
+        </TrendsTitle>
       </div>
     </div>
   );
