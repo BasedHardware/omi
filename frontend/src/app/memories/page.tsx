@@ -26,7 +26,7 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   return (
     <Fragment>
       <TrendingBanner />
-      <div className="my-10 flex w-full px-4 md:my-28">
+      <div className="my-44 flex w-full px-4">
         <div className="mx-auto w-full max-w-screen-xl">
           <h1 className="text-center text-3xl font-bold text-white md:text-start md:text-4xl">
             Memories

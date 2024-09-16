@@ -15,14 +15,14 @@ export default function Tendencies() {
       <Suspense fallback={null}>
         <GetTrends />
       </Suspense>
-      <div className="py-3 md:py-5">
+      {/* <div className="py-3 md:py-5">
         <div className="flex w-full flex-col divide-slate-800">
-          {/* <TrendingItem title="Work" count={23} raking={1} />
+          <TrendingItem title="Work" count={23} raking={1} />
           <TrendingItem title="Business" count={6} raking={2} />
           <TrendingItem title="Inspiration" count={6} raking={3} />
-          <TrendingItem title="Social" count={6} /> */}
+          <TrendingItem title="Social" count={6} />
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
