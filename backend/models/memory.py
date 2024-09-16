@@ -30,6 +30,7 @@ class CategoryEnum(str, Enum):
     politics = 'politics'
     literature = 'literature'
     history = 'history'
+    architecture = 'architecture'
     other = 'other'
 
 

@@ -9,7 +9,7 @@ enum Environment {
     return Environment.values.firstWhere(
       (e) => e.name == appFlavor?.toLowerCase(),
       orElse: () {
-        debugPrint ('Warning: Unknown flavor "$appFlavor", defaulting to dev');
+        debugPrint('Warning: Unknown flavor "$appFlavor", defaulting to dev');
         return Environment.dev;
       },
     );
@@ -22,11 +22,11 @@ class F {
   static String get title {
     switch (env) {
       case Environment.prod:
-        return 'Friend';
+        return 'Omi';
       case Environment.dev:
-        return 'Friend Dev';
+        return 'Omi Dev';
       default:
-        return 'Friend Dev';
+        return 'Omi Dev';
     }
   }
 }
