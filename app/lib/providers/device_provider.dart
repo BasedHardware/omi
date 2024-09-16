@@ -266,7 +266,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     // Connect to first founded device
-    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id, force: true);
+    var force = devices.first.id == SharedPreferencesUtil().btDeviceStruct.id;
+    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id, force: force);
     if (connection == null) {
       return;
     }
