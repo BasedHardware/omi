@@ -29,14 +29,11 @@ export default function TrendsTitle({ children }: TrendsTitleProps) {
           }}
           className="text-center text-4xl font-semibold text-white md:text-7xl"
         >
-          What's trending
+          Voices of Now: What the World is Talking About
         </motion.h1>
-        <div className="relative mx-auto mt-10 max-w-screen-lg text-center text-sm text-white md:mt-16 md:text-base">
+        <div className="relative mx-auto mt-10 max-w-screen-lg text-center text-sm text-white md:mt-12 md:text-base">
           <motion.p variants={itemVariants}>
-            Lorem ipsum dolor sit amet consectetur adipisicing elit. Consequatur aliquid
-            ullam, illum reprehenderit adipisci quae molestiae ea a aspernatur modi
-            suscipit cupiditate ratione excepturi? Harum dolores voluptatem deserunt sequi
-            veritatis.
+            From everyday moments to world-shaping debates, here you'll find the shared memories that define today.
           </motion.p>
           <div className="absolute top-3 aspect-video h-32 w-full bg-[#dbaafe38] blur-[120px]"></div>
         </div>
