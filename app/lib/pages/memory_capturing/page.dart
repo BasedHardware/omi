@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
   final String? topMemoryId;
+
   const MemoryCapturingPage({
     super.key,
     this.topMemoryId,
@@ -76,7 +77,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                 const SizedBox(width: 4),
                 const Text("🎙️"),
                 const SizedBox(width: 4),
-                Expanded(child: const Text("Live")),
+                const Expanded(child: Text("In Progress")),
               ],
             ),
           ),
@@ -127,7 +128,18 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                         shrinkWrap: true,
                         children: [
                           const SizedBox(height: 80),
-                          Center(child: Text(provider.segments.isEmpty ? "No summary" : "Processing")),
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: Text(
+                                provider.segments.isEmpty
+                                    ? "No summary"
+                                    : "Available once the conversation finishes.\nBe quiet for 2 minutes 🤫",
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ],

@@ -31,6 +31,10 @@ class SharedPreferencesUtil {
     saveString('btDeviceStruct', jsonEncode(value.toJson()));
   }
 
+  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
+    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
+
   BTDeviceStruct get btDeviceStruct {
     final String device = getString('btDeviceStruct') ?? '';
     if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
@@ -116,6 +120,10 @@ class SharedPreferencesUtil {
   String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
 
   set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
+  bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
+
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];

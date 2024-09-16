@@ -12,7 +12,7 @@ abstract class IDeviceService {
   void stop();
   Future<void> discover({String? desirableDeviceId, int timeout = 5});
 
-  Future<DeviceConnection?> ensureConnection(String deviceId);
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false});
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
@@ -122,16 +122,17 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
+    // Drop exist connection first
+    if (_connection?.status == DeviceConnectionState.connected) {
+      await _connection?.disconnect();
+    }
+    _connection = null;
+
     var bleDevice = _bleDevices.firstWhereOrNull((f) => f.device.remoteId.str == id);
     var device = _devices.firstWhereOrNull((f) => f.id == id);
     if (bleDevice == null || device == null) {
       debugPrint("bleDevice or device is null");
       return;
-    }
-
-    // Drop exist connection first
-    if (_connection != null && _connection?.status == DeviceConnectionState.connected) {
-      await _connection?.disconnect();
     }
 
     // Check exist ble device connection, force disconnect
@@ -202,21 +203,44 @@ class DeviceService implements IDeviceService {
   // Warn: Should use a better solution to prevent race conditions
   bool mutex = false;
   @override
-  Future<DeviceConnection?> ensureConnection(String deviceId) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
     mutex = true;
 
+    debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} ${force}");
     try {
-      if (_connection?.status == DeviceConnectionState.connected) {
-        var ok = await _connection?.ping() ?? false;
-        if (!ok) {
-          await _connection?.disconnect();
+      // Not force
+      if (!force && _connection != null) {
+        if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
+          return null;
+        }
 
-          // try re-connecting
-          await _connectToDevice(deviceId);
-          return _connection;
+        // connected
+        var pongAt = _connection?.pongAt;
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        if (shouldPing) {
+          var ok = await _connection?.ping() ?? false;
+          if (!ok) {
+            await _connection?.disconnect();
+            return null;
+          }
+        }
+
+        return _connection;
+      }
+
+      // Force
+      if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
+        var pongAt = _connection?.pongAt;
+        var shouldPing = (pongAt == null || pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 5))));
+        if (shouldPing) {
+          var ok = await _connection?.ping() ?? false;
+          if (!ok) {
+            await _connection?.disconnect();
+            return null;
+          }
         }
 
         return _connection;

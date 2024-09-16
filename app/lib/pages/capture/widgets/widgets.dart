@@ -1,12 +1,12 @@
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -20,7 +20,6 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:wav/wav_file.dart';
 
 getConnectionStateWidgets(
   BuildContext context,
@@ -83,7 +82,6 @@ getConnectionStateWidgets(
                           ? 'Server Issue'
                           : 'Listening',
                   style: TextStyle(
-                      fontFamily: 'SF Pro Display',
                       color: Colors.white,
                       fontSize: !connectivityProvider.isConnected
                           ? 29
@@ -220,6 +218,7 @@ speechProfileWidget(BuildContext context) {
                 await routeToPage(context, const SpeakerIdPage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                   if (context.mounted) {
+                    // TODO: is the websocket restarting once the user comes back?
                     context.read<DeviceProvider>().restartWebSocket();
                   }
                 }
@@ -229,7 +228,7 @@ speechProfileWidget(BuildContext context) {
                   color: Colors.grey.shade900,
                   borderRadius: const BorderRadius.all(Radius.circular(12)),
                 ),
-                margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 padding: const EdgeInsets.all(16),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -240,7 +239,7 @@ speechProfileWidget(BuildContext context) {
                           Icon(Icons.multitrack_audio),
                           SizedBox(width: 16),
                           Text(
-                            'Set up speech profile',
+                            'Teach Omi your voice',
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ],
@@ -262,7 +261,7 @@ speechProfileWidget(BuildContext context) {
             ),
           ],
         )
-      : const SizedBox(height: 16);
+      : const SizedBox(height: 0);
 }
 
 getTranscriptWidget(

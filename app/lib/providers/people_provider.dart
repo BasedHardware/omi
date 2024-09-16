@@ -5,7 +5,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:uuid/uuid.dart';
 
 class PeopleProvider extends BaseProvider {
   List<Person> people = SharedPreferencesUtil().cachedPeople;

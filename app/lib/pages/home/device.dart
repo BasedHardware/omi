@@ -28,7 +28,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     if (connection == null) {
       return Future.value(null);
     }
-    return connection.disconnect();
+    return await connection.disconnect();
   }
 
   Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
@@ -171,6 +171,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 ),
                 child: TextButton(
                   onPressed: () async {
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
+                    SharedPreferencesUtil().deviceName = '';
                     if (widget.device != null) {
                       await _bleDisconnectDevice(widget.device!);
                     }
@@ -178,8 +180,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     context.read<DeviceProvider>().setConnectedDevice(null);
                     context.read<DeviceProvider>().updateConnectingStatus(false);
                     Navigator.of(context).pop();
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
-                    SharedPreferencesUtil().deviceName = '';
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(
