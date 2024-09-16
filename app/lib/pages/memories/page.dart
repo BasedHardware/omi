@@ -9,8 +9,6 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:location/location.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -41,7 +39,12 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
           context: context,
           builder: (c) => getDialog(
             context,
-            () => Navigator.of(context).pop(),
+            () {
+              SharedPreferencesUtil().locationPermissionRequested = true;
+              SharedPreferencesUtil().locationEnabled = false;
+              MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+              Navigator.of(context).pop();
+            },
             () async {
               await LocationService().enableService();
               if (await LocationService().isServiceEnabled()) {
