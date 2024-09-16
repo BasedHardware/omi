@@ -84,20 +84,26 @@ abstract class DeviceConnection {
   }
 
   void _onBleConnectionStateChanged(
-      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) {
-    if (state == BluetoothConnectionState.disconnected) {
+      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) async {
+    if (state == BluetoothConnectionState.disconnected && _connectionState == DeviceConnectionState.connected) {
       _connectionState = DeviceConnectionState.disconnected;
+      await disconnect(callback: callback);
+      return;
     }
-    if (state == BluetoothConnectionState.connected) {
+
+    if (state == BluetoothConnectionState.connected && _connectionState == DeviceConnectionState.disconnected) {
       _connectionState = DeviceConnectionState.connected;
-    }
-    if (callback != null) {
-      callback(device.id, _connectionState);
+      if (callback != null) {
+        callback(device.id, _connectionState);
+      }
     }
   }
 
-  Future<void> disconnect() async {
+  Future<void> disconnect({Function(String deviceId, DeviceConnectionState state)? callback}) async {
     _connectionState = DeviceConnectionState.disconnected;
+    if (callback != null) {
+      callback(device.id, _connectionState);
+    }
     await bleDevice.disconnect();
     _connectionStateSubscription.cancel();
     _services.clear();

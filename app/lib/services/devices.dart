@@ -122,16 +122,17 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
+    // Drop exist connection first
+    if (_connection?.status == DeviceConnectionState.connected) {
+      await _connection?.disconnect();
+    }
+    _connection = null;
+
     var bleDevice = _bleDevices.firstWhereOrNull((f) => f.device.remoteId.str == id);
     var device = _devices.firstWhereOrNull((f) => f.id == id);
     if (bleDevice == null || device == null) {
       debugPrint("bleDevice or device is null");
       return;
-    }
-
-    // Drop exist connection first
-    if (_connection != null && _connection?.status == DeviceConnectionState.connected) {
-      await _connection?.disconnect();
     }
 
     // Check exist ble device connection, force disconnect
@@ -223,10 +224,7 @@ class DeviceService implements IDeviceService {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
             await _connection?.disconnect();
-
-            // try re-connecting
-            await _connectToDevice(deviceId);
-            return _connection;
+            return null;
           }
         }
 
@@ -241,10 +239,7 @@ class DeviceService implements IDeviceService {
           var ok = await _connection?.ping() ?? false;
           if (!ok) {
             await _connection?.disconnect();
-
-            // try re-connecting
-            await _connectToDevice(deviceId);
-            return _connection;
+            return null;
           }
         }
 
