@@ -10,14 +10,14 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/utils/ble/connected.dart';
-import 'package:friend_private/utils/ble/find.dart';
+import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
+class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
   bool isClicked = false;
   bool isConnected = false;
@@ -28,7 +28,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   Timer? connectionStateTimer;
   List<BTDeviceStruct> deviceList = [];
   late Timer _didNotMakeItTimer;
-  late Timer _findDevicesTimer;
+  Timer? _findDevicesTimer;
   bool enableInstructions = false;
   Map<String, BTDeviceStruct> foundDevicesMap = {};
 
@@ -36,6 +36,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
   bool hasBluetoothPermission = false;
   bool hasLocationPermission = false;
   bool hasNotificationPermission = false;
+  bool hasBackgroundPermission = false; // Android only
 
   Future updatePermissions() async {
     hasBluetoothPermission = await Permission.bluetooth.isGranted;
@@ -62,6 +63,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     hasNotificationPermission = value;
     SharedPreferencesUtil().notificationsEnabled = value;
     MixpanelManager().setUserProperty('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+    notifyListeners();
+  }
+
+  void updateBackgroundPermission(bool value) {
+    hasBackgroundPermission = value;
+    MixpanelManager().setUserProperty('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
 
@@ -98,11 +105,18 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     updateNotificationPermission(isAllowed);
     notifyListeners();
   }
+
+  Future askForBackgroundPermissions() async {
+    await ForegroundUtil.requestPermissions();
+    var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
+    updateBackgroundPermission(isAllowed);
+    notifyListeners();
+  }
   //----------------- Onboarding Permissions -----------------
 
   void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && _findDevicesTimer.isActive) {
-      _findDevicesTimer.cancel();
+    if (_findDevicesTimer != null && (_findDevicesTimer?.isActive ?? false)) {
+      _findDevicesTimer!.cancel();
     }
     if (connectionStateTimer?.isActive ?? false) {
       connectionStateTimer?.cancel();
@@ -123,17 +137,20 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
     required bool isFromOnboarding,
     VoidCallback? goNext,
   }) async {
+    if (device.name.toLowerCase() == 'openglass' || device.type == DeviceType.openglass) {
+      notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      return;
+    }
     if (isClicked) return; // if any item is clicked, don't do anything
-
     isClicked = true; // Prevent further clicks
     connectingToDeviceId = device.id; // Mark this device as being connected to
     notifyListeners();
-    await bleConnectDevice(device.id);
+    await ServiceManager.instance().device.ensureConnection(device.id, force: true);
     print('Connected to device: ${device.name}');
     deviceId = device.id;
-    SharedPreferencesUtil().btDeviceStruct = device;
+    await SharedPreferencesUtil().btDeviceStructSet(device);
     deviceName = device.name;
-    var cDevice = await getConnectedDevice();
+    var cDevice = await _getConnectedDevice(deviceId);
     if (cDevice != null) {
       deviceProvider!.setConnectedDevice(cDevice);
       SharedPreferencesUtil().btDeviceStruct = cDevice;
@@ -193,36 +210,63 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin {
       notifyListeners();
     });
 
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-      List<BTDeviceStruct> foundDevices = await bleFindDevices();
+    ServiceManager.instance().device.subscribe(this, this);
 
-      // Update foundDevicesMap with new devices and remove the ones not found anymore
-      Map<String, BTDeviceStruct> updatedDevicesMap = {};
-      for (final device in foundDevices) {
-        // If it's a new device, add it to the map. If it already exists, this will just update the entry.
-        updatedDevicesMap[device.id] = device;
-      }
-      // Remove devices that are no longer found
-      foundDevicesMap.keys.where((id) => !updatedDevicesMap.containsKey(id)).toList().forEach(foundDevicesMap.remove);
-
-      // Merge the new devices into the current map to maintain order
-      foundDevicesMap.addAll(updatedDevicesMap);
-      // Convert the values of the map back to a list
-      List<BTDeviceStruct> orderedDevices = foundDevicesMap.values.toList();
-      if (orderedDevices.isNotEmpty) {
-        deviceList = orderedDevices;
-        notifyListeners();
-        _didNotMakeItTimer.cancel();
-      }
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+      ServiceManager.instance().device.discover();
     });
+  }
+
+  // TODO: thinh, use connection directly
+  Future<BTDeviceStruct?> _getConnectedDevice(String deviceId) async {
+    if (deviceId.isEmpty) {
+      return null;
+    }
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return connection?.device;
   }
 
   @override
   void dispose() {
     //TODO: This does not get called when the page is popped
-    _findDevicesTimer.cancel();
+    _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
     connectionStateTimer?.cancel();
+    ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
+  }
+
+  @override
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
+    // TODO: implement onDeviceConnectionStateChanged
+  }
+
+  @override
+  void onDevices(List<BTDeviceStruct> devices) {
+    List<BTDeviceStruct> foundDevices = devices;
+
+    // Update foundDevicesMap with new devices and remove the ones not found anymore
+    Map<String, BTDeviceStruct> updatedDevicesMap = {};
+    for (final device in foundDevices) {
+      // If it's a new device, add it to the map. If it already exists, this will just update the entry.
+      updatedDevicesMap[device.id] = device;
+    }
+    // Remove devices that are no longer found
+    foundDevicesMap.keys.where((id) => !updatedDevicesMap.containsKey(id)).toList().forEach(foundDevicesMap.remove);
+
+    // Merge the new devices into the current map to maintain order
+    foundDevicesMap.addAll(updatedDevicesMap);
+    // Convert the values of the map back to a list
+    List<BTDeviceStruct> orderedDevices = foundDevicesMap.values.toList();
+    if (orderedDevices.isNotEmpty) {
+      deviceList = orderedDevices;
+      notifyListeners();
+      _didNotMakeItTimer.cancel();
+    }
+  }
+
+  @override
+  void onStatusChanged(DeviceServiceStatus status) {
+    // TODO: implement onStatusChanged
   }
 }

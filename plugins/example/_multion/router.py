@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 import db
 from models import RealtimePluginRequest, TranscriptSegment
@@ -19,7 +19,6 @@ router = APIRouter()
 
 templates = Jinja2Templates(directory="templates")
 
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 MULTION_API_KEY = os.getenv('MULTION_API_KEY', '123')
 
 
@@ -28,13 +27,17 @@ class BooksToBuy(BaseModel):
 
 
 def retrieve_books_to_buy(transcript: str) -> List[str]:
-    chat = ChatOpenAI(model='gpt-4o', temperature=0).with_structured_output(BooksToBuy)
+    chat = ChatGroq(temperature=0, model="llama3-groq-8b-8192-tool-use-preview").with_structured_output(BooksToBuy)
 
-    response: BooksToBuy = chat.invoke(f'''The following is the transcript of a conversation.
+    response: BooksToBuy = chat.invoke(f'''
+    The following is the transcript of a conversation:
+    ```
     {transcript}
-
-    Your task is to determine first if the speakers talked or mentioned books to each other \
-    at some point during the conversation, and provide the titles of those.''')
+    ```
+    Your task is to identify the titles of the books mentioned in the conversation, if any.
+    Make sure to find clear mentions of book titles, and not just random conversations.
+    Make sure to only include the titles of the books, and not any other information.
+    ''')
 
     print('Books to buy:', response.books)
     return response.books
@@ -158,7 +161,7 @@ async def check_setup_completion(uid: str = Query(...)):
 
 @router.post("/multion/process_transcript", tags=['multion'])
 async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Query(...)):
-    return {'message': ''}
+    # return {'message': ''}
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
@@ -166,20 +169,23 @@ async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Qu
     session_id = 'multion-' + data.session_id
     db.clean_all_transcripts_except(uid, session_id)
     transcript: List[TranscriptSegment] = db.append_segment_to_transcript(uid, session_id, data.segments)
+    transcript_str = TranscriptSegment.segments_as_string(transcript)
+    if len(transcript_str) > 100:
+        transcript_str = transcript_str[-100:]
 
     try:
-        books = retrieve_books_to_buy(transcript)
+        books = retrieve_books_to_buy(transcript_str)
         if not books:
             return {'message': ''}
-        else:
-            db.remove_transcript(uid, data.session_id)
-
+        db.remove_transcript(uid, data.session_id)
         result = await asyncio.wait_for(call_multion(books, user_id), timeout=120)
     except asyncio.TimeoutError:
         print("Timeout error occurred")
+        db.remove_transcript(uid, data.session_id)
         return
     except Exception as e:
         print(f"Error calling Multion API: {str(e)}")
+        db.remove_transcript(uid, data.session_id)
         return
 
     if isinstance(result, bytes):

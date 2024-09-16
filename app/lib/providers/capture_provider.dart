@@ -2,34 +2,37 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/processing_memories.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/pages/capture/logic/mic_background_service.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
+import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
@@ -58,7 +61,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   StreamSubscription? _bleBytesStream;
 
-  var record = AudioRecorder();
+  get bleBytesStream => _bleBytesStream;
+
+  StreamSubscription? _storageStream;
+
+  get storageStream => _storageStream;
+
   RecordingState recordingState = RecordingState.stop;
 
 // -----------------------
@@ -72,8 +80,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   DateTime? currentTranscriptStartedAt;
   DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
+  List<int> currentStorageFiles = <int>[];
+  StorageBytesUtil storageUtil = StorageBytesUtil();
 
   // -----------------------
+
+  String? processingMemoryId;
+
+  bool resetStateAlreadyCalled = false;
+
+  void setResetStateAlreadyCalled(bool value) {
+    resetStateAlreadyCalled = value;
+    notifyListeners();
+  }
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -81,18 +100,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
+    print('set memory creating ${value}');
     memoryCreating = value;
     notifyListeners();
   }
 
   void setGeolocation(Geolocation? value) {
     geolocation = value;
-    notifyListeners();
-  }
 
-  void setWebSocketConnected(bool value) {
-    webSocketProvider?.wsConnectionState =
-        value ? WebsocketConnectionStatus.connected : WebsocketConnectionStatus.notConnected;
+    // Update processing memory on geolocation
+    if (processingMemoryId != null) {
+      _updateProcessingMemory();
+    }
+
     notifyListeners();
   }
 
@@ -107,9 +127,171 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
+  // This func was added by @kevvz partially, not sure about the use
+  //create the memory here
+  Future<bool?> createMemory({bool forcedCreation = false}) async {}
+
+  void _onMemoryCreating() {
+    setMemoryCreating(true);
+  }
+
+  Future<void> _updateProcessingMemory() async {
+    if (processingMemoryId == null) {
+      return;
+    }
+
+    debugPrint("update processing memory");
+    // Update info likes geolocation
+    UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
+      id: processingMemoryId!,
+      geolocation: geolocation,
+      emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
+    );
+    if (result?.result == null) {
+      print("Can not update processing memory, result null");
+    }
+  }
+
+  Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
+    this.processingMemoryId = processingMemoryId;
+    _updateProcessingMemory();
+  }
+
+  Future<void> _onMemoryCreated(ServerMessageEvent event) async {
+    if (event.memory == null) {
+      print("Memory is not found, processing memory ${event.processingMemoryId}");
+      return;
+    }
+    _processOnMemoryCreated(event.memory, event.messages ?? []);
+  }
+
+  void _onMemoryCreateFailed() {
+    _processOnMemoryCreated(null, []); // force failed
+  }
+
+  Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
+  Future<void> _onMemoryPostProcessFailed(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    if (memory == null) {
+      print("Memory is not found $memoryId");
+      return;
+    }
+
+    memoryProvider?.updateMemory(memory);
+  }
+
+  Future<bool?> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory != null) {
+      await processMemoryContent(
+        memory: memory,
+        messages: messages,
+        sendMessageToChat: (v) {
+          // use message provider to send message to chat
+          messageProvider?.addMessage(v);
+        },
+      );
+    }
+    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
+      memory = ServerMemory(
+        id: const Uuid().v4(),
+        createdAt: DateTime.now(),
+        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
+        discarded: true,
+        transcriptSegments: segments,
+        geolocation: geolocation,
+        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
+        startedAt: currentTranscriptStartedAt,
+        finishedAt: currentTranscriptFinishedAt,
+        failed: true,
+        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
+        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
+      );
+      SharedPreferencesUtil().addFailedMemory(memory);
+
+      // TODO: store anyways something temporal and retry once connected again.
+    }
+
+    if (memory != null) {
+      // use memory provider to add memory
+      MixpanelManager().memoryCreated(memory);
+      memoryProvider?.addMemory(memory);
+      if (memoryProvider?.memories.isEmpty ?? false) {
+        memoryProvider?.getMoreMemoriesFromServer();
+      }
+    }
+
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return true;
+  }
+
+  // Should validate with synced frames also
+  bool _shouldWaitCreateMemoryAutomatically() {
+    // Openglass
+    if (photos.isNotEmpty) {
+      return false;
+    }
+
+    // Friend
+    debugPrint("Should wait ${processingMemoryId != null}");
+    return processingMemoryId != null;
+  }
+
+  bool _shouldWaitCreateMemoryAutomaticallyWithClean() {
+    var shouldWait = _shouldWaitCreateMemoryAutomatically();
+    if (!shouldWait) {
+      return false;
+    }
+
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+
+    return true;
+  }
+
+  Future<bool?> _createMemoryTimer() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      return false;
+    }
+    return await _createMemory();
+  }
+
+  Future<bool?> tryCreateMemoryManually() async {
+    if (_shouldWaitCreateMemoryAutomatically()) {
+      setMemoryCreating(true);
+      return false;
+    }
+    return await _createMemory(forcedCreation: true);
+  }
+
+  // Warn: Split-brain in memory
+  Future<bool?> forceCreateMemory() async {
+    return await _createMemory(forcedCreation: true);
+  }
+
+  Future<bool?> _createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
+
     if (memoryCreating) return null;
+
     if (segments.isEmpty && photos.isEmpty) return false;
 
     // TODO: should clean variables here? and keep them locally?
@@ -126,18 +308,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     }
 
     ServerMemory? memory = await processTranscriptContent(
+      //create mmeory "shell"
       segments: segments,
       startedAt: currentTranscriptStartedAt,
       finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocation,
       photos: photos,
       sendMessageToChat: (v) {
-        // use message provider to send message to chat
         messageProvider?.addMessage(v);
       },
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
       audioFile: file,
+      processingMemoryId: processingMemoryId,
     );
     debugPrint(memory.toString());
     if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
@@ -154,6 +337,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         failed: true,
         source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
+        processingMemoryId: processingMemoryId,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
 
@@ -163,6 +347,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     if (memory != null) {
       // use memory provider to add memory
       MixpanelManager().memoryCreated(memory);
+      _handleCalendarCreation(memory);
       memoryProvider?.addMemory(memory);
       if (memoryProvider?.memories.isEmpty ?? false) {
         memoryProvider?.getMoreMemoriesFromServer();
@@ -173,6 +358,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       setMemoryCreating(false);
       try {
         memoryPostProcessing(file, memory.id).then((postProcessed) {
+          //tyoe ServerMemory
           if (postProcessed != null) {
             memoryProvider?.updateMemory(postProcessed);
           } else {
@@ -188,10 +374,19 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       }
     }
 
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return true;
+  }
+
+  void _cleanNew() async {
     SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
     audioStorage?.clearAudioBytes();
-    setHasTranscripts(false);
 
     currentTranscriptStartedAt = null;
     currentTranscriptFinishedAt = null;
@@ -202,9 +397,32 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
-    setMemoryCreating(false);
-    notifyListeners();
-    return true;
+    processingMemoryId = null;
+
+    // Create new socket session
+    // Warn: should have a better solution to keep the socket alived
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset new memory session');
+    await initiateWebsocket();
+  }
+
+  _handleCalendarCreation(ServerMemory memory) {
+    if (!SharedPreferencesUtil().calendarEnabled) return;
+    if (SharedPreferencesUtil().calendarType != 'auto') return;
+
+    List<Event> events = memory.structured.events;
+    if (events.isEmpty) return;
+
+    List<int> indexes = events.mapIndexed((index, e) => index).toList();
+    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+    for (var i = 0; i < events.length; i++) {
+      events[i].created = true;
+      CalendarUtil().createEvent(
+        events[i].title,
+        events[i].startsAt,
+        events[i].duration,
+        description: events[i].description,
+      );
+    }
   }
 
   Future<void> initiateWebsocket([
@@ -220,14 +438,16 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: true,
+      newMemoryWatch: true,
+      // Warn: need clarify about initiateWebsocket
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
-        setWebSocketConnected(true);
         if (segments.isNotEmpty) {
           // means that it was a reconnection, so we need to reset
           streamStartedAtSecond = null;
           secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
         }
+        print('bottom in onConnectionSuccess');
         notifyListeners();
       },
       onConnectionFailed: (err) {
@@ -246,6 +466,49 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         print('err: $err');
         // connection was okay, but then failed.
         notifyListeners();
+      },
+      onMessageEventReceived: (ServerMessageEvent event) {
+        if (event.type == MessageEventType.newMemoryCreating) {
+          _onMemoryCreating();
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreated) {
+          _onMemoryCreated(event);
+          return;
+        }
+
+        if (event.type == MessageEventType.newMemoryCreateFailed) {
+          _onMemoryCreateFailed();
+          return;
+        }
+
+        if (event.type == MessageEventType.newProcessingMemoryCreated) {
+          if (event.processingMemoryId == null) {
+            print("New processing memory created message event is invalid");
+            return;
+          }
+          _onProcessingMemoryCreated(event.processingMemoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingSuccess) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessSuccess(event.memoryId!);
+          return;
+        }
+
+        if (event.type == MessageEventType.memoryPostProcessingFailed) {
+          if (event.memoryId == null) {
+            print("Post proccess message event is invalid");
+            return;
+          }
+          _onMemoryPostProcessFailed(event.memoryId!);
+          return;
+        }
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
@@ -271,10 +534,11 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
           messageProvider?.addMessage(v);
         });
         SharedPreferencesUtil().transcriptSegments = segments;
-        setHasTranscripts(true);
         debugPrint('Memory creation timer restarted');
         _memoryCreationTimer?.cancel();
-        _memoryCreationTimer = Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => createMemory());
+        _memoryCreationTimer =
+            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemoryTimer());
+        setHasTranscripts(true);
         currentTranscriptStartedAt ??= DateTime.now();
         currentTranscriptFinishedAt = DateTime.now();
         notifyListeners();
@@ -283,12 +547,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
-    print('streamAudioToWs');
+    print('streamAudioToWs in capture_provider');
     audioStorage = WavBytesUtil(codec: codec);
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
-    _bleBytesStream = await getBleAudioBytesListener(
+    _bleBytesStream = await _getBleAudioBytesListener(
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
@@ -305,6 +569,62 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
+  Future sendStorage(String id) async {
+    storageUtil = StorageBytesUtil();
+
+    if (_storageStream != null) {
+      _storageStream?.cancel();
+    }
+    _storageStream = await _getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
+      if (value.isEmpty) return;
+
+      storageUtil!.storeFrameStoragePacket(value);
+      if (value.length == 1) {
+        //result codes i guess
+        debugPrint('returned $value');
+        if (value[0] == 0) {
+          //valid command
+          debugPrint('good to go');
+        } else if (value[0] == 3) {
+          debugPrint('bad file size. finishing...');
+        } else if (value[0] == 4) {
+          //file size is zero.
+          debugPrint('file size is zero. going to next one....');
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else if (value[0] == 100) {
+          //valid end command
+          debugPrint('done. sending to backend....trying to dl more');
+          File storageFile = (await storageUtil.createWavFile(removeLastNSeconds: 0)).item1;
+          List<ServerMemory> result = await sendStorageToBackend(storageFile, "hi");
+          for (ServerMemory memory in result) {
+            memoryProvider?.addMemory(memory);
+          }
+          storageUtil.clearAudioBytes();
+          getFileFromDevice(storageUtil.getFileNum() + 1);
+        } else {
+          //bad bit
+          debugPrint('Error bit returned');
+        }
+      }
+    });
+
+    getFileFromDevice(storageUtil.getFileNum());
+
+    //  notifyListeners();
+  }
+
+  Future getFileFromDevice(int fileNum) async {
+    storageUtil.fileNum = fileNum;
+    _writeToStorage(connectedDevice!.id, storageUtil.fileNum);
+  }
+
+  // Future saveAndSendStorageWav() async {
+  // }
+// Future storageHandler() async {
+//     File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
+//     sendStorageToBackend(storageFile, "hi");
+//     writeToStorage(id,2);
+// }
   void clearTranscripts() {
     segments = [];
     SharedPreferencesUtil().transcriptSegments = [];
@@ -312,92 +632,182 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  Future resetState({bool restartBytesProcessing = true, BTDeviceStruct? btDevice}) async {
-    //TODO: Improve this, do not rely on the captureKey. And also get rid of global keys if possible.
-    debugPrint('resetState: $restartBytesProcessing');
+  Future resetForSpeechProfile() async {
+    closeBleStream();
+    await webSocketProvider?.closeWebSocketWithoutReconnect('reset for speech profile');
+    setAudioBytesConnected(false);
+    notifyListeners();
+  }
+
+  Future<void> resetState({
+    bool restartBytesProcessing = true,
+    bool isFromSpeechProfile = false,
+    BTDeviceStruct? btDevice,
+  }) async {
+    if (resetStateAlreadyCalled) {
+      debugPrint('resetState already called');
+      return;
+    }
+    setResetStateAlreadyCalled(true);
+    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing, isFromSpeechProfile=$isFromSpeechProfile');
+
+    _cleanupCurrentState();
+    await startOpenGlass();
+    if (!isFromSpeechProfile) {
+      await _handleMemoryCreation(restartBytesProcessing);
+    }
+
+    bool codecChanged = await _checkCodecChange();
+
+    if (restartBytesProcessing || codecChanged) {
+      await _manageWebSocketConnection(codecChanged, isFromSpeechProfile);
+    }
+
+    await initiateFriendAudioStreaming(isFromSpeechProfile);
+    // TODO: Commenting this for now as DevKit 2 is not yet used in production
+    // await initiateStorageBytesStreaming();
+
+    setResetStateAlreadyCalled(false);
+    notifyListeners();
+  }
+
+  void _cleanupCurrentState() {
     closeBleStream();
     cancelMemoryCreationTimer();
-
-    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      var res = await createMemory(forcedCreation: true);
-      notifyListeners();
-      if (res != null && !res) {
-        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
-      } else {
-        notifyInfo('Memory created successfully 🚀');
-      }
-    }
-    if (restartBytesProcessing) {
-      print('socket connection status22: ${webSocketProvider?.wsConnectionState}');
-      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.closeWebSocket();
-        await initiateWebsocket();
-      } else {
-        print('here comes the initiateWebsocket');
-        await initiateWebsocket();
-      }
-    } else {
-      webSocketProvider?.closeWebSocket();
-    }
     setAudioBytesConnected(false);
-    startOpenGlass();
-    if (connectedDevice != null) {
-      BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != codec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec while resetting state');
-        SharedPreferencesUtil().deviceCodec = codec;
-        print('socket connection status: ${webSocketProvider?.wsConnectionState}');
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-          print('closing websocket');
-          webSocketProvider?.closeWebSocket();
-          await initiateWebsocket();
+  }
+
+  Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
+    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
+      if (!_shouldWaitCreateMemoryAutomaticallyWithClean()) {
+        var res = await forceCreateMemory();
+        notifyListeners();
+        if (res != null && !res) {
+          notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
         } else {
-          await initiateWebsocket();
+          notifyInfo('Memory created successfully 🚀');
         }
       }
     }
-    initiateFriendAudioStreaming();
-    notifyListeners();
   }
 
-  processCachedTranscript() async {
-    // TODO: only applies to friend, not openglass, fix it
-    var segments = SharedPreferencesUtil().transcriptSegments;
-    if (segments.isEmpty) return;
-    processTranscriptContent(
-      segments: segments,
-      sendMessageToChat: null,
-      triggerIntegrations: false,
-      language: SharedPreferencesUtil().recordingsLanguage,
-    );
-    SharedPreferencesUtil().transcriptSegments = [];
-    // TODO: include created at and finished at for this cached transcript
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
   }
 
-  Future<void> startOpenGlass() async {
+  Future<StreamSubscription?> _getBleStorageBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
+  }
+
+  Future<StreamSubscription?> _getBleAudioBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onAudioBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
+  Future<bool> _writeToStorage(String deviceId, int numFile) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.writeToStorage(numFile);
+  }
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
+  }
+
+  Future<bool> _hasPhotoStreamingCharacteristic(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return false;
+    }
+    return connection.hasPhotoStreamingCharacteristic();
+  }
+
+  Future<bool> _checkCodecChange() async {
+    if (connectedDevice != null) {
+      BleAudioCodec newCodec = await _getAudioCodec(connectedDevice!.id);
+      if (SharedPreferencesUtil().deviceCodec != newCodec) {
+        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+        SharedPreferencesUtil().deviceCodec = newCodec;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _manageWebSocketConnection(bool codecChanged, bool isFromSpeechProfile) async {
+    if (codecChanged || webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
+      await webSocketProvider?.closeWebSocketWithoutReconnect('reset state $isFromSpeechProfile');
+      // if (!isFromSpeechProfile) {
+      await initiateWebsocket();
+      // }
+    }
+  }
+
+  Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
+    print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
-    isGlasses = await hasPhotoStreamingCharacteristic(connectedDevice!.id);
-    if (!isGlasses) return;
-    await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
-    webSocketProvider?.closeWebSocket();
-    notifyListeners();
-  }
 
-  Future<void> initiateFriendAudioStreaming() async {
-    print('inside initiateFriendAudioStreaming');
-    if (connectedDevice == null) return;
-    BleAudioCodec codec = await getAudioCodec(connectedDevice!.id);
+    BleAudioCodec codec = await _getAudioCodec(connectedDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
-    } else {
-      print('codec is the same');
-      print(audioBytesConnected);
-      if (audioBytesConnected) return;
-      streamAudioToWs(connectedDevice!.id, codec);
+      await _manageWebSocketConnection(true, isFromSpeechProfile);
     }
 
+    // Why is the connectedDevice null at this point?
+    if (!audioBytesConnected) {
+      if (connectedDevice != null) {
+        await streamAudioToWs(connectedDevice!.id, codec);
+      } else {
+        // Is the app in foreground when this happens?
+        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      }
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> initiateStorageBytesStreaming() async {
+    debugPrint('initiateStorageBytesStreaming');
+    if (connectedDevice == null) return;
+    currentStorageFiles = await _getStorageList(connectedDevice!.id);
+    debugPrint('Storage files: $currentStorageFiles');
+    await sendStorage(connectedDevice!.id);
+    notifyListeners();
+  }
+
+  Future<void> startOpenGlass() async {
+    if (connectedDevice == null) return;
+    isGlasses = await _hasPhotoStreamingCharacteristic(connectedDevice!.id);
+    if (!isGlasses) return;
+    await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
+    webSocketProvider?.closeWebSocketWithoutReconnect('reset state open glass');
     notifyListeners();
   }
 
@@ -423,53 +833,24 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     notifyListeners();
   }
 
-  startStreamRecording() async {
+  streamRecording() async {
     await Permission.microphone.request();
-    var stream = await record.startStream(
-      const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1),
-    );
-    updateRecordingState(RecordingState.record);
-    stream.listen((data) async {
+
+    // record
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
       if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.websocketChannel?.sink.add(data);
+        webSocketProvider?.websocketChannel?.sink.add(bytes);
       }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
     });
   }
 
-  streamRecordingOnAndroid() async {
-    await Permission.microphone.request();
-    updateRecordingState(RecordingState.initialising);
-    await initializeMicBackgroundService();
-    startBackgroundService();
-    await listenToBackgroundService();
-  }
-
-  listenToBackgroundService() async {
-    if (await FlutterBackgroundService().isRunning()) {
-      FlutterBackgroundService().on('audioBytes').listen((event) {
-        Uint8List convertedList = Uint8List.fromList(event!['data'].cast<int>());
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected)
-          webSocketProvider?.websocketChannel?.sink.add(convertedList);
-      });
-      FlutterBackgroundService().on('stateUpdate').listen((event) {
-        if (event!['state'] == 'recording') {
-          updateRecordingState(RecordingState.record);
-        } else if (event['state'] == 'initializing') {
-          updateRecordingState(RecordingState.initialising);
-        } else if (event['state'] == 'stopped') {
-          updateRecordingState(RecordingState.stop);
-        }
-      });
-    }
-  }
-
-  stopStreamRecording() async {
-    if (await record.isRecording()) await record.stop();
-    updateRecordingState(RecordingState.stop);
-    notifyListeners();
-  }
-
-  stopStreamRecordingOnAndroid() {
-    stopBackgroundService();
+  stopStreamRecording() {
+    ServiceManager.instance().mic.stop();
   }
 }

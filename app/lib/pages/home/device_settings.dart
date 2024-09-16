@@ -6,8 +6,8 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
@@ -18,6 +18,15 @@ class DeviceSettings extends StatelessWidget {
   final BTDeviceStruct? device;
   final bool isDeviceConnected;
   const DeviceSettings({super.key, this.deviceInfo, this.device, this.isDeviceConnected = false});
+
+  // TODO: thinh, use connection directly
+  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return await connection.disconnect();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,10 +115,12 @@ class DeviceSettings extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextButton(
-                  onPressed: () {
-                    if (device != null) bleDisconnectDevice(device!);
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
+                  onPressed: () async {
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
                     SharedPreferencesUtil().deviceName = '';
+                    if (device != null) {
+                      await _bleDisconnectDevice(device!);
+                    }
                     context.read<DeviceProvider>().setIsConnected(false);
                     context.read<DeviceProvider>().setConnectedDevice(null);
                     context.read<DeviceProvider>().updateConnectingStatus(false);

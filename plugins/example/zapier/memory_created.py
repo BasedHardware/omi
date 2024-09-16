@@ -195,7 +195,7 @@ def is_setup_completed(uid: str):
     return {'is_setup_completed': status == "enabled"}
 
 
-@router.post('/zapier/memories', tags=['zapier', 'memory_created'], response_model=EndpointResponse)
+@router.post('/zapier/memories', tags=['zapier'], response_model=EndpointResponse)
 def zapier_memories(memory: Memory, uid: str):
     """
     The actual plugin that gets triggered when a memory gets created, and adds the memory to the Zapier.
@@ -214,7 +214,7 @@ def zapier_memories(memory: Memory, uid: str):
     return {}
 
 
-@router.post('/zapier/action/memories', tags=['zapier', 'new_memory'], response_model=EndpointResponse)
+@router.post('/zapier/action/memories', tags=['zapier'], response_model=EndpointResponse)
 def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
     """
     Create new memory by action from Zapier.

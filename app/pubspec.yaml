@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.32+114
+version: 1.0.37+133
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -22,7 +22,7 @@ dependencies:
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
-  flutter_blue_plus: ^1.32.13
+  flutter_blue_plus: ^1.32.12
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
   http: ^1.2.1
@@ -64,7 +64,6 @@ dependencies:
   crypto: ^3.0.3
   flutter_markdown: ^0.7.2+1
   file_picker: ^8.0.5
-  record: ^5.1.2
   flutter_background_service: ^5.0.7
   flutter_background_service_android: 6.2.4
   flutter_background_service_platform_interface: 5.1.1
@@ -72,7 +71,7 @@ dependencies:
   opus_dart: ^3.0.1
   growthbook_sdk_flutter: ^3.9.2
   flutter_rating_bar: ^4.0.1
-  device_calendar: ^4.3.2
+  manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_button: ^3.2.0
   sign_in_with_apple: ^6.1.1
@@ -92,16 +91,25 @@ dependencies:
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
   gleap_sdk: ^13.9.1
+  web_socket_channel: ^3.0.1
+  talker_flutter:
+
 
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
-  flutter_blue_plus:
+  # flutter_blue_plus:
+    # git:
+    #   url: https://github.com/chipweinberger/flutter_blue_plus
+    #   ref: 1.32.13
+    #   version: ^1.32.13
+  manage_calendar_events:
     git:
-      url: https://github.com/chipweinberger/flutter_blue_plus
-      ref: 1.32.13
-      version: ^1.32.13
+       url: https://github.com/beastoin/manage_calendar_events
+       ref: master
+       version: ^2.0.4
+
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
@@ -166,9 +174,9 @@ flutter:
 flutter_native_splash:
   background_image: "assets/images/splash.png"
   android_12:
-    #    image: assets/images/herologo.png
+    image: assets/images/splash_icon.png
     color: "#000000" # TODO: improve hero banner on android12
 
   android: true
   ios: true
- 
+

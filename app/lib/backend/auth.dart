@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -100,6 +101,7 @@ Future<UserCredential?> signInWithApple() async {
     return null;
   } catch (e) {
     debugPrint('Error during Apple Sign In: $e');
+    Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
     return null;
   }
 }
@@ -137,28 +139,9 @@ Future<UserCredential?> signInWithGoogle() async {
     return result;
   } catch (e) {
     debugPrint('Failed to sign in with Google: $e');
+    Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
     return null;
   }
-}
-
-listenAuthTokenChanges() {
-  FirebaseAuth.instance.idTokenChanges().listen((User? user) async {
-    // SharedPreferencesUtil().authToken = '123:/';
-    if (user == null) {
-      debugPrint('User is currently signed out or the token has been revoked!');
-      SharedPreferencesUtil().authToken = '';
-    } else {
-      // debugPrint('User is signed in!'); // FIXME, triggered too many times.
-      try {
-        if (SharedPreferencesUtil().authToken.isEmpty ||
-            DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
-          await getIdToken();
-        }
-      } catch (e) {
-        debugPrint('Failed to get token: $e');
-      }
-    }
-  });
 }
 
 Future<String?> getIdToken() async {

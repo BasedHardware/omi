@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -15,9 +16,12 @@ import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -27,18 +31,27 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
 import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
+import 'package:talker_flutter/talker_flutter.dart';
 
 Future<bool> _init() async {
+  // Service manager
+  ServiceManager.init();
+
+  // TODO: thinh, move to app start
+  await ServiceManager.instance().start();
+
+  // Firebase
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
   } else {
@@ -49,7 +62,6 @@ Future<bool> _init() async {
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
   if (Env.gleapApiKey != null) Gleap.initialize(token: Env.gleapApiKey!);
-  listenAuthTokenChanges();
   bool isAuth = false;
   try {
     isAuth = (await getIdToken()) != null;
@@ -57,12 +69,10 @@ Future<bool> _init() async {
 
   if (isAuth) MixpanelManager().identify();
   if (isAuth) identifyGleap();
-
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
-
   ble.FlutterBluePlus.setLogLevel(ble.LogLevel.info, color: true);
   return isAuth;
 }
@@ -76,7 +86,6 @@ void main() async {
   }
   FlutterForegroundTask.initCommunicationPort();
   // _setupAudioSession();
-
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
     Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
@@ -98,19 +107,17 @@ void main() async {
           Zone.current.handleUncaughtError(details.exception, details.stack ?? StackTrace.empty);
         };
         Instabug.setColorTheme(ColorTheme.dark);
-        runApp(MyApp(isAuth: isAuth));
+        runApp(const MyApp());
       },
       CrashReporting.reportCrash,
     );
   } else {
-    runApp(MyApp(isAuth: isAuth));
+    runApp(const MyApp());
   }
 }
 
 class MyApp extends StatefulWidget {
-  final bool isAuth;
-
-  const MyApp({super.key, required this.isAuth});
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -121,13 +128,27 @@ class MyApp extends StatefulWidget {
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
-    NotificationService.instance.saveNotificationToken();
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
+  }
+
+  void _deinit() {
+    debugPrint("App > _deinit");
+    ServiceManager.instance().deinit();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint("App > lifecycle changed $state");
+    if (state == AppLifecycleState.detached) {
+      _deinit();
+    }
   }
 
   @override
@@ -165,6 +186,12 @@ class _MyAppState extends State<MyApp> {
             update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
           ),
+          ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
+            create: (context) => MemoryDetailProvider(),
+            update: (BuildContext context, plugin, memory, MemoryDetailProvider? previous) =>
+                (previous?..setProviders(plugin, memory)) ?? MemoryDetailProvider(),
+          ),
+          ChangeNotifierProvider(create: (context) => CalenderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -203,22 +230,150 @@ class _MyAppState extends State<MyApp> {
                     selectionColor: Colors.deepPurple,
                   )),
               themeMode: ThemeMode.dark,
-              home: const AuthWrapper(),
+              builder: (context, child) {
+                FlutterError.onError = (FlutterErrorDetails details) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    Logger.instance.talker.handle(details.exception, details.stack);
+                  });
+                };
+                ErrorWidget.builder = (errorDetails) {
+                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                };
+                return child!;
+              },
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: TalkerWrapperOptions(
+                  enableErrorAlerts: true,
+                  enableExceptionAlerts: true,
+                  exceptionAlertBuilder: (context, data) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(0),
+                        leading: const Icon(Icons.error_outline, color: Colors.white),
+                        title: Text(
+                          data.message ?? 'Something went wrong! Please try again later.',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.share, color: Colors.white),
+                          onPressed: () {},
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                child: const DeciderWidget(),
+              ),
             ),
           );
         });
   }
 }
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+class DeciderWidget extends StatefulWidget {
+  const DeciderWidget({super.key});
+
+  @override
+  State<DeciderWidget> createState() => _DeciderWidgetState();
+}
+
+class _DeciderWidgetState extends State<DeciderWidget> {
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.read<ConnectivityProvider>().isConnected) {
+        NotificationService.instance.saveNotificationToken();
+      }
+    });
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (SharedPreferencesUtil().onboardingCompleted && user != null) {
-      return const HomePageWrapper();
-    }
-    return const OnboardingWrapper();
+    return Consumer<AuthenticationProvider>(
+      builder: (context, authProvider, child) {
+        if (SharedPreferencesUtil().onboardingCompleted && authProvider.user != null) {
+          return const HomePageWrapper();
+        } else {
+          return const OnboardingWrapper();
+        }
+      },
+    );
+  }
+}
+
+class CustomErrorWidget extends StatelessWidget {
+  final String errorMessage;
+
+  CustomErrorWidget({required this.errorMessage});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 50.0,
+            ),
+            const SizedBox(height: 10.0),
+            const Text(
+              'Something went wrong! Please try again later.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10.0),
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.all(16),
+              height: 200,
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(255, 63, 63, 63),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                errorMessage,
+                textAlign: TextAlign.start,
+                style: const TextStyle(fontSize: 16.0),
+              ),
+            ),
+            const SizedBox(height: 10.0),
+            SizedBox(
+              width: 210,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: errorMessage));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Error message copied to clipboard'),
+                    ),
+                  );
+                },
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('Copy error message'),
+                    SizedBox(width: 10),
+                    Icon(Icons.copy_rounded),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

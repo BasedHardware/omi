@@ -41,8 +41,9 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
         plugin_dict['enabled'] = plugin['id'] in user_enabled
         if include_reviews:
             reviews = get_plugin_reviews(plugin['id'])
-            sorted_reviews = sorted(reviews.values(), key=lambda x: datetime.fromisoformat(x['rated_at']), reverse=True)
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if sorted_reviews else None
+            sorted_reviews = reviews.values()
+
+            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             plugin_dict['reviews'] = []
             plugin_dict['user_review'] = reviews.get(uid)
             plugin_dict['rating_avg'] = rating_avg
@@ -56,7 +57,8 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return []
 
@@ -107,7 +109,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
 
 def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_realtime() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return {}
 
@@ -131,6 +134,8 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
                 return
 
             response_data = response.json()
+            if not response_data:
+                return
             message = response_data.get('message', '')
             print('Plugin', plugin.id, 'response:', message)
             if message and len(message) > 5:

@@ -11,6 +11,7 @@ import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/ble/device_base.dart';
 import 'package:friend_private/utils/ble/errors.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
+import 'package:friend_private/utils/logger.dart';
 
 class FriendDevice extends DeviceBase {
   @override
@@ -107,7 +108,21 @@ class FriendDevice extends DeviceBase {
     }
 
     try {
-      await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+      // TODO: Unknown GATT error here (code 133) on Android. StackOverflow says that it has to do with smaller MTU size
+      // The creator of the plugin says not to use autoConnect
+      // https://github.com/chipweinberger/flutter_blue_plus/issues/612
+      final device = BluetoothDevice.fromId(deviceId);
+      if (device.isConnected) {
+        if (Platform.isAndroid && device.mtuNow < 512) {
+          await device.requestMtu(512); // This might fix the code 133 error
+        }
+        if (device.isConnected) {
+          await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+        } else {
+          Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
+              message: 'Device is disconnected. Please reconnect and try again');
+        }
+      }
     } catch (e, stackTrace) {
       logSubscribeError('Audio data stream', deviceId, e, stackTrace);
       return null;
@@ -124,7 +139,7 @@ class FriendDevice extends DeviceBase {
     // This will cause a crash in OpenGlass devices
     // due to a race with discoverServices() that triggers
     // a bug in the device firmware.
-    if (Platform.isAndroid) await device.requestMtu(512);
+    if (Platform.isAndroid && device.isConnected) await device.requestMtu(512);
 
     return listener;
   }
@@ -170,6 +185,115 @@ class FriendDevice extends DeviceBase {
     // debugPrint('Codec is $codec');
     return codec;
   }
+
+  Future<List<int>> getStorageList() async {
+    if (await isConnected()) {
+      debugPrint('storage list called');
+      return await performGetStorageList();
+    }
+    // _showDeviceDisconnectedNotification();
+    debugPrint('storage list error');
+    return Future.value(<int>[]);
+  }
+
+  // @override
+  Future<List<int>> performGetStorageList() async {
+    debugPrint(' perform storage list called');
+    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
+    if (storageService == null) {
+      logServiceNotFoundError('Friend', deviceId);
+      return Future.value(<int>[]);
+    }
+
+    var storageListCharacteristic = getCharacteristicByUuid(storageService, storageReadControlCharacteristicUuid);
+    if (storageListCharacteristic == null) {
+      logCharacteristicNotFoundError('Storage List', deviceId);
+      return Future.value(<int>[]);
+    }
+    var storageValue = await storageListCharacteristic.read();
+    List<int> storageLengths = [];
+    if (storageValue.isNotEmpty) {
+      //parse the list
+      int totalEntries = (storageValue.length / 4).toInt();
+      debugPrint('Storage list: ${totalEntries} items');
+
+      for (int i = 0; i < totalEntries; i++) {
+        int baseIndex = i * 4;
+        var result = ((storageValue[baseIndex] |
+                    (storageValue[baseIndex + 1] << 8) |
+                    (storageValue[baseIndex + 2] << 16) |
+                    (storageValue[baseIndex + 3] << 24)) &
+                0xFFFFFFFF as int)
+            .toSigned(32);
+        storageLengths.add(result);
+      }
+    }
+    debugPrint('storage list finished');
+    debugPrint('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
+    return storageLengths;
+  }
+
+  @override
+  Future<StreamSubscription?> performGetBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
+    if (storageService == null) {
+      logServiceNotFoundError('Storage Write', deviceId);
+      return null;
+    }
+
+    var storageDataStreamCharacteristic = getCharacteristicByUuid(storageService, storageDataStreamCharacteristicUuid);
+    if (storageDataStreamCharacteristic == null) {
+      logCharacteristicNotFoundError('Storage data stream', deviceId);
+      return null;
+    }
+
+    try {
+      await storageDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+    } catch (e, stackTrace) {
+      logSubscribeError('Storage data stream', deviceId, e, stackTrace);
+      return null;
+    }
+
+    debugPrint('Subscribed to StorageBytes stream from Friend Device');
+    var listener = storageDataStreamCharacteristic.lastValueStream.listen((value) {
+      if (value.isNotEmpty) onStorageBytesReceived(value);
+    });
+
+    final device = BluetoothDevice.fromId(deviceId);
+    device.cancelWhenDisconnected(listener);
+
+    // await storageDataStreamCharacteristic.write([0x00,0x01]);
+
+    // This will cause a crash in OpenGlass devices
+    // due to a race with discoverServices() that triggers
+    // a bug in the device firmware.
+    if (Platform.isAndroid) await device.requestMtu(512);
+
+    return listener;
+  }
+
+  Future<bool> performWriteToStorage(int numFile) async {
+    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
+    if (storageService == null) {
+      logServiceNotFoundError('Storage Write', deviceId);
+      return false;
+    }
+
+    var storageDataStreamCharacteristic = getCharacteristicByUuid(storageService, storageDataStreamCharacteristicUuid);
+    if (storageDataStreamCharacteristic == null) {
+      logCharacteristicNotFoundError('Storage data stream', deviceId);
+      return false;
+    }
+    debugPrint('About to write to storage bytes');
+    debugPrint('about to send $numFile');
+    await storageDataStreamCharacteristic.write([0x00, numFile & 0xFF]);
+
+    return true;
+  }
+
+  // Future<List<int>> performGetStorageList();
 
   @override
   Future performCameraStartPhotoController() async {

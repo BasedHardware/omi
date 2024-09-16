@@ -1,12 +1,12 @@
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -82,7 +82,6 @@ getConnectionStateWidgets(
                           ? 'Server Issue'
                           : 'Listening',
                   style: TextStyle(
-                      fontFamily: 'SF Pro Display',
                       color: Colors.white,
                       fontSize: !connectivityProvider.isConnected
                           ? 29
@@ -150,28 +149,30 @@ _getNoFriendConnectedYet(BuildContext context) {
           //     )),
           // const SizedBox(height: 32),
           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              decoration: BoxDecoration(
-                border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            decoration: BoxDecoration(
+              border: const GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 2,
               ),
-              child: TextButton(
-                  onPressed: () {
-                    launchUrl(Uri.parse('https://basedhardware.com'));
-                    MixpanelManager().getFriendClicked();
-                  },
-                  child: const Text(
-                    'Get a Friend',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ))),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextButton(
+              onPressed: () {
+                launchUrl(Uri.parse('https://omi.me'));
+                MixpanelManager().getFriendClicked();
+              },
+              child: const Text(
+                'Get a Friend',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
           const SizedBox(height: 4),
           TextButton(
             onPressed: () async {
@@ -217,6 +218,7 @@ speechProfileWidget(BuildContext context) {
                 await routeToPage(context, const SpeakerIdPage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                   if (context.mounted) {
+                    // TODO: is the websocket restarting once the user comes back?
                     context.read<DeviceProvider>().restartWebSocket();
                   }
                 }
@@ -226,7 +228,7 @@ speechProfileWidget(BuildContext context) {
                   color: Colors.grey.shade900,
                   borderRadius: const BorderRadius.all(Radius.circular(12)),
                 ),
-                margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 padding: const EdgeInsets.all(16),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -237,7 +239,7 @@ speechProfileWidget(BuildContext context) {
                           Icon(Icons.multitrack_audio),
                           SizedBox(width: 16),
                           Text(
-                            'Set up speech profile',
+                            'Teach Omi your voice',
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ],
@@ -259,7 +261,7 @@ speechProfileWidget(BuildContext context) {
             ),
           ],
         )
-      : const SizedBox(height: 16);
+      : const SizedBox(height: 0);
 }
 
 getTranscriptWidget(
@@ -279,6 +281,23 @@ getTranscriptWidget(
     children: [
       if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
       if (segments.isNotEmpty) TranscriptWidget(segments: segments),
+    ],
+  );
+}
+
+getLiteTranscriptWidget(
+  List<TranscriptSegment> segments,
+  List<Tuple2<String, String>> photos,
+  BTDeviceStruct? btDevice,
+) {
+  return Column(
+    children: [
+      // TODO: thinh, be reenabled soon
+      //if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (segments.isNotEmpty)
+        LiteTranscriptWidget(
+          segments: segments,
+        ),
     ],
   );
 }
