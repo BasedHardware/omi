@@ -26,7 +26,6 @@ class DeviceConnectionFactory {
         return FriendDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
-        return null;
       default:
         return null;
     }
