@@ -9,7 +9,7 @@ export default async function GetTrends() {
       {trends.slice(0, 3).map((trend, idx) => (
         <TrendingItem trend={trend} index={idx} />
       ))}
-      <Link href={'/dreamforce'} className='px-5 py-4 hover:underline'>
+      <Link href={'/dreamforce'} className="px-5 py-4 hover:underline">
         Show more
       </Link>
     </div>

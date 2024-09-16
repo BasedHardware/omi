@@ -33,7 +33,8 @@ export default function TrendsTitle({ children }: TrendsTitleProps) {
         </motion.h1>
         <div className="relative mx-auto mt-10 max-w-screen-lg text-center text-sm text-black md:mt-12 md:text-base">
           <motion.p variants={itemVariants}>
-            From everyday moments to world-shaping debates, here you'll find the shared memories that define today.
+            From everyday moments to world-shaping debates, here you'll find the shared
+            memories that define today.
           </motion.p>
           <div className="absolute top-3 aspect-video h-32 w-full bg-[#aab8fe38] blur-[120px]"></div>
         </div>
