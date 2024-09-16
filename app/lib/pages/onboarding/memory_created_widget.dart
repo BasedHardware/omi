@@ -34,9 +34,7 @@ class MemoryCreatedWidget extends StatelessWidget {
                 ? const SizedBox()
                 : MemoryListItem(
                     memory: context.read<SpeechProfileProvider>().memory!,
-                    updateMemory: (d, i) {},
                     memoryIdx: 0,
-                    deleteMemory: (d, i) {},
                     isFromOnboarding: true,
                   ),
             const SizedBox(height: 24),
