@@ -25,7 +25,7 @@ class DeviceSettings extends StatelessWidget {
     if (connection == null) {
       return Future.value(null);
     }
-    return connection.disconnect();
+    return await connection.disconnect();
   }
 
   @override
