@@ -76,9 +76,8 @@ Future<void> migrateUserServer(String prevUid, String newUid) async {
 }
 
 Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath',
+    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$pluginMarkdownPath',
     method: 'GET',
     headers: {},
     body: '',

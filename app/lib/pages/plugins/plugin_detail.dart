@@ -42,7 +42,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.plugin.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
