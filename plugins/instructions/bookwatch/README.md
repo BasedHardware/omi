@@ -2,8 +2,6 @@
 
 ![Alt text](assets/bookwatch.png)
 
-[![Plugin perview]()](https://drive.google.com/file/d/1zJqOfghhuBeLzu7XySpEZEIklnYndpdA/view?usp=sharing)
-
 ## Prerequisets
 Download the BookWatch app from the App Store and create an account.
 
