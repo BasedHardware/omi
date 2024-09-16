@@ -54,6 +54,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    bool isMemoryPrompt = widget.plugin.worksWithMemories();
+    bool isChatPrompt = widget.plugin.worksWithChat();
+    bool isIntegration = widget.plugin.worksExternally();
+
     return Scaffold(
         appBar: AppBar(
           title: Text(widget.plugin.name),
@@ -158,7 +162,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
             ),
             const SizedBox(height: 16),
-            widget.plugin.worksWithMemories()
+            isMemoryPrompt
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
@@ -167,7 +171,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithMemories()
+            isMemoryPrompt
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
@@ -176,8 +180,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithChat() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            widget.plugin.worksWithChat()
+            isChatPrompt ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            isChatPrompt
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
@@ -186,7 +190,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksWithChat()
+            isChatPrompt
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
@@ -195,8 +199,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            widget.plugin.worksExternally()
+            isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            isIntegration
                 ? ListTile(
                     onTap: () async {
                       await routeToPage(
@@ -207,48 +211,93 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     },
                     trailing: const Padding(
                       padding: EdgeInsets.only(right: 12.0),
-                      child: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 20,
-                        color: Colors.grey,
-                      ),
+                      child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
                     ),
                     title: const Text(
                       'Integration Instructions',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
-                    // subtitle: Text(
-                    //   'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
-                    //   style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                    // ),
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally() && widget.plugin.externalIntegration?.setupCompletedUrl != null
+            isIntegration && widget.plugin.externalIntegration?.setupCompletedUrl != null
                 ? CheckboxListTile(
-                    title: const Text('Setup Completed'),
+                    title: const Text('Setup Completed ?'),
+                    contentPadding: const EdgeInsets.only(left: 16, right: 18),
                     value: setupCompleted,
                     checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     onChanged: (s) {},
                     enabled: false,
                   )
                 : const SizedBox.shrink(),
-            widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            const SizedBox(height: 16),
+            // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    widget.plugin.userReview?.score == null ? 'Rate it:' : 'Your rating:',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 0),
+                  child: RatingBar.builder(
+                    initialRating: widget.plugin.userReview?.score ?? 0,
+                    minRating: 1,
+                    direction: Axis.horizontal,
+                    allowHalfRating: true,
+                    itemCount: 5,
+                    itemSize: 24,
+                    itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                    maxRating: 5.0,
+                    onRatingUpdate: (rating) {
+                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (connectivityProvider.isConnected) {
+                        reviewPlugin(widget.plugin.id, rating);
+                        bool hadReview = widget.plugin.userReview != null;
+                        if (!hadReview) widget.plugin.ratingCount += 1;
+                        widget.plugin.userReview = PluginReview(
+                          uid: SharedPreferencesUtil().uid,
+                          ratedAt: DateTime.now(),
+                          review: '',
+                          score: rating,
+                        );
+                        var pluginsList = SharedPreferencesUtil().pluginsList;
+                        var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
+                        pluginsList[index] = widget.plugin;
+                        SharedPreferencesUtil().pluginsList = pluginsList;
+                        MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
+                        debugPrint('Refreshed plugins list.');
+                        // TODO: refresh ratings on plugin
+                        setState(() {});
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text("Can't rate plugin without internet connection."),
+                        ));
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0),
               child: RichText(
                   text: TextSpan(children: [
-                const TextSpan(
-                  text: 'By: ',
-                  style: TextStyle(fontSize: 16),
-                ),
+                const TextSpan(text: 'By: ', style: TextStyle(fontSize: 16)),
                 TextSpan(
                   text: '${widget.plugin.author}.',
                   style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
                 ),
               ])),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -256,7 +305,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   const SizedBox(width: 2),
-                  widget.plugin.worksWithMemories()
+                  isMemoryPrompt
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -269,8 +318,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  SizedBox(width: widget.plugin.worksWithChat() && widget.plugin.worksWithMemories() ? 8 : 0),
-                  widget.plugin.worksWithChat()
+                  SizedBox(width: isMemoryPrompt && isChatPrompt ? 8 : 0),
+                  isChatPrompt
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -283,8 +332,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
-                  widget.plugin.worksExternally()
+                  SizedBox(width: isChatPrompt ? 8 : 0),
+                  ([isMemoryPrompt, isChatPrompt, isIntegration].where((value) => value).length > 1) && isIntegration
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -298,55 +347,6 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         )
                       : const SizedBox.shrink(),
                 ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Your rating:',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: RatingBar.builder(
-                initialRating: widget.plugin.userReview?.score ?? 0,
-                minRating: 1,
-                direction: Axis.horizontal,
-                allowHalfRating: true,
-                itemCount: 5,
-                itemSize: 24,
-                itemPadding: const EdgeInsets.symmetric(horizontal: 2),
-                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                maxRating: 5.0,
-                onRatingUpdate: (rating) {
-                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                  if (connectivityProvider.isConnected) {
-                    reviewPlugin(widget.plugin.id, rating);
-                    bool hadReview = widget.plugin.userReview != null;
-                    if (!hadReview) widget.plugin.ratingCount += 1;
-                    widget.plugin.userReview = PluginReview(
-                      uid: SharedPreferencesUtil().uid,
-                      ratedAt: DateTime.now(),
-                      review: '',
-                      score: rating,
-                    );
-                    var pluginsList = SharedPreferencesUtil().pluginsList;
-                    var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
-                    pluginsList[index] = widget.plugin;
-                    SharedPreferencesUtil().pluginsList = pluginsList;
-                    MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
-                    debugPrint('Refreshed plugins list.');
-                    // TODO: refresh ratings on plugin
-                    setState(() {});
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text("Can't rate plugin without internet connection."),
-                    ));
-                  }
-                },
               ),
             ),
             const SizedBox(height: 24),
