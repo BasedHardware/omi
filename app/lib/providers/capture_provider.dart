@@ -312,7 +312,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       geolocation: geolocation,
       photos: photos,
       sendMessageToChat: (v) {
-        // use message provider to send message to chat
         messageProvider?.addMessage(v);
       },
       triggerIntegrations: true,

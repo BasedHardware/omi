@@ -218,6 +218,7 @@ speechProfileWidget(BuildContext context) {
                 await routeToPage(context, const SpeakerIdPage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                   if (context.mounted) {
+                    // TODO: is the websocket restarting once the user comes back?
                     context.read<DeviceProvider>().restartWebSocket();
                   }
                 }
@@ -227,7 +228,7 @@ speechProfileWidget(BuildContext context) {
                   color: Colors.grey.shade900,
                   borderRadius: const BorderRadius.all(Radius.circular(12)),
                 ),
-                margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 padding: const EdgeInsets.all(16),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -238,7 +239,7 @@ speechProfileWidget(BuildContext context) {
                           Icon(Icons.multitrack_audio),
                           SizedBox(width: 16),
                           Text(
-                            'Set up speech profile',
+                            'Teach Omi your voice',
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ],
@@ -260,7 +261,7 @@ speechProfileWidget(BuildContext context) {
             ),
           ],
         )
-      : const SizedBox(height: 16);
+      : const SizedBox(height: 0);
 }
 
 getTranscriptWidget(

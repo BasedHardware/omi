@@ -28,7 +28,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     if (connection == null) {
       return Future.value(null);
     }
-    return connection.disconnect();
+    return await connection.disconnect();
   }
 
   Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
@@ -171,7 +171,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 ),
                 child: TextButton(
                   onPressed: () async {
-                    SharedPreferencesUtil().btDeviceStruct = BTDeviceStruct(id: '', name: '');
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
                     SharedPreferencesUtil().deviceName = '';
                     if (widget.device != null) {
                       await _bleDisconnectDevice(widget.device!);

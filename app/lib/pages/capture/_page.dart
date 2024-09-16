@@ -215,7 +215,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
             SnackBar(
               content: Text(
                 error,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );
