@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.37+131
+version: 1.0.37+130
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -104,6 +104,12 @@ dependency_overrides:
     #   url: https://github.com/chipweinberger/flutter_blue_plus
     #   ref: 1.32.13
     #   version: ^1.32.13
+  manage_calendar_events:
+    git:
+       url: https://github.com/beastoin/manage_calendar_events
+       ref: master
+       version: ^2.0.4
+
 
 dev_dependencies:
   flutter_launcher_icons: 0.13.1
