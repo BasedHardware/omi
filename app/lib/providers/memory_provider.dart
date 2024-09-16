@@ -10,7 +10,6 @@ class MemoryProvider extends ChangeNotifier {
   List memoriesWithDates = [];
 
   bool isLoadingMemories = false;
-  bool displayDiscardMemories = false;
   bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
@@ -38,7 +37,9 @@ class MemoryProvider extends ChangeNotifier {
 
   void filterMemories(String query) {
     filteredMemories = [];
-    filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
+    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
+        ? memories
+        : memories.where((memory) => !memory.discarded).toList();
     filteredMemories = query.isEmpty
         ? filteredMemories
         : filteredMemories
@@ -50,7 +51,7 @@ class MemoryProvider extends ChangeNotifier {
             .toList();
     if (query == '' && filteredMemories.isEmpty) {
       filteredMemories = memories;
-      displayDiscardMemories = true;
+      SharedPreferencesUtil().showDiscardedMemories = true;
       hasNonDiscardedMemories = false;
     }
     populateMemoriesWithDates();
@@ -58,8 +59,8 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void toggleDiscardMemories() {
-    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
-    displayDiscardMemories = !displayDiscardMemories;
+    MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
+    SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
     filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();

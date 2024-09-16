@@ -48,6 +48,7 @@ Future<ServerMemory?> processTranscriptContent({
 
   for (var message in result.messages) {
     String pluginId = message.pluginId ?? '';
+    // TODO: memory created notification should be triggered from backend
     NotificationService.instance
         .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
     if (sendMessageToChat != null) sendMessageToChat(message);

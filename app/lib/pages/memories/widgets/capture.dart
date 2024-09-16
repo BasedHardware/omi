@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -12,15 +11,12 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class LiteCaptureWidget extends StatefulWidget {
-  const LiteCaptureWidget({
-    super.key,
-  });
+  const LiteCaptureWidget({super.key});
 
   @override
   State<LiteCaptureWidget> createState() => LiteCaptureWidgetState();
@@ -163,7 +159,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
             SnackBar(
               content: Text(
                 error,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           );
