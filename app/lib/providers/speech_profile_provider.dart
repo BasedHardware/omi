@@ -4,20 +4,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/http/api/speech_profile.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/websockets.dart';
@@ -31,7 +30,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
   bool loading = false;
   BTDeviceStruct? device;
 
-  final targetWordsCount = 70;
+  final targetWordsCount = 10;
   final maxDuration = 90;
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
@@ -54,6 +53,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
   ServerMemory? memory;
+
   /////////////////////////////////
 
   void updateLoadingText(String text) {
@@ -342,14 +342,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
         language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
       );
       SharedPreferencesUtil().addFailedMemory(memory!);
-
       // TODO: store anyways something temporal and retry once connected again.
-    }
-
-    if (memory != null) {
-      // use memory provider to add memory
-      MixpanelManager().memoryCreated(memory!);
-      // memoryProvider?.addMemory(memory);
     }
 
     notifyListeners();

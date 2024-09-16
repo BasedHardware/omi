@@ -29,11 +29,12 @@ class OnboardingWrapper extends StatefulWidget {
 
 class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
   TabController? _controller;
+  bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: SharedPreferencesUtil().hasSpeakerProfile ? 5 : 7, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 5 : 7, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -100,7 +101,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
         goNext: () async {
           var provider = context.read<OnboardingProvider>();
-          if (SharedPreferencesUtil().hasSpeakerProfile) {
+          if (hasSpeechProfile) {
             // previous users
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
@@ -121,7 +122,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
     ];
 
-    if (!SharedPreferencesUtil().hasSpeakerProfile) {
+    if (!hasSpeechProfile) {
       pages.addAll([
         SpeechProfileWidget(
           goNext: () {
