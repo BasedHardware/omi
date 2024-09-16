@@ -64,6 +64,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   get bleBytesStream => _bleBytesStream;
 
   StreamSubscription? _storageStream;
+
   get storageStream => _storageStream;
 
   RecordingState recordingState = RecordingState.stop;
@@ -81,6 +82,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   int elapsedSeconds = 0;
   List<int> currentStorageFiles = <int>[];
   StorageBytesUtil storageUtil = StorageBytesUtil();
+
   // -----------------------
 
   String? processingMemoryId;
@@ -128,6 +130,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   // This func was added by @kevvz partially, not sure about the use
   //create the memory here
   Future<bool?> createMemory({bool forcedCreation = false}) async {}
+
   void _onMemoryCreating() {
     setMemoryCreating(true);
   }
@@ -435,7 +438,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       codec: codec,
       sampleRate: sampleRate,
       includeSpeechProfile: true,
-      newMemoryWatch: true, // Warn: need clarify about initiateWebsocket
+      newMemoryWatch: true,
+      // Warn: need clarify about initiateWebsocket
       onConnectionSuccess: () {
         print('inside onConnectionSuccess');
         if (segments.isNotEmpty) {
