@@ -4,8 +4,8 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
@@ -42,7 +42,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.plugin.id}/assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.plugin.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
@@ -65,26 +65,28 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
           children: [
             const SizedBox(height: 32),
             ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.white,
-                maxRadius: 28,
-                child: CachedNetworkImage(
-                  imageUrl: widget.plugin.getImageUrl(),
-                  placeholder: (context, url) => const CircularProgressIndicator(),
-                  errorWidget: (context, url, error) => const Icon(Icons.error),
+              leading: CachedNetworkImage(
+                imageUrl: widget.plugin.getImageUrl(),
+                imageBuilder: (context, imageProvider) => Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.rectangle,
+                    borderRadius: BorderRadius.circular(8),
+                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                  ),
                 ),
+                placeholder: (context, url) => const CircularProgressIndicator(),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
               title: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      widget.plugin.description,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
+                  Text(
+                    widget.plugin.description,
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                   SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
                   widget.plugin.ratingAvg != null
@@ -179,7 +181,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? const Padding(
                     padding: EdgeInsets.all(16),
                     child: Text(
-                      'Chat Prompt',
+                      'Chat Personality',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   )
@@ -215,10 +217,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                       'Integration Instructions',
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
-                    subtitle: Text(
-                      'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
-                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                    ),
+                    // subtitle: Text(
+                    //   'Triggers on ${widget.plugin.externalIntegration!.getTriggerOnString()}',
+                    //   style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
+                    // ),
                   )
                 : const SizedBox.shrink(),
             widget.plugin.worksExternally() && widget.plugin.externalIntegration?.setupCompletedUrl != null
@@ -253,17 +255,13 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Works with',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 2),
                   widget.plugin.worksWithMemories()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.grey,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
                             'Memories',
@@ -271,13 +269,13 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           ),
                         )
                       : const SizedBox.shrink(),
-                  SizedBox(width: widget.plugin.worksWithChat() ? 8 : 0),
-                  widget.plugin.worksWithMemories()
+                  SizedBox(width: widget.plugin.worksWithChat() && widget.plugin.worksWithMemories() ? 8 : 0),
+                  widget.plugin.worksWithChat()
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.grey,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
                             'Chat',
@@ -291,7 +289,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.grey,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
                             'Integration',

@@ -148,7 +148,7 @@ class Plugin {
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Friend/main$image';
+  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
 
   Map<String, dynamic> toJson() {
     return {

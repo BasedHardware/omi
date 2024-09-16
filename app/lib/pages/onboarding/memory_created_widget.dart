@@ -17,7 +17,7 @@ class MemoryCreatedWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
         return Column(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -26,10 +26,10 @@ class MemoryCreatedWidget extends StatelessWidget {
                 ? const SizedBox()
                 : Text(
                     'Your first memory is ready! 🎉',
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    style: TextStyle(color: Colors.grey.shade300, fontSize: 18),
                     textAlign: TextAlign.center,
                   ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             context.read<SpeechProfileProvider>().memory == null
                 ? const SizedBox()
                 : MemoryListItem(
@@ -39,7 +39,7 @@ class MemoryCreatedWidget extends StatelessWidget {
                     deleteMemory: (d, i) {},
                     isFromOnboarding: true,
                   ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
             Container(
               width: double.infinity,
               decoration: BoxDecoration(

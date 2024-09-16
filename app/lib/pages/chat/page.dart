@@ -75,8 +75,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             Align(
               alignment: Alignment.topCenter,
               child: provider.isLoadingMessages
-                  ? const CircularProgressIndicator(
-                      color: Colors.white,
+                  ? const Padding(
+                      padding: EdgeInsets.only(top: 32.0),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                      ),
                     )
                   : (provider.messages.isEmpty)
                       ? Text(
