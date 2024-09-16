@@ -179,11 +179,11 @@ function mainLoop()
 					color = "GREY"
 				})
 				if status == 1 then
-					frame.display.text('DISCONNECTED from Friend app', 10, 70, {
+					frame.display.text('DISCONNECTED from Omi app', 10, 70, {
 						color = "RED"
 					})
 				elseif status == 2 then
-					frame.display.text('CONNECTED to Friend app', 10, 70, {
+					frame.display.text('CONNECTED to Omi app', 10, 70, {
 						color = "GREY"
 					})
 				end
