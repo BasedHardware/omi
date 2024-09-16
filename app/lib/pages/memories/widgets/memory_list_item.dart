@@ -43,7 +43,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
         // if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
       },
       child: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+        padding:  EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0: 16, right: widget.isFromOnboarding ? 0: 16),
         child: Container(
           width: double.maxFinite,
           decoration: BoxDecoration(
