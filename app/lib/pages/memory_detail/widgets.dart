@@ -526,7 +526,8 @@ class GetPluginsWidgets extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (c) => const PluginsPage()));
+                    routeToPage(context, const PluginsPage());
+                    MixpanelManager().pageOpened('Memory Detail Plugins');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(

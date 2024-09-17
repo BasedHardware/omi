@@ -213,7 +213,7 @@ speechProfileWidget(BuildContext context) {
           children: [
             GestureDetector(
               onTap: () async {
-                MixpanelManager().speechProfileCapturePageClicked();
+                MixpanelManager().pageOpened('Speech Profile Memories');
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                 await routeToPage(context, const SpeechProfilePage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
