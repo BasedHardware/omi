@@ -291,6 +291,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void _cleanNew() async {
+    segments = [];
+
     audioStorage?.clearAudioBytes();
 
     elapsedSeconds = 0;
