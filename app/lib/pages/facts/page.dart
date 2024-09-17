@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/providers/facts_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/facts_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -69,7 +70,10 @@ class _FactsPageState extends State<_FactsPage> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
-                  onPressed: () => _showFactDialog(context, provider),
+                  onPressed: () {
+                    _showFactDialog(context, provider);
+                    MixpanelManager().factsPageCreateFactBtn();
+                  },
                 ),
               ],
             ),
@@ -252,8 +256,10 @@ class _FactsPageState extends State<_FactsPage> {
       if (formKey.currentState!.validate()) {
         if (isEditing && fact != null) {
           provider.editFactProvider(fact, contentController.text, selectedCategory);
+          MixpanelManager().factsPageEditedFact();
         } else {
           provider.createFactProvider(contentController.text, selectedCategory);
+          MixpanelManager().factsPageCreatedFact(selectedCategory);
         }
         Navigator.pop(context);
       }
@@ -296,6 +302,7 @@ class _FactsPageState extends State<_FactsPage> {
             final count = item.item2;
             return GestureDetector(
               onTap: () {
+                MixpanelManager().factsPageCategoryOpened(category);
                 setState(() {
                   provider.setCategory(category);
                 });
@@ -381,6 +388,7 @@ class _FactsPageState extends State<_FactsPage> {
                 direction: DismissDirection.endToStart,
                 onDismissed: (direction) {
                   provider.deleteFactProvider(fact);
+                  MixpanelManager().factsPageDeletedFact(fact);
                 },
                 background: Container(
                   alignment: Alignment.centerRight,
