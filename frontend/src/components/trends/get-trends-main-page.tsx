@@ -1,10 +1,16 @@
 import getTrends from '@/src/actions/trends/get-trends';
+import capitalizeFirstLetter from '@/src/utils/capitalize-first-letter';
 import { ArrowDownCircle, ArrowUpCircle } from 'iconoir-react';
 
 const categories = {
   ceo: 'CEOs',
   ai_product: 'AI Products',
+  industry: 'Industries',
+  innovation: 'Innovations',
   company: 'Companies',
+  research: 'Research',
+  product: 'Products',
+  event: 'Events',
   hardware_product: 'Hardware Products',
   software_product: 'Software Products',
 };
@@ -32,7 +38,7 @@ export default async function GetTrendsMainPage() {
       {Object.keys(groupedTrends).map((category) => (
         <div key={category} className="">
           <h2 className="text-start text-2xl font-semibold text-[#03234d] md:text-3xl bg-[#04e1cb] py-3 rounded-t-lg px-3">
-            {categories[category]}
+            {categories['category'] ?? capitalizeFirstLetter(category)}
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 border border-solid border-gray-100 p-3 bg-white rounded-b-lg">
             {groupedTrends[category].best.length > 0 && (
@@ -59,6 +65,7 @@ export default async function GetTrendsMainPage() {
                         </span>
                       )}
                       {topic.topic}
+                      {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
                     </li>
                   ))}
                 </ul>
