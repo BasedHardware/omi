@@ -50,7 +50,12 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
 
-    MixpanelManager().settingsSaved();
+    MixpanelManager().settingsSaved(
+      hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
+      hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
+      hasWebhookMemoryCreated: prefs.webhookOnMemoryCreated.isNotEmpty,
+      hasWebhookTranscriptReceived: prefs.webhookOnTranscriptReceived.isNotEmpty,
+    );
     savingSettingsLoading = false;
     notifyListeners();
     AppSnackbar.showSnackbarError(

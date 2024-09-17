@@ -5,7 +5,7 @@ import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/personal_details.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
-import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -43,14 +43,20 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: const TextStyle(color: Colors.white)),
               subtitle: const Text('What Omi has learned about you 👀'),
               trailing: const Icon(Icons.self_improvement, size: 20),
-              onTap: () => routeToPage(context, const FactsPage()),
+              onTap: () {
+                routeToPage(context, const FactsPage());
+                MixpanelManager().pageOpened('Profile Facts');
+              },
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               title: const Text('Speech Profile', style: TextStyle(color: Colors.white)),
               subtitle: const Text('Teach Omi your voice'),
               trailing: const Icon(Icons.multitrack_audio, size: 20),
-              onTap: () => routeToPage(context, const SpeakerIdPage()),
+              onTap: () {
+                routeToPage(context, const SpeechProfilePage());
+                MixpanelManager().pageOpened('Profile Speech Profile');
+              },
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
@@ -62,6 +68,7 @@ class _ProfilePageState extends State<ProfilePage> {
               trailing: const Icon(Icons.person, size: 20),
               onTap: () {
                 // TODO: change to a dialog
+                MixpanelManager().pageOpened('Profile Change Name');
                 showModalBottomSheet(
                     context: context,
                     builder: (c) {
@@ -100,14 +107,15 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: GestureDetector(
                           onTap: () {
                             routeToPage(context, const PrivacyInfoPage());
-                            MixpanelManager().privacyDetailsPageOpened();
+                            MixpanelManager().pageOpened('Share Analytics Data Details');
                           },
                           child: const Text(
                             'Help improve Friend by sharing anonymized analytics data',
                             style: TextStyle(
-                                color: Color.fromARGB(255, 150, 150, 150),
-                                fontSize: 16,
-                                decoration: TextDecoration.underline),
+                              color: Colors.grey,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ),
                       ),
@@ -144,6 +152,7 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
               child: InkWell(
                 onTap: () async {
+                  MixpanelManager().pageOpened('Profile Authorize Saving Recordings');
                   await routeToPage(context, const RecordingsStoragePermission());
                   setState(() {});
                 },
@@ -195,6 +204,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 size: 20,
               ),
               onTap: () {
+                MixpanelManager().pageOpened('Profile Delete Account Dialog');
                 showDialog(
                     context: context,
                     builder: (ctx) {
@@ -216,6 +226,7 @@ class _ProfilePageState extends State<ProfilePage> {
               subtitle: Text(SharedPreferencesUtil().uid),
               trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
+                MixpanelManager().pageOpened('Authorize Saving Recordings');
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('UID copied to clipboard')));
               },

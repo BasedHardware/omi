@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {
@@ -29,6 +30,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               title: const Text('Privacy Policy', style: TextStyle(color: Colors.white)),
               trailing: const Icon(Icons.privacy_tip_outlined, size: 20),
               onTap: () {
+                MixpanelManager().pageOpened('About Privacy Policy');
                 routeToPage(
                   context,
                   const PageWebView(url: 'https://www.omi.me/pages/privacy', title: 'Privacy Policy'),
@@ -41,6 +43,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               subtitle: const Text('https://omi.me'),
               trailing: const Icon(Icons.language_outlined, size: 20),
               onTap: () {
+                MixpanelManager().pageOpened('About Visit Website');
                 routeToPage(context, const PageWebView(url: 'https://www.omi.me/', title: 'omi'));
               },
             ),
@@ -50,8 +53,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               trailing: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 20),
               onTap: () {
-                launchUrl(Uri.parse('mailto:team@basedhardware.com'));
-                MixpanelManager().supportContacted();
+                Gleap.open();
               },
             ),
             ListTile(
@@ -60,8 +62,8 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               subtitle: const Text('2300+ members and counting.'),
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
+                MixpanelManager().pageOpened('About Join Discord');
                 launchUrl(Uri.parse('https://discord.gg/ZutWMTJnwA'));
-                MixpanelManager().joinDiscordClicked();
               },
             ),
           ],

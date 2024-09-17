@@ -472,15 +472,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       child: provider.plugins.where((p) => p.enabled).isEmpty
                           ? GestureDetector(
                               onTap: () {
-                                Navigator.of(context)
-                                    .push(MaterialPageRoute(builder: (c) => const PluginsPage(filterChatOnly: true)));
+                                MixpanelManager().pageOpened('Chat Plugins');
+                                routeToPage(context, const PluginsPage(filterChatOnly: true));
                               },
                               child: const Row(
                                 children: [
                                   Icon(size: 20, Icons.chat, color: Colors.white),
                                   SizedBox(width: 10),
-                                  Text('Enable Plugins',
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16)),
+                                  Text(
+                                    'Enable Plugins',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                                  ),
                                 ],
                               ),
                             )
@@ -492,7 +494,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 onChanged: (s) async {
                                   if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) ||
                                       s == 'enable') {
-                                    await routeToPage(context, const PluginsPage(filterChatOnly: true));
+                                    routeToPage(context, const PluginsPage(filterChatOnly: true));
+                                    MixpanelManager().pageOpened('Chat Plugins');
                                     return;
                                   }
                                   if (s == null || s == provider.selectedChatPluginId) return;
@@ -535,7 +538,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
-                        MixpanelManager().settingsOpened();
+                        MixpanelManager().pageOpened('Settings');
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                         await routeToPage(context, const SettingsPage());

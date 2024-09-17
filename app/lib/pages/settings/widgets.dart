@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 final Map<String, String> availableLanguages = {
   'Bulgarian': 'bg',
@@ -351,7 +352,10 @@ getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool vis
 
 getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
   return GestureDetector(
-    onTap: onTap,
+    onTap: (){
+      MixpanelManager().pageOpened('Settings $title');
+      onTap();
+    },
     child: Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Container(
