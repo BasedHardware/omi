@@ -43,7 +43,7 @@ export default async function GetTrendsMainPage() {
                 </h3>
                 <ul className="flex flex-col gap-2">
                   {groupedTrends[category].best.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-center rounded-md p-2`}>
+                    <li key={topic.id} className={`flex items-center text-base md:text-lg rounded-md p-2`}>
                       {index < 3 && (
                         <span
                           className={`mr-2 flex h-5 w-5 items-center justify-center rounded-md p-0.5 text-xs font-bold ${
@@ -72,7 +72,7 @@ export default async function GetTrendsMainPage() {
                 </h3>
                 <ul className="">
                   {groupedTrends[category].worst.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-center rounded-md p-2`}>
+                    <li key={topic.id} className={`flex items-center text-base md:text-lg rounded-md p-2`}>
                       {index < 3 && (
                         <span
                           className={`mr-2 flex h-5 w-5 items-center justify-center rounded-md p-0.5 text-xs font-bold ${
