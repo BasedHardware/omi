@@ -127,7 +127,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         SpeechProfileWidget(
           goNext: () {
             if (context.read<SpeechProfileProvider>().memory == null) {
-              _controller!.animateTo(_controller!.index + 2);
+              routeToPage(context, const HomePageWrapper(), replace: true);
             } else {
               _goNext();
             }
