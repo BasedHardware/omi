@@ -40,10 +40,10 @@ export default async function GetTrendsMainPage() {
           <h2 className="text-start text-2xl font-semibold text-[#03234d] md:text-3xl bg-[#04e1cb] py-3 rounded-t-lg px-3">
             {categories['category'] ?? capitalizeFirstLetter(category)}
           </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 border border-solid border-gray-100 p-3 bg-white rounded-b-lg">
+          <div className="grid grid-cols-1 md:grid-cols-2 pt-3 pb-6 border border-solid border-gray-100 bg-white rounded-b-lg divide-x">
             {groupedTrends[category].best.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-base py-3">
+              <div className='px-3'>
+                <h3 className="mb-2 text-base py-3 sticky top-16 md:top-0 bg-white z-10">
                   <ArrowUpCircle className="mr-1 inline-block text-sm text-green-500" />
                   Best {categories[category]}
                 </h3>
@@ -72,9 +72,9 @@ export default async function GetTrendsMainPage() {
                       )}
                       <div className='p-2'>
                         <p className='font-semibold'>
-                          {topic.topic}
+                          {capitalizeFirstLetter(topic.topic)}
                         </p>
-                        <p className='text-xs text-gray-500'>
+                        <p className='text-sm text-gray-500'>
                           {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
                         </p>
                       </div>
@@ -84,12 +84,12 @@ export default async function GetTrendsMainPage() {
               </div>
             )}
             {groupedTrends[category].worst.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-base py-3">
+              <div className='px-3'>
+                <h3 className="mb-2 text-base py-3 sticky top-16 md:top-0 bg-white z-10">
                   <ArrowDownCircle className="mr-1 inline-block text-sm text-red-500" />
                   Worst {categories[category]}
                 </h3>
-                <ul className="">
+                <ul className="flex flex-col gap-5">
                   {groupedTrends[category].worst.map((topic, index) => (
                     <li key={topic.id} className={`flex items-start justify-start text-base md:text-lg rounded-md relative border border-solid ${
                             index === 0
@@ -114,9 +114,9 @@ export default async function GetTrendsMainPage() {
                       )}
                       <div className='p-2'>
                         <p className='font-semibold'>
-                          {topic.topic}
+                          {capitalizeFirstLetter(topic.topic)}
                         </p>
-                        <p className='text-xs text-gray-500'>
+                        <p className='text-sm text-gray-500'>
                           {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
                         </p>
                       </div>
