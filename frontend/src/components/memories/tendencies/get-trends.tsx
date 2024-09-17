@@ -1,4 +1,3 @@
-
 export default async function GetTrends() {
   return null;
   // const trends = await getTrends();
