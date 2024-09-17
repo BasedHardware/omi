@@ -6,6 +6,9 @@ import envConfig from '@/src/constants/envConfig';
 export default async function GetTrendsMainPage() {
   console.log('URL FROM PAGE:', `${envConfig.API_URL}/v1/trends`);
   const trends = await getTrends();
+
+  if(!trends) return null;
+
   return (
     <Animation>
       {trends.map((trend, index) => (
