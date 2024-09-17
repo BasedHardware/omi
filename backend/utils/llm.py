@@ -12,7 +12,8 @@ from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
-from models.trend import TrendEnum
+from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
+    ai_product_options, TrendType
 from utils.memories.facts import get_prompt_facts
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
@@ -472,6 +473,7 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
 
 class Item(BaseModel):
     category: TrendEnum = Field(description="The category identified")
+    type: TrendType = Field(description="The sentiment identified")
     topic: str = Field(description="The specific topic corresponding the category")
 
 
@@ -487,16 +489,20 @@ def trends_extractor(memory: Memory) -> List[Item]:
     prompt = f'''
     You will be given a finished conversation transcript.
     You are responsible for extracting the topics of the conversation and classifying each one within one the following categories: {str([e.value for e in TrendEnum]).strip("[]")}.
+    You must identify if the perception is positive or negative, and classify it as "best" or "worst".
     
-    Each topic must be a person, company, event, technology, product, research, innovation, acquisition, partnership, investment, founder, CEO, industry, or any other relevant topic.
-    It can't be a non-specific topic like "the weather" or "the economy".
+    For the specific topics here are the options available, you must classify the topic within one of these options:
+    - ceo_options: {", ".join(ceo_options)}
+    - company_options: {", ".join(company_options)}
+    - software_product_options: {", ".join(software_product_options)}
+    - hardware_product_options: {", ".join(hardware_product_options)}
+    - ai_product_options: {", ".join(ai_product_options)}
     
     For example,
-    
-    If you identify the topic "Tesla", you should classify it as "company".
-    If you identify the topic "Elon Musk", you should classify it as "ceo".
-    If you identify the topic "Dreamforce", you should classify it as "event".
-    If you identify the topic "GPT O1", you should classify it as "tool".
+    If you identify the topic "Tesla stock has been going up incredibly", you should output:
+    - Category: company
+    - Type: best
+    - Topic: Tesla
     
     Conversation:
     {transcript}
