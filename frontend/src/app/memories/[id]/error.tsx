@@ -1,8 +1,5 @@
 'use client';
 
-import { NavArrowLeft } from 'iconoir-react';
-import Link from 'next/link';
-
 export default function Error() {
   console.log('Memory not found');
   return (
@@ -11,13 +8,13 @@ export default function Error() {
       <p className="mt-3 text-lg text-zinc-400">
         The memory you are looking for does not exist. Please check the URL and try again.
       </p>
-      <Link
+      {/* <Link
         href="/memories"
         className="mt-3 flex w-fit items-center gap-1.5 rounded-md text-white transition-colors hover:underline"
       >
         <NavArrowLeft className="-ml-1.5 inline-block text-sm" />
         Back to Memories
-      </Link>
+      </Link> */}
     </div>
   );
 }

@@ -42,7 +42,7 @@ export default function TrendTopicItem({
       </p>
       <div>
         <p className="text-sm text-zinc-700 md:text-base">
-          {topic.memories_count} {topic.memories_count > 1 ? 'memories' : 'memory'}
+          {topic.memories_count} {topic.memories_count > 1 ? 'converstations' : 'conversation'}
         </p>
       </div>
     </motion.div>
