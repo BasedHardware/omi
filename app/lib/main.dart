@@ -246,27 +246,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 options: TalkerWrapperOptions(
                   enableErrorAlerts: true,
                   enableExceptionAlerts: true,
+                  errorAlertBuilder: (context, data) {
+                    return LoggerSnackbar(error: data);
+                  },
                   exceptionAlertBuilder: (context, data) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(0),
-                        leading: const Icon(Icons.error_outline, color: Colors.white),
-                        title: Text(
-                          data.message ?? 'Something went wrong! Please try again later.',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.share, color: Colors.white),
-                          onPressed: () {},
-                        ),
-                      ),
-                    );
+                    return LoggerSnackbar(exception: data);
                   },
                 ),
                 child: const DeciderWidget(),
