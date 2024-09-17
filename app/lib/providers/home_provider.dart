@@ -10,6 +10,8 @@ class HomeProvider extends ChangeNotifier {
   final FocusNode chatFieldFocusNode = FocusNode();
   bool isMemoryFieldFocused = false;
   bool isChatFieldFocused = false;
+  bool hasSpeakerProfile = false;
+  bool isLoading = false;
 
   HomeProvider() {
     memoryFieldFocusNode.addListener(_onFocusChange);
@@ -27,10 +29,24 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setIsLoading(bool loading) {
+    isLoading = loading;
+    notifyListeners();
+  }
+
+  void setSpeakerProfile(bool? value) {
+    hasSpeakerProfile = value ?? SharedPreferencesUtil().hasSpeakerProfile;
+    notifyListeners();
+  }
+
   Future setupHasSpeakerProfile() async {
-    SharedPreferencesUtil().hasSpeakerProfile = await userHasSpeakerProfile();
+    setIsLoading(true);
+    var res = await userHasSpeakerProfile();
+    setSpeakerProfile(res);
+    SharedPreferencesUtil().hasSpeakerProfile = res;
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    setIsLoading(false);
     notifyListeners();
   }
 
