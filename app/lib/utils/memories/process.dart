@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -11,6 +12,7 @@ import 'package:tuple/tuple.dart';
 
 Future<ServerMemory?> processTranscriptContent({
   required String language,
+  List<TranscriptSegment> segments = const [],
   List<Tuple2<String, String>> photos = const [],
   bool triggerIntegrations = true,
   DateTime? startedAt,
@@ -22,11 +24,11 @@ Future<ServerMemory?> processTranscriptContent({
   String? processingMemoryId,
 }) async {
   debugPrint('processTranscriptContent');
-  if (photos.isEmpty) return null;
+  if (segments.isEmpty && photos.isEmpty) return null;
   CreateMemoryResponse? result = await createMemoryServer(
     startedAt: startedAt ?? DateTime.now(),
     finishedAt: finishedAt ?? DateTime.now(),
-    transcriptSegments: [],
+    transcriptSegments: segments,
     geolocation: geolocation,
     photos: photos,
     triggerIntegrations: triggerIntegrations,
