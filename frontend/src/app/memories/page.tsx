@@ -10,6 +10,7 @@ import MemoryList from '@/src/components/memories/memory-list/memory-list';
 import SearchBar from '@/src/components/memories/memory-list/search-controls/search-bar';
 import './styles.css';
 import TrendingBanner from '@/src/components/memories/tendencies/trending-banner';
+import { redirect } from 'next/navigation';
 
 interface MemoriesPageProps {
   searchParams: SearchParamsTypes;
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 };
 
 export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
+  redirect('/dreamforce');
   const previewId = searchParams.previewId;
   return (
     <Fragment>
