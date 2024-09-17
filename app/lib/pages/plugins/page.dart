@@ -30,8 +30,6 @@ class _PluginsPageState extends State<PluginsPage> {
       List<Plugin> memoryIntegrationPlugins = provider.plugins.where((p) => p.worksExternally()).toList();
       List<Plugin> chatPromptPlugins = provider.plugins.where((p) => p.worksWithChat()).toList();
 
-      print('${memoryPromptPlugins.length} ${memoryIntegrationPlugins.length} ${chatPromptPlugins.length}');
-
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
@@ -62,7 +60,7 @@ class _PluginsPageState extends State<PluginsPage> {
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle('External Apps', '🚀'),
+                          _getSectionTitle(context, provider, 'External Apps', '🚀'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -75,10 +73,10 @@ class _PluginsPageState extends State<PluginsPage> {
                               childCount: memoryIntegrationPlugins.length,
                             ),
                           ),
-                          SliverToBoxAdapter(
-                            child: Divider(color: Colors.grey.shade800, thickness: 1),
-                          ),
-                          _getSectionTitle('Prompts', '📝'),
+                          provider.plugins.isNotEmpty
+                              ? SliverToBoxAdapter(child: Divider(color: Colors.grey.shade800, thickness: 1))
+                              : const SliverToBoxAdapter(child: SizedBox.shrink()),
+                          _getSectionTitle(context, provider, 'Prompts', '📝'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -96,7 +94,7 @@ class _PluginsPageState extends State<PluginsPage> {
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle('Personalities', '🤖'),
+                          _getSectionTitle(context, provider, 'Personalities', '🤖'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -120,33 +118,40 @@ class _PluginsPageState extends State<PluginsPage> {
     });
   }
 
-  _getSectionTitle(String title, String emoji) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 32),
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  // decoration: TextDecoration.underline,
+  _getSectionTitle(BuildContext context, PluginProvider provider, String title, String emoji) {
+    return provider.plugins.isNotEmpty
+        ? SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 32),
+              child: GestureDetector(
+                // onTap: () {
+                //   showDialog(
+                //     context: context,
+                //     builder: getDialog(
+                //       context,
+                //       () => Navigator.pop(context),
+                //       () => Navigator.pop(context),
+                //       'asd',
+                //       'asd',
+                //       singleButton: true,
+                //       okButtonText: 'Ok',
+                //     ),
+                //   );
+                // },
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                      const SizedBox(width: 12),
+                      Text(emoji, style: const TextStyle(fontSize: 18)),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(emoji,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    // decoration: TextDecoration.underline,
-                  )),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          )
+        : const SliverToBoxAdapter(child: SizedBox.shrink());
   }
 
   _emptyPluginsWidget(provider) {

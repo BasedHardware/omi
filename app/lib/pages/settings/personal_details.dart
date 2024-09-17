@@ -36,16 +36,10 @@ class _PersonalDetailsState extends State<PersonalDetails> {
                 AppSnackbar.showSnackbarError('Name cannot be empty');
                 return;
               }
-              setState(() {
-                isSaving = true;
-              });
+              setState(() => isSaving = true);
               await updateGivenName(nameController.text);
-              setState(() {
-                isSaving = false;
-              });
-              AppSnackbar.showSnackbar(
-                'Name updated successfully!',
-              );
+              setState(() => isSaving = false);
+              AppSnackbar.showSnackbar('Name updated successfully!');
               Navigator.of(context).pop();
             },
             color: Colors.transparent,

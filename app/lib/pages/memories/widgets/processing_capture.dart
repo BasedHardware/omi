@@ -8,6 +8,7 @@ import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/websocket_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -76,12 +77,13 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     });
   }
 
-  _recordingToggled(BuildContext context, CaptureProvider provider) async {
+  _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
       provider.stopStreamRecording();
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().tryCreateMemoryManually();
+      MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
     } else {
@@ -96,6 +98,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
+            MixpanelManager().phoneMicRecordingStarted();
           },
           'Limited Capabilities',
           'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
@@ -139,7 +142,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
               ? Center(
                   child: getPhoneMicRecordingButton(
                     context,
-                    () => _recordingToggled(context, captureProvider),
+                    () => _toggleRecording(context, captureProvider),
                     captureProvider.recordingState,
                   ),
                 )
@@ -232,10 +235,10 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
   }
 }
 
-getPhoneMicRecordingButton(BuildContext context, recordingToggled, RecordingState state) {
+getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState state) {
   if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
   return MaterialButton(
-    onPressed: state == RecordingState.initialising ? null : recordingToggled,
+    onPressed: state == RecordingState.initialising ? null : toggleRecording,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.start,

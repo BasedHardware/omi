@@ -211,7 +211,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                       GestureDetector(
                         onTap: () {
                           launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
-                          MixpanelManager().advancedModeDocsOpened();
+                          MixpanelManager().pageOpened('Advanced Mode Docs');
                         },
                         child: const Padding(
                           padding: EdgeInsets.all(8.0),

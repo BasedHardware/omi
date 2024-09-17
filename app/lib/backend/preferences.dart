@@ -125,6 +125,11 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  int get enabledPluginsCount => pluginsList.where((element) => element.enabled).length;
+
+  int get enabledPluginsIntegrationsCount =>
+      pluginsList.where((element) => element.enabled && element.worksExternally()).length;
+
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
     return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
