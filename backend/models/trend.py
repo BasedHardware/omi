@@ -215,3 +215,6 @@ ai_product_options = [
     "Zoom AI transcription",
     "Salesforce AI"
 ]
+
+valid_items = set(
+    ceo_options + company_options + software_product_options + hardware_product_options + ai_product_options)
