@@ -1,6 +1,4 @@
 import { NavArrowRight } from 'iconoir-react';
-import { Suspense } from 'react';
-import GetTrends from './tendencies/get-trends';
 import Link from 'next/link';
 
 export default function Tendencies() {
@@ -12,9 +10,9 @@ export default function Tendencies() {
           <NavArrowRight className="text-sm text-neutral-400 group-hover:text-neutral-300" />
         </div>
       </Link>
-      <Suspense fallback={null}>
+      {/* <Suspense fallback={null}>
         <GetTrends />
-      </Suspense>
+      </Suspense> */}
       {/* <div className="py-3 md:py-5">
         <div className="flex w-full flex-col divide-slate-800">
           <TrendingItem title="Work" count={23} raking={1} />
