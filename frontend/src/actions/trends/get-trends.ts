@@ -1,22 +1,20 @@
 'use server';
-
 import envConfig from '@/src/constants/envConfig';
-import { ResponseTrends } from '@/src/types/trends/trends.types';
 
-export default async function getTrends(): Promise<ResponseTrends> {
-  console.log('URL:', `${envConfig.API_URL}/v1/trends`);
+export default async function getTrends() {
   try {
-      const response = await fetch(`${envConfig.API_URL}/v1/trends`, {
-        next: { revalidate: 60 },
-      });
+    const response = await fetch(`${envConfig.API_URL}/v1/trends`, {
+      cache: 'no-cache',
+    });
 
-      if(!response.ok){
-        throw new Error('Failed to fetch trends');
-      }
+    if (!response.ok) {
+      return response;
+    }
 
-      const data = await response.json();
-      return data;
+    const data = await response.json();
+
+    return data;
   } catch (error) {
-    throw new Error(error);
+    return undefined;
   }
 }
