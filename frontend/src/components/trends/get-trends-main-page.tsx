@@ -4,7 +4,7 @@ import getTrends from '@/src/actions/trends/get-trends';
 
 export default async function GetTrendsMainPage() {
   const trends = await getTrends();
-  if(!trends) return null;
+  if (!trends) return null;
 
   return (
     <Animation>

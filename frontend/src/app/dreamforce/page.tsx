@@ -12,11 +12,11 @@ export default function DreamforcePage() {
       <div className="flex min-h-screen w-full bg-gradient-to-t from-[#d2e3ff] via-white via-55% to-white px-4">
         <div className="mx-auto my-44 w-full max-w-screen-xl">
           <TrendsTitle>
-              <ErrorBoundary errorComponent={TrendsError}>
-                <Suspense fallback={<></>}>
-                  <GetTrendsMainPage />
-                </Suspense>
-              </ErrorBoundary>
+            <ErrorBoundary errorComponent={TrendsError}>
+              <Suspense fallback={<></>}>
+                <GetTrendsMainPage />
+              </Suspense>
+            </ErrorBoundary>
           </TrendsTitle>
         </div>
       </div>
