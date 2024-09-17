@@ -42,7 +42,7 @@ export default function TrendItem({ trend }: { trend: Trend }) {
         variants={container}
         initial="hidden"
         animate="visible"
-        className={`mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-5`}
+        className={`mt-5 grid grid-cols-1 gap-3 md:gap-5`}
       >
         {trend.topics.map((topic, index) => (
           <TrendTopicItem

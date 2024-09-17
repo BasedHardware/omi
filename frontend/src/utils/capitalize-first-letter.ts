@@ -1,3 +1,8 @@
 export default function capitalizeFirstLetter(str: string) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  if (str === "ceo") {
+    return str.toUpperCase();
+  }
+  let formattedStr = str.replace(/_/g, ' ');
+  formattedStr = formattedStr.replace(/ai/g, 'AI');
+  return formattedStr.charAt(0).toUpperCase() + formattedStr.slice(1);
 }
