@@ -95,7 +95,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         child: CustomScrollView(
           slivers: [
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            SliverToBoxAdapter(child: speechProfileWidget(context)),
+            const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             SliverToBoxAdapter(child: getMemoryCaptureWidget()),
             if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(

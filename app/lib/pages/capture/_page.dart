@@ -218,7 +218,7 @@ class CapturePageState extends State<CapturePage> with AutomaticKeepAliveClientM
         child: Stack(
           children: [
             ListView(children: [
-              speechProfileWidget(context),
+              SpeechProfileCardWidget(),
               ...getConnectionStateWidgets(
                 context,
                 provider.hasTranscripts,
