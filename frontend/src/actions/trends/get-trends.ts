@@ -10,7 +10,7 @@ export default async function getTrends() {
     if (!response.ok) {
       return response;
     }
-    
+
     const data = await response.json();
 
     return data;

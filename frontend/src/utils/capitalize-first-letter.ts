@@ -1,5 +1,5 @@
 export default function capitalizeFirstLetter(str: string) {
-  if (str === "ceo") {
+  if (str === 'ceo') {
     return str.toUpperCase();
   }
   let formattedStr = str.replace(/_/g, ' ');
