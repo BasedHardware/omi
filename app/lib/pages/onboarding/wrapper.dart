@@ -64,12 +64,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
-
     List<Widget> pages = [
       // TODO: if connected already, stop animation and display battery
       AuthComponent(
         onSignIn: () {
-          MixpanelManager().onboardingStepICompleted('Auth');
+          MixpanelManager().onboardingStepCompleted('Auth');
           if (SharedPreferencesUtil().onboardingCompleted) {
             // previous users
             // Not needed anymore, because AuthProvider already does this
@@ -79,19 +78,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           }
         },
       ),
-      NameWidget(
-        goNext: _goNext,
-      ),
+      NameWidget(goNext: () {
+        _goNext();
+        MixpanelManager().onboardingStepCompleted('Name');
+      }),
       NotificationPermissionWidget(
         goNext: () {
           _goNext();
-          MixpanelManager().onboardingStepICompleted('Permissions');
+          MixpanelManager().onboardingStepCompleted('Permissions');
         },
       ),
       WelcomePage(
         goNext: () {
           _goNext();
-          MixpanelManager().onboardingStepICompleted('Welcome');
+          MixpanelManager().onboardingStepCompleted('Welcome');
         },
       ),
       FindDevicesPage(
@@ -117,7 +117,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             }
           }
 
-          MixpanelManager().onboardingStepICompleted('Find Devices');
+          MixpanelManager().onboardingStepCompleted('Find Devices');
         },
       ),
     ];
@@ -131,7 +131,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             } else {
               _goNext();
             }
-            MixpanelManager().onboardingStepICompleted('Speech Profile');
+            MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
             routeToPage(context, const HomePageWrapper(), replace: true);
@@ -140,7 +140,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         MemoryCreatedWidget(
           goNext: () {
             // _goNext();
-            MixpanelManager().onboardingStepICompleted('Memory Created');
+            MixpanelManager().onboardingStepCompleted('Memory Created');
           },
         ),
       ]);

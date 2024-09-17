@@ -3,7 +3,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -213,9 +213,9 @@ speechProfileWidget(BuildContext context) {
           children: [
             GestureDetector(
               onTap: () async {
-                MixpanelManager().speechProfileCapturePageClicked();
+                MixpanelManager().pageOpened('Speech Profile Memories');
                 bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                await routeToPage(context, const SpeakerIdPage());
+                await routeToPage(context, const SpeechProfilePage());
                 if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                   if (context.mounted) {
                     // TODO: is the websocket restarting once the user comes back?
