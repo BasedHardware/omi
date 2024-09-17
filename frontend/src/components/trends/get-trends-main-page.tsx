@@ -43,16 +43,22 @@ export default async function GetTrendsMainPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 border border-solid border-gray-100 p-3 bg-white rounded-b-lg">
             {groupedTrends[category].best.length > 0 && (
               <div>
-                <h3 className="mb-2 text-lg font-semibold">
+                <h3 className="mb-2 text-base py-3">
                   <ArrowUpCircle className="mr-1 inline-block text-sm text-green-500" />
                   Best {categories[category]}
                 </h3>
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col gap-5">
                   {groupedTrends[category].best.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-center text-base md:text-lg rounded-md p-2`}>
+                    <li key={topic.id} className={`flex items-start justify-start text-base md:text-lg rounded-md relative border border-solid ${
+                            index === 0
+                              ? 'border-amber-300 bg-gradient-to-r to-yellow-100/80 from-white'
+                              : index === 1
+                              ? 'border-gray-500 '
+                              : 'border-gray-300'
+                          }`}>
                       {index < 3 && (
                         <span
-                          className={`mr-2 flex h-5 w-5 items-center justify-center rounded-md p-0.5 text-xs font-bold ${
+                          className={`flex h-5 rounded-sm items-center justify-center p-0.5 text-xs font-bold absolute -top-2.5 right-2 px-2 ${
                             index === 0
                               ? 'bg-yellow-400'
                               : index === 1
@@ -64,8 +70,14 @@ export default async function GetTrendsMainPage() {
                           <sup className="text-[10px]">st</sup>
                         </span>
                       )}
-                      {topic.topic}
-                      {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                      <div className='p-2'>
+                        <p className='font-semibold'>
+                          {topic.topic}
+                        </p>
+                        <p className='text-xs text-gray-500'>
+                          {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -73,16 +85,22 @@ export default async function GetTrendsMainPage() {
             )}
             {groupedTrends[category].worst.length > 0 && (
               <div>
-                <h3 className="mb-2 text-lg font-semibold">
+                <h3 className="mb-2 text-base py-3">
                   <ArrowDownCircle className="mr-1 inline-block text-sm text-red-500" />
                   Worst {categories[category]}
                 </h3>
                 <ul className="">
                   {groupedTrends[category].worst.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-center text-base md:text-lg rounded-md p-2`}>
+                    <li key={topic.id} className={`flex items-start justify-start text-base md:text-lg rounded-md relative border border-solid ${
+                            index === 0
+                              ? 'border-amber-300 bg-gradient-to-r to-yellow-100/80 from-white'
+                              : index === 1
+                              ? 'border-gray-500 '
+                              : 'border-gray-300'
+                          }`}>
                       {index < 3 && (
-                        <span
-                          className={`mr-2 flex h-5 w-5 items-center justify-center rounded-md p-0.5 text-xs font-bold ${
+                              <span
+                          className={`flex h-5 rounded-sm items-center justify-center p-0.5 text-xs font-bold absolute -top-2.5 right-2 px-2 ${
                             index === 0
                               ? 'bg-yellow-400'
                               : index === 1
@@ -94,7 +112,14 @@ export default async function GetTrendsMainPage() {
                           <sup className="text-[10px]">st</sup>
                         </span>
                       )}
-                      {topic.topic}
+                      <div className='p-2'>
+                        <p className='font-semibold'>
+                          {topic.topic}
+                        </p>
+                        <p className='text-xs text-gray-500'>
+                          {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
