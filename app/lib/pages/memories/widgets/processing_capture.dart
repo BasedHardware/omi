@@ -82,7 +82,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     if (recordingState == RecordingState.record) {
       provider.stopStreamRecording();
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().tryCreateMemoryManually();
+      await context.read<CaptureProvider>().createMemory();
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');

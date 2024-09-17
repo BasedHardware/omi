@@ -9,7 +9,6 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/processing_memories.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
@@ -69,20 +68,17 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   RecordingState recordingState = RecordingState.stop;
 
-// -----------------------
-// Memory creation variables
+  // -----------------------
+  // Memory creation variables
   double? streamStartedAtSecond;
   DateTime? firstStreamReceivedAt;
   int? secondsMissedOnReconnect;
   WavBytesUtil? audioStorage;
-  Timer? _memoryCreationTimer;
   String conversationId = const Uuid().v4();
-  DateTime? currentTranscriptStartedAt;
-  DateTime? currentTranscriptFinishedAt;
   int elapsedSeconds = 0;
   List<int> currentStorageFiles = <int>[];
   StorageBytesUtil storageUtil = StorageBytesUtil();
-
+  Timer? _memoryCreationTimer;
   // -----------------------
 
   String? processingMemoryId;
@@ -126,10 +122,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     connectedDevice = device;
     notifyListeners();
   }
-
-  // This func was added by @kevvz partially, not sure about the use
-  //create the memory here
-  Future<bool?> createMemory({bool forcedCreation = false}) async {}
 
   void _onMemoryCreating() {
     setMemoryCreating(true);
@@ -189,45 +181,23 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     memoryProvider?.updateMemory(memory);
   }
 
-  Future<bool?> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
-    if (memory != null) {
-      await processMemoryContent(
-        memory: memory,
-        messages: messages,
-        sendMessageToChat: (v) {
-          // use message provider to send message to chat
-          messageProvider?.addMessage(v);
-        },
-      );
+  Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory == null) {
+      return;
     }
-    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
-      memory = ServerMemory(
-        id: const Uuid().v4(),
-        createdAt: DateTime.now(),
-        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
-        discarded: true,
-        transcriptSegments: segments,
-        geolocation: geolocation,
-        photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
-        startedAt: currentTranscriptStartedAt,
-        finishedAt: currentTranscriptFinishedAt,
-        failed: true,
-        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
-        processingMemoryId: processingMemoryId,
-      );
-      SharedPreferencesUtil().addFailedMemory(memory);
+    await processMemoryContent(
+      memory: memory,
+      messages: messages,
+      sendMessageToChat: (v) {
+        messageProvider?.addMessage(v);
+      },
+    );
 
-      // TODO: store anyways something temporal and retry once connected again.
-    }
-
-    if (memory != null) {
-      // use memory provider to add memory
-      MixpanelManager().memoryCreated(memory);
-      memoryProvider?.addMemory(memory);
-      if (memoryProvider?.memories.isEmpty ?? false) {
-        memoryProvider?.getMoreMemoriesFromServer();
-      }
+    // use memory provider to add memory
+    MixpanelManager().memoryCreated(memory);
+    memoryProvider?.addMemory(memory);
+    if (memoryProvider?.memories.isEmpty ?? false) {
+      memoryProvider?.getMoreMemoriesFromServer();
     }
 
     _cleanNew();
@@ -236,82 +206,42 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     setMemoryCreating(false);
     setHasTranscripts(false);
     notifyListeners();
-    return true;
+    return;
   }
 
-  // Should validate with synced frames also
-  bool _shouldWaitCreateMemoryAutomatically() {
-    // Openglass
-    if (photos.isNotEmpty) {
-      return false;
-    }
-
-    // Friend
-    debugPrint("Should wait ${processingMemoryId != null}");
-    return processingMemoryId != null;
-  }
-
-  bool _shouldWaitCreateMemoryAutomaticallyWithClean() {
-    var shouldWait = _shouldWaitCreateMemoryAutomatically();
-    if (!shouldWait) {
-      return false;
-    }
-
-    _cleanNew();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    notifyListeners();
-
-    return true;
-  }
-
-  Future<bool?> _createMemoryTimer() async {
-    if (_shouldWaitCreateMemoryAutomatically()) {
-      return false;
-    }
-    return await _createMemory();
-  }
-
-  Future<bool?> tryCreateMemoryManually() async {
-    if (_shouldWaitCreateMemoryAutomatically()) {
+  Future<void> createMemory() async {
+    if (processingMemoryId != null) {
       setMemoryCreating(true);
-      return false;
+
+      // Clean to force close socket to create new memory
+      _cleanNew();
+
+      // Notify
+      setMemoryCreating(false);
+      setHasTranscripts(false);
+      notifyListeners();
+      return;
     }
-    return await _createMemory(forcedCreation: true);
+
+    // photos
+    if (photos.isNotEmpty) {
+      await _createPhotoCharacteristicMemory();
+    }
+
+    return;
   }
 
-  // Warn: Split-brain in memory
-  Future<bool?> forceCreateMemory() async {
-    return await _createMemory(forcedCreation: true);
-  }
-
-  Future<bool?> _createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
+  Future<bool?> _createPhotoCharacteristicMemory() async {
+    debugPrint('_createMemory');
 
     if (memoryCreating) return null;
 
-    if (segments.isEmpty && photos.isEmpty) return false;
+    if (photos.isEmpty) return false;
 
-    // TODO: should clean variables here? and keep them locally?
     setMemoryCreating(true);
-    File? file;
-    if (audioStorage?.frames.isNotEmpty == true) {
-      try {
-        var secs = !forcedCreation ? quietSecondsForMemoryCreation : 0;
-        file = (await audioStorage!.createWavFile(removeLastNSeconds: secs)).item1;
-        uploadFile(file);
-      } catch (e) {
-        print("creating and uploading file error: $e");
-      } // in case was a local recording and not a BLE recording
-    }
 
+    // Create new memory
     ServerMemory? memory = await processTranscriptContent(
-      //create mmeory "shell"
-      segments: segments,
-      startedAt: currentTranscriptStartedAt,
-      finishedAt: currentTranscriptFinishedAt,
       geolocation: geolocation,
       photos: photos,
       sendMessageToChat: (v) {
@@ -319,61 +249,38 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       },
       triggerIntegrations: true,
       language: SharedPreferencesUtil().recordingsLanguage,
-      audioFile: file,
-      processingMemoryId: processingMemoryId,
     );
     debugPrint(memory.toString());
-    if (memory == null && (segments.isNotEmpty || photos.isNotEmpty)) {
+    if (memory != null) {
+      MixpanelManager().memoryCreated(memory);
+      _handleCalendarCreation(memory);
+    }
+
+    // Failed, retry later
+    if (memory == null) {
       memory = ServerMemory(
         id: const Uuid().v4(),
         createdAt: DateTime.now(),
+        startedAt: DateTime.now(),
         structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
         discarded: true,
-        transcriptSegments: segments,
         geolocation: geolocation,
         photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
-        startedAt: currentTranscriptStartedAt,
-        finishedAt: currentTranscriptFinishedAt,
         failed: true,
-        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
-        processingMemoryId: processingMemoryId,
+        source: MemorySource.openglass, // TODO: Frame device ?
+        language: SharedPreferencesUtil().recordingsLanguage,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
-
-      // TODO: store anyways something temporal and retry once connected again.
     }
 
-    if (memory != null) {
-      // use memory provider to add memory
-      MixpanelManager().memoryCreated(memory);
-      _handleCalendarCreation(memory);
-      memoryProvider?.addMemory(memory);
-      if (memoryProvider?.memories.isEmpty ?? false) {
-        memoryProvider?.getMoreMemoriesFromServer();
-      }
+    // Warn: it's weird when memory created failed but still adding it to memories
+    // use memory provider to add memory
+    memoryProvider?.addMemory(memory);
+    if (memoryProvider?.memories.isEmpty ?? false) {
+      memoryProvider?.getMoreMemoriesFromServer();
     }
 
-    if (memory != null && !memory.failed && file != null && segments.isNotEmpty && !memory.discarded) {
-      setMemoryCreating(false);
-      try {
-        memoryPostProcessing(file, memory.id).then((postProcessed) {
-          //tyoe ServerMemory
-          if (postProcessed != null) {
-            memoryProvider?.updateMemory(postProcessed);
-          } else {
-            memory!.postprocessing = MemoryPostProcessing(
-              status: MemoryPostProcessingStatus.failed,
-              model: MemoryPostProcessingModel.fal_whisperx,
-            );
-            memoryProvider?.updateMemory(memory);
-          }
-        });
-      } catch (e) {
-        print('Error occurred during memory post-processing: $e');
-      }
-    }
-
+    // Clean
     _cleanNew();
 
     // Notify
@@ -384,12 +291,10 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void _cleanNew() async {
-    SharedPreferencesUtil().transcriptSegments = [];
     segments = [];
+
     audioStorage?.clearAudioBytes();
 
-    currentTranscriptStartedAt = null;
-    currentTranscriptFinishedAt = null;
     elapsedSeconds = 0;
 
     streamStartedAtSecond = null;
@@ -512,6 +417,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       },
       onMessageReceived: (List<TranscriptSegment> newSegments) {
         if (newSegments.isEmpty) return;
+
         if (segments.isEmpty) {
           debugPrint('newSegments: ${newSegments.last}');
           // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
@@ -522,8 +428,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
           audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
           firstStreamReceivedAt = DateTime.now();
         }
-        streamStartedAtSecond ??= newSegments[0].start;
 
+        streamStartedAtSecond ??= newSegments[0].start;
         TranscriptSegment.combineSegments(
           segments,
           newSegments,
@@ -533,14 +439,12 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
           messageProvider?.addMessage(v);
         });
-        SharedPreferencesUtil().transcriptSegments = segments;
+
         debugPrint('Memory creation timer restarted');
         _memoryCreationTimer?.cancel();
         _memoryCreationTimer =
-            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createMemoryTimer());
+            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createPhotoCharacteristicMemory());
         setHasTranscripts(true);
-        currentTranscriptStartedAt ??= DateTime.now();
-        currentTranscriptFinishedAt = DateTime.now();
         notifyListeners();
       },
     );
@@ -627,7 +531,6 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 // }
   void clearTranscripts() {
     segments = [];
-    SharedPreferencesUtil().transcriptSegments = [];
     setHasTranscripts(false);
     notifyListeners();
   }
@@ -678,15 +581,13 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<void> _handleMemoryCreation(bool restartBytesProcessing) async {
-    if (!restartBytesProcessing && (segments.isNotEmpty || photos.isNotEmpty)) {
-      if (!_shouldWaitCreateMemoryAutomaticallyWithClean()) {
-        var res = await forceCreateMemory();
-        notifyListeners();
-        if (res != null && !res) {
-          notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
-        } else {
-          notifyInfo('Memory created successfully 🚀');
-        }
+    if (!restartBytesProcessing && (photos.isNotEmpty)) {
+      var res = await _createPhotoCharacteristicMemory();
+      notifyListeners();
+      if (res != null && !res) {
+        notifyError('Memory creation failed. It\' stored locally and will be retried soon.');
+      } else {
+        notifyInfo('Memory created successfully 🚀');
       }
     }
   }
@@ -725,7 +626,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   Future<bool> _writeToStorage(String deviceId, int numFile) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
-      return Future.value(null);
+      return Future.value(false);
     }
     return connection.writeToStorage(numFile);
   }

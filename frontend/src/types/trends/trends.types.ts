@@ -1,14 +1,13 @@
-export type ResponseTrends = Trend[];
-
-export interface Trend {
-  create_at: Date;
+export interface Trends {
+  created_at: Date;
+  type: string;
   id: string;
   category: string;
   topics: Topic[];
 }
 
 export interface Topic {
-  id: string;
   topic: string;
+  id: string;
   memories_count: number;
 }
