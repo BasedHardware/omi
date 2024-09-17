@@ -128,7 +128,7 @@ def _extract_facts(uid: str, memory: Memory):
 
 def _extract_trends(memory: Memory):
     extracted_items = trends_extractor(memory)
-    parsed = [Trend(category=item.category, topics=[item.topic]) for item in extracted_items]
+    parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
     trends_db.save_trends(memory, parsed)
 
 
