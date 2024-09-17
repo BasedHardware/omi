@@ -5,7 +5,7 @@ from firebase_admin import firestore
 from google.api_core.retry import Retry
 
 from models.memory import Memory
-from models.trend import Trend
+from models.trend import Trend, valid_items
 from ._client import db, document_id_from_seed
 
 
@@ -16,18 +16,27 @@ def get_trends_data() -> List[Dict]:
     for category in trends_docs:
         try:
             category_data = category.to_dict()
+            if category_data['category'] not in ['ceo', 'company', 'software_product', 'hardware_product',
+                                                 'ai_product']:
+                continue
 
             category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
             topics_docs = [topic.to_dict() for topic in category_topics_ref.stream(retry=Retry())]
+            cleaned_topics = []
             topics = sorted(topics_docs, key=lambda e: len(e['memory_ids']), reverse=True)
             for topic in topics:
+                if topic['topic'] not in valid_items:
+                    continue
                 topic['memories_count'] = len(topic['memory_ids'])
                 del topic['memory_ids']
+                cleaned_topics.append(topic)
 
-            category_data['topics'] = topics
+            category_data['topics'] = cleaned_topics
             trends_data.append(category_data)
         except Exception as e:
+            print(e)
             continue
+
     return trends_data
 
 
