@@ -26,10 +26,7 @@ export default async function GetTrendsMainPage() {
     if (!acc[category]) acc[category] = { best: [], worst: [] };
 
     const topicsToPush = type === 'best' ? 'best' : 'worst';
-    acc[category][topicsToPush] = [
-      ...acc[category][topicsToPush],
-      ...topics,
-    ].slice(0, 6); // Limit to max 6
+    acc[category][topicsToPush] = [...acc[category][topicsToPush], ...topics].slice(0, 6); // Limit to max 6
 
     return acc;
   }, {});
@@ -38,28 +35,31 @@ export default async function GetTrendsMainPage() {
     <div className="mx-auto mt-20 max-w-screen-md space-y-8">
       {Object.keys(groupedTrends).map((category) => (
         <div key={category} className="">
-          <h2 className="text-start text-2xl font-semibold text-[#03234d] md:text-3xl bg-[#04e1cb] py-3 rounded-t-lg px-3">
+          <h2 className="rounded-t-lg bg-[#04e1cb] px-3 py-3 text-start text-2xl font-semibold text-[#03234d] md:text-3xl">
             {categories['category'] ?? capitalizeFirstLetter(category)}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 pt-3 pb-6 border border-solid border-gray-100 bg-white rounded-b-lg divide-x">
+          <div className="grid grid-cols-1 divide-x rounded-b-lg border border-solid border-gray-100 bg-white pb-6 pt-3 md:grid-cols-2">
             {groupedTrends[category].best.length > 0 && (
-              <div className='px-3'>
-                <h3 className="mb-2 text-base py-3 sticky top-16 md:top-0 bg-white z-10">
-                  <ArrowUpCircle className="mr-1 inline-block text-sm text-green-500" />
+              <div className="px-3">
+                <h3 className="sticky top-16 z-10 mb-4 bg-white py-3 text-base md:top-0">
+                  <ArrowUpCircle className="mb-1 mr-1 inline-block text-sm text-green-500" />
                   Best {categories[category]}
                 </h3>
                 <ul className="flex flex-col gap-5">
                   {groupedTrends[category].best.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-start justify-start text-base md:text-lg rounded-md relative border border-solid ${
-                            index === 0
-                              ? 'border-amber-300 bg-gradient-to-r to-yellow-100/80 from-white'
-                              : index === 1
-                              ? 'border-gray-500 '
-                              : 'border-gray-300'
-                          }`}>
+                    <li
+                      key={topic.id}
+                      className={`relative flex items-start justify-start rounded-md border border-solid text-base md:text-lg ${
+                        index === 0
+                          ? 'border-amber-300 bg-gradient-to-r from-white to-yellow-100/80'
+                          : index === 1
+                          ? 'border-gray-500 '
+                          : 'border-gray-300'
+                      }`}
+                    >
                       {index < 3 && (
                         <span
-                          className={`flex h-5 rounded-sm items-center justify-center p-0.5 text-xs font-bold absolute -top-2.5 right-2 px-2 ${
+                          className={`absolute -top-2.5 right-2 flex h-5 items-center justify-center rounded-sm p-0.5 px-2 text-xs font-bold ${
                             index === 0
                               ? 'bg-yellow-400'
                               : index === 1
@@ -71,12 +71,13 @@ export default async function GetTrendsMainPage() {
                           <sup className="text-[10px]">st</sup>
                         </span>
                       )}
-                      <div className='p-2'>
-                        <p className='font-semibold'>
+                      <div className="p-2">
+                        <p className="font-semibold">
                           {capitalizeFirstLetter(topic.topic)}
                         </p>
-                        <p className='text-sm text-gray-500'>
-                          {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                        <p className="text-sm text-gray-500">
+                          {topic.memories_count}{' '}
+                          {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
                         </p>
                       </div>
                     </li>
@@ -85,23 +86,26 @@ export default async function GetTrendsMainPage() {
               </div>
             )}
             {groupedTrends[category].worst.length > 0 && (
-              <div className='px-3'>
-                <h3 className="mb-2 text-base py-3 sticky top-16 md:top-0 bg-white z-10">
-                  <ArrowDownCircle className="mr-1 inline-block text-sm text-red-500" />
+              <div className="px-3">
+                <h3 className="sticky top-16 z-10 mb-4 mt-3 bg-white py-3 text-base md:top-0 md:mt-0">
+                  <ArrowDownCircle className="mb-1 mr-1 inline-block text-sm text-red-500" />
                   Worst {categories[category]}
                 </h3>
                 <ul className="flex flex-col gap-5">
                   {groupedTrends[category].worst.map((topic, index) => (
-                    <li key={topic.id} className={`flex items-start justify-start text-base md:text-lg rounded-md relative border border-solid ${
-                            index === 0
-                              ? 'border-amber-300 bg-gradient-to-r to-yellow-100/80 from-white'
-                              : index === 1
-                              ? 'border-gray-500 '
-                              : 'border-gray-300'
-                          }`}>
-                      {index < 3 && (
-                              <span
-                          className={`flex h-5 rounded-sm items-center justify-center p-0.5 text-xs font-bold absolute -top-2.5 right-2 px-2 ${
+                    <li
+                      key={topic.id}
+                      className={`relative flex items-start justify-start rounded-md border border-solid text-base md:text-lg ${
+                        index === 0
+                          ? 'border-gray-300'
+                          : index === 1
+                          ? 'border-gray-300 '
+                          : 'border-gray-300'
+                      }`}
+                    >
+                      {/* {index < 3 && (
+                        <span
+                          className={`absolute -top-2.5 right-2 flex h-5 items-center justify-center rounded-sm p-0.5 px-2 text-xs font-bold ${
                             index === 0
                               ? 'bg-yellow-400'
                               : index === 1
@@ -112,13 +116,14 @@ export default async function GetTrendsMainPage() {
                           {index + 1}
                           <sup className="text-[10px]">st</sup>
                         </span>
-                      )}
-                      <div className='p-2'>
-                        <p className='font-semibold'>
+                      )} */}
+                      <div className="p-2">
+                        <p className="font-semibold">
                           {capitalizeFirstLetter(topic.topic)}
                         </p>
-                        <p className='text-sm text-gray-500'>
-                          {topic.memories_count} {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                        <p className="text-sm text-gray-500">
+                          {topic.memories_count}{' '}
+                          {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
                         </p>
                       </div>
                     </li>
