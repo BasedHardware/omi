@@ -53,6 +53,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
       context.read<PluginProvider>().setSelectedChatPluginId(null);
+      await context.read<HomeProvider>().setupHasSpeakerProfile();
     });
     super.initState();
   }
@@ -131,10 +132,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
-        await context.read<HomeProvider>().setupHasSpeakerProfile();
-        if (mounted) {
-          await context.read<HomeProvider>().setUserPeople();
-        }
+        await context.read<HomeProvider>().setUserPeople();
       }
     });
 
