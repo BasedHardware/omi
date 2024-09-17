@@ -211,7 +211,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     padding: const EdgeInsets.fromLTRB(40, 0, 40, 48),
                     child: !provider.startedRecording
                         ? const Text(
-                            'Now, Friend needs to learn your voice to be able to recognise you.',
+                            'Now, Omi needs to learn your voice to be able to recognise you.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
