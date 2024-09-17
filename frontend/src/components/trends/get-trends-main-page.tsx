@@ -25,10 +25,11 @@ export default async function GetTrendsMainPage() {
 
     if (!acc[category]) acc[category] = { best: [], worst: [] };
 
-    acc[category][type === 'best' ? 'best' : 'worst'] = [
-      ...acc[category][type === 'best' ? 'best' : 'worst'],
+    const topicsToPush = type === 'best' ? 'best' : 'worst';
+    acc[category][topicsToPush] = [
+      ...acc[category][topicsToPush],
       ...topics,
-    ];
+    ].slice(0, 6); // Limit to max 6
 
     return acc;
   }, {});
