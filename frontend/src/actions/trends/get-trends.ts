@@ -4,7 +4,7 @@ import envConfig from '@/src/constants/envConfig';
 export default async function getTrends() {
   try {
       const response = await fetch(`${JSON.stringify(envConfig.API_URL)}/v1/trends`, {
-        next: { revalidate: 60 },
+        cache: 'no-cache',
       });
 
       if(!response.ok){
