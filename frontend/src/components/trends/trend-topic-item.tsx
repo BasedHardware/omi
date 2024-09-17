@@ -25,7 +25,7 @@ export default function TrendTopicItem({
     >
       {index <= 2 && (
         <span
-          className={`absolute -right-1.5 -top-1.5 rounded-md px-1.5 pt-0.5 text-xs font-bold text-black shadow-md ${
+          className={`absolute -left-1.5 -top-1.5 rounded-md px-1.5 pt-0.5 text-sm font-bold text-black shadow-md ${
             index === 0
               ? 'bg-yellow-400 text-black/60 shadow-yellow-600'
               : index === 1
@@ -42,7 +42,8 @@ export default function TrendTopicItem({
       </p>
       <div>
         <p className="text-sm text-zinc-700 md:text-base">
-          {topic.memories_count} {topic.memories_count > 1 ? 'converstations' : 'conversation'}
+          {topic.memories_count}{' '}
+          {topic.memories_count > 1 ? 'converstations' : 'conversation'}
         </p>
       </div>
     </motion.div>
