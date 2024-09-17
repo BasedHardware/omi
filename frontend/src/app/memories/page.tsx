@@ -9,7 +9,6 @@ import SidePanel from '@/src/components/memories/side-panel/side-panel';
 import MemoryList from '@/src/components/memories/memory-list/memory-list';
 import SearchBar from '@/src/components/memories/memory-list/search-controls/search-bar';
 import './styles.css';
-import TrendingBanner from '@/src/components/memories/tendencies/trending-banner';
 import { redirect } from 'next/navigation';
 
 interface MemoriesPageProps {
@@ -27,7 +26,7 @@ export default function MemoriesPage({ searchParams }: MemoriesPageProps) {
   const previewId = searchParams.previewId;
   return (
     <Fragment>
-      <TrendingBanner />
+      {/* <TrendingBanner /> */}
       <div className="my-44 flex w-full px-4">
         <div className="mx-auto w-full max-w-screen-xl">
           <h1 className="text-center text-3xl font-bold text-white md:text-start md:text-4xl">
