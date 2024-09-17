@@ -30,11 +30,11 @@ export default async function GetTrendsMainPage() {
   return (
     <div className="mx-auto mt-20 max-w-screen-md space-y-8">
       {Object.keys(groupedTrends).map((category) => (
-        <div key={category} className="rounded-lg border bg-[#fdfdfd]/60 p-4 shadow-sm">
-          <h2 className="mb-4 text-start text-2xl font-semibold text-[#5867e8] md:text-3xl">
+        <div key={category} className="">
+          <h2 className="text-start text-2xl font-semibold text-[#03234d] md:text-3xl bg-[#04e1cb] py-3 rounded-t-lg px-3">
             {categories[category]}
           </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 border border-solid border-gray-100 p-3 bg-white rounded-b-lg">
             {groupedTrends[category].best.length > 0 && (
               <div>
                 <h3 className="mb-2 text-lg font-semibold">
