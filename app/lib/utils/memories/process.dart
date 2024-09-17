@@ -11,8 +11,8 @@ import 'package:friend_private/services/notification_service.dart';
 import 'package:tuple/tuple.dart';
 
 Future<ServerMemory?> processTranscriptContent({
-  required List<TranscriptSegment> segments,
   required String language,
+  List<TranscriptSegment> segments = const [],
   List<Tuple2<String, String>> photos = const [],
   bool triggerIntegrations = true,
   DateTime? startedAt,
