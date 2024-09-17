@@ -17,8 +17,8 @@ Future<List<Plugin>> retrievePlugins() async {
   );
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
-      log('plugins: ${response?.body}');
-      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      log('plugins: ${response.body}');
+      var plugins = Plugin.fromJsonList(jsonDecode(response.body));
       plugins = plugins.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().pluginsList = plugins;
       return plugins;

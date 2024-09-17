@@ -1,4 +1,5 @@
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -29,14 +30,16 @@ class MixpanelManager {
   setPeopleValues() {
     setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
     setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Dev Mode Enabled', _preferences.devModeEnabled);
-    setUserProperty('Plugins Enabled Count', _preferences.pluginsList.map((p) => p.id).toSet().length);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+    setUserProperty('Plugins Integrations Enabled Count', _preferences.enabledPluginsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-    setUserProperty('Backups Enabled', _preferences.backupsEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
-    setUserProperty('Emotional Notifications Enabled', _preferences.optInEmotionalFeedback);
+    setUserProperty(
+      'GCP Integration Set',
+      _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
+    );
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
@@ -77,27 +80,40 @@ class MixpanelManager {
 
   void onboardingCompleted() => track('Onboarding Completed');
 
-  void onboardingStepICompleted(String step) => track('Onboarding Step $step Completed');
+  void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
-  void settingsOpened() => track('Settings Opened');
-
-  void settingsSaved() => track('Developer Settings Saved');
+  void settingsSaved({
+    bool hasGCPCredentials = false,
+    bool hasGCPBucketName = false,
+    bool hasWebhookMemoryCreated = false,
+    bool hasWebhookTranscriptReceived = false,
+  }) =>
+      track('Developer Settings Saved', properties: {
+        'has_gcp_credentials': hasGCPCredentials,
+        'has_gcp_bucket_name': hasGCPBucketName,
+        'has_webhook_memory_created': hasWebhookMemoryCreated,
+        'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+      });
 
   void pageOpened(String name) => track('$name Opened');
 
   void pluginEnabled(String pluginId) {
     track('Plugin Enabled', properties: {'plugin_id': pluginId});
-    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
   }
 
   void pluginDisabled(String pluginId) {
     track('Plugin Disabled', properties: {'plugin_id': pluginId});
-    // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
   }
 
   void pluginRated(String pluginId, double rating) {
     track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
   }
+
+  void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
+
+  void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
   void pluginResultExpanded(ServerMemory memory, String pluginId) {
     track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
@@ -127,6 +143,23 @@ class MixpanelManager {
   void deviceConnected() => track('Device Connected');
 
   void deviceDisconnected() => track('Device Disconnected');
+
+  void factsPageCategoryOpened(FactCategory category) =>
+      track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
+
+  void factsPageDeletedFact(Fact fact) => track(
+        'Fact Page Deleted Fact',
+        properties: {
+          'fact_category': fact.category.toString().split('.').last,
+        },
+      );
+
+  void factsPageEditedFact() => track('Fact Page Edited Fact');
+
+  void factsPageCreateFactBtn() => track('Fact Page Create Fact Button Pressed');
+
+  void factsPageCreatedFact(FactCategory category) =>
+      track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
     String transcriptCopy = transcript.substring(0, transcript.length);
@@ -172,12 +205,6 @@ class MixpanelManager {
       properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
-
-  // void speechProfileStarted() => track('Speech Profile Started');
-  //
-  // void speechProfileStartedOnboarding() => track('Speech Profile Started Onboarding');
-  //
-  // void speechProfileCompleted() => track('Speech Profile Completed');
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
@@ -232,7 +259,6 @@ class MixpanelManager {
   void disconnectFriendClicked() => track('Disconnect Friend Clicked');
 
   void batteryIndicatorClicked() => track('Battery Indicator Clicked');
-
 
   void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
 
