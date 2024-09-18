@@ -488,6 +488,7 @@ class GetPluginsWidgets extends StatelessWidget {
       },
       child: ListView(
         shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         children: [
           const SizedBox(height: 32),
           Text(
