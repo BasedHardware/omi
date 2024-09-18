@@ -299,7 +299,7 @@ workflows:
         script: |
           GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
           VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
-          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
+          VERSION_NAME=$(echo $VERSION_STRING | cut -d'+' -f1 | sed 's/^v//')
           VERSION_CODE=$(echo $VERSION_STRING | cut -d'+' -f2)
 
           echo "Version String: $VERSION_STRING"
