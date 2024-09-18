@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from models.memory import *
-from utils.postprocessing import postprocess_memory_util
+from utils.memories.postprocess_memory import postprocess_memory as postprocess_memory_util
 from utils.other import endpoints as auth
 
 router = APIRouter()
