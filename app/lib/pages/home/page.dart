@@ -53,7 +53,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
       context.read<PluginProvider>().setSelectedChatPluginId(null);
-      await context.read<HomeProvider>().setupHasSpeakerProfile();
     });
     super.initState();
   }
