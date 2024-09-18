@@ -209,17 +209,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                       return TabBarView(
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
-                          Consumer<MemoryDetailProvider>(
-                            builder: (context, provider, child) {
+                          Selector<MemoryDetailProvider, MemorySource?>(
+                            selector: (context, provider) => provider.memory.source,
+                            builder: (context, source, child) {
                               return ListView(
                                 shrinkWrap: true,
-                                children: provider.memory.source == MemorySource.openglass
-                                    ? [
-                                        PhotosGridComponent(
-                                          photos: provider.photosData,
-                                        ),
-                                        const SizedBox(height: 32)
-                                      ]
+                                children: source == MemorySource.openglass
+                                    ? [const PhotosGridComponent(), const SizedBox(height: 32)]
                                     : [const TranscriptWidgets()],
                               );
                             },
@@ -245,17 +241,18 @@ class SummaryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Selector<MemoryDetailProvider, bool>(
-        selector: (context, provider) => provider.memory.discarded,
-        builder: (context, isDiscaarded, child) {
-          return ListView(
-            shrinkWrap: true,
-            children: [
-              const GetSummaryWidgets(),
-              isDiscaarded ? const ReprocessDiscardedWidget() : const GetPluginsWidgets(),
-              const GetGeolocationWidgets(),
-            ],
-          );
-        });
+      selector: (context, provider) => provider.memory.discarded,
+      builder: (context, isDiscaarded, child) {
+        return ListView(
+          shrinkWrap: true,
+          children: [
+            const GetSummaryWidgets(),
+            isDiscaarded ? const ReprocessDiscardedWidget() : const GetPluginsWidgets(),
+            const GetGeolocationWidgets(),
+          ],
+        );
+      },
+    );
   }
 }
 
