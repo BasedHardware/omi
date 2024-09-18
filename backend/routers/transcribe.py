@@ -15,7 +15,7 @@ from database.redis_db import get_user_speech_profile
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
-from routers.postprocessing import postprocess_memory_util
+from utils.postprocessing import postprocess_memory_util
 from utils.audio import create_wav_from_bytes, merge_wav_files
 from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_postprocessing_audio
