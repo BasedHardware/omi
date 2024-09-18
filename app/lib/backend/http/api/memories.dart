@@ -184,6 +184,42 @@ Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
   return [];
 }
 
+class TranscriptsResponse {
+  List<TranscriptSegment> deepgram;
+  List<TranscriptSegment> soniox;
+  List<TranscriptSegment> whisperx;
+
+  TranscriptsResponse({
+    this.deepgram = const [],
+    this.soniox = const [],
+    this.whisperx = const [],
+  });
+
+  factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
+    return TranscriptsResponse(
+      deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+    );
+  }
+}
+
+Future<TranscriptsResponse> getMemoryTranscripts(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/transcripts',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return TranscriptsResponse();
+  debugPrint('getMemoryTranscripts: ${response.body}');
+  if (response.statusCode == 200) {
+    var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
+    return TranscriptsResponse.fromJson(transcripts);
+  }
+  return TranscriptsResponse();
+}
+
 Future<bool> hasMemoryRecording(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/recording',
