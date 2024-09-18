@@ -409,7 +409,10 @@ async def _websocket_util(
 
         # Process
         emotional_feedback = processing_memory.emotional_feedback
-        (status, new_memory) = postprocess_memory_util(memory.id, file_path, uid, emotional_feedback, )
+        status, new_memory = postprocess_memory_util(
+            memory.id, file_path, uid, emotional_feedback,
+            'deepgram_streaming' if stt_service == STTService.deepgram else 'soniox_streaming'
+        )
         if status == 200:
             memory = new_memory
         else:
