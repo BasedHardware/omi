@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
-import 'package:friend_private/pages/settings/personal_details.dart';
+import 'package:friend_private/pages/settings/change_name_widget.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
@@ -66,14 +66,14 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               subtitle: Text(SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName),
               trailing: const Icon(Icons.person, size: 20),
-              onTap: () {
-                // TODO: change to a dialog
+              onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
-                showModalBottomSheet(
-                    context: context,
-                    builder: (c) {
-                      return const PersonalDetails();
-                    });
+                await showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return const ChangeNameWidget();
+                  },
+                ).whenComplete(() => setState(() {}));
               },
             ),
             const SizedBox(height: 24),
