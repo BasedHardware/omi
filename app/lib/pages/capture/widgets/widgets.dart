@@ -290,7 +290,7 @@ getTranscriptWidget(
 
   return Column(
     children: [
-      if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (photos.isNotEmpty) PhotosGridComponent(),
       if (segments.isNotEmpty) TranscriptWidget(segments: segments),
     ],
   );
