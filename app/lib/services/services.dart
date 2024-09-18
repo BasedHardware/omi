@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:friend_private/services/devices.dart';
+import 'package:friend_private/services/sockets.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
   late IDeviceService _device;
+  late ISocketService _socket;
 
   static ServiceManager? _instance;
 
@@ -19,6 +21,7 @@ class ServiceManager {
       runner: BackgroundService(),
     );
     sm._device = DeviceService();
+    sm._socket = SocketServicePool();
 
     return sm;
   }
@@ -34,6 +37,8 @@ class ServiceManager {
   IMicRecorderService get mic => _mic;
 
   IDeviceService get device => _device;
+
+  ISocketService get socket => _socket;
 
   static void init() {
     if (_instance != null) {

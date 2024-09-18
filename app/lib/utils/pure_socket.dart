@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
@@ -11,7 +12,7 @@ import 'package:friend_private/services/notification_service.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/status.dart' as status;
+import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
@@ -28,7 +29,7 @@ abstract class IPureSocketListener {
 
 abstract class IPureSocket {
   Future<bool> connect();
-  void disconnect();
+  Future disconnect();
   void send(dynamic message);
 
   void onInternetSatusChanged(InternetStatus status);
@@ -69,7 +70,16 @@ class PureSocket implements IPureSocket {
   Timer? _internetLostDelayTimer;
 
   WebSocketChannel? _channel;
+  WebSocketChannel get channel {
+    if (_channel == null) {
+      throw Exception('Socket is not connected');
+    }
+    return _channel!;
+  }
+
   PureSocketStatus _status = PureSocketStatus.notConnected;
+  PureSocketStatus get status => _status;
+
   IPureSocketListener? _listener;
 
   int _retries = 0;
@@ -80,13 +90,6 @@ class PureSocket implements IPureSocket {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
       onInternetSatusChanged(status);
     });
-  }
-
-  WebSocketChannel get channel {
-    if (_channel == null) {
-      throw Exception('Socket is not connected');
-    }
-    return _channel!;
   }
 
   void setListener(IPureSocketListener listener) {
@@ -136,15 +139,15 @@ class PureSocket implements IPureSocket {
   }
 
   @override
-  void disconnect() {
+  Future disconnect() async {
     _status = PureSocketStatus.disconnected;
-    _cleanUp();
+    await _cleanUp();
   }
 
   Future _cleanUp() async {
     _internetLostDelayTimer?.cancel();
     _internetStatusListener?.cancel();
-    await _channel?.sink.close(status.goingAway);
+    await _channel?.sink.close(socket_channel_status.goingAway);
   }
 
   @override
@@ -218,12 +221,12 @@ class PureSocket implements IPureSocket {
       case InternetStatus.disconnected:
         var that = this;
         _internetLostDelayTimer?.cancel();
-        _internetLostDelayTimer = Timer(const Duration(seconds: 60), () {
+        _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
           if (_internetStatus != InternetStatus.disconnected) {
             return;
           }
 
-          that.disconnect();
+          await that.disconnect();
           _listener?.onInternetConnectionFailed();
         });
 
@@ -239,30 +242,39 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
+class SpeechProfileTranscripSegmentSocketService extends TranscripSegmentSocketService {
+  SpeechProfileTranscripSegmentSocketService.create(super.sampleRate, super.codec)
+      : super.create(includeSpeechProfile: false, newMemoryWatch: false);
+}
+
+class MemoryTranscripSegmentSocketService extends TranscripSegmentSocketService {
+  MemoryTranscripSegmentSocketService.create(super.sampleRate, super.codec)
+      : super.create(includeSpeechProfile: true, newMemoryWatch: true);
+}
+
+enum SocketServiceState {
+  connected,
+  disconnected,
+}
+
 class TranscripSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 
+  SocketServiceState get state =>
+      _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
+
   int sampleRate;
-  String codec;
+  BleAudioCodec codec;
   bool includeSpeechProfile;
-
-  factory TranscripSegmentSocketService() {
-    if (_instance == null) {
-      throw Exception("TranscripSegmentSocketService is not initiated");
-    }
-
-    return _instance!;
-  }
-
-  /// The singleton instance of [TranscripSegmentSocketService].
-  static TranscripSegmentSocketService? _instance;
+  bool newMemoryWatch;
 
   TranscripSegmentSocketService.create(
     this.sampleRate,
-    this.codec,
-    this.includeSpeechProfile,
-  ) {
+    this.codec, {
+    this.includeSpeechProfile = false,
+    this.newMemoryWatch = true,
+  }) {
     final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
     var params =
         '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile';
@@ -270,14 +282,6 @@ class TranscripSegmentSocketService implements IPureSocketListener {
 
     _socket = PureSocket(url);
     _socket.setListener(this);
-  }
-
-  TranscripSegmentSocketService.createInstance(
-    this.sampleRate,
-    this.codec,
-    this.includeSpeechProfile,
-  ) {
-    _instance = TranscripSegmentSocketService.createInstance(sampleRate, codec, includeSpeechProfile);
   }
 
   void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
@@ -293,13 +297,25 @@ class TranscripSegmentSocketService implements IPureSocketListener {
     }
   }
 
-  void start() {
-    _socket.connect();
+  Future start() async {
+    bool ok = await _socket.connect();
+    if (!ok) {
+      debugPrint("Can not connect to websocket");
+    }
   }
 
-  void stop() {
-    _socket.disconnect();
+  Future stop({String? reason}) async {
+    await _socket.disconnect();
     _listeners.clear();
+
+    if (reason != null) {
+      debugPrint(reason);
+    }
+  }
+
+  Future send(dynamic message) async {
+    _socket.send(message);
+    return;
   }
 
   @override
