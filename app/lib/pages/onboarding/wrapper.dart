@@ -12,6 +12,7 @@ import 'package:friend_private/pages/onboarding/name/name_widget.dart';
 import 'package:friend_private/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
@@ -39,6 +40,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
+        context.read<HomeProvider>().setupHasSpeakerProfile();
         _goNext();
       }
     });
@@ -51,7 +53,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     super.dispose();
   }
 
-  _goNext() => _controller!.animateTo(_controller!.index + 1);
+  _goNext() {
+    if (_controller!.index < _controller!.length - 1) {
+      _controller!.animateTo(_controller!.index + 1);
+    } else {
+      routeToPage(context, const HomePageWrapper(), replace: true);
+    }
+    // _controller!.animateTo(_controller!.index + 1);
+  }
 
   // TODO: use connection directly
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
@@ -69,6 +78,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () {
           MixpanelManager().onboardingStepCompleted('Auth');
+          context.read<HomeProvider>().setupHasSpeakerProfile();
           if (SharedPreferencesUtil().onboardingCompleted) {
             // previous users
             // Not needed anymore, because AuthProvider already does this
@@ -101,7 +111,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
         goNext: () async {
           var provider = context.read<OnboardingProvider>();
-          if (hasSpeechProfile) {
+          if (context.read<HomeProvider>().hasSpeakerProfile) {
             // previous users
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
