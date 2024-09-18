@@ -228,13 +228,13 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
-        return (500, str(e))
+        return 500, str(e)
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     result.postprocessing = MemoryPostProcessing(
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
-    return (200, result)
+    return 200, result
 
 
 def _delete_postprocessing_audio(file_path):
@@ -256,4 +256,4 @@ def _handle_segment_embedding_matching(uid: str, file_path: str, segments: List[
         matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
         for i, segment in enumerate(segments):
             segment.is_user = matches[i]['is_user']
-            segment.person_id = matches[i]['person_id']
+            segment.person_id = matches[i].get('person_id')
