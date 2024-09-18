@@ -164,7 +164,14 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         raise Exception(f'Could not open socket: {e}')
 
 
+soniox_valid_languages = ['en']
+
+
+# soniox_valid_languages = ['en', 'es', 'fr', 'ko', 'zh', 'it', 'pt', 'de']
+
+
 async def process_audio_soniox(stream_transcript, stream_id: int, language: str, uid: str):
+    # TODO: Fuck, soniox doesn't even support diarization in languages != english
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
         raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
@@ -172,17 +179,12 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     uri = 'wss://api.soniox.com/transcribe-websocket'
 
     # Validate the language and construct the model name
-    valid_languages = ['en', 'es', 'fr']  # TODO Add other supported languages as needed
-    if language not in valid_languages:
-        raise ValueError(f"Unsupported language '{language}'. Supported languages are: {valid_languages}")
+    if language not in soniox_valid_languages:
+        raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
-    if uid and language == 'en':
-        has_speech_profile = create_user_speech_profile(uid)
-    else:
-        has_speech_profile = False
+    has_speech_profile = create_user_speech_profile(uid)  # only english too
 
     # Construct the initial request with all required and optional parameters
-    # TODO: diarization works in spanish?
     request = {
         'api_key': api_key,
         'sample_rate_hertz': 16000,
@@ -191,6 +193,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
         'enable_streaming_speaker_diarization': True,
         'enable_speaker_identification': has_speech_profile,
         'cand_speaker_names': [uid] if has_speech_profile else [],
+        'max_num_speakers': 4,
         # 'enable_global_speaker_diarization': False,
         # 'enable_profanity_filter': False,
         # 'enable_dictation': False,
@@ -250,7 +253,9 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
                                     'person_id': None,
                                 })
 
-                    print(segments)
+                    for i, segment in enumerate(segments):
+                        segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
+
                     # print('Soniox:', transcript.replace('<end>', ''))
                     stream_transcript(segments, stream_id)
             except websockets.exceptions.ConnectionClosedOK:
