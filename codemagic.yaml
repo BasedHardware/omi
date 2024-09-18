@@ -294,6 +294,26 @@ workflows:
           flutter build appbundle \
             --release \
             --flavor prod
+
+      - name: Extract version information
+        script: |
+          GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
+          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
+          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
+          VERSION_CODE=$(echo $VERSION_STRING | cut -d'+' -f2)
+
+          echo "Version String: $VERSION_STRING"
+          echo "VERSION_NAME=$VERSION_NAME"
+          echo "VERSION_CODE=$VERSION_CODE"
+
+      - name: Upload mapping file to Instabug
+        script: |
+          curl --location --request POST 'https://api.instabug.com/api/sdk/v3/symbols_files' \
+            --form 'os="android"' \
+            --form 'application_token="$INSTABUG_API_KEY"' \
+            --form 'app_version="{\"code\":\"$VERSION_CODE\",\"name\":\"$VERSION_NAME\"}"' \
+            --form 'symbols_file=@"build/app/outputs/mapping/prodRelease/mapping.txt"'
+            
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
