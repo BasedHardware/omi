@@ -308,11 +308,11 @@ workflows:
 
       - name: Upload mapping file to Instabug
         script: |
-          curl --location --request POST 'https://api.instabug.com/api/sdk/v3/symbols_files' \
-            --form 'os="android"' \
-            --form 'application_token="$INSTABUG_API_KEY"' \
-            --form 'app_version="{\"code\":\"$VERSION_CODE\",\"name\":\"$VERSION_NAME\"}"' \
-            --form 'symbols_file=@"build/app/outputs/mapping/prodRelease/mapping.txt"'
+          curl -X POST https://api.instabug.com/api/sdk/v3/symbols_files \
+            -F os="android" \
+            -F application_token="$INSTABUG_API_KEY" \
+            -F app_version='{"code":"$VERSION_CODE","name":"$VERSION_NAME"}' \
+            -F symbols_file=@"build/app/outputs/mapping/prodRelease/mapping.txt"
             
     artifacts:
       - build/**/outputs/**/*.aab
