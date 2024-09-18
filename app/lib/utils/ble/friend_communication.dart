@@ -274,7 +274,12 @@ class FriendDevice extends DeviceBase {
     return listener;
   }
 
-  Future<bool> performWriteToStorage(int numFile) async {
+
+
+Future<bool> performWriteToStorage(
+           int numFile,int command
+) async {
+
     final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
     if (storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
@@ -287,9 +292,8 @@ class FriendDevice extends DeviceBase {
       return false;
     }
     debugPrint('About to write to storage bytes');
-    debugPrint('about to send $numFile');
-    await storageDataStreamCharacteristic.write([0x00, numFile & 0xFF]);
-
+   debugPrint('about to send $numFile');
+    await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF]);
     return true;
   }
 
