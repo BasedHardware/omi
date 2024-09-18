@@ -28,6 +28,14 @@ class MemoryCreatedWidget extends StatefulWidget {
 
 class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
   @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await updateMemoryDetailProvider(context, context.read<SpeechProfileProvider>().memory!);
+    });
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -68,7 +76,7 @@ class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
               child: MaterialButton(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 onPressed: () {
-                  updateMemoryDetailProvider(context, provider.memory!);
+                  // updateMemoryDetailProvider(context, provider.memory!);
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
                   routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
                 },
