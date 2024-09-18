@@ -5,7 +5,8 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
 from database.memories import get_memory
-from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile
+from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile, \
+    remove_user_soniox_speech_profile
 from database.users import get_person
 from models.memory import Memory
 from models.other import UploadProfile
@@ -63,7 +64,9 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=400, detail="Audio duration is invalid")
 
     apply_vad_for_speech_profile(file_path)
-    return {"url": upload_profile_audio(file_path, uid)}
+    url = upload_profile_audio(file_path, uid)
+    remove_user_soniox_speech_profile(uid)
+    return {"url": url}
 
 
 # ******************************************************
