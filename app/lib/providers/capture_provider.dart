@@ -25,6 +25,7 @@ import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
+import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
@@ -79,6 +80,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   List<int> currentStorageFiles = <int>[];
   StorageBytesUtil storageUtil = StorageBytesUtil();
   Timer? _memoryCreationTimer;
+
   // -----------------------
 
   String? processingMemoryId;
@@ -268,7 +270,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         geolocation: geolocation,
         photos: photos.map<MemoryPhoto>((e) => MemoryPhoto(e.item1, e.item2)).toList(),
         failed: true,
-        source: MemorySource.openglass, // TODO: Frame device ?
+        source: MemorySource.openglass,
+        // TODO: Frame device ?
         language: SharedPreferencesUtil().recordingsLanguage,
       );
       SharedPreferencesUtil().addFailedMemory(memory);
@@ -524,14 +527,15 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   Future getFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 0;
-    writeToStorage(connectedDevice!.id, storageUtil.fileNum,command);
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum, command);
   }
 
   Future clearFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 1;
-    writeToStorage(connectedDevice!.id, storageUtil.fileNum,command);
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum, command);
   }
+
   void clearTranscripts() {
     segments = [];
     setHasTranscripts(false);
