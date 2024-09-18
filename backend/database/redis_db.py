@@ -69,6 +69,18 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     return eval(reviews)
 
 
+def set_user_has_soniox_speech_profile(uid: str):
+    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
+
+
+def get_user_has_soniox_speech_profile(uid: str) -> bool:
+    return r.exists(f'users:{uid}:has_soniox_speech_profile')
+
+
+def remove_user_soniox_speech_profile(uid: str):
+    r.delete(f'users:{uid}:has_soniox_speech_profile')
+
+
 def store_user_speech_profile(uid: str, data: List[List[int]]):
     r.set(f'users:{uid}:speech_profile', str(data))
 
