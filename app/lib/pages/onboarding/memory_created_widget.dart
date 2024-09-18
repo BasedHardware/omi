@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
@@ -9,11 +10,23 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-class MemoryCreatedWidget extends StatelessWidget {
+Future updateMemoryDetailProvider(BuildContext context, ServerMemory memory) {
+  return Future.microtask(() {
+    context.read<MemoryProvider>().addMemory(memory);
+    context.read<MemoryDetailProvider>().updateMemory(0);
+  });
+}
+
+class MemoryCreatedWidget extends StatefulWidget {
   final VoidCallback goNext;
 
   const MemoryCreatedWidget({super.key, required this.goNext});
 
+  @override
+  State<MemoryCreatedWidget> createState() => _MemoryCreatedWidgetState();
+}
+
+class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -54,10 +67,8 @@ class MemoryCreatedWidget extends StatelessWidget {
               ),
               child: MaterialButton(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                onPressed: () async {
-                  // goNext();
-                  context.read<MemoryProvider>().addMemory(provider.memory!);
-                  context.read<MemoryDetailProvider>().updateMemory(0);
+                onPressed: () {
+                  updateMemoryDetailProvider(context, provider.memory!);
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
                   routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
                 },
