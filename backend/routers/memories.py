@@ -103,6 +103,14 @@ def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_u
     return memories_db.get_memory_photos(uid, memory_id)
 
 
+@router.get(
+    "/v1/memories/{memory_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]], tags=['memories']
+)
+def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return memories_db.get_memory_transcripts_by_model(uid, memory_id)
+
+
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     memories_db.delete_memory(uid, memory_id)
