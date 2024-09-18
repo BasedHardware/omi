@@ -111,7 +111,8 @@ def postprocess_memory(
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
             memory.postprocessing = MemoryPostProcessing(
-                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
+                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx, fail_reason=fail_reason,
+            )
             # TODO: consider doing process_memory, if any segment still matched to user or people
             return memory
 
@@ -215,7 +216,8 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
             memory.postprocessing = MemoryPostProcessing(
-                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
+                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx, fail_reason=fail_reason,
+            )
             # TODO: consider doing process_memory, if any segment still matched to user or people
             return (200, memory)
 
