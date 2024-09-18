@@ -9,7 +9,7 @@ import 'package:friend_private/pages/onboarding/auth.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
 import 'package:friend_private/pages/onboarding/name/name_widget.dart';
-import 'package:friend_private/pages/onboarding/permissions/notification_permission.dart';
+import 'package:friend_private/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
@@ -82,7 +82,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _goNext();
         MixpanelManager().onboardingStepCompleted('Name');
       }),
-      NotificationPermissionWidget(
+      PermissionsWidget(
         goNext: () {
           _goNext();
           MixpanelManager().onboardingStepCompleted('Permissions');
@@ -199,7 +199,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 ],
               ),
             ),
-            if (_controller!.index == 2 || _controller!.index == 3)
+            if (_controller!.index == 3)
               Padding(
                 padding: const EdgeInsets.fromLTRB(0, 40, 16, 0),
                 child: Align(
