@@ -19,8 +19,9 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
   @override
   void initState() {
     getMemoryTranscripts(widget.memory.id).then((result) {
-      print(result);
-      transcripts = result;
+      setState(() {
+        transcripts = result;
+      });
     });
     super.initState();
   }

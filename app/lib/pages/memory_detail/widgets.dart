@@ -723,7 +723,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
         ),
       ),
       // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-      widget.memory.postprocessing != null
+      widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
           ? Card(
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
               child: ListTile(
