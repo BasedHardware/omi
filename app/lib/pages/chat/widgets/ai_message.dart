@@ -116,8 +116,8 @@ class _AIMessageState extends State<AIMessage> {
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
-              // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
-              // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
+              if (widget.displayOptions) const SizedBox(height: 8),
+              if (widget.displayOptions) ..._getInitialOptions(context),
               if (messageMemories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var data in messageMemories.indexed) ...[
@@ -256,7 +256,7 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOption(BuildContext context, String optionText) {
     return GestureDetector(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -273,11 +273,11 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOptions(BuildContext context) {
     return [
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What tasks do I have from yesterday?'),
+      _getInitialOption(context, 'What\'s been on my mind a lot?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What conversations did I have with John?'),
+      _getInitialOption(context, 'Did I forget to follow up on something?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What advise have I received about entrepreneurship?'),
+      _getInitialOption(context, 'What\'s the funniest thing I\'ve said lately?'),
     ];
   }
 }
