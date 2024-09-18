@@ -42,13 +42,15 @@ enum MemoryPostProcessingModel { fal_whisperx, custom_whisperx }
 class MemoryPostProcessing {
   final MemoryPostProcessingStatus status;
   final MemoryPostProcessingModel? model;
+  final String? failReason;
 
-  MemoryPostProcessing({required this.status, required this.model});
+  MemoryPostProcessing({required this.status, required this.model, this.failReason});
 
   factory MemoryPostProcessing.fromJson(Map<String, dynamic> json) {
     return MemoryPostProcessing(
       status: MemoryPostProcessingStatus.values.asNameMap()[json['status']] ?? MemoryPostProcessingStatus.in_progress,
       model: MemoryPostProcessingModel.values.asNameMap()[json['model']] ?? MemoryPostProcessingModel.fal_whisperx,
+      failReason: json['fail_reason'],
     );
   }
 

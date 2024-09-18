@@ -10,7 +10,7 @@ class HomeProvider extends ChangeNotifier {
   final FocusNode chatFieldFocusNode = FocusNode();
   bool isMemoryFieldFocused = false;
   bool isChatFieldFocused = false;
-  bool hasSpeakerProfile = false;
+  bool hasSpeakerProfile = true;
   bool isLoading = false;
 
   HomeProvider() {
