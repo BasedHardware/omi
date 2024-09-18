@@ -542,6 +542,7 @@ class GetGeolocationWidgets extends StatelessWidget {
       return provider.memory.geolocation;
     }, builder: (context, geolocation, child) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: geolocation == null
             ? []
             : [
