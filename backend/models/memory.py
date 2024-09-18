@@ -128,6 +128,7 @@ class PostProcessingModel(str, Enum):
 class MemoryPostProcessing(BaseModel):
     status: PostProcessingStatus
     model: PostProcessingModel
+    fail_reason: Optional[str] = None
 
 
 class Memory(BaseModel):
