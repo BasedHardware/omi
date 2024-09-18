@@ -84,6 +84,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   String? processingMemoryId;
 
   bool resetStateAlreadyCalled = false;
+  String dateTimeStorageString = "";
 
   void setResetStateAlreadyCalled(bool value) {
     resetStateAlreadyCalled = value;
@@ -488,6 +489,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         debugPrint('returned $value');
         if (value[0] == 0) {
           //valid command
+          DateTime storageStartTime = DateTime.now();
+          dateTimeStorageString = storageStartTime.toIso8601String();
           debugPrint('good to go');
         } else if (value[0] == 3) {
           debugPrint('bad file size. finishing...');
@@ -499,11 +502,13 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
           //valid end command
           debugPrint('done. sending to backend....trying to dl more');
           File storageFile = (await storageUtil.createWavFile(removeLastNSeconds: 0)).item1;
-          List<ServerMemory> result = await sendStorageToBackend(storageFile, "hi");
+          List<ServerMemory> result = await sendStorageToBackend(storageFile, dateTimeStorageString);
           for (ServerMemory memory in result) {
             memoryProvider?.addMemory(memory);
           }
           storageUtil.clearAudioBytes();
+          //clear the file to indicate completion
+          clearFileFromDevice(storageUtil.getFileNum());
           getFileFromDevice(storageUtil.getFileNum() + 1);
         } else {
           //bad bit
@@ -513,22 +518,20 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     });
 
     getFileFromDevice(storageUtil.getFileNum());
-
     //  notifyListeners();
   }
 
   Future getFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
-    _writeToStorage(connectedDevice!.id, storageUtil.fileNum);
+    int command = 0;
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum,command);
   }
 
-  // Future saveAndSendStorageWav() async {
-  // }
-// Future storageHandler() async {
-//     File storageFile =  (await storageUtil!.createWavFile(removeLastNSeconds:0)).item1;
-//     sendStorageToBackend(storageFile, "hi");
-//     writeToStorage(id,2);
-// }
+  Future clearFileFromDevice(int fileNum) async {
+    storageUtil.fileNum = fileNum;
+    int command = 1;
+    writeToStorage(connectedDevice!.id, storageUtil.fileNum,command);
+  }
   void clearTranscripts() {
     segments = [];
     setHasTranscripts(false);

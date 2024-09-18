@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
-extern uint32_t file_num_array[30];
+extern uint32_t file_num_array[40];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
@@ -120,7 +120,7 @@ static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct
 }
 
 
-#define ACCEL_REFRESH_INTERVAL 1000 // 0.5 seconds
+#define ACCEL_REFRESH_INTERVAL 1000 // 1.0 seconds
 
 void broadcast_accel(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
@@ -455,7 +455,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        printk("Failed to read from ring buffer. not enough data %d\n", tx_buffer_size);
+        LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
         return false;
     }
 
@@ -532,6 +532,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 }
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
+#define MAX_WRITE_SIZE 400
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 bool write_to_storage(void) {
@@ -556,6 +557,45 @@ bool write_to_storage(void) {
 
     return true;
 }
+//for improving ble bandwidth
+// bool write_to_storage(void) {//max possible packing
+//     if (!read_from_tx_queue())
+//     {
+//         return false;
+//     }
+
+//     uint8_t *buffer = tx_buffer+2;
+//     uint8_t packet_size = (uint8_t)(tx_buffer_size+ OPUS_PREFIX_LENGTH);
+
+//     // buffer_offset = buffer_offset+amount_to_fill;
+//     //check if adding the new packet will cause a overflow
+//     if(buffer_offset+packet_size > MAX_WRITE_SIZE) { 
+
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     write_to_file(write_ptr,MAX_WRITE_SIZE);
+
+//     buffer_offset = packet_size;
+//     storage_temp_data[0] = packet_size-1;
+//     memcpy(storage_temp_data +1, buffer, packet_size-1);
+
+//     }
+//     else if (buffer_offset + packet_size == MAX_WRITE_SIZE) { //exact frame needed 
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     buffer_offset = 0;
+//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     write_to_file(write_ptr,MAX_WRITE_SIZE);
+    
+//     }
+//     else {
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     buffer_offset = buffer_offset + packet_size;
+//     }
+
+//     return true;
+// }
 
 static bool use_storage = true;
 #define MAX_FILES 10

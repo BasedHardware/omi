@@ -377,10 +377,27 @@ class StorageBytesUtil extends WavBytesUtil {
    List<int> currentStorageList = [];
    int currentStorageCount = 0;
    int fileNum = 1;
-
+   
    int getFileNum() {
     return fileNum;
    }
+
+  //  void fastStoreFramePacket(value) { //all packets are independent of each other. 
+
+  //   if (value.length == 1) {
+  //     return;
+  //   }
+  //   if (value.length < 40) {
+  //     debugPrint('packet too small');
+  //     return;
+  //   }
+  // for (int i = 0; i < 5; i++) {//unsafe, bad packet values could leak
+  //   int amount = value[3+83*i];
+  //   List<int> content = value.sublist(i*83,4+amount+83*i);
+  // }
+  // pending.addAll(content);
+
+  //  }
    
    void storeFrameStoragePacket(value) {
     if (value.length == 1) {
@@ -390,6 +407,8 @@ class StorageBytesUtil extends WavBytesUtil {
       debugPrint('packet too small');
       return;
     }
+    //enforce 
+    // if (value.length ==83 * 5) //83 is one packet, 5 is the packets per bluetooth frame
     rawPackets.add(value);
     int index = value[0] + (value[1] << 8);
     int internal = value[2];
@@ -409,7 +428,7 @@ class StorageBytesUtil extends WavBytesUtil {
 
     if (lastPacketIndex == -1) return;
 
-    // Lost frame - reset state
+    // Lost frame - reset statem
     if (index != lastPacketIndex + 1 || (internal != 0 && internal != lastFrameId + 1)) {
       // debugPrint('Lost frame');
       lastPacketIndex = -1;

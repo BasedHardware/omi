@@ -32,6 +32,9 @@ static int16_t *clear_ptr;
 static struct device *speaker;
 static uint16_t current_length;
 static uint16_t offset;
+
+struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
+
 int speaker_init() {
         const struct device *speaker = device_get_binding("I2S_0");
 	    if (!device_is_ready(speaker)) {
@@ -169,4 +172,20 @@ static void generate_gentle_chime(int16_t *buffer, int num_samples)
      }
 
      return 0;
+ }
+
+ int init_haptic_pin() {
+    if (gpio_is_ready_dt(&haptic_gpio_pin)) {
+		LOG_INF("Haptic Pin ready");
+	}
+    else {
+		LOG_ERR("Error setting up Haptic Pin");
+        return 1;
+	}
+
+	if (gpio_pin_configure_dt(&haptic_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) {
+		LOG_ERR("Error setting up Haptic Pin");
+        return 1;
+	}
+    return 0;
  }
