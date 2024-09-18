@@ -20,7 +20,6 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -31,19 +30,20 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/websockets.dart';
+import 'package:friend_private/utils/pure_socket.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
-class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifierMixin {
+class CaptureProvider extends ChangeNotifier
+    with OpenGlassMixin, MessageNotifierMixin
+    implements ITransctipSegmentSocketServiceListener {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
-  WebSocketProvider? webSocketProvider;
+  TranscripSegmentSocketService? _socket;
 
-  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p, WebSocketProvider? wsProvider) {
+  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
     messageProvider = p;
-    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
@@ -99,7 +99,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   void setMemoryCreating(bool value) {
-    print('set memory creating ${value}');
+    debugPrint('set memory creating ${value}');
     memoryCreating = value;
     notifyListeners();
   }
@@ -143,7 +143,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
       emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
     );
     if (result?.result == null) {
-      print("Can not update processing memory, result null");
+      debugPrint("Can not update processing memory, result null");
     }
   }
 
@@ -154,7 +154,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future<void> _onMemoryCreated(ServerMessageEvent event) async {
     if (event.memory == null) {
-      print("Memory is not found, processing memory ${event.processingMemoryId}");
+      debugPrint("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
     _processOnMemoryCreated(event.memory, event.messages ?? []);
@@ -167,7 +167,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
     var memory = await getMemoryById(memoryId);
     if (memory == null) {
-      print("Memory is not found $memoryId");
+      debugPrint("Memory is not found $memoryId");
       return;
     }
 
@@ -177,7 +177,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   Future<void> _onMemoryPostProcessFailed(String memoryId) async {
     var memory = await getMemoryById(memoryId);
     if (memory == null) {
-      print("Memory is not found $memoryId");
+      debugPrint("Memory is not found $memoryId");
       return;
     }
 
@@ -310,7 +310,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
     // Create new socket session
     // Warn: should have a better solution to keep the socket alived
-    await webSocketProvider?.closeWebSocketWithoutReconnect('reset new memory session');
+    await _socket?.stop(reason: 'reset new memory session');
     await initiateWebsocket();
   }
 
@@ -338,124 +338,30 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     BleAudioCodec? audioCodec,
     int? sampleRate,
   ]) async {
-    // setWebSocketConnecting(true);
-    print('initiateWebsocket in capture_provider');
+    debugPrint('initiateWebsocket in capture_provider');
+
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
     sampleRate ??= (codec == BleAudioCodec.opus ? 16000 : 8000);
-    print('is ws null: ${webSocketProvider == null}');
-    await webSocketProvider?.initWebSocket(
-      codec: codec,
-      sampleRate: sampleRate,
-      includeSpeechProfile: true,
-      newMemoryWatch: true,
-      // Warn: need clarify about initiateWebsocket
-      onConnectionSuccess: () {
-        print('inside onConnectionSuccess');
-        if (segments.isNotEmpty) {
-          // means that it was a reconnection, so we need to reset
-          streamStartedAtSecond = null;
-          secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
-        }
-        print('bottom in onConnectionSuccess');
-        notifyListeners();
-      },
-      onConnectionFailed: (err) {
-        print('inside onConnectionFailed');
-        print('err: $err');
-        notifyListeners();
-      },
-      onConnectionClosed: (int? closeCode, String? closeReason) {
-        print('inside onConnectionClosed');
-        print('closeCode: $closeCode');
-        // connection was closed, either on resetState, or by backend, or by some other reason.
-        // setState(() {});
-      },
-      onConnectionError: (err) {
-        print('inside onConnectionError');
-        print('err: $err');
-        // connection was okay, but then failed.
-        notifyListeners();
-      },
-      onMessageEventReceived: (ServerMessageEvent event) {
-        if (event.type == MessageEventType.newMemoryCreating) {
-          _onMemoryCreating();
-          return;
-        }
 
-        if (event.type == MessageEventType.newMemoryCreated) {
-          _onMemoryCreated(event);
-          return;
-        }
+    debugPrint('is ws null: ${_socket == null}');
 
-        if (event.type == MessageEventType.newMemoryCreateFailed) {
-          _onMemoryCreateFailed();
-          return;
-        }
+    // TODO: thinh, socket
+    _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate);
+    if (_socket == null) {
+      throw Exception("Can not create new memory socket");
+    }
 
-        if (event.type == MessageEventType.newProcessingMemoryCreated) {
-          if (event.processingMemoryId == null) {
-            print("New processing memory created message event is invalid");
-            return;
-          }
-          _onProcessingMemoryCreated(event.processingMemoryId!);
-          return;
-        }
-
-        if (event.type == MessageEventType.memoryPostProcessingSuccess) {
-          if (event.memoryId == null) {
-            print("Post proccess message event is invalid");
-            return;
-          }
-          _onMemoryPostProcessSuccess(event.memoryId!);
-          return;
-        }
-
-        if (event.type == MessageEventType.memoryPostProcessingFailed) {
-          if (event.memoryId == null) {
-            print("Post proccess message event is invalid");
-            return;
-          }
-          _onMemoryPostProcessFailed(event.memoryId!);
-          return;
-        }
-      },
-      onMessageReceived: (List<TranscriptSegment> newSegments) {
-        if (newSegments.isEmpty) return;
-
-        if (segments.isEmpty) {
-          debugPrint('newSegments: ${newSegments.last}');
-          // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
-          //  losing from the audio the first part of the recording. All other parts are fine.
-          FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-          var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
-          var removeUpToSecond = newSegments[0].start.toInt();
-          audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
-          firstStreamReceivedAt = DateTime.now();
-        }
-
-        streamStartedAtSecond ??= newSegments[0].start;
-        TranscriptSegment.combineSegments(
-          segments,
-          newSegments,
-          toRemoveSeconds: streamStartedAtSecond ?? 0,
-          toAddSeconds: secondsMissedOnReconnect ?? 0,
-        );
-        triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
-          messageProvider?.addMessage(v);
-        });
-
-        debugPrint('Memory creation timer restarted');
-        _memoryCreationTimer?.cancel();
-        _memoryCreationTimer =
-            Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createPhotoCharacteristicMemory());
-        setHasTranscripts(true);
-        notifyListeners();
-      },
-    );
+    // Ok
+    _socket?.subscribe(this, this);
+    if (segments.isNotEmpty) {
+      // means that it was a reconnection, so we need to reset
+      streamStartedAtSecond = null;
+      secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
+    }
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
-    print('streamAudioToWs in capture_provider');
+    debugPrint('streamAudioToWs in capture_provider');
     audioStorage = WavBytesUtil(codec: codec);
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
@@ -468,8 +374,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
         final trimmedValue = value.sublist(3);
         // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-          webSocketProvider?.websocketChannel?.sink.add(trimmedValue);
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(trimmedValue);
         }
       },
     );
@@ -544,7 +450,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   Future resetForSpeechProfile() async {
     closeBleStream();
-    await webSocketProvider?.closeWebSocketWithoutReconnect('reset for speech profile');
+    // TODO: thinh, socket, check why we need reset for speech profile here
+    await _socket?.stop(reason: 'reset for speech profile');
     setAudioBytesConnected(false);
     notifyListeners();
   }
@@ -667,8 +574,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<void> _manageWebSocketConnection(bool codecChanged, bool isFromSpeechProfile) async {
-    if (codecChanged || webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
-      await webSocketProvider?.closeWebSocketWithoutReconnect('reset state $isFromSpeechProfile');
+    if (codecChanged || _socket?.state != SocketServiceState.connected) {
+      await _socket?.stop(reason: 'reset state $isFromSpeechProfile');
       // if (!isFromSpeechProfile) {
       await initiateWebsocket();
       // }
@@ -676,7 +583,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   }
 
   Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
-    print('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
+    debugPrint('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
 
     BleAudioCodec codec = await _getAudioCodec(connectedDevice!.id);
@@ -715,7 +622,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
     isGlasses = await _hasPhotoStreamingCharacteristic(connectedDevice!.id);
     if (!isGlasses) return;
     await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
-    webSocketProvider?.closeWebSocketWithoutReconnect('reset state open glass');
+    _socket?.stop(reason: 'reset state open glass');
     notifyListeners();
   }
 
@@ -733,6 +640,7 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
   void dispose() {
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
+    _socket?.unsubscribe(this);
     super.dispose();
   }
 
@@ -746,8 +654,8 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-      if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-        webSocketProvider?.websocketChannel?.sink.add(bytes);
+      if (_socket?.state == SocketServiceState.connected) {
+        _socket?.send(bytes);
       }
     }, onRecording: () {
       updateRecordingState(RecordingState.record);
@@ -760,5 +668,97 @@ class CaptureProvider extends ChangeNotifier with OpenGlassMixin, MessageNotifie
 
   stopStreamRecording() {
     ServiceManager.instance().mic.stop();
+  }
+
+  // Socket handling
+
+  @override
+  void onClosed() {
+    debugPrint('socket is closed');
+  }
+
+  @override
+  void onError(Object err) {
+    debugPrint('err: $err');
+    notifyListeners();
+  }
+
+  @override
+  void onMessageEventReceived(ServerMessageEvent event) {
+    if (event.type == MessageEventType.newMemoryCreating) {
+      _onMemoryCreating();
+      return;
+    }
+
+    if (event.type == MessageEventType.newMemoryCreated) {
+      _onMemoryCreated(event);
+      return;
+    }
+
+    if (event.type == MessageEventType.newMemoryCreateFailed) {
+      _onMemoryCreateFailed();
+      return;
+    }
+
+    if (event.type == MessageEventType.newProcessingMemoryCreated) {
+      if (event.processingMemoryId == null) {
+        debugPrint("New processing memory created message event is invalid");
+        return;
+      }
+      _onProcessingMemoryCreated(event.processingMemoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.memoryPostProcessingSuccess) {
+      if (event.memoryId == null) {
+        debugPrint("Post proccess message event is invalid");
+        return;
+      }
+      _onMemoryPostProcessSuccess(event.memoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.memoryPostProcessingFailed) {
+      if (event.memoryId == null) {
+        debugPrint("Post proccess message event is invalid");
+        return;
+      }
+      _onMemoryPostProcessFailed(event.memoryId!);
+      return;
+    }
+  }
+
+  @override
+  void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    if (newSegments.isEmpty) return;
+
+    if (segments.isEmpty) {
+      debugPrint('newSegments: ${newSegments.last}');
+      // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
+      //  losing from the audio the first part of the recording. All other parts are fine.
+      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
+      var removeUpToSecond = newSegments[0].start.toInt();
+      audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
+      firstStreamReceivedAt = DateTime.now();
+    }
+
+    streamStartedAtSecond ??= newSegments[0].start;
+    TranscriptSegment.combineSegments(
+      segments,
+      newSegments,
+      toRemoveSeconds: streamStartedAtSecond ?? 0,
+      toAddSeconds: secondsMissedOnReconnect ?? 0,
+    );
+    triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
+      messageProvider?.addMessage(v);
+    });
+
+    debugPrint('Memory creation timer restarted');
+    _memoryCreationTimer?.cancel();
+    _memoryCreationTimer =
+        Timer(const Duration(seconds: quietSecondsForMemoryCreation), () => _createPhotoCharacteristicMemory());
+    setHasTranscripts(true);
+    notifyListeners();
   }
 }
