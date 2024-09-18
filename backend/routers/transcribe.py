@@ -110,7 +110,8 @@ async def _websocket_util(
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
 
-    if stt_service == STTService.soniox and (sample_rate != 16000 or codec != 'opus'):
+    if stt_service == STTService.soniox and (
+            sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
         stt_service = STTService.deepgram
 
     # Check: Why do we need try-catch around websocket.accept?

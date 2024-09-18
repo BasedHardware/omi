@@ -539,10 +539,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         MixpanelManager().pageOpened('Settings');
                         String language = SharedPreferencesUtil().recordingsLanguage;
                         bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
                         await routeToPage(context, const SettingsPage());
-                        // TODO: this fails like 10 times, connects reconnects, until it finally works.
+
                         if (language != SharedPreferencesUtil().recordingsLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile) {
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
                           context.read<DeviceProvider>().restartWebSocket();
                         }
                       },

@@ -120,9 +120,9 @@ def get_memory_transcripts_by_model(uid: str, memory_id: str):
     whisperx_ref = memory_ref.collection('fal_whisperx')
 
     return {
-        'deepgram': [doc.to_dict() for doc in deepgram_ref.stream()],
-        'soniox': [doc.to_dict() for doc in soniox_ref.stream()],
-        'whisperx': [doc.to_dict() for doc in whisperx_ref.stream()],
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
     }
 
 

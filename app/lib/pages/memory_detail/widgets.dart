@@ -8,6 +8,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/memory_detail/compare_transcripts.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -268,6 +269,7 @@ class EventsListWidget extends StatelessWidget {
 class GetEditTextField extends StatefulWidget {
   final bool enabled;
   final String overview;
+
   const GetEditTextField({super.key, required this.enabled, required this.overview});
 
   @override
@@ -276,6 +278,7 @@ class GetEditTextField extends StatefulWidget {
 
 class _GetEditTextFieldState extends State<GetEditTextField> {
   late TextEditingController controller;
+
   @override
   void initState() {
     controller = TextEditingController(text: widget.overview);
@@ -651,6 +654,7 @@ class GetSheetTitle extends StatelessWidget {
 
 class GetDevToolsOptions extends StatefulWidget {
   final ServerMemory memory;
+
   const GetDevToolsOptions({
     super.key,
     required this.memory,
@@ -662,6 +666,7 @@ class GetDevToolsOptions extends StatefulWidget {
 
 class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   bool loadingPluginIntegrationTest = false;
+
   void changeLoadingPluginIntegrationTest(bool value) {
     setState(() {
       loadingPluginIntegrationTest = value;
@@ -670,56 +675,68 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: ListTile(
-            title: const Text('Trigger Memory Created Integration'),
-            leading: loadingPluginIntegrationTest
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.send_to_mobile_outlined),
-            onTap: () {
-              changeLoadingPluginIntegrationTest(true);
-              // TODO: if not set, show dialog to set URL or take them to settings.
-
-              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () => Navigator.pop(context),
-                    () => Navigator.pop(context),
-                    'Result:',
-                    response,
-                    okButtonText: 'Ok',
-                    singleButton: true,
+    return Column(children: [
+      Card(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        child: ListTile(
+          title: const Text('Trigger Memory Created Integration'),
+          leading: loadingPluginIntegrationTest
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
-                );
-                changeLoadingPluginIntegrationTest(false);
-              });
-            },
-          ),
+                )
+              : const Icon(Icons.send_to_mobile_outlined),
+          onTap: () {
+            changeLoadingPluginIntegrationTest(true);
+            // TODO: if not set, show dialog to set URL or take them to settings.
+
+            webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () => Navigator.pop(context),
+                  () => Navigator.pop(context),
+                  'Result:',
+                  response,
+                  okButtonText: 'Ok',
+                  singleButton: true,
+                ),
+              );
+              changeLoadingPluginIntegrationTest(false);
+            });
+          },
         ),
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: ListTile(
-            title: const Text('Test a Memory Prompt'),
-            leading: const Icon(Icons.chat),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-            onTap: () {
-              routeToPage(context, TestPromptsPage(memory: widget.memory));
-            },
-          ),
+      ),
+      Card(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        child: ListTile(
+          title: const Text('Test a Memory Prompt'),
+          leading: const Icon(Icons.chat),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+          onTap: () {
+            routeToPage(context, TestPromptsPage(memory: widget.memory));
+          },
         ),
-      ],
-    );
+      ),
+      // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
+      widget.memory.postprocessing != null
+          ? Card(
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+              child: ListTile(
+                title: const Text('Compare Transcripts Models'),
+                leading: const Icon(Icons.chat),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                onTap: () {
+                  routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
+                },
+              ),
+            )
+          : const SizedBox.shrink(),
+    ]);
   }
 }
 
@@ -743,6 +760,7 @@ _getLoadingIndicator() {
 
 class GetShareOptions extends StatefulWidget {
   final ServerMemory memory;
+
   const GetShareOptions({
     super.key,
     required this.memory,
@@ -915,25 +933,6 @@ class GetSheetMainOptions extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Card(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-              child: Column(
-                children: [
-                  SharedPreferencesUtil().devModeEnabled
-                      ? ListTile(
-                          onTap: () {
-                            provider.toggleDevToolsInSheet(!provider.displayDevToolsInSheet);
-                          },
-                          title: const Text('Developer Tools'),
-                          leading: const Icon(
-                            Icons.developer_mode,
-                            color: Colors.white,
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                        )
-                      : const SizedBox.shrink()
-                ],
-              )),
           const SizedBox(height: 4),
           Card(
             shape: const RoundedRectangleBorder(
@@ -1018,6 +1017,25 @@ class GetSheetMainOptions extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 4),
+          Card(
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+            child: Column(
+              children: [
+                ListTile(
+                  onTap: () {
+                    provider.toggleDevToolsInSheet(!provider.displayDevToolsInSheet);
+                  },
+                  title: const Text('Developer Tools'),
+                  leading: const Icon(
+                    Icons.developer_mode,
+                    color: Colors.white,
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+                )
+              ],
+            ),
+          )
         ],
       );
     });
