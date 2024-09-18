@@ -1,4 +1,3 @@
-from google.cloud.firestore_v1.async_client import AsyncClient
 import asyncio
 import json
 import uuid
@@ -7,6 +6,7 @@ from typing import List, Tuple
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
 from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
@@ -110,6 +110,20 @@ def get_memory_photos(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     photos_ref = memory_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
+
+
+def get_memory_transcripts_by_model(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    deepgram_ref = memory_ref.collection('deepgram_streaming')
+    soniox_ref = memory_ref.collection('soniox_streaming')
+    whisperx_ref = memory_ref.collection('fal_whisperx')
+
+    return {
+        'deepgram': [doc.to_dict() for doc in deepgram_ref.stream()],
+        'soniox': [doc.to_dict() for doc in soniox_ref.stream()],
+        'whisperx': [doc.to_dict() for doc in whisperx_ref.stream()],
+    }
 
 
 def update_memory_events(uid: str, memory_id: str, events: List[dict]):

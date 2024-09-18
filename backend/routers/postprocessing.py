@@ -133,7 +133,7 @@ def postprocess_memory(
 
 
 # TODO: Move to util
-def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_feedback: bool):
+def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
     """
     The objective of this endpoint, is to get the best possible transcript from the audio file.
     Instead of storing the initial deepgram result, doing a full post-processing with whisper-x.
@@ -151,11 +151,11 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
     memory = Memory(**memory_data)
     if memory.discarded:
         print('postprocess_memory: Memory is discarded')
-        return (400, "Memory is discarded")
+        return 400, "Memory is discarded"
 
     if memory.postprocessing is not None and memory.postprocessing.status != PostProcessingStatus.not_started:
         print(f'postprocess_memory: Memory can\'t be post-processed again {memory.postprocessing.status}')
-        return (400, "Memory can't be post-processed again")
+        return 400, "Memory can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
     if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
@@ -203,7 +203,7 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
             _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
 
         # Store both models results.
-        memories_db.store_model_segments_result(uid, memory.id, 'deepgram_streaming', memory.transcript_segments)
+        memories_db.store_model_segments_result(uid, memory.id, streaming_model, memory.transcript_segments)
         memories_db.store_model_segments_result(uid, memory.id, 'fal_whisperx', fal_segments)
 
         if not fal_failed:
