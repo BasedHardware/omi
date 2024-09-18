@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -37,6 +38,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   bool hasLocationPermission = false;
   bool hasNotificationPermission = false;
   bool hasBackgroundPermission = false; // Android only
+  bool isLoading = false;
 
   Future updatePermissions() async {
     hasBluetoothPermission = await Permission.bluetooth.isGranted;
@@ -44,6 +46,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     hasNotificationPermission = await Permission.notification.isGranted;
     SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
     SharedPreferencesUtil().locationEnabled = hasLocationPermission;
+    notifyListeners();
+  }
+
+  void setLoading(bool value) {
+    isLoading = value;
     notifyListeners();
   }
 
@@ -107,10 +114,27 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBackgroundPermissions() async {
-    await ForegroundUtil.requestPermissions();
+    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
     updateBackgroundPermission(isAllowed);
     notifyListeners();
+  }
+
+  Future<(bool, PermissionStatus)> askForLocationPermissions() async {
+    if (await Permission.location.serviceStatus.isDisabled) {
+      print('Location service is disabled');
+      return (false, PermissionStatus.permanentlyDenied);
+    } else {
+      var res = await Permission.locationWhenInUse.request();
+      return (true, res);
+    }
+  }
+
+  Future<bool> alwaysAllowLocation() async {
+    PermissionStatus locationStatus = await Permission.locationAlways.request();
+    print('alwaysAllowLocation permission status: $locationStatus');
+    updateLocationPermission(locationStatus.isGranted);
+    return locationStatus.isGranted;
   }
   //----------------- Onboarding Permissions -----------------
 
