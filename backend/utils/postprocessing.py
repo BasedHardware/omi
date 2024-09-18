@@ -16,16 +16,17 @@ from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
+
 def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
     memory_data = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory_data)
     if memory.discarded:
         print('postprocess_memory: Memory is discarded')
-        return 400, "Memory is discarded"
+        return (400, "Memory is discarded")
 
     if memory.postprocessing is not None and memory.postprocessing.status != PostProcessingStatus.not_started:
         print(f'postprocess_memory: Memory can\'t be post-processed again {memory.postprocessing.status}')
-        return 400, "Memory can't be post-processed again"
+        return (400, "Memory can't be post-processed again")
 
     aseg = AudioSegment.from_wav(file_path)
     if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
@@ -98,13 +99,13 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
-        return 500, str(e)
+        return (500, str(e))
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     result.postprocessing = MemoryPostProcessing(
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
-    return 200, result
+    return (200, result)
 
 
 def _delete_postprocessing_audio(file_path):
