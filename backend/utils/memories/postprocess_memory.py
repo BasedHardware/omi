@@ -8,7 +8,6 @@ from pydub import AudioSegment
 import database.memories as memories_db
 from database.users import get_user_store_recording_permission
 from models.memory import *
-from routers.memories import _get_memory_by_id
 from utils.memories.process_memory import process_memory, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, \
     delete_postprocessing_audio, upload_memory_recording
@@ -17,8 +16,11 @@ from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
 
-def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
+def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
     memory_data = _get_memory_by_id(uid, memory_id)
+    if not memory_data:
+        return (404, "Memory not found")
+
     memory = Memory(**memory_data)
     if memory.discarded:
         print('postprocess_memory: Memory is discarded')
@@ -106,6 +108,13 @@ def postprocess_memory_util(memory_id: str, file_path: str, uid: str, emotional_
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
     return (200, result)
+
+
+def _get_memory_by_id(uid: str, memory_id: str) -> dict:
+    memory = memories_db.get_memory(uid, memory_id)
+    if memory is None or memory.get('deleted', False):
+        return None
+    return memory
 
 
 def _delete_postprocessing_audio(file_path):
