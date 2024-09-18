@@ -77,7 +77,7 @@ export default async function GetTrendsMainPage() {
                         </p>
                         <p className="text-sm text-gray-500">
                           {topic.memories_count}{' '}
-                          {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                          {topic.memories_count === 1 ? 'Conversation' : 'Conversations'}
                         </p>
                       </div>
                     </li>
@@ -123,7 +123,7 @@ export default async function GetTrendsMainPage() {
                         </p>
                         <p className="text-sm text-gray-500">
                           {topic.memories_count}{' '}
-                          {topic.memories_count === 1 ? 'Conversartion' : 'Conversations'}
+                          {topic.memories_count === 1 ? 'Conversation' : 'Conversations'}
                         </p>
                       </div>
                     </li>
