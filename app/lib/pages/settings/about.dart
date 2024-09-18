@@ -44,7 +44,8 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               trailing: const Icon(Icons.language_outlined, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Visit Website');
-                routeToPage(context, const PageWebView(url: 'https://www.omi.me/', title: 'omi'));
+                // routeToPage(context, const PageWebView(url: 'https://www.omi.me/', title: 'omi'));
+                launchUrl(Uri.parse('https://www.omi.me/'));
               },
             ),
             ListTile(
