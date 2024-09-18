@@ -171,7 +171,7 @@ soniox_valid_languages = ['en']
 
 
 async def process_audio_soniox(stream_transcript, stream_id: int, language: str, uid: str):
-    # TODO: Fuck, soniox doesn't even support diarization in languages != english
+    # Fuck, soniox doesn't even support diarization in languages != english
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
         raise ValueError("API key is not set. Please set the SONIOX_API_KEY environment variable.")
