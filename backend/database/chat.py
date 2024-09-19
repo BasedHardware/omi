@@ -82,3 +82,20 @@ def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: b
         ]
 
     return messages
+
+
+def clear_chat(uid,batch_size):
+    user_ref = db.collection('users').document(uid)
+    messages_ref = user_ref.collection('messages')
+    if batch_size == 0:
+        return
+    docs = messages_ref.list_documents(page_size=batch_size)
+    deleted = 0
+
+    for doc in docs:
+        print(f"Deleting doc {doc.id} => {doc.get().to_dict()}")
+        doc.delete()
+        deleted = deleted + 1
+
+    if deleted >= batch_size:
+        return clear_chat(uid,batch_size)
