@@ -47,7 +47,7 @@ class _NameWidgetState extends State<NameWidget> {
             textAlign: TextAlign.center,
             textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
-              hintText: 'Enter your given name',
+              hintText: 'How Omi should call you?',
               // label: const Text('What should Omi call you?'),
               hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
               // border: UnderlineInputBorder(

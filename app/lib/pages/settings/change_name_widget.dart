@@ -34,7 +34,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
           padding: const EdgeInsets.all(8.0),
           child: Column(
             children: <Widget>[
-              const Text('Enter your given name'),
+              const Text('How Omi should call you?'),
               const SizedBox(height: 8),
               CupertinoTextField(
                 controller: nameController,
@@ -75,7 +75,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Text('Enter your given name'),
+              const Text('How Omi should call you?'),
               const SizedBox(height: 8),
               TextField(
                 controller: nameController,
