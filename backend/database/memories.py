@@ -122,11 +122,13 @@ def get_memory_transcripts_by_model(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     deepgram_ref = memory_ref.collection('deepgram_streaming')
     soniox_ref = memory_ref.collection('soniox_streaming')
+    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
     whisperx_ref = memory_ref.collection('fal_whisperx')
 
     return {
         'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
         'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
     }
 
