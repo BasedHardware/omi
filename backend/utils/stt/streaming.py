@@ -257,7 +257,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
                         segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
 
                     # print('Soniox:', transcript.replace('<end>', ''))
-                    stream_transcript(segments, stream_id)
+                    if segments:
+                        stream_transcript(segments, stream_id)
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
             except Exception as e:
@@ -276,3 +277,119 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     except Exception as e:
         print(f"Exception in process_audio_soniox: {e}")
         raise  # Re-raise the exception to be handled by the caller
+
+
+LANGUAGE = "en"
+CONNECTION_URL = f"wss://eu2.rt.speechmatics.com/v2"
+
+
+async def process_audio_speechmatics(stream_transcript, stream_id: int, language: str, uid: str):
+    # Create a transcription client
+    api_key = os.getenv('SPEECHMATICS_API_KEY')
+    uri = 'wss://eu2.rt.speechmatics.com/v2'
+    # Validate the language and construct the model name
+    # has_speech_profile = create_user_speech_profile(uid)  # only english too
+
+    request = {
+        "message": "StartRecognition",
+        "transcription_config": {
+            "language": language,
+            "diarization": "speaker",
+            "operating_point": "enhanced",
+            "max_delay_mode": "flexible",
+            "max_delay": 3,
+            "enable_partials": False,
+            "enable_entities": True,
+            "speaker_diarization_config": {"max_speakers": 4}
+        },
+        "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": 16000},
+        # "audio_events_config": {
+        #     "types": [
+        #         "laughter",
+        #         "music",
+        #         "applause"
+        #     ]
+        # }
+    }
+    try:
+        # Connect to Soniox WebSocket
+        print("Connecting to Speechmatics WebSocket...")
+        socket = await websockets.connect(uri, extra_headers={"Authorization": f"Bearer {api_key}"})
+        print("Connected to Speechmatics WebSocket.")
+
+        # Send the initial request
+        await socket.send(json.dumps(request))
+        print(f"Sent initial request: {request}")
+
+        # Start listening for messages from Soniox
+        async def on_message():
+            try:
+                async for message in socket:
+                    response = json.loads(message)
+                    if response['message'] == 'AudioAdded':
+                        continue
+                    if response['message'] == 'AddTranscript':
+                        results = response['results']
+                        if not results:
+                            continue
+                        segments = []
+                        for r in results:
+                            # print(r)
+                            if not r['alternatives']:
+                                continue
+                            r_data = r['alternatives'][0]
+                            r_type = r['type']  # word | punctuation
+                            r_start = r['start_time']
+                            r_end = r['end_time']
+
+                            r_content = r_data['content']
+                            r_confidence = r_data['confidence']
+                            if r_confidence < 0.4:
+                                print('Low confidence:', r)
+                                continue
+                            r_speaker = r_data['speaker'][1:] if r_data['speaker'] != 'UU' else '1'
+                            speaker = f"SPEAKER_0{r_speaker}"
+                            # print(r_content, r_speaker, [r_start, r_end])
+                            if not segments:
+                                segments.append({
+                                    'speaker': speaker,
+                                    'start': r_start,
+                                    'end': r_end,
+                                    'text': r_content,
+                                    'is_user': False,
+                                    'person_id': None,
+                                })
+                            else:
+                                last_segment = segments[-1]
+                                if last_segment['speaker'] == speaker:
+                                    last_segment['text'] += f' {r_content}'
+                                    last_segment['end'] += r_end
+                                else:
+                                    segments.append({
+                                        'speaker': speaker,
+                                        'start': r_start,
+                                        'end': r_end,
+                                        'text': r_content,
+                                        'is_user': False,
+                                        'person_id': None,
+                                    })
+
+                        if segments:
+                            stream_transcript(segments, stream_id)
+                        # print('---')
+                    else:
+                        print(response)
+            except websockets.exceptions.ConnectionClosedOK:
+                print("Speechmatics connection closed normally.")
+            except Exception as e:
+                print(f"Error receiving from Speechmatics: {e}")
+            finally:
+                if not socket.closed:
+                    await socket.close()
+                    print("Speechmatics WebSocket closed in on_message.")
+
+        asyncio.create_task(on_message())
+        return socket
+    except Exception as e:
+        print(f"Exception in process_audio_speechmatics: {e}")
+        raise
