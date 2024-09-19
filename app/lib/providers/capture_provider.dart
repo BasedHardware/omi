@@ -20,7 +20,6 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -48,7 +47,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  BTDeviceStruct? connectedDevice;
+  BTDeviceStruct? _recordingDevice;
   bool isGlasses = false;
 
   List<TranscriptSegment> segments = [];
@@ -115,9 +114,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _updateConnectedDevice(BTDeviceStruct? device) {
-    debugPrint('connected device changed from ${connectedDevice?.id} to ${device?.id}');
-    connectedDevice = device;
+  void _updateRecordingDevice(BTDeviceStruct? device) {
+    debugPrint('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
+    _recordingDevice = device;
     notifyListeners();
   }
 
@@ -442,13 +441,13 @@ class CaptureProvider extends ChangeNotifier
   Future getFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 0;
-    writeToStorage(connectedDevice!.id, storageUtil.fileNum, command);
+    writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
   }
 
   Future clearFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 1;
-    writeToStorage(connectedDevice!.id, storageUtil.fileNum, command);
+    writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
   }
 
   void clearTranscripts() {
@@ -471,11 +470,11 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing');
 
     _cleanupCurrentState();
-    await startOpenGlass();
     await _handleMemoryCreation(restartBytesProcessing);
 
     await _ensureSocketConnection(force: true);
 
+    await startOpenGlass();
     await _initiateFriendAudioStreaming();
     // TODO: Commenting this for now as DevKit 2 is not yet used in production
     // await initiateStorageBytesStreaming();
@@ -556,8 +555,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<bool> _checkCodecChange() async {
-    if (connectedDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(connectedDevice!.id);
+    if (_recordingDevice != null) {
+      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
       if (SharedPreferencesUtil().deviceCodec != newCodec) {
         debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
         SharedPreferencesUtil().deviceCodec = newCodec;
@@ -577,10 +576,10 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateFriendAudioStreaming() async {
-    debugPrint('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
-    if (connectedDevice == null) return;
+    debugPrint('_recordingDevice: $_recordingDevice in initiateFriendAudioStreaming');
+    if (_recordingDevice == null) return;
 
-    BleAudioCodec codec = await _getAudioCodec(connectedDevice!.id);
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     if (SharedPreferencesUtil().deviceCodec != codec) {
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
@@ -588,10 +587,10 @@ class CaptureProvider extends ChangeNotifier
       await _ensureSocketConnection();
     }
 
-    // Why is the connectedDevice null at this point?
+    // Why is the _recordingDevice null at this point?
     if (!audioBytesConnected) {
-      if (connectedDevice != null) {
-        await streamAudioToWs(connectedDevice!.id, codec);
+      if (_recordingDevice != null) {
+        await streamAudioToWs(_recordingDevice!.id, codec);
       } else {
         // Is the app in foreground when this happens?
         Logger.handle(Exception('Device Not Connected'), StackTrace.current,
@@ -604,18 +603,18 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
-    if (connectedDevice == null) return;
-    currentStorageFiles = await _getStorageList(connectedDevice!.id);
+    if (_recordingDevice == null) return;
+    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
     debugPrint('Storage files: $currentStorageFiles');
-    await sendStorage(connectedDevice!.id);
+    await sendStorage(_recordingDevice!.id);
     notifyListeners();
   }
 
   Future<void> startOpenGlass() async {
-    if (connectedDevice == null) return;
-    isGlasses = await _hasPhotoStreamingCharacteristic(connectedDevice!.id);
+    if (_recordingDevice == null) return;
+    isGlasses = await _hasPhotoStreamingCharacteristic(_recordingDevice!.id);
     if (!isGlasses) return;
-    await openGlassProcessing(connectedDevice!, (p) {}, setHasTranscripts);
+    await openGlassProcessing(_recordingDevice!, (p) {}, setHasTranscripts);
     _socket?.stop(reason: 'reset state open glass');
     notifyListeners();
   }
@@ -665,20 +664,21 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future streamDeviceRecording({
-    BTDeviceStruct? btDevice,
+    BTDeviceStruct? device,
     bool restartBytesProcessing = true,
   }) async {
-    debugPrint("streamDeviceRecording ${btDevice} ${restartBytesProcessing}");
-    if (btDevice != null) {
-      _updateConnectedDevice(btDevice);
+    debugPrint("streamDeviceRecording ${device} ${restartBytesProcessing}");
+    if (device != null) {
+      _updateRecordingDevice(device);
     }
+
     await _resetState(
       restartBytesProcessing: restartBytesProcessing,
     );
   }
 
   Future stopStreamDeviceRecording() async {
-    _updateConnectedDevice(null);
+    _updateRecordingDevice(null);
     await _resetState();
   }
 
