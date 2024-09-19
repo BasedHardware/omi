@@ -94,8 +94,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () async {
             Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
-            // TODO: thinh, socket check why we need to close socket provider here, disable temporary
-            //context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
             await provider.changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();

@@ -164,15 +164,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updatePluginProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => WebSocketProvider()),
-          ChangeNotifierProxyProvider3<MemoryProvider, MessageProvider, WebSocketProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, message, wsProvider, CaptureProvider? previous) =>
+            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
                 (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
           ),
-          ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
+          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
+            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
                 (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
@@ -181,10 +180,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider3<DeviceProvider, CaptureProvider, WebSocketProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider2<DeviceProvider, CaptureProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, capture, wsProvider, SpeechProfileProvider? previous) =>
-                (previous?..setProviders(device, capture, wsProvider)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, capture, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device, capture)) ?? SpeechProfileProvider(),
           ),
           ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
             create: (context) => MemoryDetailProvider(),

@@ -207,7 +207,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         await provider.initialise(true);
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () async {
-                                          provider.finalize(true);
+                                          provider.finalize();
                                         });
                                         provider.updateStartedRecording(true);
                                       },
