@@ -325,7 +325,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         // 1.5 minutes seems reasonable
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
-                                          provider.finalize(false);
+                                          provider.finalize();
                                         });
                                         provider.updateStartedRecording(true);
                                       },

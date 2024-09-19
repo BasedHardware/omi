@@ -75,7 +75,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
 
@@ -138,7 +137,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await _getAudioCodec(connectedDevice!.id);
                   await context.read<CaptureProvider>().changeAudioRecordProfile(codec);

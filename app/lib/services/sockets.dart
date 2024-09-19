@@ -8,14 +8,14 @@ abstract class ISocketService {
 
   Future<TranscripSegmentSocketService?> memory(
       {required BleAudioCodec codec, required int sampleRate, bool force = false});
-  TranscripSegmentSocketService speechProfile();
+  Future<TranscripSegmentSocketService?> speechProfile(
+      {required BleAudioCodec codec, required int sampleRate, bool force = false});
 }
 
 abstract interface class ISocketServiceSubsciption {}
 
 class SocketServicePool extends ISocketService {
-  TranscripSegmentSocketService? _memory;
-  TranscripSegmentSocketService? _speechProfile;
+  TranscripSegmentSocketService? _socket;
 
   @override
   void start() {
@@ -24,50 +24,54 @@ class SocketServicePool extends ISocketService {
 
   @override
   void stop() async {
-    await _memory?.stop();
-    await _speechProfile?.stop();
+    await _socket?.stop();
   }
 
   // Warn: Should use a better solution to prevent race conditions
-  bool memoryMutex = false;
-  @override
-  Future<TranscripSegmentSocketService?> memory(
+  bool mutex = false;
+  Future<TranscripSegmentSocketService?> socket(
       {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
-    while (memoryMutex) {
+    while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
-    memoryMutex = true;
-
-    debugPrint("socket memory > $codec $sampleRate $force");
+    mutex = true;
 
     try {
       if (!force &&
-          _memory?.codec == codec &&
-          _memory?.sampleRate == sampleRate &&
-          _memory?.state == SocketServiceState.connected) {
-        return _memory;
+          _socket?.codec == codec &&
+          _socket?.sampleRate == sampleRate &&
+          _socket?.state == SocketServiceState.connected) {
+        return _socket;
       }
 
       // new socket
-      await _memory?.stop();
+      await _socket?.stop();
 
-      _memory = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
-      await _memory?.start();
-      if (_memory?.state != SocketServiceState.connected) {
+      _socket = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
+      await _socket?.start();
+      if (_socket?.state != SocketServiceState.connected) {
         return null;
       }
 
-      return _memory;
+      return _socket;
     } finally {
-      memoryMutex = false;
+      mutex = false;
     }
 
     return null;
   }
 
   @override
-  TranscripSegmentSocketService speechProfile() {
-    // TODO: implement speechProfile
-    throw UnimplementedError();
+  Future<TranscripSegmentSocketService?> memory(
+      {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
+    debugPrint("socket memory > $codec $sampleRate $force");
+    return await socket(codec: codec, sampleRate: sampleRate, force: force);
+  }
+
+  @override
+  Future<TranscripSegmentSocketService?> speechProfile(
+      {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
+    debugPrint("socket speech profile > $codec $sampleRate $force");
+    return await socket(codec: codec, sampleRate: sampleRate, force: force);
   }
 }
