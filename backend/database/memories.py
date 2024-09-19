@@ -56,11 +56,13 @@ def delete_memory(uid, memory_id):
 
 
 def filter_memories_by_date(uid, start_date, end_date):
+    # TODO: check utc comparison or not?
     user_ref = db.collection('users').document(uid)
     query = (
         user_ref.collection('memories')
         .where(filter=FieldFilter('created_at', '>=', start_date))
         .where(filter=FieldFilter('created_at', '<=', end_date))
+        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('discarded', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
@@ -85,7 +87,10 @@ def get_memories_by_id(uid, memory_ids):
     memories = []
     for doc in docs:
         if doc.exists:
-            memories.append(doc.to_dict())
+            data = doc.to_dict()
+            if data.get('deleted') or data.get('discarded'):
+                continue
+            memories.append(data)
     return memories
 
 
