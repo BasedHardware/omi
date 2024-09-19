@@ -53,14 +53,20 @@ class PureCore {
 
   PureCore.createInstance() {
     internetConnection = InternetConnection.createInstance(
+        /*
       customCheckOptions: [
         InternetCheckOption(
-            uri: Uri.parse(Env.apiBaseUrl!),
-            timeout: const Duration(
-              seconds: 30,
-            )),
+          uri: Uri.parse(Env.apiBaseUrl!),
+          timeout: const Duration(
+            seconds: 30,
+          ),
+          responseStatusFn: (resp) {
+            return resp.statusCode < 500;
+          },
+        ),
       ],
-    );
+		*/
+        );
   }
 }
 
@@ -141,13 +147,14 @@ class PureSocket implements IPureSocket {
   @override
   Future disconnect() async {
     _status = PureSocketStatus.disconnected;
+	onClosed();
     await _cleanUp();
   }
 
   Future _cleanUp() async {
     _internetLostDelayTimer?.cancel();
     _internetStatusListener?.cancel();
-    await _channel?.sink.close(socket_channel_status.goingAway);
+    await _channel?.sink.close(socket_channel_status.normalClosure);
   }
 
   @override
@@ -277,7 +284,7 @@ class TranscripSegmentSocketService implements IPureSocketListener {
   }) {
     final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
     var params =
-        '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile';
+        '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch';
     String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params';
 
     _socket = PureSocket(url);
@@ -285,16 +292,12 @@ class TranscripSegmentSocketService implements IPureSocketListener {
   }
 
   void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
-    if (_listeners.containsKey(context.hashCode)) {
-      _listeners.remove(context.hashCode);
-    }
+    _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
   }
 
   void unsubscribe(Object context) {
-    if (_listeners.containsKey(context.hashCode)) {
-      _listeners.remove(context.hashCode);
-    }
+    _listeners.remove(context.hashCode);
   }
 
   Future start() async {
@@ -334,6 +337,7 @@ class TranscripSegmentSocketService implements IPureSocketListener {
 
   @override
   void onMessage(event) {
+    debugPrint("[TranscriptSegmentService] onMessage ${event}");
     if (event == 'ping') return;
 
     // Decode json
@@ -351,7 +355,7 @@ class TranscripSegmentSocketService implements IPureSocketListener {
     // Transcript segments
     if (jsonEvent is List) {
       var segments = jsonEvent;
-      if (segments.isNotEmpty) {
+      if (segments.isEmpty) {
         return;
       }
       _listeners.forEach((k, v) {

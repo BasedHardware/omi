@@ -228,7 +228,8 @@ class SpeechProfileCardWidget extends StatelessWidget {
                       if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                         if (context.mounted) {
                           // TODO: is the websocket restarting once the user comes back?
-                          context.read<DeviceProvider>().restartWebSocket();
+                          // TODO: thinh, socket speech profile
+                          // context.read<DeviceProvider>().restartWebSocket();
                         }
                       }
                     },

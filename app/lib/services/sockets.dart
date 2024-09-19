@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/utils/pure_socket.dart';
 
@@ -5,7 +6,8 @@ abstract class ISocketService {
   void start();
   void stop();
 
-  Future<TranscripSegmentSocketService?> memory({required BleAudioCodec codec, required int sampleRate, bool force = false});
+  Future<TranscripSegmentSocketService?> memory(
+      {required BleAudioCodec codec, required int sampleRate, bool force = false});
   TranscripSegmentSocketService speechProfile();
 }
 
@@ -36,22 +38,31 @@ class SocketServicePool extends ISocketService {
     }
     memoryMutex = true;
 
-    if (!force &&
-        _memory?.codec == codec &&
-        _memory?.sampleRate == sampleRate &&
-        _memory?.state == SocketServiceState.connected) {
+    debugPrint("socket memory > $codec $sampleRate $force");
+
+    try {
+      if (!force &&
+          _memory?.codec == codec &&
+          _memory?.sampleRate == sampleRate &&
+          _memory?.state == SocketServiceState.connected) {
+        return _memory;
+      }
+
+      // new socket
+      await _memory?.stop();
+
+      _memory = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
+      await _memory?.start();
+      if (_memory?.state != SocketServiceState.connected) {
+        return null;
+      }
+
       return _memory;
+    } finally {
+      memoryMutex = false;
     }
 
-    // new socket
-    await _memory?.stop();
-
-    _memory = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
-    await _memory?.start();
-
-    memoryMutex = false;
-
-    return _memory;
+    return null;
   }
 
   @override

@@ -204,7 +204,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
       await createMemory();
       captureProvider?.clearTranscripts();
     }
-    await captureProvider?.resetState(restartBytesProcessing: true);
+    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true);
     uploadingProfile = false;
     profileCompleted = true;
     text = '';
@@ -297,7 +297,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     uploadingProfile = false;
     profileCompleted = false;
     await webSocketProvider?.closeWebSocketWithoutReconnect('closing');
-    await captureProvider?.resetState(restartBytesProcessing: true, isFromSpeechProfile: true);
+	// TODO: thinh, socket check why? disable temporary
+    // await captureProvider?.resetState(restartBytesProcessing: true, isFromSpeechProfile: true);
     notifyListeners();
   }
 
