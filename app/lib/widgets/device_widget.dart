@@ -37,7 +37,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: MediaQuery.sizeOf(context).height <= 700 ? 280 * widget.sizeMultiplier : 400 * widget.sizeMultiplier,
+      height: MediaQuery.sizeOf(context).height <= 700 ? 220 * widget.sizeMultiplier : 340 * widget.sizeMultiplier,
       child: Center(
         child: Stack(
           alignment: Alignment.center,

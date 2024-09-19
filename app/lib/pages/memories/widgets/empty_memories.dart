@@ -11,7 +11,7 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.only(top: 200.0),
+      padding: EdgeInsets.only(top: 240.0),
       child: Text(
         'No memories generated yet.',
         style: TextStyle(color: Colors.grey, fontSize: 16),

@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -34,19 +34,22 @@ Future<CreateMemoryResponse?> createMemoryServer({
   bool triggerIntegrations = true,
   String? language,
   File? audioFile,
+  String? source,
+  String? processingMemoryId,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations',
+    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
     headers: {},
     method: 'POST',
     body: jsonEncode({
-      'started_at': startedAt.toIso8601String(),
-      'finished_at': finishedAt.toIso8601String(),
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'finished_at': finishedAt.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
       'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
       'language': language, // maybe determine auto?
+      'processing_memory_id': processingMemoryId,
       // 'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
     }),
   );
@@ -70,7 +73,7 @@ Future<CreateMemoryResponse?> createMemoryServer({
 }
 
 Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
-  var optEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
+  var optEmotionalFeedback = GrowthbookUtil().isOmiFeedbackEnabled();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
@@ -100,7 +103,9 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
       url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
-    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
+    var body = utf8.decode(response.bodyBytes);
+    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
   }
@@ -149,6 +154,21 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   return null;
 }
 
+Future<ServerProcessingMemory?> getProcessingMemoryById(String id) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/processing-memories/$id',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getProcessingMemoryById: ${response.body}');
+  if (response.statusCode == 200) {
+    return ServerProcessingMemory.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
 Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',
@@ -162,6 +182,42 @@ Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
     return (jsonDecode(response.body) as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList();
   }
   return [];
+}
+
+class TranscriptsResponse {
+  List<TranscriptSegment> deepgram;
+  List<TranscriptSegment> soniox;
+  List<TranscriptSegment> whisperx;
+
+  TranscriptsResponse({
+    this.deepgram = const [],
+    this.soniox = const [],
+    this.whisperx = const [],
+  });
+
+  factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
+    return TranscriptsResponse(
+      deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+    );
+  }
+}
+
+Future<TranscriptsResponse> getMemoryTranscripts(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/transcripts',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return TranscriptsResponse();
+  debugPrint('getMemoryTranscripts: ${response.body}');
+  if (response.statusCode == 200) {
+    var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
+    return TranscriptsResponse.fromJson(transcripts);
+  }
+  return TranscriptsResponse();
 }
 
 Future<bool> hasMemoryRecording(String memoryId) async {
@@ -209,4 +265,56 @@ Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}
   if (response == null) return false;
   debugPrint('setMemoryVisibility: ${response.body}');
   return response.statusCode == 200;
+}
+
+Future<bool> setMemoryEventsState(
+  String memoryId,
+  List<int> eventsIdx,
+  List<bool> values,
+) async {
+  print(jsonEncode({
+    'events_idx': eventsIdx,
+    'values': values,
+  }));
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/events',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({
+      'events_idx': eventsIdx,
+      'values': values,
+    }),
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryEventsState: ${response.body}');
+  return response.statusCode == 200;
+}
+
+//this is expected to return complete memories
+Future<List<ServerMemory>> sendStorageToBackend(File file, String dateTimeStorageString) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$dateTimeStorageString'),
+  );
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
+    } else {
+      debugPrint('Failed to storageSend. Status code: ${response.statusCode}');
+      return [];
+    }
+
+    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    debugPrint('getMemories length: ${memories.length}');
+
+    return memories;
+  } catch (e) {
+    debugPrint('An error occurred storageSend: $e');
+    return [];
+  }
 }

@@ -98,27 +98,30 @@ class TranscriptSegment {
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
-      if (joinedSimilarSegments.isNotEmpty &&
-          (joinedSimilarSegments.last.speaker == newSegment.speaker ||
-              (joinedSimilarSegments.last.isUser && newSegment.isUser))) {
+      // TODO: bad edge case because of using deepgram
+      // - previous segments before ws2 is switched on the backend, (duration of speech profile) will not be assigned.
+      bool isNotEmpty = joinedSimilarSegments.isNotEmpty;
+      bool isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
+      bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
+
+      if (isNotEmpty && isSameSpeaker && isSameUser) {
         joinedSimilarSegments.last.text += ' ${newSegment.text}';
         joinedSimilarSegments.last.end = newSegment.end;
       } else {
         joinedSimilarSegments.add(newSegment);
       }
     }
-    // segments is not empty
-    // prev segment speaker is same as first new segment speaker || prev segment is user and first new segment is user
-    // and the difference between the end of the last segment and the start of the first new segment is less than 30 seconds
 
-    if (segments.isNotEmpty &&
-        (segments.last.speaker == joinedSimilarSegments[0].speaker ||
-            (segments.last.isUser && joinedSimilarSegments[0].isUser)) &&
-        (joinedSimilarSegments[0].start - segments.last.end < 30)) {
+    if (joinedSimilarSegments.isEmpty) return;
+
+    bool isNotEmpty = segments.isNotEmpty;
+    bool isSameUser = isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
+    bool isSameSpeaker = isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
+    bool withinThreshold = isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
+
+    if (isNotEmpty && isSameSpeaker && isSameUser && withinThreshold) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       segments.last.end = joinedSimilarSegments[0].end;
-      // let's not switch to user, if the 1st segment is not, it will be always the user basically.
-      // if (joinedSimilarSegments[0].isUser) segments.last.isUser = true;
       joinedSimilarSegments.removeAt(0);
     }
 

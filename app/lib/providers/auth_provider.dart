@@ -5,16 +5,57 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AuthenticationProvider extends BaseProvider {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? user;
+  String? authToken;
+
+  bool isSignedIn() {
+    return _auth.currentUser != null;
+  }
+
+  AuthenticationProvider() {
+    _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      this.user = user;
+      SharedPreferencesUtil().uid = user?.uid ?? '';
+      SharedPreferencesUtil().email = user?.email ?? '';
+      SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
+    });
+    _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      if (user == null) {
+        debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
+        SharedPreferencesUtil().authToken = '';
+        authToken = null;
+      } else {
+        debugPrint('User is signed in at ${DateTime.now()} with user ${user.uid}');
+        try {
+          if (SharedPreferencesUtil().authToken.isEmpty ||
+              DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
+            authToken = await getIdToken();
+          }
+        } catch (e) {
+          authToken = null;
+          debugPrint('Failed to get token: $e');
+        }
+      }
+      notifyListeners();
+    });
+  }
+
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
       setLoadingState(true);
       await signInWithGoogle();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
+      }
       setLoadingState(false);
     }
   }
@@ -23,7 +64,11 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       await signInWithApple();
-      _signIn(onSignIn);
+      if (isSignedIn()) {
+        _signIn(onSignIn);
+      } else {
+        AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
+      }
       setLoadingState(false);
     }
   }
@@ -60,6 +105,7 @@ class AuthenticationProvider extends BaseProvider {
       String newUid = user.uid;
       SharedPreferencesUtil().uid = newUid;
       MixpanelManager().identify();
+      identifyGleap();
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError('Unexpected error signing in, please try again');
@@ -71,7 +117,7 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void openPrivacyPolicy() {
-    _launchUrl('https://basedhardware.com/privacy-policy');
+    _launchUrl('https://www.omi.me/pages/privacy');
   }
 
   void _launchUrl(String url) async {

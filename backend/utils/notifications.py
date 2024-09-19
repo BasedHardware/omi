@@ -7,7 +7,7 @@ import database.notifications as notification_db
 
 
 def send_notification(token: str, title: str, body: str, data: dict = None):
-    print('send_notification', token, title, body, data)
+    print('send_notification')
     notification = messaging.Notification(title=title, body=body)
     message = messaging.Message(notification=notification, token=token)
 
@@ -16,13 +16,12 @@ def send_notification(token: str, title: str, body: str, data: dict = None):
 
     try:
         response = messaging.send(message)
-        print("Successfully sent message:", response)
+        print('send_notification success:', response)
     except Exception as e:
         error_message = str(e)
         if "Requested entity was not found" in error_message:
             notification_db.remove_token(token)
-
-        print("Error sending message:", e)
+        print('send_notification failed:', e)
 
 
 async def send_bulk_notification(user_tokens: list, title: str, body: str):

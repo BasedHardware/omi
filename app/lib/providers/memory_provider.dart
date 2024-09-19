@@ -1,13 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/memories/process.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:tuple/tuple.dart';
 
 class MemoryProvider extends ChangeNotifier {
   List<ServerMemory> memories = [];
@@ -15,7 +10,7 @@ class MemoryProvider extends ChangeNotifier {
   List memoriesWithDates = [];
 
   bool isLoadingMemories = false;
-  bool displayDiscardMemories = false;
+  bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
 
@@ -42,7 +37,9 @@ class MemoryProvider extends ChangeNotifier {
 
   void filterMemories(String query) {
     filteredMemories = [];
-    filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
+    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
+        ? memories
+        : memories.where((memory) => !memory.discarded).toList();
     filteredMemories = query.isEmpty
         ? filteredMemories
         : filteredMemories
@@ -52,13 +49,18 @@ class MemoryProvider extends ChangeNotifier {
                   .contains(query.toLowerCase()),
             )
             .toList();
+    if (query == '' && filteredMemories.isEmpty) {
+      filteredMemories = memories;
+      SharedPreferencesUtil().showDiscardedMemories = true;
+      hasNonDiscardedMemories = false;
+    }
     populateMemoriesWithDates();
     notifyListeners();
   }
 
   void toggleDiscardMemories() {
-    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
-    displayDiscardMemories = !displayDiscardMemories;
+    MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
+    SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
     filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();
@@ -76,7 +78,9 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    await retryFailedMemories();
+    initFilteredMemories();
+    // No need to retry memories anymore as it is handled by the server
+    // retryFailedMemories();
     notifyListeners();
   }
 
@@ -115,69 +119,41 @@ class MemoryProvider extends ChangeNotifier {
         memories[i] = memory;
       }
     }
+    initFilteredMemories();
+    notifyListeners();
+  }
+
+  /////////////////////////////////////////////////////////////////
+  ////////// Delete Memory With Undo Functionality ///////////////
+
+  Map<String, ServerMemory> memoriesToDelete = {};
+
+  void deleteMemoryLocally(ServerMemory memory, int index) {
+    memoriesToDelete[memory.id] = memory;
+    memories.removeWhere((element) => element.id == memory.id);
     filterMemories('');
     notifyListeners();
   }
+
+  void deleteMemoryOnServer(String memoryId) {
+    deleteMemoryServer(memoryId);
+    memoriesToDelete.remove(memoryId);
+  }
+
+  void undoDeleteMemory(String memoryId, int index) {
+    if (memoriesToDelete.containsKey(memoryId)) {
+      ServerMemory memory = memoriesToDelete.remove(memoryId)!;
+      memories.insert(index, memory);
+      filterMemories('');
+    }
+    notifyListeners();
+  }
+  /////////////////////////////////////////////////////////////////
 
   void deleteMemory(ServerMemory memory, int index) {
-    memories.removeAt(index);
+    memories.removeWhere((element) => element.id == memory.id);
     deleteMemoryServer(memory.id);
     filterMemories('');
-    notifyListeners();
-  }
-
-  // TODO: Move this to somewhere more suitable
-  Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
-    if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
-    return await processTranscriptContent(
-      segments: memory.transcriptSegments,
-      sendMessageToChat: null,
-      startedAt: memory.startedAt,
-      finishedAt: memory.finishedAt,
-      geolocation: memory.geolocation,
-      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
-      triggerIntegrations: false,
-      language: memory.language ?? 'en',
-    );
-  }
-
-  Future retryFailedMemories() async {
-    if (SharedPreferencesUtil().failedMemories.isEmpty) return;
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
-    // retry failed memories
-    List<Future<ServerMemory?>> asyncEvents = [];
-    for (var item in SharedPreferencesUtil().failedMemories) {
-      asyncEvents.add(_retrySingleFailed(item));
-    }
-    // TODO: should be able to retry including created at date.
-    // TODO: should trigger integrations? probably yes, but notifications?
-
-    List<ServerMemory?> results = await Future.wait(asyncEvents);
-    var failedCopy = List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
-
-    for (var i = 0; i < results.length; i++) {
-      ServerMemory? newCreatedMemory = results[i];
-
-      if (newCreatedMemory != null) {
-        SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-        memories.insert(0, newCreatedMemory);
-      } else {
-        var prefsMemory = SharedPreferencesUtil().failedMemories[i];
-        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
-          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
-              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
-        SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
-      }
-    }
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
     notifyListeners();
   }
 }

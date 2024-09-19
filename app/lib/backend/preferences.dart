@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -31,6 +31,10 @@ class SharedPreferencesUtil {
     saveString('btDeviceStruct', jsonEncode(value.toJson()));
   }
 
+  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
+    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
+
   BTDeviceStruct get btDeviceStruct {
     final String device = getString('btDeviceStruct') ?? '';
     if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
@@ -48,6 +52,14 @@ class SharedPreferencesUtil {
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
+
+  set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
+
+  bool get notificationsEnabled => getBool('notificationsEnabled') ?? false;
+
+  set locationEnabled(bool value) => saveBool('locationEnabled', value);
+
+  bool get locationEnabled => getBool('locationEnabled') ?? false;
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -68,6 +80,10 @@ class SharedPreferencesUtil {
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
+
+  String get transcriptionModel => getString('transcriptionModel') ?? 'deepgram';
+
+  set transcriptionModel(String value) => saveString('transcriptionModel', value);
 
   bool get useFriendApiKeys => getBool('useFriendApiKeys') ?? true;
 
@@ -108,6 +124,15 @@ class SharedPreferencesUtil {
   String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
 
   set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
+  bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
+
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  int get enabledPluginsCount => pluginsList.where((element) => element.enabled).length;
+
+  int get enabledPluginsIntegrationsCount =>
+      pluginsList.where((element) => element.enabled && element.worksExternally()).length;
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
@@ -320,13 +345,9 @@ class SharedPreferencesUtil {
 
   bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
 
-  set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
-
-  bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
-
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
 
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
 
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 

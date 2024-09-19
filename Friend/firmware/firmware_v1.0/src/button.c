@@ -7,7 +7,7 @@
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include "transport.h"
-
+#include "button.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
@@ -74,13 +74,6 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 void check_button_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
-
-typedef enum {
-    IDLE, 
-    ONE_PRESS,
-    TWO_PRESS,
-    GRACE
-} FSM_STATE_T;
 
 
 #define DEFAULT_STATE 0
@@ -308,4 +301,8 @@ void activate_button_work() {
 
 void register_button_service() {
     bt_gatt_service_register(&button_service);
+}
+
+FSM_STATE_T get_current_button_state() {
+    return current_button_state;
 }

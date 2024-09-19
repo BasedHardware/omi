@@ -1,18 +1,20 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
+  redirect('/memories');
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-12 text-xl text-white md:p-24 md:text-lg">
-      <div>
+    <div className="flex min-h-screen flex-col items-center justify-between p-12 text-xl text-white md:p-24 md:text-lg">
+      <div className="mt-10">
         <Image
-          src={'/logo.webp'}
+          src={'/omi-white.webp'}
           alt="Based Hardware Logo"
           width={100}
           height={64}
-          className="mx-auto h-auto w-[50px]"
+          className="mx-auto h-auto w-[80px]"
         />
-        <h2 className="mt-2 text-center text-xl md:text-2xl">
+        <h2 className="mt-5 text-center text-lg md:text-xl">
           We are working in this feature
         </h2>
         <p className="mt-10 max-w-xl text-center">
@@ -27,6 +29,6 @@ export default function Home() {
           Order now
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

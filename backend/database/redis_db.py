@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 import redis
@@ -30,7 +30,7 @@ def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.utcnow().isoformat(), 'uid': uid}
+    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid}
     r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 
@@ -67,6 +67,18 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     if not reviews:
         return {}
     return eval(reviews)
+
+
+def set_user_has_soniox_speech_profile(uid: str):
+    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
+
+
+def get_user_has_soniox_speech_profile(uid: str) -> bool:
+    return r.exists(f'users:{uid}:has_soniox_speech_profile')
+
+
+def remove_user_soniox_speech_profile(uid: str):
+    r.delete(f'users:{uid}:has_soniox_speech_profile')
 
 
 def store_user_speech_profile(uid: str, data: List[List[int]]):

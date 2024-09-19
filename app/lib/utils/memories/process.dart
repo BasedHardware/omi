@@ -11,8 +11,8 @@ import 'package:friend_private/services/notification_service.dart';
 import 'package:tuple/tuple.dart';
 
 Future<ServerMemory?> processTranscriptContent({
-  required List<TranscriptSegment> segments,
   required String language,
+  List<TranscriptSegment> segments = const [],
   List<Tuple2<String, String>> photos = const [],
   bool triggerIntegrations = true,
   DateTime? startedAt,
@@ -20,6 +20,8 @@ Future<ServerMemory?> processTranscriptContent({
   Geolocation? geolocation,
   File? audioFile,
   Function(ServerMessage)? sendMessageToChat,
+  String? source,
+  String? processingMemoryId,
 }) async {
   debugPrint('processTranscriptContent');
   if (segments.isEmpty && photos.isEmpty) return null;
@@ -32,6 +34,8 @@ Future<ServerMemory?> processTranscriptContent({
     triggerIntegrations: triggerIntegrations,
     language: language,
     audioFile: audioFile,
+    source: source,
+    processingMemoryId: processingMemoryId,
   );
   if (result == null || result.memory == null) return null;
 
@@ -44,9 +48,32 @@ Future<ServerMemory?> processTranscriptContent({
 
   for (var message in result.messages) {
     String pluginId = message.pluginId ?? '';
+    // TODO: memory created notification should be triggered from backend
     NotificationService.instance
         .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
     if (sendMessageToChat != null) sendMessageToChat(message);
   }
   return result.memory;
+}
+
+Future<ServerMemory?> processMemoryContent({
+  required ServerMemory memory,
+  required List<ServerMessage> messages,
+  Function(ServerMessage)? sendMessageToChat,
+}) async {
+  debugPrint('processTranscriptContent');
+  webhookOnMemoryCreatedCall(memory).then((s) {
+    if (s.isNotEmpty) {
+      NotificationService.instance
+          .createNotification(title: 'Developer: On Memory Created', body: s, notificationId: 11);
+    }
+  });
+
+  for (var message in messages) {
+    String pluginId = message.pluginId ?? '';
+    NotificationService.instance
+        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
+    if (sendMessageToChat != null) sendMessageToChat(message);
+  }
+  return memory;
 }

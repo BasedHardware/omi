@@ -59,6 +59,12 @@ post_install do |installer|
         'PERMISSION_LOCATION=1',
         'PERMISSION_LOCATION_WHENINUSE=1',
         'PERMISSION_LOCATION_ALWAYS=1',
+
+        ## dart: PermissionGroup.calendarFullAccess
+        'PERMISSION_EVENTS_FULL_ACCESS=1',
+
+        ## dart: PermissionGroup.calendar
+        'PERMISSION_EVENTS=1',
       ]
 
     end

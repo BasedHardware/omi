@@ -1,16 +1,24 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from modal import Image, App, Secret, asgi_app, mount, Stub, Mount
-from modal import Stub, Image, Secret, Mount, asgi_app
+from modal import App, mount
+from modal import Image, Secret, asgi_app
 
 # from _mem0 import router as mem0_router
-from _multion import router as multion_router, demo_router
-# from advanced import openglass as advanced_openglass_router
-from advanced import realtime as advanced_realtime_router
+from _multion import router as multion_router
 from basic import memory_created as basic_memory_created_router
-from basic import realtime as basic_realtime_router
 from oauth import memory_created as oauth_memory_created_router
 from zapier import memory_created as zapier_memory_created_router
+
+# from advanced import openglass as advanced_openglass_router
+
+# ************* @DEPRECATED **************
+# REALTIME plugins are not ready yet: (After various attempts, we found the following:
+# 1. Super expensive to maintain, running a llm or certain logic every 3 seconds for 10 hours a day is not cheap.
+# 2. There has to be a better way to trigger those plugins, current way is not efficient.
+# 3. Didn't find killer use cases.
+# from advanced import realtime as advanced_realtime_router
+# from basic import realtime as basic_realtime_router
+# ****************************************
 
 app = FastAPI()
 app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
@@ -20,6 +28,7 @@ modal_app = App(
     secrets=[Secret.from_dotenv('.env')],
     mounts=[mount.Mount.from_local_dir('templates/', remote_path='templates/')]
 )
+
 
 @modal_app.function(
     image=(
@@ -38,13 +47,11 @@ def api():
 
 
 app.include_router(basic_memory_created_router.router)
-app.include_router(basic_realtime_router.router)
-
 app.include_router(oauth_memory_created_router.router)
-
 app.include_router(zapier_memory_created_router.router)
 
-app.include_router(advanced_realtime_router.router)
+# app.include_router(basic_realtime_router.router)
+# app.include_router(advanced_realtime_router.router)
 # app.include_router(advanced_openglass_router.router)
 
 # ***********************************************
@@ -52,12 +59,4 @@ app.include_router(advanced_realtime_router.router)
 # ***********************************************
 
 # Multion
-app.include_router(demo_router, prefix="/multion-demo")
-
 app.include_router(multion_router.router)
-
-# Mem0
-# app.include_router(mem0_router.router)
-
-
-

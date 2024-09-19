@@ -14,7 +14,7 @@ Future<bool> userHasSpeakerProfile() async {
     method: 'GET',
     body: '',
   );
-  if (response == null) return false;
+  if (response == null) return true;
   debugPrint('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_profile'] ?? false;
@@ -72,8 +72,6 @@ Future<bool> uploadProfile(File file) async {
     throw Exception('An error occurred uploadSample: $e');
   }
 }
-
-/**/
 
 Future<List<String>> getExpandedProfileSamples() async {
   var response = await makeApiCall(

@@ -3,9 +3,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
+import { useParams, usePathname } from 'next/navigation';
 
 export default function AppHeader() {
   const [scrollPosition, setScrollPosition] = useState(0);
+  const params = useParams();
+  const pathname = usePathname();
+
+  const dreamforcePage = pathname.includes('dreamforce');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,27 +24,28 @@ export default function AppHeader() {
     };
   }, []);
 
-  return (
+  return !dreamforcePage ? (
     <header
-      className={`sticky top-0 z-30 flex items-center justify-between p-4 px-4 text-white backdrop-blur-md transition-all duration-500 md:px-12 ${
-        scrollPosition > 100 ? 'bg-black bg-opacity-10' : ''
+      className={`fixed top-0 z-30 flex w-full items-center justify-between bg-black/40 p-4 px-4 text-white transition-all duration-500 md:bg-transparent md:px-12 ${
+        scrollPosition > 100 ? 'backdrop-blur-md md:!bg-black md:!bg-opacity-10' : ''
       }`}
     >
       <h1 className="flex items-center gap-2 text-xl">
         <Image
-          src={'/logo.webp'}
+          src={'/omi-white.webp'}
           alt="Based Hardware Logo"
-          width={68}
+          width={146}
           height={64}
-          className="h-auto w-[25px]"
+          className="h-auto w-[50px]"
         />
-        <span className="hidden md:inline">Based Hardware</span>
       </h1>
       <nav>
         <ul className="flex gap-3 text-sm md:gap-4 md:text-base">
-          <li>
-            <ShareButton />
-          </li>
+          {params.id && (
+            <li>
+              <ShareButton />
+            </li>
+          )}
           <li>
             <Link
               href={`https://basedhardware.com/`}
@@ -52,5 +58,5 @@ export default function AppHeader() {
         </ul>
       </nav>
     </header>
-  );
+  ) : null;
 }

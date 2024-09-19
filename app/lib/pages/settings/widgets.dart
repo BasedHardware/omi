@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 final Map<String, String> availableLanguages = {
   'Bulgarian': 'bg',
@@ -38,7 +40,6 @@ getLanguageName(String code) {
   return availableLanguages.entries.firstWhere((element) => element.value == code).key;
 }
 
-
 getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguage) {
   return [
     const Padding(
@@ -46,7 +47,7 @@ getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguag
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'RECORDING SETTINGS',
+          'SPEECH LANGUAGE',
           style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
         ),
       ),
@@ -122,7 +123,10 @@ getPreferencesWidgets({
                   child: const Text(
                     'Help improve Friend by sharing anonymized analytics data',
                     style: TextStyle(
-                        color: Color.fromARGB(255, 150, 150, 150), fontSize: 16, decoration: TextDecoration.underline),
+                      color: Color.fromARGB(255, 150, 150, 150),
+                      fontSize: 16,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
               ),
@@ -143,105 +147,6 @@ getPreferencesWidgets({
                 width: 22,
                 height: 22,
                 child: optInAnalytics // Show the icon only when checked
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white, // Tick color
-                        size: 18,
-                      )
-                    : null, // No icon when unchecked
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-    Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-      child: InkWell(
-        onTap: (SharedPreferencesUtil().hasSpeakerProfile || optInEmotionalFeedback) ? onOptInEmotionalFeedback : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Enable Omi Feedback',
-                    style: TextStyle(
-                      color: Color.fromARGB(255, 150, 150, 150),
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(
-                    width: 8,
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: optInEmotionalFeedback
-                          ? const Color.fromARGB(255, 150, 150, 150)
-                          : Colors.transparent, // Fill color when checked
-                      border: Border.all(
-                        color: const Color.fromARGB(255, 150, 150, 150),
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    width: 22,
-                    height: 22,
-                    child: optInEmotionalFeedback // Show the icon only when checked
-                        ? const Icon(
-                            Icons.check,
-                            color: Colors.white, // Tick color
-                            size: 18,
-                          )
-                        : null, // No icon when unchecked
-                  ),
-                ],
-              ),
-              !SharedPreferencesUtil().hasSpeakerProfile
-                  ? const Text(
-                      'Set-up your speech profile to enable Omi Feedback',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const SizedBox(),
-            ],
-          ),
-        ),
-      ),
-    ),
-    Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
-      child: InkWell(
-        onTap: onDevModeClicked,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Developer Mode',
-                style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: devModeEnabled
-                      ? const Color.fromARGB(255, 150, 150, 150)
-                      : Colors.transparent, // Fill color when checked
-                  border: Border.all(
-                    color: const Color.fromARGB(255, 150, 150, 150),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                width: 22,
-                height: 22,
-                child: devModeEnabled // Show the icon only when checked
                     ? const Icon(
                         Icons.check,
                         color: Colors.white, // Tick color
@@ -292,8 +197,120 @@ getPreferencesWidgets({
           ),
         ),
       ),
-    )
+    ),
+    Visibility(
+      visible: GrowthbookUtil().displayOmiFeedback(),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+        child: InkWell(
+          onTap:
+              (SharedPreferencesUtil().hasSpeakerProfile || optInEmotionalFeedback) ? onOptInEmotionalFeedback : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Enable Omi Feedback',
+                      style: TextStyle(
+                        color: Color.fromARGB(255, 150, 150, 150),
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: optInEmotionalFeedback
+                            ? const Color.fromARGB(255, 150, 150, 150)
+                            : Colors.transparent, // Fill color when checked
+                        border: Border.all(
+                          color: const Color.fromARGB(255, 150, 150, 150),
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      width: 22,
+                      height: 22,
+                      child: optInEmotionalFeedback // Show the icon only when checked
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white, // Tick color
+                              size: 18,
+                            )
+                          : null, // No icon when unchecked
+                    ),
+                  ],
+                ),
+                !SharedPreferencesUtil().hasSpeakerProfile
+                    ? const Text(
+                        'Set-up your speech profile to enable Omi Feedback',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const SizedBox(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+    // Padding(
+    //   padding: const EdgeInsets.fromLTRB(0, 0, 8, 0),
+    //   child: InkWell(
+    //     onTap: onDevModeClicked,
+    //     child: Padding(
+    //       padding: const EdgeInsets.symmetric(vertical: 12.0),
+    //       child: Row(
+    //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    //         children: [
+    //           const Text(
+    //             'Enable Developer Mode',
+    //             style: TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+    //           ),
+    //           Container(
+    //             decoration: BoxDecoration(
+    //               color: devModeEnabled
+    //                   ? const Color.fromARGB(255, 150, 150, 150)
+    //                   : Colors.transparent, // Fill color when checked
+    //               border: Border.all(
+    //                 color: const Color.fromARGB(255, 150, 150, 150),
+    //                 width: 2,
+    //               ),
+    //               borderRadius: BorderRadius.circular(12),
+    //             ),
+    //             width: 22,
+    //             height: 22,
+    //             child: devModeEnabled // Show the icon only when checked
+    //                 ? const Icon(
+    //                     Icons.check,
+    //                     color: Colors.white, // Tick color
+    //                     size: 18,
+    //                   )
+    //                 : null, // No icon when unchecked
+    //           ),
+    //         ],
+    //       ),
+    //     ),
+    //   ),
+    // ),
   ];
+}
+
+getItemAddonWrapper(List<Widget> widgets) {
+  return Card(
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+    child: Column(
+      children: widgets,
+    ),
+  );
 }
 
 getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool visibility = true}) {
@@ -326,6 +343,43 @@ getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool vis
                 const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
               ],
             ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
+  return GestureDetector(
+    onTap: (){
+      MixpanelManager().pageOpened('Settings $title');
+      onTap();
+    },
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 29, 29, 29),
+          borderRadius: BorderRadius.circular(10.0),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(icon, color: Colors.white, size: 18),
+                ],
+              ),
+              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+            ],
           ),
         ),
       ),

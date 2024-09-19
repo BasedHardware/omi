@@ -2,4 +2,5 @@
 #include <zephyr/kernel.h>
 int speaker_init();
 uint16_t speak();
-void buzz();
+int play_boot_sound();
+int init_haptic_pin();

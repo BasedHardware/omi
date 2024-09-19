@@ -25,10 +25,11 @@ def _get_memory_by_id(uid: str, memory_id: str) -> dict:
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
-        uid: str = Depends(auth.get_current_user_uid)
+        source: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
     Create Memory endpoint.
+    :param source:
     :param create_memory: data to create memory
     :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
     :param language_code: language.
@@ -49,7 +50,11 @@ def create_memory(
     else:
         create_memory.language = language_code
 
-    memory = process_memory(uid, language_code, create_memory)
+    if create_memory.processing_memory_id:
+        print(
+            f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}, processing_memory_id: {create_memory.processing_memory_id}")
+
+    memory = process_memory(uid, language_code, create_memory, force_process=source == 'speech_profile_onboarding')
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
 
@@ -70,6 +75,7 @@ def reprocess_memory(
     Whenever a user wants to reprocess a memory, or wants to force process a discarded one
     :return: The updated memory after reprocessing.
     """
+    print('')
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -97,8 +103,17 @@ def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_u
     return memories_db.get_memory_photos(uid, memory_id)
 
 
+@router.get(
+    "/v1/memories/{memory_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]], tags=['memories']
+)
+def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return memories_db.get_memory_transcripts_by_model(uid, memory_id)
+
+
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('delete_memory', memory_id, uid)
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
@@ -108,6 +123,22 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
 def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
     return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
+
+
+@router.patch("/v1/memories/{memory_id}/events", response_model=dict, tags=['memories'])
+def set_memory_events_state(
+        memory_id: str, data: SetMemoryEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+    events = memory.structured.events
+    for i, event_idx in enumerate(data.events_idx):
+        if event_idx >= len(events):
+            continue
+        events[event_idx].created = data.values[i]
+
+    memories_db.update_memory_events(uid, memory_id, [event.dict() for event in events])
+    return {"status": "Ok"}
 
 
 @router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory, tags=['memories'])
@@ -166,6 +197,10 @@ def set_assignee_memory_segment(
 
     return memory
 
+
+# *********************************************
+# ************* SHARING MEMORIES **************
+# *********************************************
 
 @router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
 def set_memory_visibility(

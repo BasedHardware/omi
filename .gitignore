@@ -13,6 +13,7 @@ yarn.lock
 
 # General
 .idea/
+.next/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -146,3 +147,10 @@ app/lib/env/dev_env.g.dart
 app/lib/env/prod_env.g.dart
 /app/lib/libobjectbox.dylib
 /app/lib/objectbox-model.json
+
+/backend/scripts/research
+/backend/scripts/research/*.txt
+/backend/scripts/research/*.md
+/backend/scripts/research/*.json
+/backend/scripts/research/*.csv
+/backend/scripts/research/users

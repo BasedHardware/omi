@@ -2,19 +2,19 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct> deviceList;
+  final bool isFromOnboarding;
   final VoidCallback goNext;
 
   const FoundDevices({
     super.key,
-    required this.deviceList,
     required this.goNext,
+    required this.isFromOnboarding,
   });
 
   @override
@@ -41,12 +41,25 @@ class _FoundDevicesState extends State<FoundDevices> {
         },
         showInfo: (info) {
           if (info == "DEVICE_CONNECTED") {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => const HomePageWrapper(),
-              ),
-              (route) => false,
-            );
+            // Navigator.of(context).pushAndRemoveUntil(
+            //   MaterialPageRoute(
+            //     builder: (context) => const HomePageWrapper(),
+            //   ),
+            //   (route) => false,
+            // );
+            Navigator.pop(context);
+          } else if (info == 'OPENGLASS_NOT_SUPPORTED') {
+            showDialog(
+                context: context,
+                builder: (context) {
+                  return getDialog(context, () {
+                    Navigator.pop(context);
+                  }, () {
+                    Navigator.pop(context);
+                  }, "OpenGlass isn't supported",
+                      "OpenGlass isn’t available in this version of the app. It will be added in a future update once it's ready",
+                      singleButton: true);
+                });
           } else {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(info),
@@ -60,9 +73,9 @@ class _FoundDevicesState extends State<FoundDevices> {
           children: [
             !provider.isConnected
                 ? Text(
-                    widget.deviceList.isEmpty
+                    provider.deviceList.isEmpty
                         ? 'Searching for devices...'
-                        : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
@@ -77,7 +90,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: Color(0x66FFFFFF),
                     ),
                   ),
-            if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
+            if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
@@ -112,7 +125,7 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   _devicesList(OnboardingProvider provider) {
-    return (widget.deviceList.mapIndexed(
+    return (provider.deviceList.mapIndexed(
       (index, device) {
         bool isConnecting = provider.connectingToDeviceId == device.id;
 
@@ -121,6 +134,8 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? () async {
                   await provider.handleTap(
                     device: device,
+                    isFromOnboarding: widget.isFromOnboarding,
+                    goNext: widget.goNext,
                   );
                 }
               : null,
