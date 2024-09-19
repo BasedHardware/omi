@@ -20,6 +20,7 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -85,13 +86,7 @@ class CaptureProvider extends ChangeNotifier
 
   String? processingMemoryId;
 
-  bool resetStateAlreadyCalled = false;
   String dateTimeStorageString = "";
-
-  void setResetStateAlreadyCalled(bool value) {
-    resetStateAlreadyCalled = value;
-    notifyListeners();
-  }
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -120,7 +115,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void updateConnectedDevice(BTDeviceStruct? device) {
+  void _updateConnectedDevice(BTDeviceStruct? device) {
     debugPrint('connected device changed from ${connectedDevice?.id} to ${device?.id}');
     connectedDevice = device;
     notifyListeners();
@@ -294,7 +289,7 @@ class CaptureProvider extends ChangeNotifier
     return true;
   }
 
-  void _cleanNew() async {
+  Future _clean() async {
     segments = [];
 
     audioStorage?.clearAudioBytes();
@@ -307,11 +302,15 @@ class CaptureProvider extends ChangeNotifier
     photos = [];
     conversationId = const Uuid().v4();
     processingMemoryId = null;
+  }
+
+  Future _cleanNew() async {
+    _clean();
 
     // Create new socket session
     // Warn: should have a better solution to keep the socket alived
-    await _socket?.stop(reason: 'reset new memory session');
-    await initiateWebsocket();
+    debugPrint("_cleanNew");
+    await _initiateWebsocket(force: true);
   }
 
   _handleCalendarCreation(ServerMemory memory) {
@@ -334,10 +333,20 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> initiateWebsocket([
+  Future<void> changeAudioRecordProfile([
     BleAudioCodec? audioCodec,
     int? sampleRate,
   ]) async {
+    debugPrint("changeAudioRecordProfile");
+    await _resetState(restartBytesProcessing: true);
+    await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
+  }
+
+  Future<void> _initiateWebsocket({
+    BleAudioCodec? audioCodec,
+    int? sampleRate,
+    bool force = false,
+  }) async {
     debugPrint('initiateWebsocket in capture_provider');
 
     BleAudioCodec codec = audioCodec ?? SharedPreferencesUtil().deviceCodec;
@@ -346,7 +355,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // TODO: thinh, socket
-    _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate);
+    _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
     if (_socket == null) {
       throw Exception("Can not create new memory socket");
     }
@@ -456,35 +465,20 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> resetState({
+  Future<void> _resetState({
     bool restartBytesProcessing = true,
-    bool isFromSpeechProfile = false,
-    BTDeviceStruct? btDevice,
   }) async {
-    if (resetStateAlreadyCalled) {
-      debugPrint('resetState already called');
-      return;
-    }
-    setResetStateAlreadyCalled(true);
-    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing, isFromSpeechProfile=$isFromSpeechProfile');
+    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing');
 
     _cleanupCurrentState();
     await startOpenGlass();
-    if (!isFromSpeechProfile) {
-      await _handleMemoryCreation(restartBytesProcessing);
-    }
+    await _handleMemoryCreation(restartBytesProcessing);
 
-    bool codecChanged = await _checkCodecChange();
+    await _ensureSocketConnection(force: true);
 
-    if (restartBytesProcessing || codecChanged) {
-      await _manageWebSocketConnection(codecChanged, isFromSpeechProfile);
-    }
-
-    await initiateFriendAudioStreaming(isFromSpeechProfile);
+    await _initiateFriendAudioStreaming();
     // TODO: Commenting this for now as DevKit 2 is not yet used in production
     // await initiateStorageBytesStreaming();
-
-    setResetStateAlreadyCalled(false);
     notifyListeners();
   }
 
@@ -573,16 +567,16 @@ class CaptureProvider extends ChangeNotifier
     return false;
   }
 
-  Future<void> _manageWebSocketConnection(bool codecChanged, bool isFromSpeechProfile) async {
-    if (codecChanged || _socket?.state != SocketServiceState.connected) {
-      await _socket?.stop(reason: 'reset state $isFromSpeechProfile');
-      // if (!isFromSpeechProfile) {
-      await initiateWebsocket();
-      // }
+  Future<void> _ensureSocketConnection({bool force = false}) async {
+    debugPrint("_ensureSocketConnection");
+    var codec = SharedPreferencesUtil().deviceCodec;
+    if (force || (codec != _socket?.codec || _socket?.state != SocketServiceState.connected)) {
+      await _socket?.stop(reason: 'reset state, force $force');
+      await _initiateWebsocket(force: force);
     }
   }
 
-  Future<void> initiateFriendAudioStreaming(bool isFromSpeechProfile) async {
+  Future<void> _initiateFriendAudioStreaming() async {
     debugPrint('connectedDevice: $connectedDevice in initiateFriendAudioStreaming');
     if (connectedDevice == null) return;
 
@@ -591,7 +585,7 @@ class CaptureProvider extends ChangeNotifier
       debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
       SharedPreferencesUtil().deviceCodec = codec;
       notifyInfo('FIM_CHANGE');
-      await _manageWebSocketConnection(true, isFromSpeechProfile);
+      await _ensureSocketConnection();
     }
 
     // Why is the connectedDevice null at this point?
@@ -670,11 +664,36 @@ class CaptureProvider extends ChangeNotifier
     ServiceManager.instance().mic.stop();
   }
 
+  Future streamDeviceRecording({
+    BTDeviceStruct? btDevice,
+    bool restartBytesProcessing = true,
+  }) async {
+    debugPrint("streamDeviceRecording ${btDevice} ${restartBytesProcessing}");
+    if (btDevice != null) {
+      _updateConnectedDevice(btDevice);
+    }
+    await _resetState(
+      restartBytesProcessing: restartBytesProcessing,
+    );
+  }
+
+  Future stopStreamDeviceRecording() async {
+    _updateConnectedDevice(null);
+    await _resetState();
+  }
+
   // Socket handling
 
   @override
   void onClosed() {
-    debugPrint('socket is closed');
+    debugPrint('[Provider] Socket is closed');
+
+    _clean();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
   }
 
   @override

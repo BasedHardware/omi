@@ -544,7 +544,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         if (language != SharedPreferencesUtil().recordingsLanguage ||
                             hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
                             transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          context.read<DeviceProvider>().restartWebSocket();
+                          // TODO: thinh, socket speech profile
+                          // context.read<DeviceProvider>().restartWebSocket();
                         }
                       },
                     ),

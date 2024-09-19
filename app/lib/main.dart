@@ -173,7 +173,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProxyProvider2<CaptureProvider, WebSocketProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
             update: (BuildContext context, captureProvider, wsProvider, DeviceProvider? previous) =>
-                (previous?..setProviders(captureProvider, wsProvider)) ?? DeviceProvider(),
+                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
           ),
           ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
             create: (context) => OnboardingProvider(),
