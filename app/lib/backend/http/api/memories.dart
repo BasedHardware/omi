@@ -188,11 +188,13 @@ class TranscriptsResponse {
   List<TranscriptSegment> deepgram;
   List<TranscriptSegment> soniox;
   List<TranscriptSegment> whisperx;
+  List<TranscriptSegment> speechmatics;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
     this.whisperx = const [],
+    this.speechmatics = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -200,6 +202,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
