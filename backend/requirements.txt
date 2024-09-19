@@ -9,6 +9,7 @@ altair==5.4.0
 annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 anyio==4.4.0
+assemblyai==0.33.0
 asteroid-filterbanks==0.4.0
 asttokens==2.4.1
 attrs==24.1.0
@@ -33,11 +34,14 @@ decorator==5.1.1
 deepgram-sdk==3.4.0
 deprecation==2.1.0
 distro==1.9.0
+dnspython==2.6.1
 docopt==0.6.2
 einops==0.8.0
+email_validator==2.2.0
 executing==2.0.1
 fal_client==0.4.1
 fastapi==0.112.0
+fastapi-cli==0.0.5
 fastapi-utilities==0.2.0
 filelock==3.15.4
 firebase-admin==6.5.0
@@ -60,12 +64,14 @@ googleapis-common-protos==1.63.2
 groq==0.9.0
 grpcio==1.65.4
 grpcio-status==1.62.3
+grpcio-tools==1.62.3
 grpclib==0.4.7
 h11==0.14.0
 h2==4.1.0
 hpack==4.0.0
 httpcore==1.0.5
 httplib2==0.22.0
+httptools==0.6.1
 httpx==0.27.0
 httpx-sse==0.4.0
 huggingface-hub==0.24.5
@@ -76,6 +82,7 @@ idna==3.7
 ipython==8.26.0
 jedi==0.19.1
 Jinja2==3.1.4
+jiwer==3.0.4
 joblib==1.4.2
 jsonpatch==1.33
 jsonpointer==3.0.0
@@ -105,6 +112,7 @@ matplotlib-inline==0.1.7
 mdurl==0.1.2
 modal==0.64.7
 monotonic==1.6
+more-itertools==10.5.0
 mplcursors==0.5.3
 mpld3==0.5.10
 mpmath==1.3.0
@@ -121,6 +129,7 @@ omegaconf==2.3.0
 onnxruntime==1.19.0
 openai==1.39.0
 optuna==3.6.1
+opuslib==3.0.1
 orjson==3.10.6
 packaging==24.1
 pandas==2.2.2
@@ -132,6 +141,7 @@ pinecone-plugin-inference==1.0.3
 pinecone-plugin-interface==0.0.7
 platformdirs==4.2.2
 plotly==5.23.0
+polling2==0.5.0
 pooch==1.8.2
 portalocker==2.10.1
 posthog==3.5.2
@@ -157,6 +167,7 @@ pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.9.0
 pynndescent==0.5.13
+PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
@@ -166,6 +177,7 @@ pytorch-metric-learning==2.6.0
 pytz==2024.1
 PyYAML==6.0.1
 qdrant-client==1.11.0
+rapidfuzz==3.9.7
 redis==5.0.8
 referencing==0.35.1
 regex==2024.7.24
@@ -184,10 +196,13 @@ sigtools==4.0.1
 six==1.16.0
 smmap==5.0.1
 sniffio==1.3.1
+soniox==1.10.1
 sortedcontainers==2.4.0
+SoundCard==0.4.3
 soundfile==0.12.1
 soxr==0.4.0
 speechbrain==1.0.0
+speechmatics-python==2.0.1
 SQLAlchemy==2.0.32
 stack-data==0.6.3
 starlette==0.37.2
@@ -195,7 +210,7 @@ streamlit==1.37.1
 sympy==1.13.1
 synchronicity==0.6.7
 tabulate==0.9.0
-tenacity==8.5.0
+tenacity==8.2.3
 tensorboardX==2.6.2.2
 threadpoolctl==3.5.0
 tiktoken==0.7.0
@@ -220,10 +235,9 @@ umap-learn==0.5.6
 uritemplate==4.1.1
 urllib3==2.2.2
 uvicorn==0.30.5
+uvloop==0.20.0
 watchdog==4.0.2
 watchfiles==0.22.0
 wcwidth==0.2.13
 websockets==12.0
 yarl==1.9.4
-pyogg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f
-opuslib==3.0.1

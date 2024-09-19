@@ -15,8 +15,8 @@ from database.redis_db import get_user_speech_profile
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
-from utils.memories.postprocess_memory import postprocess_memory as postprocess_memory_util
 from utils.audio import create_wav_from_bytes, merge_wav_files
+from utils.memories.postprocess_memory import postprocess_memory as postprocess_memory_util
 from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_postprocessing_audio
 from utils.processing_memories import create_memory_by_processing_memory
@@ -95,12 +95,31 @@ def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
 
     segments.extend(joined_similar_segments)
 
+    # Speechmatics specific issue with punctuation
+    for i, segment in enumerate(segments):
+        segments[i].text = (
+            segments[i].text.strip()
+            .replace('  ', '')
+            .replace(' ,', ',')
+            .replace(' .', '.')
+            .replace(' ?', '?')
+        )
     return segments
 
 
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
+    speechmatics = "speechmatics"
+
+    @staticmethod
+    def get_model_name(value):
+        if value == STTService.deepgram:
+            return 'deepgram_streaming'
+        elif value == STTService.soniox:
+            return 'soniox_streaming'
+        elif value == STTService.speechmatics:
+            return 'speechmatics_streaming'
 
 
 async def _websocket_util(
@@ -112,6 +131,9 @@ async def _websocket_util(
 
     if stt_service == STTService.soniox and (
             sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
+        stt_service = STTService.deepgram
+
+    if stt_service == STTService.speechmatics and (sample_rate != 16000 or codec != 'opus'):
         stt_service = STTService.deepgram
 
     # Check: Why do we need try-catch around websocket.accept?
@@ -182,6 +204,7 @@ async def _websocket_util(
         processing_audio_frames.append(audio_buffer)
 
     soniox_socket = None
+    speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
 
@@ -216,6 +239,10 @@ async def _websocket_util(
             soniox_socket = await process_audio_soniox(
                 stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
             )
+        elif stt_service == STTService.speechmatics:
+            speechmatics_socket = await process_audio_speechmatics(
+                stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
+            )
 
     except Exception as e:
         print(f"Initial processing error: {e}")
@@ -228,7 +255,7 @@ async def _websocket_util(
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
-    async def receive_audio(dg_socket1, dg_socket2, soniox_socket):
+    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket):
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal timer_start
@@ -251,6 +278,10 @@ async def _websocket_util(
                 if soniox_socket is not None:
                     decoded_opus = decoder.decode(bytes(data), frame_size=160)
                     await soniox_socket.send(decoded_opus)
+
+                if speechmatics_socket is not None:
+                    decoded_opus = decoder.decode(bytes(data), frame_size=160)
+                    await speechmatics_socket.send(decoded_opus)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
@@ -281,6 +312,8 @@ async def _websocket_util(
                 dg_socket2.finish()
             if soniox_socket:
                 await soniox_socket.close()
+            if speechmatics_socket:
+                await speechmatics_socket.close()
 
     # heart beat
     async def send_heartbeat():
@@ -410,8 +443,7 @@ async def _websocket_util(
         # Process
         emotional_feedback = processing_memory.emotional_feedback
         status, new_memory = postprocess_memory_util(
-            memory.id, file_path, uid, emotional_feedback,
-            'deepgram_streaming' if stt_service == STTService.deepgram else 'soniox_streaming'
+            memory.id, file_path, uid, emotional_feedback, STTService.get_model_name(stt_service)
         )
         if status == 200:
             memory = new_memory
@@ -587,7 +619,8 @@ async def _websocket_util(
             processing_memory = None
 
     try:
-        receive_task = asyncio.create_task(receive_audio(deepgram_socket, deepgram_socket2, soniox_socket))
+        receive_task = asyncio.create_task(
+            receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket))
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
         # Run task
