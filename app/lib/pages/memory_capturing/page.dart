@@ -77,7 +77,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                 const SizedBox(width: 4),
                 const Text("🎙️"),
                 const SizedBox(width: 4),
-                const Expanded(child: Text("In Progress")),
+                const Expanded(child: Text("In progress")),
               ],
             ),
           ),
