@@ -41,6 +41,12 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
+  Future clearChat() async {
+    var mes = await clearChatServer();
+    messages = mes;
+    notifyListeners();
+  }
+
   void addMessage(ServerMessage message) {
     messages.insert(0, message);
     notifyListeners();
