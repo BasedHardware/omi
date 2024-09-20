@@ -7,7 +7,6 @@ import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -80,7 +79,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
-      provider.stopStreamRecording();
+      await provider.stopStreamRecording();
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().createMemory();
       MixpanelManager().phoneMicRecordingStopped();
@@ -95,8 +94,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () async {
             Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
-            await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            await provider.changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();
           },
