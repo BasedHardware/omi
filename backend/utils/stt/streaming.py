@@ -198,7 +198,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     if language not in soniox_valid_languages:
         raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
-    has_speech_profile = create_user_speech_profile(uid)  # only english too
+    has_speech_profile = create_user_speech_profile(uid) if uid else False  # only english too
 
     # Construct the initial request with all required and optional parameters
     request = {
@@ -232,6 +232,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
+                    # print(response)
                     fw = response['fw']
                     if not fw:
                         continue
@@ -350,7 +351,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
                             continue
                         segments = []
                         for r in results:
-                            print(r)
+                            # print(r)
                             if not r['alternatives']:
                                 continue
 
