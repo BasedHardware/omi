@@ -130,8 +130,8 @@ def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(
     segments_data = json.loads(segments)
     transcript_segments = [TranscriptSegment(**segment) for segment in segments_data]
 
-    people = get_people_with_speech_samples(uid)
-
+    # people = get_people_with_speech_samples(uid)
+    people = []
     try:
         result = classify_segments(audio_file.filename, profile_path, people, transcript_segments)
         print(result)
