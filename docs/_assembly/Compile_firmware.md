@@ -11,11 +11,10 @@ Important: If you purchased an assembled device please skip this step
 
 If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
 
-### Official firmware:
+### Want to install a pre-built firmware? Navigate [here](https://docs.omi.me/get_started/Flash_device/) 
 
-Go to [Releases](https://github.com/BasedHardware/Omi/releases) in Github, and find the latest official firmware release. To use this firmware, simply download it and skip to step 6. If you would like to build the firmware yourself please follow all the steps below.
 
-### Build your own firmware:
+## Build your own firmware:
 
 1. Set up nRF Connect by following the tutorial in this video: [https://youtu.be/EAJdOqsL9m8](https://youtu.be/EAJdOqsL9m8)
 
