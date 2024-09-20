@@ -134,6 +134,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.startForegroundTask();
       if (mounted) {
         await context.read<HomeProvider>().setUserPeople();
+
+        // Start stream recording
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
       }
     });
 
