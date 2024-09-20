@@ -7,6 +7,7 @@ import opuslib
 import requests
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
+from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
@@ -205,6 +206,7 @@ async def _websocket_util(
 
     soniox_socket = None
     speechmatics_socket = None
+    speechmatics_socket2 = None
     deepgram_socket = None
     deepgram_socket2 = None
 
@@ -240,9 +242,20 @@ async def _websocket_util(
                 stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
             )
         elif stt_service == STTService.speechmatics:
+            file_path = None
+            if language == 'en' and codec == 'opus' and include_speech_profile:
+                file_path = get_profile_audio_if_exists(uid)
+                duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
+                stream_transcript, speech_profile_stream_id, language, preseconds=duration
             )
+            if duration:
+                #     speechmatics_socket2 = await process_audio_speechmatics(
+                #         stream_transcript, speech_profile_stream_id, language, preseconds=duration
+                #     )
+                await send_initial_file_path(file_path, speechmatics_socket)
+                print('speech_profile speechmatics duration', duration)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
@@ -255,7 +268,7 @@ async def _websocket_util(
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
-    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket):
+    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal timer_start
@@ -279,9 +292,18 @@ async def _websocket_util(
                     decoded_opus = decoder.decode(bytes(data), frame_size=160)
                     await soniox_socket.send(decoded_opus)
 
-                if speechmatics_socket is not None:
+                if speechmatics_socket1 is not None:
                     decoded_opus = decoder.decode(bytes(data), frame_size=160)
-                    await speechmatics_socket.send(decoded_opus)
+                    await speechmatics_socket1.send(decoded_opus)
+
+                    # elapsed_seconds = time.time() - timer_start
+                    # if elapsed_seconds > duration or not dg_socket2:
+                    #     if speechmatics_socket2:
+                    #         print('Killing socket2 speechmatics')
+                    #         speechmatics_socket2.close()
+                    #         speechmatics_socket2 = None
+                    # else:
+                    #     speechmatics_socket2.send(decoded_opus)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
@@ -314,6 +336,8 @@ async def _websocket_util(
                 await soniox_socket.close()
             if speechmatics_socket:
                 await speechmatics_socket.close()
+            if speechmatics_socket2:
+                await speechmatics_socket2.close()
 
     # heart beat
     async def send_heartbeat():
