@@ -56,11 +56,13 @@ def delete_memory(uid, memory_id):
 
 
 def filter_memories_by_date(uid, start_date, end_date):
+    # TODO: check utc comparison or not?
     user_ref = db.collection('users').document(uid)
     query = (
         user_ref.collection('memories')
         .where(filter=FieldFilter('created_at', '>=', start_date))
         .where(filter=FieldFilter('created_at', '<=', end_date))
+        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('discarded', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
@@ -85,7 +87,10 @@ def get_memories_by_id(uid, memory_ids):
     memories = []
     for doc in docs:
         if doc.exists:
-            memories.append(doc.to_dict())
+            data = doc.to_dict()
+            if data.get('deleted') or data.get('discarded'):
+                continue
+            memories.append(data)
     return memories
 
 
@@ -117,11 +122,13 @@ def get_memory_transcripts_by_model(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     deepgram_ref = memory_ref.collection('deepgram_streaming')
     soniox_ref = memory_ref.collection('soniox_streaming')
+    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
     whisperx_ref = memory_ref.collection('fal_whisperx')
 
     return {
         'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
         'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
     }
 

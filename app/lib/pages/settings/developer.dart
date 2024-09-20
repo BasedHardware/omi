@@ -127,7 +127,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                         underline: Container(height: 0, color: Colors.white),
                         isExpanded: true,
                         itemHeight: 48,
-                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
+                        items: ['deepgram', 'soniox', 'speechmatics'].map<DropdownMenuItem<String>>((String value) {
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(
