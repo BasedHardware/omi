@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Flashing FRIEND Firmware
+title: Update FRIEND Firmware
 nav_order: 3
 ---
 # Video Tutorial
@@ -13,8 +13,12 @@ This guide will walk you through the process of flashing the latest firmware ont
 
 ## Downloading the Firmware
 
-1. Go to the [FRIEND GitHub repository](https://github.com/BasedHardware/Omi) and navigate to the "Devices > FRIEND > firmware" section.
+1. Go to the [FRIEND GitHub repository](https://github.com/BasedHardware/Omi) and navigate to the " FRIEND > firmware" section.
 2. Find the latest firmware release and bootloader, then download the corresponding `.uf2` files.
+
+Or download these files
+   - **Bootloader:** [bootloader0.9.0.uf2](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/devices/Friend/firmware/bootloader/bootloader0.9.0.uf2)
+   -  **Firmware:** [firmware1.0.4.uf2](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/devices/Friend/firmware/firmware1.0.4.uf2)
 
 ## Putting FRIEND into DFU Mode
 
