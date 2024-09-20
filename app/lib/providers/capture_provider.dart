@@ -41,6 +41,8 @@ class CaptureProvider extends ChangeNotifier
   MessageProvider? messageProvider;
   TranscripSegmentSocketService? _socket;
 
+  Timer? _keepAliveTimer;
+
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
     messageProvider = p;
@@ -636,6 +638,7 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream?.cancel();
     _memoryCreationTimer?.cancel();
     _socket?.unsubscribe(this);
+    _keepAliveTimer?.cancel();
     super.dispose();
   }
 
@@ -700,12 +703,34 @@ class CaptureProvider extends ChangeNotifier
     setMemoryCreating(false);
     setHasTranscripts(false);
     notifyListeners();
+
+    // Keep alived
+    _startKeepAlivedServices();
+  }
+
+  void _startKeepAlivedServices() {
+    if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+        debugPrint("[Provider] keep alived...");
+
+        if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
+          t.cancel();
+          return;
+        }
+
+        await _initiateWebsocket();
+      });
+    }
   }
 
   @override
   void onError(Object err) {
     debugPrint('err: $err');
     notifyListeners();
+
+    // Keep alived
+    _startKeepAlivedServices();
   }
 
   @override
