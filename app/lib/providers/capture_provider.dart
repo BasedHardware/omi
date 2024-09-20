@@ -332,6 +332,10 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  Future<void> onRecordProfileSettingChanged() async {
+    await _resetState(restartBytesProcessing: true);
+  }
+
   Future<void> changeAudioRecordProfile([
     BleAudioCodec? audioCodec,
     int? sampleRate,
@@ -353,14 +357,13 @@ class CaptureProvider extends ChangeNotifier
 
     debugPrint('is ws null: ${_socket == null}');
 
-    // TODO: thinh, socket
+    // Get memory socket
     _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
     if (_socket == null) {
       throw Exception("Can not create new memory socket");
     }
-
-    // Ok
     _socket?.subscribe(this, this);
+
     if (segments.isNotEmpty) {
       // means that it was a reconnection, so we need to reset
       streamStartedAtSecond = null;
@@ -458,7 +461,6 @@ class CaptureProvider extends ChangeNotifier
 
   Future resetForSpeechProfile() async {
     closeBleStream();
-    // TODO: thinh, socket, check why we need reset for speech profile here
     await _socket?.stop(reason: 'reset for speech profile');
     setAudioBytesConnected(false);
     notifyListeners();

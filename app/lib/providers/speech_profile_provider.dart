@@ -132,12 +132,7 @@ class SpeechProfileProvider extends ChangeNotifier
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
-
-    // Ok
     _socket?.subscribe(this, this);
-    print('Websocket connected in speech profile');
-    // TODO: thinh, socket ?
-    //notifyListeners();
   }
 
   _handleCompletion() async {
