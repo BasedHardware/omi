@@ -133,9 +133,10 @@ async def _websocket_util(
     if stt_service == STTService.soniox and (
             sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
         stt_service = STTService.deepgram
-
     if stt_service == STTService.speechmatics and (sample_rate != 16000 or codec != 'opus'):
         stt_service = STTService.deepgram
+
+    # At some point try running all the models together to easily compare
 
     # Check: Why do we need try-catch around websocket.accept?
     try:
