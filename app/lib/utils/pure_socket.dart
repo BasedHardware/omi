@@ -147,7 +147,7 @@ class PureSocket implements IPureSocket {
   @override
   Future disconnect() async {
     _status = PureSocketStatus.disconnected;
-	onClosed();
+    onClosed();
     await _cleanUp();
   }
 
@@ -283,8 +283,8 @@ class TranscripSegmentSocketService implements IPureSocketListener {
     this.newMemoryWatch = true,
   }) {
     final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-    var params =
-        '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch';
+    var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+        '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
     String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params';
 
     _socket = PureSocket(url);
