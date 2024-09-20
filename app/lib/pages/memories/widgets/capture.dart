@@ -34,13 +34,15 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
   void _onReceiveTaskData(dynamic data) {
     if (data is Map<String, dynamic>) {
       if (data.containsKey('latitude') && data.containsKey('longitude')) {
-        context.read<CaptureProvider>().setGeolocation(Geolocation(
-              latitude: data['latitude'],
-              longitude: data['longitude'],
-              accuracy: data['accuracy'],
-              altitude: data['altitude'],
-              time: DateTime.parse(data['time']),
-            ));
+        if (mounted) {
+          context.read<CaptureProvider>().setGeolocation(Geolocation(
+                latitude: data['latitude'],
+                longitude: data['longitude'],
+                accuracy: data['accuracy'],
+                altitude: data['altitude'],
+                time: DateTime.parse(data['time']),
+              ));
+        }
       } else {
         if (mounted) {
           context.read<CaptureProvider>().setGeolocation(null);
@@ -73,7 +75,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // context.read<WebSocketProvider>().closeWebSocket();
     super.dispose();
   }
 
@@ -136,11 +137,9 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
               builder: (c) => getDialog(
                 context,
                 () async {
-                  context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Firmware change detected');
                   var connectedDevice = deviceProvider.connectedDevice;
                   var codec = await _getAudioCodec(connectedDevice!.id);
-                  context.read<CaptureProvider>().resetState(restartBytesProcessing: true);
-                  context.read<CaptureProvider>().initiateWebsocket(codec);
+                  await context.read<CaptureProvider>().changeAudioRecordProfile(codec);
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   }

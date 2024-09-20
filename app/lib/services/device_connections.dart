@@ -45,6 +45,8 @@ abstract class DeviceConnection {
 
   DeviceConnectionState get connectionState => _connectionState;
 
+  Function(String deviceId, DeviceConnectionState state)? _connectionStateChangedCallback;
+
   DateTime? get pongAt => _pongAt;
 
   late StreamSubscription<BluetoothConnectionState> _connectionStateSubscription;
@@ -62,8 +64,9 @@ abstract class DeviceConnection {
     }
 
     // Connect
+    _connectionStateChangedCallback = onConnectionStateChanged;
     _connectionStateSubscription = bleDevice.connectionState.listen((BluetoothConnectionState state) async {
-      _onBleConnectionStateChanged(state, onConnectionStateChanged);
+      _onBleConnectionStateChanged(state);
     });
 
     await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
@@ -82,26 +85,26 @@ abstract class DeviceConnection {
     _services = await bleDevice.discoverServices();
   }
 
-  void _onBleConnectionStateChanged(
-      BluetoothConnectionState state, Function(String deviceId, DeviceConnectionState state)? callback) async {
+  void _onBleConnectionStateChanged(BluetoothConnectionState state) async {
     if (state == BluetoothConnectionState.disconnected && _connectionState == DeviceConnectionState.connected) {
       _connectionState = DeviceConnectionState.disconnected;
-      await disconnect(callback: callback);
+      await disconnect();
       return;
     }
 
     if (state == BluetoothConnectionState.connected && _connectionState == DeviceConnectionState.disconnected) {
       _connectionState = DeviceConnectionState.connected;
-      if (callback != null) {
-        callback(device.id, _connectionState);
+      if (_connectionStateChangedCallback != null) {
+        _connectionStateChangedCallback!(device.id, _connectionState);
       }
     }
   }
 
-  Future<void> disconnect({Function(String deviceId, DeviceConnectionState state)? callback}) async {
+  Future<void> disconnect() async {
     _connectionState = DeviceConnectionState.disconnected;
-    if (callback != null) {
-      callback(device.id, _connectionState);
+    if (_connectionStateChangedCallback != null) {
+      _connectionStateChangedCallback!(device.id, _connectionState);
+      _connectionStateChangedCallback = null;
     }
     await bleDevice.disconnect();
     _connectionStateSubscription.cancel();

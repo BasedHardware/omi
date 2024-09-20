@@ -14,7 +14,7 @@ Future<bool> userHasSpeakerProfile() async {
     method: 'GET',
     body: '',
   );
-  if (response == null) return false;
+  if (response == null) return true;
   debugPrint('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_profile'] ?? false;
