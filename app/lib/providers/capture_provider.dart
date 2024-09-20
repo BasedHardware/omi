@@ -204,6 +204,7 @@ class CaptureProvider extends ChangeNotifier
     // Notify
     setMemoryCreating(false);
     setHasTranscripts(false);
+    _handleCalendarCreation(memory);
     notifyListeners();
     return;
   }
@@ -324,6 +325,7 @@ class CaptureProvider extends ChangeNotifier
     List<int> indexes = events.mapIndexed((index, e) => index).toList();
     setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
     for (var i = 0; i < events.length; i++) {
+      if (events[i].created) continue;
       events[i].created = true;
       CalendarUtil().createEvent(
         events[i].title,
