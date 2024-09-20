@@ -180,10 +180,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
           ),
           ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider2<DeviceProvider, CaptureProvider, SpeechProfileProvider>(
+          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
             create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, capture, SpeechProfileProvider? previous) =>
-                (previous?..setProviders(device, capture)) ?? SpeechProfileProvider(),
+            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
+                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
           ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
             create: (context) => MemoryDetailProvider(),

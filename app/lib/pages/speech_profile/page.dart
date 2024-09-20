@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -30,6 +31,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await context.read<SpeechProfileProvider>().updateDevice();
     });
+
     super.initState();
   }
 
@@ -71,10 +73,15 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
         if (context.read<SpeechProfileProvider>().isInitialised) {
           WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
             await context.read<SpeechProfileProvider>().close();
+
+            // Restart device recording
+            if (mounted && context.mounted) {
+              await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(restartBytesProcessing: true);
+            }
           });
         }
       },
-      child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
+      child: Consumer2<SpeechProfileProvider, CaptureProvider>(builder: (context, provider, _, child) {
         return MessageListener<SpeechProfileProvider>(
           showInfo: (info) {
             if (info == 'SCROLL_DOWN') {
@@ -320,12 +327,24 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           );
                                           return;
                                         }
+
+                                        // Stop device recoding
+                                        if (mounted && context.mounted) {
+                                          await Provider.of<CaptureProvider>(context, listen: false)
+                                              .stopStreamDeviceRecording();
+                                        }
+
                                         await provider.initialise(false);
-                                        // provider.initiateWebsocket(false);
                                         // 1.5 minutes seems reasonable
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
                                           provider.finalize();
+
+                                          // Restart device recording
+                                          if (mounted && context.mounted) {
+                                            Provider.of<CaptureProvider>(context, listen: false)
+                                                .streamDeviceRecording();
+                                          }
                                         });
                                         provider.updateStartedRecording(true);
                                       },
