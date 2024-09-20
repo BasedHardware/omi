@@ -19,32 +19,36 @@ from utils.stt.vad import vad_is_empty
 def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
     memory_data = _get_memory_by_id(uid, memory_id)
     if not memory_data:
-        return (404, "Memory not found")
+        return 404, "Memory not found"
 
     memory = Memory(**memory_data)
     if memory.discarded:
         print('postprocess_memory: Memory is discarded')
-        return (400, "Memory is discarded")
+        return 400, "Memory is discarded"
 
     if memory.postprocessing is not None and memory.postprocessing.status != PostProcessingStatus.not_started:
         print(f'postprocess_memory: Memory can\'t be post-processed again {memory.postprocessing.status}')
-        return (400, "Memory can't be post-processed again")
+        return 400, "Memory can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
     if aseg.duration_seconds < 10:  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         print('postprocess_memory: Audio duration is too short, seems wrong.')
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.canceled)
-        return (500, "Audio duration is too short, seems wrong.")
+        return 500, "Audio duration is too short, seems wrong."
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
         # Calling VAD to avoid processing empty parts and getting hallucinations from whisper.
+        # TODO: use this logs to determine if whisperx is failing because of the VAD results.
+        print('previous to vad_is_empty (segments duration):',
+              memory.transcript_segments[-1].end - memory.transcript_segments[0].start)
         vad_segments = vad_is_empty(file_path, return_segments=True)
         if vad_segments:
             start = vad_segments[0]['start']
             end = vad_segments[-1]['end']
+            print('vad_is_empty file result segments:', start, end)
             aseg = AudioSegment.from_wav(file_path)
             aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
             aseg.export(file_path, format="wav")
@@ -90,7 +94,7 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
             memory.postprocessing = MemoryPostProcessing(
                 status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_memory, if any segment still matched to user or people
-            return (200, memory)
+            return 200, memory
 
         # Reprocess memory with improved transcription
         result: Memory = process_memory(uid, memory.language, memory, force_process=True)
@@ -101,13 +105,13 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
     except Exception as e:
         print(e)
         memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=str(e))
-        return (500, str(e))
+        return 500, str(e)
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
     result.postprocessing = MemoryPostProcessing(
         status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
-    return (200, result)
+    return 200, result
 
 
 def _get_memory_by_id(uid: str, memory_id: str) -> dict:
