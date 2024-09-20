@@ -679,9 +679,13 @@ class CaptureProvider extends ChangeNotifier
     );
   }
 
-  Future stopStreamDeviceRecording() async {
-    _updateRecordingDevice(null);
-    await _resetState();
+  Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    if (cleanDevice) {
+      _updateRecordingDevice(null);
+    }
+    _cleanupCurrentState();
+    await _socket?.stop(reason: 'stop stream device recording');
+    await _handleMemoryCreation(false);
   }
 
   // Socket handling

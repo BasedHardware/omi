@@ -146,11 +146,11 @@ class PureSocket implements IPureSocket {
 
   @override
   Future disconnect() async {
-    _status = PureSocketStatus.disconnected;
     if (_status == PureSocketStatus.connected) {
       // Warn: should not use await cause dead end by socket closed.
       _channel?.sink.close(socket_channel_status.normalClosure);
     }
+    _status = PureSocketStatus.disconnected;
     onClosed();
   }
 
@@ -194,7 +194,7 @@ class PureSocket implements IPureSocket {
   }
 
   void _reconnect() async {
-    debugPrint("[Socket] reconnect...${_retries+1}...");
+    debugPrint("[Socket] reconnect...${_retries + 1}...");
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
     const int maxRetries = 7;
