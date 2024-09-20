@@ -225,7 +225,7 @@ class PureSocket implements IPureSocket {
 
   @override
   void onInternetSatusChanged(InternetStatus status) {
-    debugPrint("[Socket] Internet connection changed $status");
+    debugPrint("[Socket] Internet connection changed $status socket $_status");
     _internetStatus = status;
     switch (status) {
       case InternetStatus.connected:
