@@ -147,14 +147,21 @@ class PureSocket implements IPureSocket {
   @override
   Future disconnect() async {
     _status = PureSocketStatus.disconnected;
+    if (_status == PureSocketStatus.connected) {
+      // Warn: should not use await cause dead end by socket closed.
+      _channel?.sink.close(socket_channel_status.normalClosure);
+    }
     onClosed();
-    await _cleanUp();
   }
 
   Future _cleanUp() async {
     _internetLostDelayTimer?.cancel();
     _internetStatusListener?.cancel();
-    await _channel?.sink.close(socket_channel_status.normalClosure);
+  }
+
+  Future stop() async {
+    await disconnect();
+    await _cleanUp();
   }
 
   @override
@@ -187,6 +194,7 @@ class PureSocket implements IPureSocket {
   }
 
   void _reconnect() async {
+    debugPrint("[Socket] reconnect...${_retries+1}...");
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
     const int maxRetries = 7;
@@ -217,6 +225,7 @@ class PureSocket implements IPureSocket {
 
   @override
   void onInternetSatusChanged(InternetStatus status) {
+    debugPrint("[Socket] Internet connection changed $status");
     _internetStatus = status;
     switch (status) {
       case InternetStatus.connected:
@@ -308,7 +317,7 @@ class TranscripSegmentSocketService implements IPureSocketListener {
   }
 
   Future stop({String? reason}) async {
-    await _socket.disconnect();
+    await _socket.stop();
     _listeners.clear();
 
     if (reason != null) {
