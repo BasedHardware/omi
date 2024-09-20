@@ -53,6 +53,7 @@ class SpeechProfileProvider extends ChangeNotifier
   String message = '';
 
   late bool _isFromOnboarding;
+  late Function? _finalizedCallback;
 
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
@@ -88,8 +89,9 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> initialise(bool isFromOnboarding) async {
+  Future<void> initialise(bool isFromOnboarding, {Function? finalizedCallback}) async {
     _isFromOnboarding = isFromOnboarding;
+    _finalizedCallback = finalizedCallback;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
     await _initiateWebsocket(force: true);
@@ -144,45 +146,49 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future finalize() async {
-    if (uploadingProfile || profileCompleted) return;
-
-    int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-    if (duration < 5 || duration > 120) {
-      notifyError('INVALID_RECORDING');
-    }
-
-    String text = segments.map((e) => e.text).join(' ').trim();
-    if (text.split(' ').length < (targetWordsCount / 2)) {
-      // 25 words
-      notifyError('TOO_SHORT');
-    }
-    uploadingProfile = true;
-    notifyListeners();
-    await _socket?.stop(reason: 'finalizing');
-    forceCompletionTimer?.cancel();
-    connectionStateListener?.cancel();
-    _bleBytesStream?.cancel();
-
-    updateLoadingText('Memorizing your voice...');
-    List<List<int>> raw = List.from(audioStorage.rawPackets);
-    var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
     try {
-      await uploadProfile(data.item1);
-      await uploadProfileBytes(raw, duration);
-    } catch (e) {}
+      if (uploadingProfile || profileCompleted) return;
 
-    updateLoadingText('Personalizing your experience...');
-    SharedPreferencesUtil().hasSpeakerProfile = true;
-    if (_isFromOnboarding) {
-      await createMemory();
-	  // TODO: thinh, socket
-      //captureProvider?.clearTranscripts();
+      int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
+      if (duration < 5 || duration > 120) {
+        notifyError('INVALID_RECORDING');
+      }
+
+      String text = segments.map((e) => e.text).join(' ').trim();
+      if (text.split(' ').length < (targetWordsCount / 2)) {
+        // 25 words
+        notifyError('TOO_SHORT');
+      }
+      uploadingProfile = true;
+      notifyListeners();
+      await _socket?.stop(reason: 'finalizing');
+      forceCompletionTimer?.cancel();
+      connectionStateListener?.cancel();
+      _bleBytesStream?.cancel();
+
+      updateLoadingText('Memorizing your voice...');
+      List<List<int>> raw = List.from(audioStorage.rawPackets);
+      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      try {
+        await uploadProfile(data.item1);
+        await uploadProfileBytes(raw, duration);
+      } catch (e) {}
+
+      updateLoadingText('Personalizing your experience...');
+      SharedPreferencesUtil().hasSpeakerProfile = true;
+      if (_isFromOnboarding) {
+        await createMemory();
+      }
+      uploadingProfile = false;
+      profileCompleted = true;
+      text = '';
+      updateLoadingText("You're all set!");
+      notifyListeners();
+    } finally {
+      if (_finalizedCallback != null) {
+        _finalizedCallback!();
+      }
     }
-    uploadingProfile = false;
-    profileCompleted = true;
-    text = '';
-    updateLoadingText("You're all set!");
-    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -328,8 +334,10 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _finalizedCallback = null;
     _socket?.unsubscribe(this);
     ServiceManager.instance().device.unsubscribe(this);
+
     super.dispose();
   }
 

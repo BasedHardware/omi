@@ -67,6 +67,23 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
+    Future restartDeviceRecording() async {
+      debugPrint("restartDeviceRecording $mounted");
+      if (mounted) {
+        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
+        Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
+          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice,
+        );
+      }
+    }
+
+    Future stopDeviceRecording() async {
+      debugPrint("stopDeviceRecording $mounted");
+      if (mounted) {
+        await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+      }
+    }
+
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
@@ -75,9 +92,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
             await context.read<SpeechProfileProvider>().close();
 
             // Restart device recording
-            if (mounted && context.mounted) {
-              await Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(restartBytesProcessing: true);
-            }
+            restartDeviceRecording();
           });
         }
       },
@@ -328,23 +343,12 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           return;
                                         }
 
-                                        // Stop device recoding
-                                        if (mounted && context.mounted) {
-                                          await Provider.of<CaptureProvider>(context, listen: false)
-                                              .stopStreamDeviceRecording();
-                                        }
-
-                                        await provider.initialise(false);
+                                        await stopDeviceRecording();
+                                        await provider.initialise(false, finalizedCallback: restartDeviceRecording);
                                         // 1.5 minutes seems reasonable
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
                                           provider.finalize();
-
-                                          // Restart device recording
-                                          if (mounted && context.mounted) {
-                                            Provider.of<CaptureProvider>(context, listen: false)
-                                                .streamDeviceRecording();
-                                          }
                                         });
                                         provider.updateStartedRecording(true);
                                       },
