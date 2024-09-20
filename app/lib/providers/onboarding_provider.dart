@@ -179,6 +179,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceProvider!.setConnectedDevice(cDevice);
       SharedPreferencesUtil().btDeviceStruct = cDevice;
       SharedPreferencesUtil().deviceName = cDevice.name;
+      SharedPreferencesUtil().deviceCodec = await _getAudioCodec(device.id);
       deviceProvider!.setIsConnected(true);
     }
     //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
@@ -196,6 +197,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     await Future.delayed(const Duration(seconds: 2));
     SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
     SharedPreferencesUtil().deviceName = connectedDevice.name;
+    SharedPreferencesUtil().deviceCodec = await _getAudioCodec(device.id);
     foundDevicesMap.clear();
     deviceList.clear();
     if (isFromOnboarding) {
@@ -248,6 +250,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     }
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     return connection?.device;
+  }
+
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
   }
 
   @override
