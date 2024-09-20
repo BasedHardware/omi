@@ -61,6 +61,22 @@ headers = {
 #     return segments
 
 
+async def send_initial_file_path(file_path: str, transcript_socket):
+    print('send_initial_file_path')
+    start = time.time()
+    # Reading and sending in chunks
+    with open(file_path, "rb") as file:
+        while True:
+            chunk = file.read(320)
+            if not chunk:
+                break
+            # print('Uploading', len(chunk))
+            await transcript_socket.send(bytes(chunk))
+            await asyncio.sleep(0.0001)  # if it takes too long to transcribe
+
+    print('send_initial_file_path', time.time() - start)
+
+
 async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file2')
     start = time.time()
@@ -283,7 +299,7 @@ LANGUAGE = "en"
 CONNECTION_URL = f"wss://eu2.rt.speechmatics.com/v2"
 
 
-async def process_audio_speechmatics(stream_transcript, stream_id: int, language: str, uid: str):
+async def process_audio_speechmatics(stream_transcript, stream_id: int, language: str, preseconds: int = 0):
     # Create a transcription client
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
@@ -334,9 +350,10 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
                             continue
                         segments = []
                         for r in results:
-                            # print(r)
+                            print(r)
                             if not r['alternatives']:
                                 continue
+
                             r_data = r['alternatives'][0]
                             r_type = r['type']  # word | punctuation
                             r_start = r['start_time']
@@ -349,6 +366,11 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
                                 continue
                             r_speaker = r_data['speaker'][1:] if r_data['speaker'] != 'UU' else '1'
                             speaker = f"SPEAKER_0{r_speaker}"
+
+                            is_user = True if r_speaker == '1' and preseconds > 0 else False
+                            if r_start < preseconds:
+                                print('Skipping word', r_start, r_content)
+                                continue
                             # print(r_content, r_speaker, [r_start, r_end])
                             if not segments:
                                 segments.append({
@@ -356,7 +378,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
                                     'start': r_start,
                                     'end': r_end,
                                     'text': r_content,
-                                    'is_user': False,
+                                    'is_user': is_user,
                                     'person_id': None,
                                 })
                             else:
@@ -370,7 +392,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
                                         'start': r_start,
                                         'end': r_end,
                                         'text': r_content,
-                                        'is_user': False,
+                                        'is_user': is_user,
                                         'person_id': None,
                                     })
 
