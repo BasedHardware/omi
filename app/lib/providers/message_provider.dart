@@ -10,9 +10,23 @@ class MessageProvider extends ChangeNotifier {
   List<ServerMessage> messages = [];
 
   bool isLoadingMessages = false;
+  bool hasCachedMessages = false;
+  bool isClearingChat = false;
+
+  String firstTimeLoadingText = '';
 
   void updatePluginProvider(PluginProvider p) {
     pluginProvider = p;
+  }
+
+  void setHasCachedMessages(bool value) {
+    hasCachedMessages = value;
+    notifyListeners();
+  }
+
+  void setClearingChat(bool value) {
+    isClearingChat = value;
+    notifyListeners();
   }
 
   void setLoadingMessages(bool value) {
@@ -32,9 +46,25 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setMessagesFromCache() {
+    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
+      setHasCachedMessages(true);
+      messages = SharedPreferencesUtil().cachedMessages;
+    }
+    notifyListeners();
+  }
+
   Future<List<ServerMessage>> getMessagesFromServer() async {
+    if (!hasCachedMessages) {
+      firstTimeLoadingText = 'Reading your memories...';
+      notifyListeners();
+    }
     setLoadingMessages(true);
     var mes = await getMessagesServer();
+    if (!hasCachedMessages) {
+      firstTimeLoadingText = 'Learning from your memories...';
+      notifyListeners();
+    }
     messages = mes;
     setLoadingMessages(false);
     notifyListeners();
@@ -42,8 +72,10 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future clearChat() async {
+    setClearingChat(true);
     var mes = await clearChatServer();
     messages = mes;
+    setClearingChat(false);
     notifyListeners();
   }
 
