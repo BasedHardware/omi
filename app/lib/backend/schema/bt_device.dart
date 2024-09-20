@@ -3,7 +3,17 @@ import 'package:friend_private/services/device_connections.dart';
 import 'package:friend_private/services/frame_connection.dart';
 import 'package:friend_private/utils/ble/gatt_utils.dart';
 
-enum BleAudioCodec { pcm16, pcm8, mulaw16, mulaw8, opus, unknown }
+enum BleAudioCodec {
+  pcm16,
+  pcm8,
+  mulaw16,
+  mulaw8,
+  opus,
+  unknown;
+
+  @override
+  String toString() => mapCodecToName(this);
+}
 
 String mapCodecToName(BleAudioCodec codec) {
   switch (codec) {

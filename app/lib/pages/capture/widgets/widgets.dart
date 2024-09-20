@@ -4,6 +4,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
@@ -227,8 +228,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
                       await routeToPage(context, const SpeechProfilePage());
                       if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                         if (context.mounted) {
-                          // TODO: is the websocket restarting once the user comes back?
-                          context.read<DeviceProvider>().restartWebSocket();
+                          context.read<CaptureProvider>().onRecordProfileSettingChanged();
                         }
                       }
                     },
@@ -290,7 +290,7 @@ getTranscriptWidget(
 
   return Column(
     children: [
-      if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (photos.isNotEmpty) PhotosGridComponent(),
       if (segments.isNotEmpty) TranscriptWidget(segments: segments),
     ],
   );

@@ -129,6 +129,26 @@ class TranscriptSegment {
     cleanSegments(joinedSimilarSegments);
 
     segments.addAll(joinedSimilarSegments);
+
+    //     for i, segment in enumerate(segments):
+    //         segments[i].text = (
+    //             segments[i].text.strip()
+    //             .replace('  ', '')
+    //             .replace(' ,', ',')
+    //             .replace(' .', '.')
+    //             .replace(' ?', '?')
+    //         )
+
+    // Speechmatics specific issue with punctuation
+    for (var i = 0; i < segments.length; i++) {
+      segments[i].text = segments[i]
+          .text
+          .replaceAll('  ', '')
+          .replaceAll(' ,', ',')
+          .replaceAll(' .', '.')
+          .replaceAll(' ?', '?')
+          .trim();
+    }
   }
 
   static String segmentsAsString(

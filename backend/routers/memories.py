@@ -113,6 +113,7 @@ def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get
 
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('delete_memory', memory_id, uid)
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
