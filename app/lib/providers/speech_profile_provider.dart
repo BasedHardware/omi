@@ -26,7 +26,6 @@ class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements IDeviceServiceSubsciption, ITransctipSegmentSocketServiceListener {
   DeviceProvider? deviceProvider;
-  CaptureProvider? captureProvider;
   bool? permissionEnabled;
   bool loading = false;
   BTDeviceStruct? device;
@@ -76,9 +75,8 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setProviders(DeviceProvider provider, CaptureProvider captureProvider) {
+  void setProviders(DeviceProvider provider) {
     deviceProvider = provider;
-    this.captureProvider = captureProvider;
     notifyListeners();
   }
 
@@ -94,10 +92,8 @@ class SpeechProfileProvider extends ChangeNotifier
     _isFromOnboarding = isFromOnboarding;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
-    await captureProvider!.resetForSpeechProfile();
     await _initiateWebsocket(force: true);
 
-    // _bleBytesStream = captureProvider?.bleBytesStream;
     if (device != null) await initiateFriendAudioStreaming();
     if (_socket?.state != SocketServiceState.connected) {
       // wait for websocket to connect
@@ -179,9 +175,9 @@ class SpeechProfileProvider extends ChangeNotifier
     SharedPreferencesUtil().hasSpeakerProfile = true;
     if (_isFromOnboarding) {
       await createMemory();
-      captureProvider?.clearTranscripts();
+	  // TODO: thinh, socket
+      //captureProvider?.clearTranscripts();
     }
-    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true);
     uploadingProfile = false;
     profileCompleted = true;
     text = '';
@@ -210,7 +206,6 @@ class SpeechProfileProvider extends ChangeNotifier
 
         value.removeRange(0, 3);
         if (_socket?.state == SocketServiceState.connected) {
-          debugPrint("Socket stream ${value.length}");
           _socket?.send(value);
         }
       },
