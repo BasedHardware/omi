@@ -120,14 +120,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             ],
                           )
                         : (provider.messages.isEmpty)
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 16.0),
-                                child: Text(
-                                    connectivityProvider.isConnected
-                                        ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                        : 'Please check your internet connection and try again',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.white)),
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 32.0),
+                                  child: Text(
+                                      connectivityProvider.isConnected
+                                          ? 'No messages yet!\nWhy don\'t you start a conversation?'
+                                          : 'Please check your internet connection and try again',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.white)),
+                                ),
                               )
                             : ListView.builder(
                                 shrinkWrap: true,
