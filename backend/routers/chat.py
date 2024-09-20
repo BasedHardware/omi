@@ -57,8 +57,7 @@ def send_message(
 
 @router.delete('/v1/clear-chat', tags=['chat'], response_model=Message)
 def clear_chat(uid: str = Depends(auth.get_current_user_uid)):
-
-    chat_db.clear_chat(uid, 400)
+    chat_db.clear_chat(uid)
     return initial_message_util(uid)
 
 
