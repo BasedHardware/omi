@@ -13,6 +13,7 @@ import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
@@ -21,6 +22,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -132,6 +134,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ForegroundUtil.startForegroundTask();
       if (mounted) {
         await context.read<HomeProvider>().setUserPeople();
+
+        // Start stream recording
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
       }
     });
 
@@ -544,7 +550,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         if (language != SharedPreferencesUtil().recordingsLanguage ||
                             hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
                             transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          context.read<DeviceProvider>().restartWebSocket();
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
                         }
                       },
                     ),
