@@ -1,4 +1,7 @@
 import threading
+import asyncio
+import time
+from typing import List
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -126,8 +129,8 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
-    # Soft timeout
-    timeout_seconds = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 1800  # 30m
     started_at = time.time()
 
     def stream_transcript(segments, stream_id):
