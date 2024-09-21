@@ -32,6 +32,20 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
             memories.append(doc.to_dict())
     return memories
 
+def get_basic_processing_memories_by_id(uid, processing_memory_ids):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = user_ref.collection('processing_memories')
+
+    doc_refs = [memories_ref.document(str(processing_memory_id)) for processing_memory_id in processing_memory_ids]
+    docs = db.get_all(doc_refs, field_paths=["id", "created_at", "geolocation", "emotional_feedback", "timer_start"],)
+
+    memories = []
+    for doc in docs:
+        if doc.exists:
+            memories.append(doc.to_dict())
+    return memories
+
+
 def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
