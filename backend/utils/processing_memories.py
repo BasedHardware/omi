@@ -57,11 +57,11 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
 
 def update_basic_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> BasicProcessingMemory:
     # Fetch new
-    processing_memories = processing_memories_db.get_basic_processing_memories_by_id(uid, [update_processing_memory.id])
-    if len(processing_memories) == 0:
+    processing_memory = processing_memories_db.get_processing_memory_by_id(uid, update_processing_memory.id)
+    if not processing_memory:
         print("processing memory is not found")
         return
-    processing_memory = BasicProcessingMemory(**processing_memories[0])
+    processing_memory = BasicProcessingMemory(**processing_memory)
 
     # geolocation
     if update_processing_memory.geolocation:
