@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -30,7 +31,10 @@ class ChatPage extends StatefulWidget {
 
 class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
-  ScrollController scrollController = ScrollController();
+  late ScrollController scrollController;
+
+  bool _showDeleteOption = false;
+  bool isScrollingDown = false;
 
   var prefs = SharedPreferencesUtil();
   late List<Plugin> plugins;
@@ -50,11 +54,28 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     plugins = prefs.pluginsList;
+    scrollController = ScrollController();
+    scrollController.addListener(() {
+      if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+        if (!isScrollingDown) {
+          isScrollingDown = true;
+          _showDeleteOption = true;
+          setState(() {});
+        }
+      }
+
+      if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
+        if (isScrollingDown) {
+          isScrollingDown = false;
+          _showDeleteOption = false;
+          setState(() {});
+        }
+      }
+    });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      // await context.read<MessageProvider>().refreshMessages();
       scrollToBottom();
     });
-    // _initDailySummary();
+    ;
     super.initState();
   }
 
@@ -73,20 +94,58 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: AnimatedMiniBanner(
-            showAppBar: provider.isLoadingMessages,
-            child: Container(
-              width: double.infinity,
-              height: 10,
-              color: Colors.green,
-              child: const Center(
-                child: Text(
-                  'Syncing messages with server...',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
+          appBar: provider.isLoadingMessages
+              ? AnimatedMiniBanner(
+                  showAppBar: provider.isLoadingMessages,
+                  child: Container(
+                    width: double.infinity,
+                    height: 10,
+                    color: Colors.green,
+                    child: const Center(
+                      child: Text(
+                        'Syncing messages with server...',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                )
+              : AnimatedMiniBanner(
+                  showAppBar: _showDeleteOption,
+                  height: 80,
+                  child: Container(
+                    width: double.infinity,
+                    height: 40,
+                    color: Theme.of(context).primaryColor,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 20),
+                        InkWell(
+                          onTap: () async {
+                            await context.read<MessageProvider>().refreshMessages();
+                          },
+                          child: const Text(
+                            'Refresh Chat',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
+                        const Spacer(),
+                        InkWell(
+                          onTap: () async {
+                            setState(() {
+                              _showDeleteOption = false;
+                            });
+                            await context.read<MessageProvider>().clearChat();
+                          },
+                          child: const Text(
+                            'Clear Chat',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
           body: Stack(
             children: [
               Align(
