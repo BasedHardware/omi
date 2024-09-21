@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/pages/settings/device_settings.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
-
-import 'device_settings.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
@@ -31,47 +31,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     return await connection.disconnect();
   }
 
-  Future<DeviceInfo> _getDeviceInfo(String? deviceId) async {
-    if (deviceId == null) {
-      return DeviceInfo.getDeviceInfo(null, null);
-    }
-
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return DeviceInfo.getDeviceInfo(null, null);
-    }
-    return await DeviceInfo.getDeviceInfo(connection.device, connection);
-  }
-
   @override
   Widget build(BuildContext context) {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
     return FutureBuilder<DeviceInfo>(
-      future: _getDeviceInfo(widget.device?.id),
+      future: context.read<DeviceProvider>().getDeviceInfo(),
       builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
             backgroundColor: Theme.of(context).colorScheme.primary,
-            actions: [
-              IconButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => DeviceSettings(
-                        device: widget.device,
-                        deviceInfo: snapshot.data,
-                        isDeviceConnected: deviceConnected,
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.settings),
-              )
-            ],
           ),
           body: Column(
             children: [
@@ -185,6 +157,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   child: Text(
                     widget.device == null ? "Unpair" : "Disconnect",
                     style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  routeToPage(context, const DeviceSettings());
+                },
+                child: const Text(
+                  'How to charge?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
               ),
