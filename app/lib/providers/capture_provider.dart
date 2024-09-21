@@ -71,6 +71,10 @@ class CaptureProvider extends ChangeNotifier
 
   RecordingState recordingState = RecordingState.stop;
 
+  bool get transcriptServiceReady => _socket?.state == SocketServiceState.connected;
+
+  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
+
   // -----------------------
   // Memory creation variables
   double? streamStartedAtSecond;
@@ -478,6 +482,7 @@ class CaptureProvider extends ChangeNotifier
     _cleanupCurrentState();
     await _handleMemoryCreation(restartBytesProcessing);
 
+    await _recheckCodecChange();
     await _ensureSocketConnection(force: true);
 
     await startOpenGlass();
@@ -560,12 +565,12 @@ class CaptureProvider extends ChangeNotifier
     return connection.hasPhotoStreamingCharacteristic();
   }
 
-  Future<bool> _checkCodecChange() async {
+  Future<bool> _recheckCodecChange() async {
     if (_recordingDevice != null) {
       BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
       if (SharedPreferencesUtil().deviceCodec != newCodec) {
         debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        SharedPreferencesUtil().deviceCodec = newCodec;
+        await SharedPreferencesUtil().setDeviceCodec(newCodec);
         return true;
       }
     }
