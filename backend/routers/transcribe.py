@@ -89,7 +89,7 @@ async def _websocket_util(
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
         stt_service: STTService = STTService.deepgram,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
+    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch, stt_service)
 
     if stt_service == STTService.soniox and (
             sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
