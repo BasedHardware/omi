@@ -60,6 +60,10 @@ def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: b
     # Fetch messages and collect memory IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
+
+        if message.get('deleted') is True:
+            continue
+
         messages.append(message)
         memories_id.update(message.get('memories_id', []))
 
@@ -92,16 +96,18 @@ async def batch_delete_messages(parent_doc_ref, batch_size=450):
         docs = messages_ref.limit(batch_size).stream()
         docs_list = list(docs)
         if not docs_list:
+            print("No more messages to delete")
             break
         batch = db.batch()
         for doc in docs_list:
-            batch.delete(doc.reference)
+            batch.update(doc.reference, {'deleted': True})
         batch.commit()
 
 
-async def clear_chat( uid: str):
+async def clear_chat(uid: str):
     try:
         user_ref = db.collection('users').document(uid)
+        print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             raise HTTPException(status_code=404, detail="User not found")
         await batch_delete_messages(user_ref)
