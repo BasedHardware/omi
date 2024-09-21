@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -122,7 +123,19 @@ class PureSocket implements IPureSocket {
     }
 
     _status = PureSocketStatus.connecting;
-    await _channel?.ready;
+    dynamic err;
+    try {
+      await channel.ready;
+    } on SocketException catch (e) {
+      err = e;
+    } on WebSocketChannelException catch (e) {
+      err = e;
+    }
+    if (err != null) {
+      print("Error: $err");
+      _status = PureSocketStatus.notConnected;
+      return false;
+    }
     _status = PureSocketStatus.connected;
     _retries = 0;
 
