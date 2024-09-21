@@ -462,11 +462,11 @@ async def _websocket_util(
             await _create_processing_memory()
         else:
             # or ensure synced processing transcript
-            processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [processing_memory.id])
-            if len(processing_memories) == 0:
+            processing_memory_data = processing_memories_db.get_processing_memory_by_id(uid, processing_memory.id)
+            if not processing_memory_data:
                 print("processing memory is not found")
                 return
-            processing_memory = ProcessingMemory(**processing_memories[0])
+            processing_memory = ProcessingMemory(**processing_memory_data)
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
