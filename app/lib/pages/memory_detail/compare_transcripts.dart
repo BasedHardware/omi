@@ -35,7 +35,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: DefaultTabController(
-        length: 3,
+        length: 4,
         initialIndex: 0,
         child: Column(
           children: [
@@ -50,7 +50,12 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
               padding: EdgeInsets.zero,
               indicatorPadding: EdgeInsets.zero,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-              tabs: const [Tab(text: 'Deepgram'), Tab(text: 'Soniox'), Tab(text: 'Whisper-x')],
+              tabs: const [
+                Tab(text: 'Deepgram'),
+                Tab(text: 'Soniox'),
+                Tab(text: 'SpeechMatics'),
+                Tab(text: 'Whisper-x'),
+              ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),
             Expanded(
@@ -77,6 +82,18 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                         children: [
                           TranscriptWidget(
                             segments: transcripts?.soniox ?? [],
+                            horizontalMargin: false,
+                            topMargin: false,
+                            canDisplaySeconds: true,
+                            isMemoryDetail: true,
+                          )
+                        ],
+                      ),
+                      ListView(
+                        shrinkWrap: true,
+                        children: [
+                          TranscriptWidget(
+                            segments: transcripts?.speechmatics ?? [],
                             horizontalMargin: false,
                             topMargin: false,
                             canDisplaySeconds: true,

@@ -10,22 +10,22 @@ import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/websockets.dart';
+import 'package:friend_private/utils/pure_socket.dart';
 import 'package:uuid/uuid.dart';
 
-class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin implements IDeviceServiceSubsciption {
+class SpeechProfileProvider extends ChangeNotifier
+    with MessageNotifierMixin
+    implements IDeviceServiceSubsciption, ITransctipSegmentSocketServiceListener {
   DeviceProvider? deviceProvider;
-  CaptureProvider? captureProvider;
-  WebSocketProvider? webSocketProvider;
   bool? permissionEnabled;
   bool loading = false;
   BTDeviceStruct? device;
@@ -38,6 +38,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
   WavBytesUtil audioStorage = WavBytesUtil(codec: BleAudioCodec.opus);
   StreamSubscription? _bleBytesStream;
 
+  TranscripSegmentSocketService? _socket;
+
   bool startedRecording = false;
   double percentageCompleted = 0;
   bool uploadingProfile = false;
@@ -49,6 +51,9 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
 
   String text = '';
   String message = '';
+
+  late bool _isFromOnboarding;
+  late Function? _finalizedCallback;
 
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
@@ -71,10 +76,8 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     notifyListeners();
   }
 
-  void setProviders(DeviceProvider provider, CaptureProvider captureProvider, WebSocketProvider wsProvider) {
+  void setProviders(DeviceProvider provider) {
     deviceProvider = provider;
-    this.captureProvider = captureProvider;
-    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
@@ -86,15 +89,15 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     notifyListeners();
   }
 
-  Future<void> initialise(bool isFromOnboarding) async {
+  Future<void> initialise(bool isFromOnboarding, {Function? finalizedCallback}) async {
+    _isFromOnboarding = isFromOnboarding;
+    _finalizedCallback = finalizedCallback;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
-    await captureProvider!.resetForSpeechProfile();
-    await initiateWebsocket(isFromOnboarding);
+    await _initiateWebsocket(force: true);
 
-    // _bleBytesStream = captureProvider?.bleBytesStream;
     if (device != null) await initiateFriendAudioStreaming();
-    if (webSocketProvider?.wsConnectionState != WebsocketConnectionStatus.connected) {
+    if (_socket?.state != SocketServiceState.connected) {
       // wait for websocket to connect
       await Future.delayed(Duration(seconds: 2));
     }
@@ -120,96 +123,72 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  Future<void> initiateWebsocket(bool isFromOnboarding) async {
-    await webSocketProvider?.initWebSocket(
-      codec: BleAudioCodec.opus,
-      sampleRate: 16000,
-      includeSpeechProfile: false,
-      newMemoryWatch: false,
-      onConnectionSuccess: () {
-        print('Websocket connected in speech profile');
-        notifyListeners();
-      },
-      onConnectionFailed: (err) {
-        notifyError('WS_ERR');
-      },
-      onConnectionClosed: (int? closeCode, String? closeReason) {},
-      onConnectionError: (err) {
-        notifyError('WS_ERR');
-      },
-      onMessageReceived: (List<TranscriptSegment> newSegments) {
-        if (newSegments.isEmpty) return;
-        if (segments.isEmpty) {
-          audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
-        }
-        streamStartedAtSecond ??= newSegments[0].start;
-
-        TranscriptSegment.combineSegments(
-          segments,
-          newSegments,
-          toRemoveSeconds: streamStartedAtSecond ?? 0,
-        );
-        updateProgressMessage();
-        _validateSingleSpeaker();
-        _handleCompletion(isFromOnboarding);
-        notifyInfo('SCROLL_DOWN');
-        debugPrint('Memory creation timer restarted');
-      },
-    );
+  Future<void> _initiateWebsocket({bool force = false}) async {
+    _socket = await ServiceManager.instance()
+        .socket
+        .speechProfile(codec: BleAudioCodec.opus, sampleRate: 16000, force: force);
+    if (_socket == null) {
+      throw Exception("Can not create new speech profile socket");
+    }
+    _socket?.subscribe(this, this);
   }
 
-  _handleCompletion(bool isFromOnboarding) async {
+  _handleCompletion() async {
     if (uploadingProfile || profileCompleted) return;
     String text = segments.map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
     if (percentageCompleted == 1) {
-      await finalize(isFromOnboarding);
+      await finalize();
     }
     notifyListeners();
   }
 
-  Future finalize(bool isFromOnboarding) async {
-    if (uploadingProfile || profileCompleted) return;
-
-    int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-    if (duration < 5 || duration > 120) {
-      notifyError('INVALID_RECORDING');
-    }
-
-    String text = segments.map((e) => e.text).join(' ').trim();
-    if (text.split(' ').length < (targetWordsCount / 2)) {
-      // 25 words
-      notifyError('TOO_SHORT');
-    }
-    uploadingProfile = true;
-    notifyListeners();
-    await webSocketProvider?.closeWebSocketWithoutReconnect('finalizing');
-    forceCompletionTimer?.cancel();
-    connectionStateListener?.cancel();
-    _bleBytesStream?.cancel();
-
-    updateLoadingText('Memorizing your voice...');
-    List<List<int>> raw = List.from(audioStorage.rawPackets);
-    var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+  Future finalize() async {
     try {
-      await uploadProfile(data.item1);
-      await uploadProfileBytes(raw, duration);
-    } catch (e) {}
+      if (uploadingProfile || profileCompleted) return;
 
-    updateLoadingText('Personalizing your experience...');
-    SharedPreferencesUtil().hasSpeakerProfile = true;
-    if (isFromOnboarding) {
-      await createMemory();
-      captureProvider?.clearTranscripts();
+      int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
+      if (duration < 5 || duration > 120) {
+        notifyError('INVALID_RECORDING');
+      }
+
+      String text = segments.map((e) => e.text).join(' ').trim();
+      if (text.split(' ').length < (targetWordsCount / 2)) {
+        // 25 words
+        notifyError('TOO_SHORT');
+      }
+      uploadingProfile = true;
+      notifyListeners();
+      await _socket?.stop(reason: 'finalizing');
+      forceCompletionTimer?.cancel();
+      connectionStateListener?.cancel();
+      _bleBytesStream?.cancel();
+
+      updateLoadingText('Memorizing your voice...');
+      List<List<int>> raw = List.from(audioStorage.rawPackets);
+      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      try {
+        await uploadProfile(data.item1);
+        await uploadProfileBytes(raw, duration);
+      } catch (e) {}
+
+      updateLoadingText('Personalizing your experience...');
+      SharedPreferencesUtil().hasSpeakerProfile = true;
+      if (_isFromOnboarding) {
+        await createMemory();
+      }
+      uploadingProfile = false;
+      profileCompleted = true;
+      text = '';
+      updateLoadingText("You're all set!");
+      notifyListeners();
+    } finally {
+      if (_finalizedCallback != null) {
+        _finalizedCallback!();
+      }
     }
-    await captureProvider?.resetState(restartBytesProcessing: true);
-    uploadingProfile = false;
-    profileCompleted = true;
-    text = '';
-    updateLoadingText("You're all set!");
-    notifyListeners();
   }
 
   // TODO: use connection directly
@@ -230,9 +209,10 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         audioStorage.storeFramePacket(value);
+
         value.removeRange(0, 3);
-        if (webSocketProvider?.wsConnectionState == WebsocketConnectionStatus.connected) {
-          webSocketProvider?.websocketChannel?.sink.add(value);
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(value);
         }
       },
     );
@@ -296,8 +276,7 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     percentageCompleted = 0;
     uploadingProfile = false;
     profileCompleted = false;
-    await webSocketProvider?.closeWebSocketWithoutReconnect('closing');
-    await captureProvider?.resetState(restartBytesProcessing: true, isFromSpeechProfile: true);
+    await _socket?.stop(reason: 'closing');
     notifyListeners();
   }
 
@@ -355,7 +334,10 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+    _finalizedCallback = null;
+    _socket?.unsubscribe(this);
     ServiceManager.instance().device.unsubscribe(this);
+
     super.dispose();
   }
 
@@ -386,4 +368,39 @@ class SpeechProfileProvider extends ChangeNotifier with MessageNotifierMixin imp
 
   @override
   void onStatusChanged(DeviceServiceStatus status) {}
+
+  @override
+  void onClosed() {
+    // TODO: implement onClosed
+  }
+
+  @override
+  void onError(Object err) {
+    notifyError('WS_ERR');
+  }
+
+  @override
+  void onMessageEventReceived(ServerMessageEvent event) {
+    // TODO: implement onMessageEventReceived
+  }
+
+  @override
+  void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    if (newSegments.isEmpty) return;
+    if (segments.isEmpty) {
+      audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
+    }
+    streamStartedAtSecond ??= newSegments[0].start;
+
+    TranscriptSegment.combineSegments(
+      segments,
+      newSegments,
+      toRemoveSeconds: streamStartedAtSecond ?? 0,
+    );
+    updateProgressMessage();
+    _validateSingleSpeaker();
+    _handleCompletion();
+    notifyInfo('SCROLL_DOWN');
+    debugPrint('Memory creation timer restarted');
+  }
 }

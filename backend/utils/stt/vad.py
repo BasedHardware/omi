@@ -38,6 +38,8 @@ def is_audio_empty(file_path, sample_rate=8000):
 def vad_is_empty(file_path, return_segments: bool = False):
     """Uses vad_modal/vad.py deployment (Best quality)"""
     try:
+        file_duration = AudioSegment.from_wav(file_path).duration_seconds
+        print('vad_is_empty file duration:', file_duration)
         with open(file_path, 'rb') as file:
             files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
             response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)

@@ -23,6 +23,13 @@ class ProcessingMemory(BaseModel):
     memory_id: Optional[str] = None
     message_ids: List[str] = []
 
+class BasicProcessingMemory(BaseModel):
+    id: str
+    timer_start: float
+    created_at: datetime
+    geolocation: Optional[Geolocation] = None
+    emotional_feedback: Optional[bool] = False
+
 
 class UpdateProcessingMemory(BaseModel):
     id: Optional[str] = None
@@ -31,4 +38,4 @@ class UpdateProcessingMemory(BaseModel):
 
 
 class UpdateProcessingMemoryResponse(BaseModel):
-    result: ProcessingMemory
+    result: BasicProcessingMemory
