@@ -9,7 +9,9 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -116,8 +118,8 @@ class _AIMessageState extends State<AIMessage> {
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
-              // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
-              // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
+              if (widget.displayOptions) const SizedBox(height: 8),
+              if (widget.displayOptions) ..._getInitialOptions(context),
               if (messageMemories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var data in messageMemories.indexed) ...[
@@ -127,30 +129,58 @@ class _AIMessageState extends State<AIMessage> {
                       onTap: () async {
                         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                         if (connectivityProvider.isConnected) {
-                          if (memoryDetailLoading[data.$1]) return;
-                          setState(() => memoryDetailLoading[data.$1] = true);
+                          var memProvider = Provider.of<MemoryProvider>(context, listen: false);
+                          var idx = memProvider.memoriesWithDates.indexWhere((e) {
+                            if (e.runtimeType == ServerMemory) {
+                              return e.id == data.$2.id;
+                            }
+                            return false;
+                          });
 
-                          ServerMemory? m = await getMemoryById(data.$2.id);
-                          if (m == null) return;
-                          MixpanelManager().chatMessageMemoryClicked(m);
-                          setState(() => memoryDetailLoading[data.$1] = false);
-                          await Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
-                          if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                            ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                            widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                            var copy = List<MessageMemory>.from(widget.message.memories);
-                            copy[data.$1] = MessageMemory(
-                                modifiedDetails.id,
-                                modifiedDetails.createdAt,
-                                MessageMemoryStructured(
-                                  modifiedDetails.structured.title,
-                                  modifiedDetails.structured.emoji,
-                                ));
-                            widget.message.memories.clear();
-                            widget.message.memories.addAll(copy);
-                            SharedPreferencesUtil().modifiedMemoryDetails = null;
-                            setState(() {});
+                          if (idx != -1) {
+                            context.read<MemoryDetailProvider>().updateMemory(idx);
+                            var m = memProvider.memoriesWithDates[idx];
+                            MixpanelManager().chatMessageMemoryClicked(m);
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (c) => MemoryDetailPage(
+                                  memory: m,
+                                ),
+                              ),
+                            );
+                          } else {
+                            if (memoryDetailLoading[data.$1]) return;
+                            setState(() => memoryDetailLoading[data.$1] = true);
+                            ServerMemory? m = await getMemoryById(data.$2.id);
+                            if (m == null) return;
+                            idx = memProvider.addMemoryWithDate(m);
+                            MixpanelManager().chatMessageMemoryClicked(m);
+                            setState(() => memoryDetailLoading[data.$1] = false);
+                            context.read<MemoryDetailProvider>().updateMemory(idx);
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (c) => MemoryDetailPage(
+                                  memory: m,
+                                ),
+                              ),
+                            );
+                            //TODO: Not needed anymore I guess because memories are stored in provider and read from there only
+                            if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
+                              ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
+                              widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
+                              var copy = List<MessageMemory>.from(widget.message.memories);
+                              copy[data.$1] = MessageMemory(
+                                  modifiedDetails.id,
+                                  modifiedDetails.createdAt,
+                                  MessageMemoryStructured(
+                                    modifiedDetails.structured.title,
+                                    modifiedDetails.structured.emoji,
+                                  ));
+                              widget.message.memories.clear();
+                              widget.message.memories.addAll(copy);
+                              SharedPreferencesUtil().modifiedMemoryDetails = null;
+                              setState(() {});
+                            }
                           }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -256,7 +286,7 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOption(BuildContext context, String optionText) {
     return GestureDetector(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -273,11 +303,11 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOptions(BuildContext context) {
     return [
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What tasks do I have from yesterday?'),
+      _getInitialOption(context, 'What\'s been on my mind a lot?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What conversations did I have with John?'),
+      _getInitialOption(context, 'Did I forget to follow up on something?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What advise have I received about entrepreneurship?'),
+      _getInitialOption(context, 'What\'s the funniest thing I\'ve said lately?'),
     ];
   }
 }

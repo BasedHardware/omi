@@ -274,8 +274,10 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
       }
+
       if (context.read<AuthenticationProvider>().user != null) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
+        context.read<MessageProvider>().setMessagesFromCache();
+        context.read<MessageProvider>().refreshMessages();
       }
     });
     super.initState();
