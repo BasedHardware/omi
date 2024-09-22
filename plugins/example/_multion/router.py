@@ -26,7 +26,7 @@ class BooksToBuy(BaseModel):
     books: List[str] = Field(description="The list of titles of the books mentioned", default=[], min_items=0)
 
 
-async def retrieve_books_to_buy(transcript: str) -> List[str]:
+def retrieve_books_to_buy(transcript: str) -> List[str]:
     chat = ChatGroq(temperature=0, model="llama3-groq-8b-8192-tool-use-preview").with_structured_output(BooksToBuy)
 
     response: BooksToBuy = chat.invoke(f'''
@@ -165,7 +165,7 @@ async def multion_endpoint(memory: Memory, uid: str = Query(...)):
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
 
-    books = await retrieve_books_to_buy(memory.get_transcript())
+    books = retrieve_books_to_buy(memory.get_transcript())
     if not books:
         return EndpointResponse(message='No books were suggested or mentioned.')
 
