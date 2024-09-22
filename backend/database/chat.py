@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import HTTPException
 from google.cloud import firestore
 
 from models.chat import Message
@@ -89,27 +88,43 @@ def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: b
     return messages
     
 
-async def batch_delete_messages(parent_doc_ref, batch_size=450):
-    # batch size is 450 because firebase can perform upto 500 operations in a batch
+def batch_delete_messages(parent_doc_ref, batch_size=450):
     messages_ref = parent_doc_ref.collection('messages')
+    last_doc = None  # For pagination
+
     while True:
-        docs = messages_ref.limit(batch_size).stream()
+        if last_doc:
+            docs = messages_ref.limit(batch_size).start_after(last_doc).stream()
+        else:
+            docs = messages_ref.limit(batch_size).stream()
+
         docs_list = list(docs)
+
         if not docs_list:
             print("No more messages to delete")
             break
+
         batch = db.batch()
+
         for doc in docs_list:
             batch.update(doc.reference, {'deleted': True})
+
         batch.commit()
 
+        if len(docs_list) < batch_size:
+            print("Processed all messages")
+            break
 
-async def clear_chat(uid: str):
+        last_doc = docs_list[-1]
+
+
+def clear_chat(uid: str):
     try:
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
-            raise HTTPException(status_code=404, detail="User not found")
-        await batch_delete_messages(user_ref)
+            return {"message": "User not found"}
+        batch_delete_messages(user_ref)
+        return None
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting messages: {str(e)}")
+        return {"message": str(e)}
