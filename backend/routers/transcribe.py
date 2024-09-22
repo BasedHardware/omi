@@ -89,7 +89,8 @@ async def _websocket_util(
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
         stt_service: STTService = STTService.deepgram,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch, stt_service)
+    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,
+          stt_service)
 
     if stt_service == STTService.soniox and (
             sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
@@ -168,7 +169,6 @@ async def _websocket_util(
 
     soniox_socket = None
     speechmatics_socket = None
-    speechmatics_socket2 = None
     deepgram_socket = None
     deepgram_socket2 = None
 
@@ -178,44 +178,33 @@ async def _websocket_util(
     # audio_buffer = None
     duration = 0
     try:
-        # Soniox
-        if stt_service == STTService.deepgram:
-            if language == 'en' and codec == 'opus' and include_speech_profile:
-                second_per_frame: float = 0.01
-                speech_profile = get_user_speech_profile(uid)
-                duration = len(speech_profile) * second_per_frame
-                print('speech_profile', len(speech_profile), duration)
-                if duration:
-                    duration += 10
-            else:
-                speech_profile, duration = [], 0
+        file_path, duration = None, 0
+        if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            file_path = get_profile_audio_if_exists(uid)
+            duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
+        # Deepgram
+        if stt_service == STTService.deepgram:
+            deepgram_codec_value = 'pcm16' if codec == 'opus' else codec
             deepgram_socket = await process_audio_dg(
-                stream_transcript, memory_stream_id, language, sample_rate, codec, channels, preseconds=duration
+                stream_transcript, memory_stream_id, language, sample_rate, deepgram_codec_value, channels,
+                preseconds=duration
             )
             if duration:
                 deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, speech_profile_stream_id, language, sample_rate, codec, channels
+                    stream_transcript, speech_profile_stream_id, language, sample_rate, deepgram_codec_value, channels
                 )
 
-                await send_initial_file(speech_profile, deepgram_socket)
+                await send_initial_file_path(file_path, deepgram_socket)
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
                 stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
             )
         elif stt_service == STTService.speechmatics:
-            file_path = None
-            if language == 'en' and codec == 'opus' and include_speech_profile:
-                file_path = get_profile_audio_if_exists(uid)
-                duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
-
             speechmatics_socket = await process_audio_speechmatics(
                 stream_transcript, speech_profile_stream_id, language, preseconds=duration
             )
             if duration:
-                #     speechmatics_socket2 = await process_audio_speechmatics(
-                #         stream_transcript, speech_profile_stream_id, language, preseconds=duration
-                #     )
                 await send_initial_file_path(file_path, speechmatics_socket)
                 print('speech_profile speechmatics duration', duration)
 
@@ -249,23 +238,14 @@ async def _websocket_util(
             while websocket_active:
                 data = await websocket.receive_bytes()
                 # audio_buffer.extend(data)
+                if codec == 'opus' and sample_rate == 16000:
+                    data = decoder.decode(bytes(data), frame_size=160)
 
                 if soniox_socket is not None:
-                    decoded_opus = decoder.decode(bytes(data), frame_size=160)
-                    await soniox_socket.send(decoded_opus)
+                    await soniox_socket.send(data)
 
                 if speechmatics_socket1 is not None:
-                    decoded_opus = decoder.decode(bytes(data), frame_size=160)
-                    await speechmatics_socket1.send(decoded_opus)
-
-                    # elapsed_seconds = time.time() - timer_start
-                    # if elapsed_seconds > duration or not dg_socket2:
-                    #     if speechmatics_socket2:
-                    #         print('Killing socket2 speechmatics')
-                    #         speechmatics_socket2.close()
-                    #         speechmatics_socket2 = None
-                    # else:
-                    #     speechmatics_socket2.send(decoded_opus)
+                    await speechmatics_socket1.send(data)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
@@ -298,8 +278,6 @@ async def _websocket_util(
                 await soniox_socket.close()
             if speechmatics_socket:
                 await speechmatics_socket.close()
-            if speechmatics_socket2:
-                await speechmatics_socket2.close()
 
     # heart beat
     async def send_heartbeat():
