@@ -166,46 +166,44 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   await provider.askForBackgroundPermissions();
                                 }
                               }
-                              await Permission.notification.request().then((value) async {
-                                if (value.isGranted) {
-                                  provider.updateNotificationPermission(true);
-                                }
-                                if (await Permission.location.serviceStatus.isEnabled) {
-                                  await Permission.locationWhenInUse.request().then((value) async {
-                                    if (value.isGranted) {
-                                      await Permission.locationAlways.request().then((value) async {
-                                        print('Location permission: ${value.isGranted}');
+                              await Permission.notification.request().then(
+                                (value) async {
+                                  if (value.isGranted) {
+                                    provider.updateNotificationPermission(true);
+                                  }
+                                  if (await Permission.location.serviceStatus.isEnabled) {
+                                    await Permission.locationWhenInUse.request().then(
+                                      (value) async {
                                         if (value.isGranted) {
-                                          provider.setLoading(false);
-                                          if (Platform.isAndroid) {
-                                            widget.goNext();
-                                          }
-                                          provider.updateLocationPermission(true);
-                                        }
-                                        value.isGranted
-                                            ? () {
+                                          await Permission.locationAlways.request().then(
+                                            (value) async {
+                                              if (value.isGranted) {
+                                                provider.updateLocationPermission(true);
                                                 widget.goNext();
                                                 provider.setLoading(false);
+                                              } else {
+                                                Future.delayed(const Duration(milliseconds: 2500), () async {
+                                                  if (await Permission.locationAlways.status.isGranted) {
+                                                    provider.updateLocationPermission(true);
+                                                  }
+                                                  widget.goNext();
+                                                  provider.setLoading(false);
+                                                });
                                               }
-                                            : Future.delayed(const Duration(milliseconds: 2500), () async {
-                                                if (await Permission.locationAlways.status.isGranted) {
-                                                  provider.updateLocationPermission(true);
-                                                }
-                                                print('Location permission222222: ${value.isGranted}');
-                                                widget.goNext();
-                                                provider.setLoading(false);
-                                              });
-                                      });
-                                    } else {
-                                      widget.goNext();
-                                      provider.setLoading(false);
-                                    }
-                                  });
-                                } else {
-                                  widget.goNext();
-                                  provider.setLoading(false);
-                                }
-                              });
+                                            },
+                                          );
+                                        } else {
+                                          widget.goNext();
+                                          provider.setLoading(false);
+                                        }
+                                      },
+                                    );
+                                  } else {
+                                    widget.goNext();
+                                    provider.setLoading(false);
+                                  }
+                                },
+                              );
                             },
                             child: const Text(
                               'Continue',
