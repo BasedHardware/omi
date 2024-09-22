@@ -94,10 +94,10 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, codec: str, channels: int,
+        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int,
         preseconds: int = 0,
 ):
-    print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
+    print('process_audio_dg', language, sample_rate, channels, preseconds)
 
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
@@ -143,7 +143,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram(on_message, on_error, language, sample_rate, codec, channels)
+    return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
 
 
 def process_segments(uid: str, segments: list[dict]):
@@ -151,7 +151,7 @@ def process_segments(uid: str, segments: list[dict]):
     trigger_realtime_integrations(uid, token, segments)
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, codec: str, channels: int):
+def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
     try:
         dg_connection = deepgram.listen.live.v("1")
@@ -171,7 +171,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             multichannel=channels > 1,
             model='nova-2-general',
             sample_rate=sample_rate,
-            encoding='linear16' if codec == 'pcm8' or codec == 'pcm16' else 'opus'
+            encoding='linear16'
         )
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
@@ -183,10 +183,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
 soniox_valid_languages = ['en']
 
 
-# soniox_valid_languages = ['en', 'es', 'fr', 'ko', 'zh', 'it', 'pt', 'de']
-
-
-async def process_audio_soniox(stream_transcript, stream_id: int, language: str, uid: str):
+async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: int, language: str, uid: str):
     # Fuck, soniox doesn't even support diarization in languages != english
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -198,12 +195,12 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     if language not in soniox_valid_languages:
         raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
-    has_speech_profile = create_user_speech_profile(uid) if uid else False  # only english too
+    has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
 
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
-        'sample_rate_hertz': 16000,
+        'sample_rate_hertz': sample_rate,
         'include_nonfinal': True,
         'enable_endpoint_detection': True,
         'enable_streaming_speaker_diarization': True,
@@ -300,12 +297,9 @@ LANGUAGE = "en"
 CONNECTION_URL = f"wss://eu2.rt.speechmatics.com/v2"
 
 
-async def process_audio_speechmatics(stream_transcript, stream_id: int, language: str, preseconds: int = 0):
-    # Create a transcription client
+async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str, preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
-    # Validate the language and construct the model name
-    # has_speech_profile = create_user_speech_profile(uid)  # only english too
 
     request = {
         "message": "StartRecognition",
@@ -319,7 +313,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
             "enable_entities": True,
             "speaker_diarization_config": {"max_speakers": 4}
         },
-        "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": 16000},
+        "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": sample_rate},
         # "audio_events_config": {
         #     "types": [
         #         "laughter",
@@ -329,16 +323,13 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
         # }
     }
     try:
-        # Connect to Soniox WebSocket
         print("Connecting to Speechmatics WebSocket...")
         socket = await websockets.connect(uri, extra_headers={"Authorization": f"Bearer {api_key}"})
         print("Connected to Speechmatics WebSocket.")
 
-        # Send the initial request
         await socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
 
-        # Start listening for messages from Soniox
         async def on_message():
             try:
                 async for message in socket:
@@ -370,7 +361,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, language
 
                             is_user = True if r_speaker == '1' and preseconds > 0 else False
                             if r_start < preseconds:
-                                print('Skipping word', r_start, r_content)
+                                # print('Skipping word', r_start, r_content)
                                 continue
                             # print(r_content, r_speaker, [r_start, r_end])
                             if not segments:

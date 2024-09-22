@@ -105,8 +105,8 @@ async def _execute_single(file_path: str):
 
     # streaming models
     socket = await process_audio_dg(stream_transcript_deepgram, '1', 'en', 16000, 'pcm16', 1, 0)
-    socket_soniox = await process_audio_soniox(stream_transcript_soniox, '1', 'en', None)
-    socket_speechmatics = await process_audio_speechmatics(stream_transcript_speechmatics, '1', 'en', 0)
+    socket_soniox = await process_audio_soniox(stream_transcript_soniox, '1', 16000, 'en', None)
+    socket_speechmatics = await process_audio_speechmatics(stream_transcript_speechmatics, '1', 16000, 'en', 0)
     print('duration', duration)
     with open(file_path, "rb") as file:
         while True:
