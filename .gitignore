@@ -154,3 +154,8 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/research/*.json
 /backend/scripts/research/*.csv
 /backend/scripts/research/users
+/backend/scripts/stt/_temp
+/backend/scripts/stt/_temp2
+/backend/scripts/stt/pretrained_models
+/backend/scripts/stt/results
+/backend/scripts/stt/diarization.json
