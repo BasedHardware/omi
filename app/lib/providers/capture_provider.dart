@@ -71,6 +71,11 @@ class CaptureProvider extends ChangeNotifier
 
   RecordingState recordingState = RecordingState.stop;
 
+  bool _transcriptServiceReady = false;
+  bool get transcriptServiceReady => _transcriptServiceReady;
+
+  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
+
   // -----------------------
   // Memory creation variables
   double? streamStartedAtSecond;
@@ -367,6 +372,7 @@ class CaptureProvider extends ChangeNotifier
       throw Exception("Can not create new memory socket");
     }
     _socket?.subscribe(this, this);
+    _transcriptServiceReady = true;
 
     if (segments.isNotEmpty) {
       // means that it was a reconnection, so we need to reset
@@ -478,6 +484,7 @@ class CaptureProvider extends ChangeNotifier
     _cleanupCurrentState();
     await _handleMemoryCreation(restartBytesProcessing);
 
+    await _recheckCodecChange();
     await _ensureSocketConnection(force: true);
 
     await startOpenGlass();
@@ -560,12 +567,12 @@ class CaptureProvider extends ChangeNotifier
     return connection.hasPhotoStreamingCharacteristic();
   }
 
-  Future<bool> _checkCodecChange() async {
+  Future<bool> _recheckCodecChange() async {
     if (_recordingDevice != null) {
       BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
       if (SharedPreferencesUtil().deviceCodec != newCodec) {
         debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        SharedPreferencesUtil().deviceCodec = newCodec;
+        await SharedPreferencesUtil().setDeviceCodec(newCodec);
         return true;
       }
     }
@@ -697,6 +704,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onClosed() {
+    _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
     _clean();
@@ -728,6 +736,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _transcriptServiceReady = false;
     debugPrint('err: $err');
     notifyListeners();
 

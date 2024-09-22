@@ -54,7 +54,7 @@ image = (
     memory=(512, 1024),
     cpu=2,
     allow_concurrent_inputs=10,
-    timeout=60 * 10,
+    timeout=60 * 35,
 )
 @asgi_app()
 def api():

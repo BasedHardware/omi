@@ -1,4 +1,7 @@
 import threading
+import asyncio
+import time
+from typing import List
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -127,8 +130,8 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
-    # Soft timeout
-    timeout_seconds = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 1800  # 30m
     started_at = time.time()
 
     def stream_transcript(segments, stream_id):
@@ -437,11 +440,11 @@ async def _websocket_util(
             await _create_processing_memory()
         else:
             # or ensure synced processing transcript
-            processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [processing_memory.id])
-            if len(processing_memories) == 0:
+            processing_memory_data = processing_memories_db.get_processing_memory_by_id(uid, processing_memory.id)
+            if not processing_memory_data:
                 print("processing memory is not found")
                 return
-            processing_memory = ProcessingMemory(**processing_memories[0])
+            processing_memory = ProcessingMemory(**processing_memory_data)
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
