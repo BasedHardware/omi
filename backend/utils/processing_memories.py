@@ -23,7 +23,7 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     if not transcript_segments or len(transcript_segments) == 0:
         print("Transcript segments is invalid")
         return
-    timer_segment_start = processing_memory.timer_segment_start
+    timer_segment_start = processing_memory.timer_segment_start if processing_memory.timer_segment_start else processing_memory.timer_start
     segment_end = transcript_segments[-1].end
     new_memory = CreateMemory(
         started_at=datetime.fromtimestamp(timer_segment_start, timezone.utc),
