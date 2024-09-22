@@ -74,6 +74,8 @@ class STTService(str, Enum):
     soniox = "soniox"
     speechmatics = "speechmatics"
 
+    # auto = "auto"
+
     @staticmethod
     def get_model_name(value):
         if value == STTService.deepgram:
@@ -97,6 +99,9 @@ async def _websocket_util(
 
     if stt_service == STTService.speechmatics:  # defaults to deepgram (no credits + 10 connections max limit)
         stt_service = STTService.deepgram
+
+    # TODO: if language english, use soniox
+    # TODO: else deepgram, if speechmatics credits, prob this for both?
 
     try:
         await websocket.accept()
