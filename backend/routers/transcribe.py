@@ -586,9 +586,8 @@ async def _websocket_util(
         # Longer 120s
         now = time.time()
         should_create_memory_time = True
-        timer_segment_start = timer_start + segment_start
         if time_validate:
-            should_create_memory_time = timer_segment_start + segment_end + min_seconds_limit < now
+            should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
         should_create_memory_time_words = min_words_limit == 0
@@ -602,7 +601,7 @@ async def _websocket_util(
 
         should_create_memory = should_create_memory_time and should_create_memory_time_words
         print(
-            f"Should create memory {should_create_memory} - {timer_segment_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
+            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
         if should_create_memory:
             memory = await _create_memory()
             if not memory:
