@@ -24,10 +24,11 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
         print("Transcript segments is invalid")
         return
     timer_start = processing_memory.timer_start
+    segment_start = transcript_segments[0].start
     segment_end = transcript_segments[-1].end
     new_memory = CreateMemory(
-        started_at=datetime.fromtimestamp(timer_start, timezone.utc),
-        finished_at=datetime.fromtimestamp(timer_start + segment_end, timezone.utc),
+        started_at=datetime.fromtimestamp(timer_start + segment_start, timezone.utc),
+        finished_at=datetime.fromtimestamp(timer_start + segment_start + segment_end, timezone.utc),
         language=processing_memory.language,
         transcript_segments=transcript_segments,
     )
