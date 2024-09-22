@@ -36,11 +36,15 @@ class MessageProvider extends ChangeNotifier {
 
   Future refreshMessages() async {
     setLoadingMessages(true);
+    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
+      setHasCachedMessages(true);
+    }
     messages = await getMessagesFromServer();
     if (messages.isEmpty) {
       messages = SharedPreferencesUtil().cachedMessages;
     } else {
       SharedPreferencesUtil().cachedMessages = messages;
+      setHasCachedMessages(true);
     }
     setLoadingMessages(false);
     notifyListeners();
