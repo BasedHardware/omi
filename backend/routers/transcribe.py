@@ -139,9 +139,20 @@ async def _websocket_util(
         nonlocal processing_memory
         nonlocal processing_memory_synced
         nonlocal memory_transcript_segements
+        nonlocal segment_start
 
         if not segments or len(segments) == 0:
             return
+
+        # Align the start, end segment
+        if len(memory_transcript_segements) == 0 and len(segments) > 0:
+            start = segments[0]["start"]
+            if not segment_start or segment_start > start:
+                segment_start = start
+        for i, segment in enumerate(segments):
+            segment["start"] -= segment_start
+            segment["end"] -= segment_start
+            segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
@@ -178,6 +189,8 @@ async def _websocket_util(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
     timer_start = None
+    segment_start = None
+    segment_end = None
     # audio_buffer = None
     duration = 0
     try:
@@ -377,6 +390,7 @@ async def _websocket_util(
         nonlocal processing_audio_frame_synced
 
         # Create wav
+        # TODO: remove audio frames [start, end]
         processing_audio_frame_synced = len(processing_audio_frames)
         file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced],
