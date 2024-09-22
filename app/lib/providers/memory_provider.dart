@@ -120,8 +120,34 @@ class MemoryProvider extends ChangeNotifier {
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
-    filterMemories('');
+    initFilteredMemories();
     notifyListeners();
+  }
+
+  int addMemoryWithDate(ServerMemory memory) {
+    int idx;
+    var date = memoriesWithDates.indexWhere((element) =>
+        element is DateTime &&
+        element.day == memory.createdAt.day &&
+        element.month == memory.createdAt.month &&
+        element.year == memory.createdAt.year);
+    if (date != -1) {
+      var hour = memoriesWithDates[date + 1].createdAt.hour;
+      var newHour = memory.createdAt.hour;
+      if (newHour > hour) {
+        memoriesWithDates.insert(date + 1, memory);
+        idx = date + 1;
+      } else {
+        memoriesWithDates.insert(date + 2, memory);
+        idx = date + 2;
+      }
+    } else {
+      memoriesWithDates.add(memory.createdAt);
+      memoriesWithDates.add(memory);
+      idx = memoriesWithDates.length - 1;
+    }
+    notifyListeners();
+    return idx;
   }
 
   void updateMemory(ServerMemory memory, [int? index]) {
