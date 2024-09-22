@@ -352,10 +352,11 @@ async def _websocket_util(
         last_processing_memory_data = processing_memories_db.get_last(uid)
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            segment_end = 0
+            last_segment_end = 0
             for segment in last_processing_memory.transcript_segments:
-                segment_end = max(segment_end, segment.end)
-            if last_processing_memory.timer_start + segment_end + min_seconds_limit > time.time():
+                last_segment_end = max(last_segment_end, segment.end)
+            timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
+            if timer_segment_start + last_segment_end + min_seconds_limit > time.time():
                 processing_memory = last_processing_memory
 
         # Or create new
@@ -364,6 +365,7 @@ async def _websocket_util(
                 id=str(uuid.uuid4()),
                 created_at=datetime.now(timezone.utc),
                 timer_start=timer_start,
+                timer_segment_start=timer_start+segment_start,
                 language=language,
             )
 
@@ -557,6 +559,8 @@ async def _websocket_util(
     async def _try_flush_new_memory(time_validate: bool = True):
         nonlocal memory_transcript_segements
         nonlocal timer_start
+        nonlocal segment_start
+        nonlocal segment_end
         nonlocal processing_memory
         nonlocal processing_memory_synced
         nonlocal processing_audio_frames
@@ -567,13 +571,8 @@ async def _websocket_util(
             return
 
         # Validate last segment
-        last_segment = None
-        if len(memory_transcript_segements) > 0:
-            last_segment = memory_transcript_segements[-1]
-        if not last_segment:
+        if not segment_end:
             print("Not last segment or last segment invalid")
-            if last_segment:
-                print(f"{last_segment.dict()}")
             return
 
         # First chunk, create processing memory
@@ -584,11 +583,11 @@ async def _websocket_util(
 
         # Validate transcript
         # Longer 120s
-        segment_end = last_segment.end
         now = time.time()
         should_create_memory_time = True
         if time_validate:
-            should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
+            timer_segment_start = timer_start + segment_start
+            should_create_memory_time = timer_segment_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
         should_create_memory_time_words = min_words_limit == 0
@@ -602,7 +601,7 @@ async def _websocket_util(
 
         should_create_memory = should_create_memory_time and should_create_memory_time_words
         print(
-            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
+            f"Should create memory {should_create_memory} - {timer_segment_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
         if should_create_memory:
             memory = await _create_memory()
             if not memory:
