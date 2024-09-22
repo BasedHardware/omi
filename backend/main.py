@@ -6,8 +6,7 @@ from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, Cron
 from routers import workflow, chat, firmware, plugins, memories, transcribe, notifications, speech_profile, \
-    agents, facts, users, postprocessing, processing_memories, trends,sdcard
-
+    agents, facts, users, postprocessing, processing_memories, trends, sdcard
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -54,7 +53,7 @@ image = (
     memory=(512, 1024),
     cpu=2,
     allow_concurrent_inputs=10,
-    timeout=60 * 5,
+    timeout=60 * 19,
 )
 @asgi_app()
 def api():
@@ -70,3 +69,30 @@ for path in paths:
 @modal_app.function(image=image, schedule=Cron('* * * * *'))
 async def notifications_cronjob():
     await start_cron_job()
+
+
+@app.post('/webhook')
+async def webhook(data: dict):
+    diarization = data['output']['diarization']
+    joined = []
+    for speaker in diarization:
+        if not joined:
+            joined.append(speaker)
+        else:
+            if speaker['speaker'] == joined[-1]['speaker']:
+                joined[-1]['end'] = speaker['end']
+            else:
+                joined.append(speaker)
+
+    print(data['jobId'], json.dumps(joined))
+    # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
+    with open('scripts/stt/diarization.json', 'r') as f:
+        diarization_data = json.loads(f.read())
+
+    memory_id = diarization_data.get(data['jobId'])
+    if memory_id:
+        diarization_data[memory_id] = joined
+        del diarization_data[data['jobId']]
+        with open('scripts/stt/diarization.json', 'w') as f:
+            json.dump(diarization_data, f, indent=2)
+    return 'ok'
