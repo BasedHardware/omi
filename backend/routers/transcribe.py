@@ -147,16 +147,14 @@ async def _websocket_util(
             return
 
         # Align the start, end segment
-        if len(segments) > 0:
-            # start
-            if not segment_start:
-                start = segments[0]["start"]
-                segment_start = start
+        if not segment_start:
+            start = segments[0]["start"]
+            segment_start = start
 
-            # end
-            end = segments[-1]["end"]
-            if not segment_end or segment_end < end:
-                segment_end = end
+        # end
+        end = segments[-1]["end"]
+        if not segment_end or segment_end < end:
+            segment_end = end
 
         for i, segment in enumerate(segments):
             segment["start"] -= segment_start
@@ -200,6 +198,7 @@ async def _websocket_util(
     timer_start = None
     segment_start = None
     segment_end = None
+    audio_frames_per_sec = 100
     # audio_buffer = None
     duration = 0
     try:
@@ -404,13 +403,12 @@ async def _websocket_util(
         processing_audio_frame_synced = len(processing_audio_frames)
 
         # Remove audio frames [start, end]
-        frames_per_sec = 100
         left = 0
         if segment_start:
-            left = max(left, math.floor(segment_start * frames_per_sec))
+            left = max(left, math.floor(segment_start * audio_frames_per_sec))
         right = processing_audio_frame_synced
         if segment_end:
-            right = min(math.ceil(segment_end * frames_per_sec), right)
+            right = min(math.ceil(segment_end * audio_frames_per_sec), right)
 
         file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[left:right],
