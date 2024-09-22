@@ -260,7 +260,8 @@ async def _websocket_util(
         # audio_file = open(path, "a")
         try:
             while websocket_active:
-                data = await websocket.receive_bytes()
+                raw_data = await websocket.receive_bytes()
+                data = raw_data[:]
                 # audio_buffer.extend(data)
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
@@ -283,7 +284,7 @@ async def _websocket_util(
                         dg_socket2.send(data)
 
                 # stream
-                stream_audio(data)
+                stream_audio(raw_data)
 
                 # audio_buffer = bytearray()
 
@@ -407,10 +408,10 @@ async def _websocket_util(
         # Remove audio frames [start, end]
         left = 0
         if segment_start:
-            left = max(left, math.floor(segment_start * audio_frames_per_sec))
+            left = max(left, math.floor(segment_start) * audio_frames_per_sec)
         right = processing_audio_frame_synced
         if segment_end:
-            right = min(math.ceil(segment_end * audio_frames_per_sec), right)
+            right = min(math.ceil(segment_end) * audio_frames_per_sec, right)
 
         file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
         create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[left:right],
@@ -585,8 +586,8 @@ async def _websocket_util(
         # Longer 120s
         now = time.time()
         should_create_memory_time = True
+        timer_segment_start = timer_start + segment_start
         if time_validate:
-            timer_segment_start = timer_start + segment_start
             should_create_memory_time = timer_segment_start + segment_end + min_seconds_limit < now
 
         # 1 words at least
