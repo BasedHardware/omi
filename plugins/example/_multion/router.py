@@ -169,7 +169,14 @@ async def multion_endpoint(memory: Memory, uid: str = Query(...)):
     if not books:
         return EndpointResponse(message='No books were suggested or mentioned.')
 
-    result = await call_multion(books, user_id)
+    try:
+        result = await asyncio.wait_for(call_multion(books, user_id), timeout=120)
+    except asyncio.TimeoutError:
+        print("Timeout error occurred")
+        return EndpointResponse(message="Timeout error occurred.")
+    except Exception as e:
+        print(f"Error calling Multion API: {str(e)}")
+        return EndpointResponse(message=f"Error calling Multion API: {str(e)}")
     if isinstance(result, bytes):
         result = result.decode('utf-8')
 
