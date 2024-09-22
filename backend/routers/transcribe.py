@@ -524,6 +524,10 @@ async def _websocket_util(
             memories_db.update_memory_segments(uid, memory.id,
                                                [segment.dict() for segment in memory.transcript_segments])
 
+            # Update finished at
+            memory.finished_at = datetime.fromtimestamp(memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc)
+            memories_db.update_memory_finished_at(uid, memory.id, memory.finished_at)
+
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
 

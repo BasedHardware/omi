@@ -138,6 +138,11 @@ def update_memory_events(uid: str, memory_id: str, events: List[dict]):
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'structured.events': events})
 
+def update_memory_finished_at(uid: str, memory_id: str, finished_at: datetime):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'finished_at': finished_at})
+
 
 # VISBILITY
 
