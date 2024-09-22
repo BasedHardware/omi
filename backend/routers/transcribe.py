@@ -428,7 +428,8 @@ async def _websocket_util(
 
                     # merge
                     merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                    merge_wav_files(merge_file_path, [previous_file_path, file_path])
+                    nearest_timer_start = processing_memory.timer_starts[-2]
+                    merge_wav_files(merge_file_path, [previous_file_path, file_path], [math.ceil(timer_start-nearest_timer_start), 0])
 
                     # clean
                     os.remove(previous_file_path)
