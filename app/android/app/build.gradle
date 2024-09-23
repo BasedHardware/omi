@@ -33,6 +33,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     namespace "com.friend.ios"
 
 
@@ -79,6 +83,8 @@ android {
         versionName flutterVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
+        buildConfigField("String", "INTERCOM_APP_ID", "\"${System.getenv("intercom.app.id")}\"")
+        buildConfigField("String", "INTERCOM_ANDROID_API_KEY", "\"${System.getenv("intercom.android.api.key")}\"")
     }
 
     signingConfigs {
@@ -125,4 +131,6 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
+    implementation 'io.intercom.android:intercom-sdk:latest.release'
 }
