@@ -8,7 +8,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/memory_detail/compare_transcripts.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/plugins/page.dart';
@@ -713,19 +712,19 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
         ),
       ),
       // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-      widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-          ? Card(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-              child: ListTile(
-                title: const Text('Compare Transcripts Models'),
-                leading: const Icon(Icons.chat),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-                onTap: () {
-                  routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-                },
-              ),
-            )
-          : const SizedBox.shrink(),
+      // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
+      //     ? Card(
+      //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      //         child: ListTile(
+      //           title: const Text('Compare Transcripts Models'),
+      //           leading: const Icon(Icons.chat),
+      //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
+      //           onTap: () {
+      //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
+      //           },
+      //         ),
+      //       )
+      //     : const SizedBox.shrink(),
     ]);
   }
 }

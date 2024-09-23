@@ -1,11 +1,9 @@
-import math
 import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
 import opuslib
-import requests
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
@@ -16,10 +14,7 @@ import database.processing_memories as processing_memories_db
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
-from utils.audio import create_wav_from_bytes, merge_wav_files
-from utils.memories.postprocess_memory import postprocess_memory as postprocess_memory_util
 from utils.memories.process_memory import process_memory
-from utils.other.storage import upload_postprocessing_audio
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
 from utils.stt.vad import VADIterator, model
@@ -218,8 +213,10 @@ async def _websocket_util(
                 )
 
                 print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
+
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
+
                 await send_initial_file_path(file_path, deepgram_socket_send)
         # SONIOX
         elif stt_service == STTService.soniox:
@@ -401,74 +398,6 @@ async def _websocket_util(
         if not ok:
             print("Can not send message event new_processing_memory_created")
 
-    async def _post_process_memory(memory: Memory):
-        nonlocal processing_memory
-        nonlocal processing_audio_frames
-        nonlocal processing_audio_frame_synced
-        nonlocal segment_start
-        nonlocal segment_end
-
-        # Create wav
-        processing_audio_frame_synced = len(processing_audio_frames)
-
-        # Remove audio frames [start, end]
-        left = 0
-        if segment_start:
-            left = max(left, math.floor(segment_start) * audio_frames_per_sec)
-        right = processing_audio_frame_synced
-        if segment_end:
-            right = min(math.ceil(segment_end) * audio_frames_per_sec, right)
-
-        file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-        create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[left:right],
-                              frame_rate=sample_rate, channels=channels, codec=codec, )
-
-        # Try merge new audio with the previous
-        if processing_memory.audio_url:
-            try:
-                response = requests.get(processing_memory.audio_url, timeout=30, )
-                if response.status_code == 200:
-                    previous_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                    with open(previous_file_path, "wb") as file:
-                        file.write(response.content)
-
-                    # merge
-                    merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                    nearest_timer_start = processing_memory.timer_starts[-2]
-                    merge_wav_files(merge_file_path, [previous_file_path, file_path],
-                                    [math.ceil(timer_start - nearest_timer_start), 0])
-
-                    # clean
-                    os.remove(previous_file_path)
-                    os.remove(file_path)
-
-                    # new
-                    file_path = merge_file_path
-                else:
-                    print("Failed to download the file.")
-
-            except Exception as e:
-                print(f"Can not merge wav files {str(e)}")
-
-        # Process
-        emotional_feedback = processing_memory.emotional_feedback
-        status, new_memory = postprocess_memory_util(
-            memory.id, file_path, uid, emotional_feedback, STTService.get_model_name(stt_service)
-        )
-        if status == 200:
-            memory = new_memory
-        else:
-            print(f"Post processing failed {memory.id}")
-
-        # Store postprocessing audio file
-        signed_url = upload_postprocessing_audio(file_path)
-        processing_memory.audio_url = signed_url
-        processing_memories_db.update_audio_url(uid, processing_memory.id, processing_memory.audio_url)
-
-        os.remove(file_path)
-
-        return memory
-
     # Create memory
     async def _create_memory():
         print("create memory")
@@ -502,11 +431,11 @@ async def _websocket_util(
             print("Can not send message event new_memory_creating")
 
         # Not existed memory then create new one
-        memory = None
         messages = []
         if not processing_memory.memory_id:
             new_memory, new_messages, updated_processing_memory = await create_memory_by_processing_memory(
-                uid, processing_memory.id)
+                uid, processing_memory.id
+            )
             if not new_memory:
                 print("Can not create new memory")
 
@@ -529,28 +458,24 @@ async def _websocket_util(
 
             # Update transcripts
             memory.transcript_segments = processing_memory.transcript_segments
-            memories_db.update_memory_segments(uid, memory.id,
-                                               [segment.dict() for segment in memory.transcript_segments])
+            memories_db.update_memory_segments(
+                uid, memory.id, [segment.dict() for segment in memory.transcript_segments]
+            )
 
             # Update finished at
             memory.finished_at = datetime.fromtimestamp(
-                memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc)
+                memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc
+            )
             memories_db.update_memory_finished_at(uid, memory.id, memory.finished_at)
 
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
 
-        # Post-processing
-        new_memory = await _post_process_memory(memory)
-        if new_memory:
-            memory = new_memory
-
         # Message: completed
-        msg = NewMemoryCreated(event_type="new_memory_created",
-                               processing_memory_id=processing_memory.id,
-                               memory_id=memory.id,
-                               memory=memory,
-                               messages=messages, )
+        msg = NewMemoryCreated(
+            event_type="new_memory_created", processing_memory_id=processing_memory.id, memory_id=memory.id,
+            memory=memory, messages=messages,
+        )
         ok = await _send_message_event(msg)
         if not ok:
             print("Can not send message event new_memory_created")
