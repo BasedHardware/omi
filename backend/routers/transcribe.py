@@ -204,6 +204,7 @@ async def _websocket_util(
         # TODO: how bee does for recognizing other languages speech profile
         if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
             file_path = get_profile_audio_if_exists(uid)
+            print(f'deepgram-obns3: file_path {file_path}')
             duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
         # DEEPGRAM
@@ -216,6 +217,7 @@ async def _websocket_util(
                     stream_transcript, speech_profile_stream_id, language, sample_rate, channels
                 )
 
+                print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
                 await send_initial_file_path(file_path, deepgram_socket)
         # SONIOX
         elif stt_service == STTService.soniox:
@@ -292,6 +294,8 @@ async def _websocket_util(
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Could not process audio: error {e}')
+            print(f'deepgram-obns3: receive_audio > dg_socket1 {dg_socket1}')
+            print(f'deepgram-obns3: receive_audio > dg_socket2 {dg_socket2}')
             websocket_close_code = 1011
         finally:
             websocket_active = False
