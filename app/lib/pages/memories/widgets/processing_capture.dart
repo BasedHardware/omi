@@ -26,6 +26,7 @@ class MemoryCaptureWidget extends StatefulWidget {
 }
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -120,8 +121,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
       isConnected = deviceProvider.connectedDevice != null;
-    } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
+    } else if (captureProvider.recordingDeviceServiceReady && captureProvider.transcriptServiceReady) {
       stateText = "Listening";
+      isConnected = true;
+    } else if (captureProvider.recordingDeviceServiceReady || captureProvider.transcriptServiceReady) {
+      stateText = "Preparing";
       isConnected = true;
     }
 

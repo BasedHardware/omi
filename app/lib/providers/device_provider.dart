@@ -24,6 +24,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Timer? _disconnectNotificationTimer;
 
+  DeviceProvider() {
+    ServiceManager.instance().device.subscribe(this, this);
+  }
+
   void setProviders(CaptureProvider provider) {
     captureProvider = provider;
     notifyListeners();
@@ -128,7 +132,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future scanAndConnectToDevice() async {
-    ServiceManager.instance().device.subscribe(this, this);
     updateConnectingStatus(true);
     if (isConnected) {
       if (connectedDevice == null) {
@@ -219,7 +222,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(device);
     setIsConnected(true);
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true, device: connectedDevice);
+    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true, device: device);
     //  initiateBleBatteryListener();
     // The device is still disconnected for some reason
     if (connectedDevice != null) {
