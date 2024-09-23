@@ -1,13 +1,11 @@
-import 'dart:convert';
-
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/memories/process.dart';
-import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:tuple/tuple.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 
 class MemoryProvider extends ChangeNotifier {
   List<ServerMemory> memories = [];
@@ -15,7 +13,7 @@ class MemoryProvider extends ChangeNotifier {
   List memoriesWithDates = [];
 
   bool isLoadingMemories = false;
-  bool displayDiscardMemories = false;
+  bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
 
@@ -35,14 +33,16 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void initFilteredMemories() {
-    filteredMemories = memories;
+    filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();
   }
 
   void filterMemories(String query) {
     filteredMemories = [];
-    filteredMemories = displayDiscardMemories ? memories : memories.where((memory) => !memory.discarded).toList();
+    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
+        ? memories
+        : memories.where((memory) => !memory.discarded).toList();
     filteredMemories = query.isEmpty
         ? filteredMemories
         : filteredMemories
@@ -52,13 +52,18 @@ class MemoryProvider extends ChangeNotifier {
                   .contains(query.toLowerCase()),
             )
             .toList();
+    if (query == '' && filteredMemories.isEmpty) {
+      filteredMemories = memories;
+      SharedPreferencesUtil().showDiscardedMemories = true;
+      hasNonDiscardedMemories = false;
+    }
     populateMemoriesWithDates();
     notifyListeners();
   }
 
   void toggleDiscardMemories() {
-    MixpanelManager().showDiscardedMemoriesToggled(!displayDiscardMemories);
-    displayDiscardMemories = !displayDiscardMemories;
+    MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
+    SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
     filterMemories('');
     populateMemoriesWithDates();
     notifyListeners();
@@ -76,7 +81,9 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    await retryFailedMemories();
+    initFilteredMemories();
+    // No need to retry memories anymore as it is handled by the server
+    // retryFailedMemories();
     notifyListeners();
   }
 
@@ -84,9 +91,20 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(true);
     var mem = await getMemories();
     memories = mem;
+    createEventsForMemories();
     setLoadingMemories(false);
     notifyListeners();
     return memories;
+  }
+
+  void createEventsForMemories() {
+    for (var memory in memories) {
+      if (memory.structured.events.isNotEmpty &&
+          !memory.structured.events.first.created &&
+          memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
+        _handleCalendarCreation(memory);
+      }
+    }
   }
 
   Future getMoreMemoriesFromServer() async {
@@ -95,14 +113,41 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(true);
     var newMemories = await getMemories(offset: memories.length);
     memories.addAll(newMemories);
+    filterMemories('');
     setLoadingMemories(false);
     notifyListeners();
   }
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
-    filterMemories('');
+    initFilteredMemories();
     notifyListeners();
+  }
+
+  int addMemoryWithDate(ServerMemory memory) {
+    int idx;
+    var date = memoriesWithDates.indexWhere((element) =>
+        element is DateTime &&
+        element.day == memory.createdAt.day &&
+        element.month == memory.createdAt.month &&
+        element.year == memory.createdAt.year);
+    if (date != -1) {
+      var hour = memoriesWithDates[date + 1].createdAt.hour;
+      var newHour = memory.createdAt.hour;
+      if (newHour > hour) {
+        memoriesWithDates.insert(date + 1, memory);
+        idx = date + 1;
+      } else {
+        memoriesWithDates.insert(date + 2, memory);
+        idx = date + 2;
+      }
+    } else {
+      memoriesWithDates.add(memory.createdAt);
+      memoriesWithDates.add(memory);
+      idx = memoriesWithDates.length - 1;
+    }
+    notifyListeners();
+    return idx;
   }
 
   void updateMemory(ServerMemory memory, [int? index]) {
@@ -114,67 +159,63 @@ class MemoryProvider extends ChangeNotifier {
         memories[i] = memory;
       }
     }
+    initFilteredMemories();
+    notifyListeners();
+  }
+
+  _handleCalendarCreation(ServerMemory memory) {
+    if (!SharedPreferencesUtil().calendarEnabled) return;
+    if (SharedPreferencesUtil().calendarType != 'auto') return;
+
+    List<Event> events = memory.structured.events;
+    if (events.isEmpty) return;
+
+    List<int> indexes = events.mapIndexed((index, e) => index).toList();
+    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+    for (var i = 0; i < events.length; i++) {
+      print('Creating event: ${events[i].title}');
+      if (events[i].created) continue;
+      events[i].created = true;
+      CalendarUtil().createEvent(
+        events[i].title,
+        events[i].startsAt,
+        events[i].duration,
+        description: events[i].description,
+      );
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////
+  ////////// Delete Memory With Undo Functionality ///////////////
+
+  Map<String, ServerMemory> memoriesToDelete = {};
+
+  void deleteMemoryLocally(ServerMemory memory, int index) {
+    memoriesToDelete[memory.id] = memory;
+    memories.removeWhere((element) => element.id == memory.id);
     filterMemories('');
     notifyListeners();
   }
 
-  void deleteMemory(ServerMemory memory, int index) {
-    memories.removeAt(index);
+  void deleteMemoryOnServer(String memoryId) {
+    deleteMemoryServer(memoryId);
+    memoriesToDelete.remove(memoryId);
+  }
+
+  void undoDeleteMemory(String memoryId, int index) {
+    if (memoriesToDelete.containsKey(memoryId)) {
+      ServerMemory memory = memoriesToDelete.remove(memoryId)!;
+      memories.insert(index, memory);
+      filterMemories('');
+    }
     notifyListeners();
   }
+  /////////////////////////////////////////////////////////////////
 
-  // TODO: Move this to somewhere more suitable
-  Future<ServerMemory?> _retrySingleFailed(ServerMemory memory) async {
-    if (memory.transcriptSegments.isEmpty || memory.photos.isEmpty) return null;
-    return await processTranscriptContent(
-      segments: memory.transcriptSegments,
-      sendMessageToChat: null,
-      startedAt: memory.startedAt,
-      finishedAt: memory.finishedAt,
-      geolocation: memory.geolocation,
-      photos: memory.photos.map((photo) => Tuple2(photo.base64, photo.description)).toList(),
-      triggerIntegrations: false,
-      language: memory.language ?? 'en',
-    );
-  }
-
-  Future retryFailedMemories() async {
-    if (SharedPreferencesUtil().failedMemories.isEmpty) return;
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
-    // retry failed memories
-    List<Future<ServerMemory?>> asyncEvents = [];
-    for (var item in SharedPreferencesUtil().failedMemories) {
-      asyncEvents.add(_retrySingleFailed(item));
-    }
-    // TODO: should be able to retry including created at date.
-    // TODO: should trigger integrations? probably yes, but notifications?
-
-    List<ServerMemory?> results = await Future.wait(asyncEvents);
-    var failedCopy = List<ServerMemory>.from(SharedPreferencesUtil().failedMemories);
-
-    for (var i = 0; i < results.length; i++) {
-      ServerMemory? newCreatedMemory = results[i];
-
-      if (newCreatedMemory != null) {
-        SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-        memories.insert(0, newCreatedMemory);
-      } else {
-        var prefsMemory = SharedPreferencesUtil().failedMemories[i];
-        if (prefsMemory.transcriptSegments.isEmpty && prefsMemory.photos.isEmpty) {
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        if (SharedPreferencesUtil().failedMemories[i].retries == 3) {
-          CrashReporting.reportHandledCrash(Exception('Retry memory limits reached'), StackTrace.current,
-              userAttributes: {'memory': jsonEncode(SharedPreferencesUtil().failedMemories[i].toJson())});
-          SharedPreferencesUtil().removeFailedMemory(failedCopy[i].id);
-          continue;
-        }
-        memories.insert(0, SharedPreferencesUtil().failedMemories[i]); // TODO: sort them or something?
-        SharedPreferencesUtil().increaseFailedMemoryRetries(failedCopy[i].id);
-      }
-    }
-    debugPrint('SharedPreferencesUtil().failedMemories: ${SharedPreferencesUtil().failedMemories.length}');
+  void deleteMemory(ServerMemory memory, int index) {
+    memories.removeWhere((element) => element.id == memory.id);
+    deleteMemoryServer(memory.id);
+    filterMemories('');
     notifyListeners();
   }
 }

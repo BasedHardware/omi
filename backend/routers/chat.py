@@ -1,13 +1,13 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.chat as chat_db
 from models.chat import Message, SendMessageRequest, MessageSender
+from utils.chat.chat import clear_user_chat_message
 from utils.llm import qa_rag, initial_chat_message
-from utils.memories.facts import get_prompt_data
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
 from utils.retrieval.rag import retrieve_rag_context
@@ -30,7 +30,8 @@ def filter_messages(messages, plugin_id):
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.utcnow(), sender='human', type='text')
+    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human',
+                      type='text')
     chat_db.add_message(uid, message.dict())
 
     plugin = get_plugin_by_id(plugin_id)
@@ -40,13 +41,12 @@ def send_message(
     messages = filter_messages(messages, plugin_id)
 
     context_str, memories = retrieve_rag_context(uid, messages)
-    user_name, user_facts = get_prompt_data(uid)
-    response: str = qa_rag(user_name, user_facts, context_str, messages, plugin)
+    response: str = qa_rag(uid, context_str, messages, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=response,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=plugin_id,
         type='text',
@@ -58,15 +58,22 @@ def send_message(
     return ai_message
 
 
+@router.delete('/v1/clear-chat', tags=['chat'], response_model=Message)
+def clear_chat(uid: str = Depends(auth.get_current_user_uid)):
+    err = clear_user_chat_message(uid)
+    if err:
+        raise HTTPException(status_code=500, detail='Failed to clear chat')
+    return initial_message_util(uid)
+
+
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
     plugin = get_plugin_by_id(plugin_id)
-    user_name, user_facts = get_prompt_data(uid)
-    text = initial_chat_message(user_name, user_facts, plugin)
+    text = initial_chat_message(uid, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         sender='ai',
         plugin_id=plugin_id,
         from_external_integration=False,

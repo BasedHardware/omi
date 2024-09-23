@@ -27,8 +27,10 @@ class CategoryEnum(str, Enum):
     social = 'social'
     work = 'work'
     sports = 'sports'
+    politics = 'politics'
     literature = 'literature'
     history = 'history'
+    architecture = 'architecture'
     other = 'other'
 
 
@@ -75,11 +77,14 @@ class Structured(BaseModel):
     )
 
     def __str__(self):
-        result = f"{self.emoji} {self.title} ({self.category})\n\nSummary: {self.overview}\n\n"
+        result = (f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
+                  f"{str(self.overview).capitalize()}\n")
+
         if self.action_items:
             result += "Action Items:\n"
             for item in self.action_items:
                 result += f"- {item.description}\n"
+
         if self.events:
             result += "Events:\n"
             for event in self.events:
@@ -102,7 +107,14 @@ class MemorySource(str, Enum):
     workflow = 'workflow'
 
 
+class MemoryVisibility(str, Enum):
+    private = 'private'
+    shared = 'shared'
+    public = 'public'
+
+
 class PostProcessingStatus(str, Enum):
+    not_started = 'not_started'
     in_progress = 'in_progress'
     completed = 'completed'
     canceled = 'canceled'
@@ -116,6 +128,7 @@ class PostProcessingModel(str, Enum):
 class MemoryPostProcessing(BaseModel):
     status: PostProcessingStatus
     model: PostProcessingModel
+    fail_reason: Optional[str] = None
 
 
 class Memory(BaseModel):
@@ -140,13 +153,16 @@ class Memory(BaseModel):
 
     discarded: bool = False
     deleted: bool = False
+    visibility: MemoryVisibility = MemoryVisibility.private
+
+    processing_memory_id: Optional[str] = None
 
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:
         result = []
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
-                memory = Memory(**memory)          
+                memory = Memory(**memory)
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
@@ -177,6 +193,8 @@ class CreateMemory(BaseModel):
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
 
+    processing_memory_id: Optional[str] = None
+
     def get_transcript(self, include_timestamps: bool) -> str:
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
@@ -203,3 +221,8 @@ class WorkflowCreateMemory(BaseModel):
 class CreateMemoryResponse(BaseModel):
     memory: Memory
     messages: List[Message] = []
+
+
+class SetMemoryEventsStateRequest(BaseModel):
+    events_idx: List[int]
+    values: List[bool]

@@ -15,7 +15,8 @@ class ZapierCreateMemory(BaseModel):
     speakers: int
     category: str
     duration: int
-    overview:  str
+    overview: str
+    transcript: str
 
 
 class ZapierActionCreateMemory(BaseModel):

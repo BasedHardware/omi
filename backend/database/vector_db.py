@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from pinecone import Pinecone
@@ -21,7 +21,7 @@ def _get_data(uid: str, memory_id: str, vector: List[float]):
         'metadata': {
             'uid': uid,
             'memory_id': memory_id,
-            'created_at': datetime.utcnow().timestamp() / 1000,  # TODO: check this
+            'created_at': datetime.now(timezone.utc).timestamp() / 1000,  # TODO: check this
         }
     }
 
@@ -42,7 +42,7 @@ def upsert_vectors(
     print('upsert_vectors', res)
 
 
-def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k:int = 5) -> List[str]:
+def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
     filter_data = {'uid': uid}
     if starts_at is not None:
         filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
@@ -55,4 +55,6 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
 
 def delete_vector(memory_id: str):
-    index.delete(ids=[memory_id], namespace="ns1")
+    # TODO: does this work?
+    result = index.delete(ids=[memory_id], namespace="ns1")
+    print('delete_vector', result)

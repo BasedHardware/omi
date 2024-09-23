@@ -13,17 +13,28 @@
 #include "utils.h"
 #include "btutils.h"
 #include "lib/battery/battery.h"
+#include "speaker.h"
+#include "button.h"
+#include "sdcard.h"
+#include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
-
+extern bool storage_is_on;
+extern uint8_t file_count;
+extern uint32_t file_num_array[40];
+struct bt_conn *current_connection = NULL;
+uint16_t current_mtu = 0;
+uint16_t current_package_index = 0; 
 //
 // Internal
 //
 
-static struct bt_conn_cb _callback_references;
 
+static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+
+static struct bt_conn_cb _callback_references;
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
@@ -34,7 +45,6 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 //
 // Service and Characteristic
 //
-
 // Audio service with UUID 19B10000-E8F2-537E-4F6C-D104768A1214
 // exposes following characteristics:
 // - Audio data (UUID 19B10001-E8F2-537E-4F6C-D104768A1214) to send audio data (read/notify)
@@ -44,12 +54,18 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
 static struct bt_uuid_128 audio_service_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10000, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10001, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+#ifdef CONFIG_ENABLE_SPEAKER
+     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+#endif
+    
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -67,7 +83,119 @@ static struct bt_gatt_attr dfu_service_attr[] = {
 };
 
 static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
+//Acceleration data
+//this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
+//
+typedef struct sensors{
 
+	struct sensor_value a_x;
+	struct sensor_value a_y;
+	struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
+
+};
+static struct sensors mega_sensor;
+static struct device *lsm6dsl_dev;
+//Arbritrary uuid, feel free to change
+static struct bt_uuid_128 accel_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403790,0x0000,0x1000,0x7450,0xBF445E5829A2));
+static struct bt_uuid_128 accel_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x32403791,0x0000,0x1000,0x7450,0xBF445E5829A2));
+
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
+
+static struct bt_gatt_attr accel_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&accel_uuid),//primary description
+    BT_GATT_CHARACTERISTIC(&accel_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, accel_data_read_characteristic, NULL, NULL),//data type
+    BT_GATT_CCC(accel_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),//scheduler
+};
+static struct bt_gatt_service accel_service = BT_GATT_SERVICE(accel_service_attr);
+
+static ssize_t accel_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    LOG_INF("Acceleration data read characteristic");
+    int axis_mode = 6; //3 for accel, 6 for (also) gyro
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &axis_mode, sizeof(axis_mode));
+}
+
+
+#define ACCEL_REFRESH_INTERVAL 1000 // 1.0 seconds
+
+void broadcast_accel(struct k_work *work_item);
+K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
+
+void broadcast_accel(struct k_work *work_item) {
+
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+
+    sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+
+   //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
+    int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
+    if (err) {
+       LOG_ERR("Error updating Accelerometer data");
+    }
+    k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+}
+
+
+//use d4,d5
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+        if (value == BT_GATT_CCC_NOTIFY)
+    {
+        LOG_INF("Client subscribed for notifications");
+    }
+    else if (value == 0)
+    {
+        LOG_INF("Client unsubscribed from notifications");
+    }
+    else
+    {
+        LOG_ERR("Invalid CCC value: %u", value);
+    }
+}
+
+int accel_start() {
+    struct sensor_value odr_attr;
+    lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
+    k_msleep(50);
+    if (lsm6dsl_dev == NULL) {
+        LOG_ERR("Could not get LSM6DSL device");
+        return 0;
+	}
+    if (!device_is_ready(lsm6dsl_dev)) {
+		LOG_ERR("LSM6DSL: not ready");
+		return 0;
+	}
+    odr_attr.val1 = 52;
+	odr_attr.val2 = 0;
+
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+		return 0;
+	}
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
+		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	LOG_ERR("Cannot set sampling frequency for gyro.");
+	    return 0;
+	}
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
+    LOG_ERR("Sensor sample update error");
+    return 0;
+	}
+
+    LOG_INF("Accelerometer is ready for use \n");
+    
+    return 1;
+}
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -84,10 +212,6 @@ static const struct bt_data bt_sd[] = {
 //
 // State and Characteristics
 //
-
-struct bt_conn *current_connection = NULL;
-uint16_t current_mtu = 0;
-uint16_t current_package_index = 0;
 
 static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -117,6 +241,14 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
     LOG_DBG("audio_codec_read_characteristic %d", CODEC_ID);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
+
+static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+ {
+     uint16_t amount = 0;
+     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
+     amount = speak(len, buf);
+     return len;
+ }
 
 //
 // DFU Service Handlers
@@ -157,6 +289,8 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     return len;
 }
 
+
+
 //
 // Battery Service Handlers
 //
@@ -170,11 +304,12 @@ K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 void broadcast_battery_level(struct k_work *work_item) {
     uint16_t battery_millivolt;
     uint8_t battery_percentage;
-
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
-        LOG_INF("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+
+        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
+
 
         // Use the Zephyr BAS function to set (and notify) the battery level
         int err = bt_bas_set_battery_level(battery_percentage);
@@ -195,6 +330,7 @@ void broadcast_battery_level(struct k_work *work_item) {
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+    storage_is_on = true;
 
     err = bt_conn_get_info(conn, &info);
     if (err)
@@ -202,6 +338,8 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         LOG_ERR("Failed to get connection info (err %d)", err);
         return;
     }
+
+    LOG_INF("bluetooth activated");
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
@@ -211,13 +349,19 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
-
+#ifdef CONFIG_ACCELEROMETER
+     k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+#endif
+#ifdef CONFIG_ENABLE_BUTTON
+    activate_button_work();
+#endif
     is_connected = true;
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     is_connected = false;
+    storage_is_on = false;
 
     LOG_INF("Transport disconnected");
     bt_conn_unref(conn);
@@ -291,7 +435,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     tx_buffer_2[1] = (size >> 8) & 0xFF;
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
-    // Write to ring buffer
+    // Write to ring buffer 
     int written = ring_buf_put(&ring_buf, tx_buffer_2, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)
     {
@@ -311,12 +455,13 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        LOG_WRN("Failed to read from ring buffer %d", tx_buffer_size);
+        LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
         return false;
     }
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
+    // printk("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -326,16 +471,18 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 1024);
+K_THREAD_STACK_DEFINE(pusher_stack, 2048);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
+static char storage_temp_data[400];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
+
         return false;
     }
 
@@ -352,6 +499,8 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
+        // printk("sent %d bytes \n",tx_buffer_size);
+
         offset += packet_size;
         index++;
 
@@ -381,18 +530,92 @@ static bool push_to_gatt(struct bt_conn *conn)
 
     return true;
 }
+#define OPUS_PREFIX_LENGTH 1
+#define OPUS_PADDED_LENGTH 80
+#define MAX_WRITE_SIZE 400
+static uint32_t offset = 0;
+static uint16_t buffer_offset = 0;
+bool write_to_storage(void) {
+    if (!read_from_tx_queue())
+    {
+        return false;
+    }
+
+    uint8_t *buffer = tx_buffer+2;
+    uint32_t packet_size = tx_buffer_size;
+    //load into write at 400 bytes at a time. is faster 
+    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
+    storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
+    
+    buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
+    if(buffer_offset >= OPUS_PADDED_LENGTH*5) { 
+    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+    write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
+
+    buffer_offset = 0;
+    }
+
+    return true;
+}
+//for improving ble bandwidth
+// bool write_to_storage(void) {//max possible packing
+//     if (!read_from_tx_queue())
+//     {
+//         return false;
+//     }
+
+//     uint8_t *buffer = tx_buffer+2;
+//     uint8_t packet_size = (uint8_t)(tx_buffer_size+ OPUS_PREFIX_LENGTH);
+
+//     // buffer_offset = buffer_offset+amount_to_fill;
+//     //check if adding the new packet will cause a overflow
+//     if(buffer_offset+packet_size > MAX_WRITE_SIZE) { 
+
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     write_to_file(write_ptr,MAX_WRITE_SIZE);
+
+//     buffer_offset = packet_size;
+//     storage_temp_data[0] = packet_size-1;
+//     memcpy(storage_temp_data +1, buffer, packet_size-1);
+
+//     }
+//     else if (buffer_offset + packet_size == MAX_WRITE_SIZE) { //exact frame needed 
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     buffer_offset = 0;
+//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     write_to_file(write_ptr,MAX_WRITE_SIZE);
+    
+//     }
+//     else {
+//     storage_temp_data[buffer_offset] = packet_size-1;
+//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     buffer_offset = buffer_offset + packet_size;
+//     }
+
+//     return true;
+// }
+
+static bool use_storage = true;
+#define MAX_FILES 10
+#define MAX_AUDIO_FILE_SIZE 300000
+
+
 
 void pusher(void)
 {
+    k_msleep(500);
     while (1)
     {
+
 
         //
         // Load current connection
         //
 
         struct bt_conn *conn = current_connection;
-        bool use_gatt = true;
+        // bool use_gatt = true;
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -410,17 +633,27 @@ void pusher(void)
         {
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
+        
+        if (!valid  && !storage_is_on) {
 
-        // If no valid mode exists - discard whole buffer
-        if (!valid)
+        bool result = write_to_storage();
+        // file_num_array[file_count-1] = get_file_size(file_count);
+        // printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
+        if (result)
         {
-            ring_buf_reset(&ring_buf);
-            k_sleep(K_MSEC(10));
+            // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
+            //     printk("Audio file size limit reached, making new file\n");
+            //     // make_and_rebase_audio_file(get_info_file_length()+1);
+            // }
         }
+        else {
+             k_sleep(K_MSEC(10));
+        }
+        }    
 
-        // Handle GATT
-        if (use_gatt && valid)
+        if (valid)
         {
+
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
@@ -432,8 +665,12 @@ void pusher(void)
         {
             bt_conn_unref(conn);
         }
+
+      k_yield();
     }
 }
+
+
 
 //
 // Public functions
@@ -452,10 +689,38 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
+#ifdef CONFIG_ACCELEROMETER
+    err = accel_start();
+    if (!err) {
+        LOG_INF("Accelerometer failed to activate\n");
+    }
+    else {
+        bt_gatt_service_register(&accel_service);
+    }
+#endif
 
+#ifdef CONFIG_ENABLE_BUTTON
+
+     button_init();
+     register_button_service();
+#endif
+
+#ifdef CONFIG_ENABLE_SPEAKER
+
+err = speaker_init();
+if(!err) {
+    LOG_ERR("Speaker failed to start");
+    return 0;
+}
+
+play_boot_sound();
+    
+#endif
     // Start advertising
+    
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {

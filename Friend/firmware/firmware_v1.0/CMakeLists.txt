@@ -13,6 +13,10 @@ target_sources(app PRIVATE
     src/audio.c
     src/codec.c
     src/lib/battery/battery.c
+    src/button.c
+    src/speaker.c
+    src/sdcard.c
+    src/storage.c
 )
 
 target_sources_ifdef(CONFIG_CODEC_OPUS app PRIVATE

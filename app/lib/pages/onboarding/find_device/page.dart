@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -11,10 +12,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
+  final bool isFromOnboarding;
   final VoidCallback goNext;
+  final VoidCallback? onSkip;
   final bool includeSkip;
 
-  const FindDevicesPage({super.key, required this.goNext, this.includeSkip = true});
+  const FindDevicesPage(
+      {super.key, required this.goNext, this.includeSkip = true, this.isFromOnboarding = false, this.onSkip});
 
   @override
   State<FindDevicesPage> createState() => _FindDevicesPageState();
@@ -25,8 +29,17 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
   void initState() {
     super.initState();
     SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (widget.isFromOnboarding) {
+        context.read<HomeProvider>().setupHasSpeakerProfile();
+      }
       _scanDevices();
     });
+  }
+
+  @override
+  dispose() {
+    // context.read<OnboardingProvider>().dispose();
+    super.dispose();
   }
 
   Future<void> _scanDevices() async {
@@ -60,8 +73,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             FoundDevices(
-              deviceList: provider.deviceList,
               goNext: widget.goNext,
+              isFromOnboarding: widget.isFromOnboarding,
             ),
             if (provider.deviceList.isEmpty && provider.enableInstructions) const SizedBox(height: 48),
             if (provider.deviceList.isEmpty && provider.enableInstructions)
@@ -85,7 +98,11 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
             if (widget.includeSkip && provider.deviceList.isEmpty)
               ElevatedButton(
                 onPressed: () {
-                  widget.goNext();
+                  if (widget.isFromOnboarding) {
+                    widget.onSkip!();
+                  } else {
+                    widget.goNext();
+                  }
                   MixpanelManager().useWithoutDeviceOnboardingFindDevices();
                 },
                 child: Container(

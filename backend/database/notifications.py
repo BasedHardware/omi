@@ -1,7 +1,7 @@
 import asyncio
 
 from google.cloud.firestore_v1.base_query import FieldFilter
-
+from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 
 
@@ -16,6 +16,11 @@ def get_token_only(uid: str):
         user_ref = user_ref.to_dict()
         return user_ref.get('fcm_token')
     return None
+
+def remove_token(token: str):
+    token = db.collection('users'). where(filter=FieldFilter('fcm_token', '==', token)).get()
+    for doc in token:
+        doc.reference.update({'fcm_token': DELETE_FIELD, 'time_zone': DELETE_FIELD})
 
 
 def get_token(uid: str):

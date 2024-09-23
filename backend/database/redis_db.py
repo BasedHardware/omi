@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 import redis
@@ -30,7 +30,7 @@ def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.utcnow().isoformat(), 'uid': uid}
+    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid}
     r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 
@@ -69,6 +69,18 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     return eval(reviews)
 
 
+def set_user_has_soniox_speech_profile(uid: str):
+    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
+
+
+def get_user_has_soniox_speech_profile(uid: str) -> bool:
+    return r.exists(f'users:{uid}:has_soniox_speech_profile')
+
+
+def remove_user_soniox_speech_profile(uid: str):
+    r.delete(f'users:{uid}:has_soniox_speech_profile')
+
+
 def store_user_speech_profile(uid: str, data: List[List[int]]):
     r.set(f'users:{uid}:speech_profile', str(data))
 
@@ -101,3 +113,59 @@ def get_cached_user_name(uid: str) -> str:
     if not name:
         return 'User'
     return name.decode()
+
+
+# TODO: cache facts if speed improves dramatically
+def cache_facts(uid: str, facts: List[dict]):
+    r.set(f'users:{uid}:facts', str(facts))
+    r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
+
+
+def get_cached_facts(uid: str) -> List[dict]:
+    facts = r.get(f'users:{uid}:facts')
+    if not facts:
+        return []
+    return eval(facts)
+
+
+def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):
+    r.set(f'urls:{blob_path}', signed_url)
+    r.expire(f'urls:{blob_path}', ttl - 1)
+
+
+def get_cached_signed_url(blob_path: str) -> str:
+    signed_url = r.get(f'urls:{blob_path}')
+    if not signed_url:
+        return ''
+    return signed_url.decode()
+
+
+# VISIIBILTIY OF MEMORIES
+def store_memory_to_uid(memory_id: str, uid: str):
+    r.set(f'memories-visibility:{memory_id}', uid)
+
+
+def remove_memory_to_uid(memory_id: str):
+    r.delete(f'memories-visibility:{memory_id}')
+
+
+def get_memory_uid(memory_id: str) -> str:
+    uid = r.get(f'memories-visibility:{memory_id}')
+    if not uid:
+        return ''
+    return uid.decode()
+
+
+def add_public_memory(memory_id: str):
+    r.sadd('public-memories', memory_id)
+
+
+def remove_public_memory(memory_id: str):
+    r.srem('public-memories', memory_id)
+
+
+def get_public_memories() -> List[str]:
+    val = r.smembers('public-memories')
+    if not val:
+        return []
+    return [x.decode() for x in val]

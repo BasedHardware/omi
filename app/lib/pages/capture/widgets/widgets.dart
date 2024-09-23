@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/connect.dart';
-import 'package:friend_private/pages/speaker_id/page.dart';
+import 'package:friend_private/pages/speech_profile/page.dart';
+import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -14,8 +18,8 @@ import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/scanning_ui.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,7 +28,6 @@ getConnectionStateWidgets(
   bool hasTranscripts,
   BTDeviceStruct? device,
   WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
 ) {
   if (hasTranscripts) return [];
   if (device == null) {
@@ -39,90 +42,90 @@ getConnectionStateWidgets(
     ];
   }
 
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
   bool isWebsocketError =
       wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
 
   return [
     const Center(child: DeviceAnimationWidget(sizeMultiplier: 0.7)),
-    GestureDetector(
-      onTap: isWifiDisconnected || isWebsocketError
-          ? () {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  isWifiDisconnected ? 'Internet Connection Lost' : 'Connection Issue',
-                  isWifiDisconnected
-                      ? 'Your device is offline. Transcription is paused until connection is restored.'
-                      : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
-                  okButtonText: 'Ok',
-                  singleButton: true,
+    Consumer<ConnectivityProvider>(builder: (context, connectivityProvider, child) {
+      return GestureDetector(
+        onTap: !connectivityProvider.isConnected || isWebsocketError
+            ? () {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () => Navigator.pop(context),
+                    !connectivityProvider.isConnected ? 'Internet Connection Lost' : 'Connection Issue',
+                    !connectivityProvider.isConnected
+                        ? 'Your device is offline. Transcription is paused until connection is restored.'
+                        : 'Unable to connect to the transcript service. Please restart the app or contact support if the problem persists.',
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                );
+              }
+            : null,
+        child: Center(
+            child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(width: 24),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Text(
+                  !connectivityProvider.isConnected
+                      ? 'No Internet'
+                      : (connectivityProvider.isConnected && isWebsocketError)
+                          ? 'Server Issue'
+                          : 'Listening',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: !connectivityProvider.isConnected
+                          ? 29
+                          : isWebsocketError
+                              ? 29
+                              : 29,
+                      letterSpacing: 0.0,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2),
+                  textAlign: TextAlign.center,
                 ),
-              );
-            }
-          : null,
-      child: Center(
-          child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(width: 24),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Text(
-                isWifiDisconnected
-                    ? 'No Internet'
-                    : (!isWifiDisconnected && isWebsocketError)
-                        ? 'Server Issue'
-                        : 'Listening',
-                style: TextStyle(
-                    fontFamily: 'SF Pro Display',
+                Text(
+                  '${device.name} (${device.getShortId()})',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: isWifiDisconnected
-                        ? 29
-                        : isWebsocketError
-                            ? 29
-                            : 29,
-                    letterSpacing: 0.0,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                '${device.name} (${device.getShortId()})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              )
-            ],
-          ),
-          const SizedBox(width: 24),
-          isWifiDisconnected
-              ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-              : isWebsocketError
-                  // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
-                  ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
-                  // TODO: find a better animation for server
-                  : Container(
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(
-                        color: Color.fromARGB(255, 0, 255, 9),
-                        shape: BoxShape.circle,
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w500,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                )
+              ],
+            ),
+            const SizedBox(width: 24),
+            !connectivityProvider.isConnected
+                ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+                : isWebsocketError
+                    // ? Lottie.network('https://lottie.host/8223dbf8-8a50-4d48-8e37-0b845b1f1094/TQcT5w5Mn4.json', height: 48, width: 48)
+                    ? Lottie.asset('assets/lottie_animations/no_internet.json', height: 56, width: 56)
+                    // TODO: find a better animation for server
+                    : Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Color.fromARGB(255, 0, 255, 9),
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-        ],
-      )),
-    ),
+          ],
+        )),
+      );
+    }),
     const SizedBox(height: 8),
     // const Row(
     //   crossAxisAlignment: CrossAxisAlignment.center,
@@ -148,28 +151,30 @@ _getNoFriendConnectedYet(BuildContext context) {
           //     )),
           // const SizedBox(height: 32),
           Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              decoration: BoxDecoration(
-                border: const GradientBoxBorder(
-                  gradient: LinearGradient(colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236)
-                  ]),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            decoration: BoxDecoration(
+              border: const GradientBoxBorder(
+                gradient: LinearGradient(colors: [
+                  Color.fromARGB(127, 208, 208, 208),
+                  Color.fromARGB(127, 188, 99, 121),
+                  Color.fromARGB(127, 86, 101, 182),
+                  Color.fromARGB(127, 126, 190, 236)
+                ]),
+                width: 2,
               ),
-              child: TextButton(
-                  onPressed: () {
-                    launchUrl(Uri.parse('https://basedhardware.com'));
-                    MixpanelManager().getFriendClicked();
-                  },
-                  child: const Text(
-                    'Get a Friend',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ))),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextButton(
+              onPressed: () {
+                launchUrl(Uri.parse('https://omi.me'));
+                MixpanelManager().getFriendClicked();
+              },
+              child: const Text(
+                'Get a Friend',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
           const SizedBox(height: 4),
           TextButton(
             onPressed: () async {
@@ -204,59 +209,70 @@ _getNoFriendConnectedYet(BuildContext context) {
   );
 }
 
-speechProfileWidget(BuildContext context, StateSetter setState, Function restartWebSocket) {
-  return !SharedPreferencesUtil().hasSpeakerProfile
-      ? Stack(
-          children: [
-            GestureDetector(
-              onTap: () async {
-                MixpanelManager().speechProfileCapturePageClicked();
-                bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                await routeToPage(context, const SpeakerIdPage());
-                if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
-                  // setState(() {});
-                  restartWebSocket();
-                }
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: const BorderRadius.all(Radius.circular(12)),
-                ),
-                margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                padding: const EdgeInsets.all(16),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
+class SpeechProfileCardWidget extends StatelessWidget {
+  const SpeechProfileCardWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<HomeProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading) return const SizedBox();
+        return provider.hasSpeakerProfile
+            ? const SizedBox()
+            : Stack(
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      MixpanelManager().pageOpened('Speech Profile Memories');
+                      bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                      await routeToPage(context, const SpeechProfilePage());
+                      if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
+                        if (context.mounted) {
+                          context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                        }
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade900,
+                        borderRadius: const BorderRadius.all(Radius.circular(12)),
+                      ),
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: const EdgeInsets.all(16),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(Icons.multitrack_audio),
-                          SizedBox(width: 16),
-                          Text(
-                            'Set up speech profile',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Icon(Icons.multitrack_audio),
+                                SizedBox(width: 16),
+                                Text(
+                                  'Teach Omi your voice',
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                              ],
+                            ),
                           ),
+                          Icon(Icons.arrow_forward_ios)
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios)
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              top: 12,
-              right: 24,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-              ),
-            ),
-          ],
-        )
-      : const SizedBox(height: 16);
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 24,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    ),
+                  ),
+                ],
+              );
+      },
+    );
+  }
 }
 
 getTranscriptWidget(
@@ -272,19 +288,39 @@ getTranscriptWidget(
     );
   }
 
-  if (photos.isNotEmpty) return PhotosGridComponent(photos: photos);
-  return TranscriptWidget(segments: segments);
+  return Column(
+    children: [
+      if (photos.isNotEmpty) PhotosGridComponent(),
+      if (segments.isNotEmpty) TranscriptWidget(segments: segments),
+    ],
+  );
+}
+
+getLiteTranscriptWidget(
+  List<TranscriptSegment> segments,
+  List<Tuple2<String, String>> photos,
+  BTDeviceStruct? btDevice,
+) {
+  return Column(
+    children: [
+      // TODO: thinh, be reenabled soon
+      //if (photos.isNotEmpty) PhotosGridComponent(photos: photos),
+      if (segments.isNotEmpty)
+        LiteTranscriptWidget(
+          segments: segments,
+        ),
+    ],
+  );
 }
 
 connectionStatusWidgets(
   BuildContext context,
   List<TranscriptSegment> segments,
   WebsocketConnectionStatus wsConnectionState,
-  InternetStatus? internetStatus,
 ) {
   if (segments.isEmpty) return [];
 
-  bool isWifiDisconnected = internetStatus == InternetStatus.disconnected;
+  bool isWifiDisconnected = !Provider.of<ConnectivityProvider>(context, listen: false).isConnected;
   bool isWebsocketError =
       wsConnectionState == WebsocketConnectionStatus.failed || wsConnectionState == WebsocketConnectionStatus.error;
   if (!isWifiDisconnected && !isWebsocketError) return [];

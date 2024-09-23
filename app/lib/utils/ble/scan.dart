@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
@@ -11,10 +10,12 @@ Future<BTDeviceStruct?> scanAndConnectDevice({bool autoConnect = true, bool time
   print('scanAndConnectDevice ${deviceId}');
   for (var device in FlutterBluePlus.connectedDevices) {
     if (device.remoteId.str == deviceId) {
+      DeviceType? deviceType = await getTypeOfBluetoothDevice(device);
       return BTDeviceStruct(
         id: device.remoteId.str,
         name: device.platformName,
         rssi: await device.readRssi(),
+        type: deviceType ?? DeviceType.friend,
       );
     }
   }

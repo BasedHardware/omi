@@ -39,8 +39,9 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
           children: [
             const DeviceAnimationWidget(),
             FindDevicesPage(
+              isFromOnboarding: false,
               goNext: () {
-                debugPrint('onConnected');
+                debugPrint('onConnected from FindDevicesPage');
                 routeToPage(context, const HomePageWrapper(), replace: true);
               },
               includeSkip: false,

@@ -1,10 +1,12 @@
+import asyncio
+import json
 import uuid
 from datetime import datetime
-from typing import List
-import json
+from typing import List, Tuple
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.async_client import AsyncClient
 
 import utils.other.hume as hume
 from models.memory import MemoryPhoto, PostProcessingStatus, PostProcessingModel
@@ -54,11 +56,13 @@ def delete_memory(uid, memory_id):
 
 
 def filter_memories_by_date(uid, start_date, end_date):
+    # TODO: check utc comparison or not?
     user_ref = db.collection('users').document(uid)
     query = (
         user_ref.collection('memories')
         .where(filter=FieldFilter('created_at', '>=', start_date))
         .where(filter=FieldFilter('created_at', '<=', end_date))
+        .where(filter=FieldFilter('deleted', '==', False))
         .where(filter=FieldFilter('discarded', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
@@ -73,17 +77,6 @@ def filter_memories_by_date(uid, start_date, end_date):
 # print(len(result))
 
 
-def get_memories_batch_operation():
-    batch = db.batch()
-    return batch
-
-
-def add_memory_to_batch(batch, uid, memory_data):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_data['id'])
-    batch.set(memory_ref, memory_data)
-
-
 def get_memories_by_id(uid, memory_ids):
     user_ref = db.collection('users').document(uid)
     memories_ref = user_ref.collection('memories')
@@ -94,7 +87,10 @@ def get_memories_by_id(uid, memory_ids):
     memories = []
     for doc in docs:
         if doc.exists:
-            memories.append(doc.to_dict())
+            data = doc.to_dict()
+            if data.get('deleted') or data.get('discarded'):
+                continue
+            memories.append(data)
     return memories
 
 
@@ -121,15 +117,78 @@ def get_memory_photos(uid: str, memory_id: str):
     return [doc.to_dict() for doc in photos_ref.stream()]
 
 
+def get_memory_transcripts_by_model(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    deepgram_ref = memory_ref.collection('deepgram_streaming')
+    soniox_ref = memory_ref.collection('soniox_streaming')
+    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
+    whisperx_ref = memory_ref.collection('fal_whisperx')
+
+    return {
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
+    }
+
+
+def update_memory_events(uid: str, memory_id: str, events: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'structured.events': events})
+
+def update_memory_finished_at(uid: str, memory_id: str, finished_at: datetime):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'finished_at': finished_at})
+
+
+# VISBILITY
+
+def set_memory_visibility(uid: str, memory_id: str, visibility: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'visibility': visibility})
+
+
+# claude outputs
+
+
+async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
+    memory_ref = db.collection('users').document(uid).collection('memories').document(memory_id)
+    memory_doc = await memory_ref.get()
+    if memory_doc.exists:
+        memory_data = memory_doc.to_dict()
+        if memory_data.get('visibility') in ['public'] and not memory_data.get('deleted'):
+            return memory_data
+    return None
+
+
+async def _get_public_memories(data: List[Tuple[str, str]]):
+    db = AsyncClient()
+    tasks = [_get_public_memory(db, uid, memory_id) for uid, memory_id in data]
+    memories = await asyncio.gather(*tasks)
+    return [memory for memory in memories if memory is not None]
+
+
+def run_get_public_memories(data: List[Tuple[str, str]]):
+    return asyncio.run(_get_public_memories(data))
+
+
 # POST PROCESSING
 
 def set_postprocessing_status(
-        uid: str, memory_id: str, status: PostProcessingStatus,
+        uid: str, memory_id: str, status: PostProcessingStatus, fail_reason: str = None,
         model: PostProcessingModel = PostProcessingModel.fal_whisperx
 ):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'postprocessing.status': status, 'postprocessing.model': model})
+    memory_ref.update({
+        'postprocessing.status': status,
+        'postprocessing.model': model,
+        'postprocessing.fail_reason': fail_reason
+    })
 
 
 def store_model_segments_result(uid: str, memory_id: str, model_name: str, segments: List[TranscriptSegment]):
@@ -147,6 +206,13 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
     batch.commit()
 
 
+def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'transcript_segments': segments})
+    # TODO: update also fal_whisperx? nah..?
+
+
 def store_model_emotion_predictions_result(
         uid: str, memory_id: str, model_name: str,
         predictions: List[hume.HumeJobModelPredictionResponseModel]
@@ -156,7 +222,7 @@ def store_model_emotion_predictions_result(
     memory_ref = user_ref.collection('memories').document(memory_id)
     predictions_ref = memory_ref.collection(model_name)
     batch = db.batch()
-    count = 1
+    count = 0
     for prediction in predictions:
         prediction_id = str(uuid.uuid4())
         prediction_ref = predictions_ref.document(prediction_id)
@@ -166,7 +232,9 @@ def store_model_emotion_predictions_result(
             "end": prediction.time[1],
             "emotions": json.dumps(hume.HumePredictionEmotionResponseModel.to_multi_dict(prediction.emotions)),
         })
-        if count % 400 == 0:
+        count = count + 1
+        if count >= 100:
             batch.commit()
             batch = db.batch()
+            count = 0
     batch.commit()

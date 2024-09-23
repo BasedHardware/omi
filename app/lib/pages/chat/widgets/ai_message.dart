@@ -9,11 +9,14 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/connectivity_controller.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:provider/provider.dart';
 
 class AIMessage extends StatefulWidget {
   final ServerMessage message;
@@ -60,14 +63,10 @@ class _AIMessageState extends State<AIMessage> {
         widget.pluginSender != null
             ? CachedNetworkImage(
                 imageUrl: widget.pluginSender!.getImageUrl(),
-                imageBuilder: (context, imageProvider) => Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    image: DecorationImage(
-                      image: imageProvider,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                imageBuilder: (context, imageProvider) => CircleAvatar(
+                  backgroundColor: Colors.white,
+                  radius: 16,
+                  backgroundImage: imageProvider,
                 ),
                 placeholder: (context, url) => const CircularProgressIndicator(),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
@@ -119,8 +118,8 @@ class _AIMessageState extends State<AIMessage> {
                 style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
               )),
               if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
-              // if (message.id == 1 && displayOptions) const SizedBox(height: 8),
-              // if (message.id == 1 && displayOptions) ..._getInitialOptions(context),
+              if (widget.displayOptions) const SizedBox(height: 8),
+              if (widget.displayOptions) ..._getInitialOptions(context),
               if (messageMemories.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 for (var data in messageMemories.indexed) ...[
@@ -128,31 +127,60 @@ class _AIMessageState extends State<AIMessage> {
                     padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
                     child: GestureDetector(
                       onTap: () async {
-                        if (ConnectivityController().isConnected.value) {
-                          if (memoryDetailLoading[data.$1]) return;
-                          setState(() => memoryDetailLoading[data.$1] = true);
+                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                        if (connectivityProvider.isConnected) {
+                          var memProvider = Provider.of<MemoryProvider>(context, listen: false);
+                          var idx = memProvider.memoriesWithDates.indexWhere((e) {
+                            if (e.runtimeType == ServerMemory) {
+                              return e.id == data.$2.id;
+                            }
+                            return false;
+                          });
 
-                          ServerMemory? m = await getMemoryById(data.$2.id);
-                          if (m == null) return;
-                          MixpanelManager().chatMessageMemoryClicked(m);
-                          setState(() => memoryDetailLoading[data.$1] = false);
-                          await Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (c) => MemoryDetailPage(memory: m)));
-                          if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                            ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                            widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                            var copy = List<MessageMemory>.from(widget.message.memories);
-                            copy[data.$1] = MessageMemory(
-                                modifiedDetails.id,
-                                modifiedDetails.createdAt,
-                                MessageMemoryStructured(
-                                  modifiedDetails.structured.title,
-                                  modifiedDetails.structured.emoji,
-                                ));
-                            widget.message.memories.clear();
-                            widget.message.memories.addAll(copy);
-                            SharedPreferencesUtil().modifiedMemoryDetails = null;
-                            setState(() {});
+                          if (idx != -1) {
+                            context.read<MemoryDetailProvider>().updateMemory(idx);
+                            var m = memProvider.memoriesWithDates[idx];
+                            MixpanelManager().chatMessageMemoryClicked(m);
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (c) => MemoryDetailPage(
+                                  memory: m,
+                                ),
+                              ),
+                            );
+                          } else {
+                            if (memoryDetailLoading[data.$1]) return;
+                            setState(() => memoryDetailLoading[data.$1] = true);
+                            ServerMemory? m = await getMemoryById(data.$2.id);
+                            if (m == null) return;
+                            idx = memProvider.addMemoryWithDate(m);
+                            MixpanelManager().chatMessageMemoryClicked(m);
+                            setState(() => memoryDetailLoading[data.$1] = false);
+                            context.read<MemoryDetailProvider>().updateMemory(idx);
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (c) => MemoryDetailPage(
+                                  memory: m,
+                                ),
+                              ),
+                            );
+                            //TODO: Not needed anymore I guess because memories are stored in provider and read from there only
+                            if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
+                              ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
+                              widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
+                              var copy = List<MessageMemory>.from(widget.message.memories);
+                              copy[data.$1] = MessageMemory(
+                                  modifiedDetails.id,
+                                  modifiedDetails.createdAt,
+                                  MessageMemoryStructured(
+                                    modifiedDetails.structured.title,
+                                    modifiedDetails.structured.emoji,
+                                  ));
+                              widget.message.memories.clear();
+                              widget.message.memories.addAll(copy);
+                              SharedPreferencesUtil().modifiedMemoryDetails = null;
+                              setState(() {});
+                            }
                           }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -174,7 +202,7 @@ class _AIMessageState extends State<AIMessage> {
                           children: [
                             Expanded(
                               child: Text(
-                                '${utf8.decode(data.$2.structured.emoji.codeUnits)} ${data.$2.structured.title}',
+                                '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
                                 style: Theme.of(context).textTheme.bodyMedium,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -201,6 +229,14 @@ class _AIMessageState extends State<AIMessage> {
         ),
       ],
     );
+  }
+
+  String tryDecodeText(String text) {
+    try {
+      return utf8.decode(text.codeUnits);
+    } catch (e) {
+      return text;
+    }
   }
 
   _getCopyButton(BuildContext context) {
@@ -250,7 +286,7 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOption(BuildContext context, String optionText) {
     return GestureDetector(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
         width: double.maxFinite,
         decoration: BoxDecoration(
           color: Colors.grey.shade900,
@@ -267,11 +303,11 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOptions(BuildContext context) {
     return [
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What tasks do I have from yesterday?'),
+      _getInitialOption(context, 'What\'s been on my mind a lot?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What conversations did I have with John?'),
+      _getInitialOption(context, 'Did I forget to follow up on something?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What advise have I received about entrepreneurship?'),
+      _getInitialOption(context, 'What\'s the funniest thing I\'ve said lately?'),
     ];
   }
 }

@@ -5,8 +5,8 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, Cron
-from routers import workflow, chat, firmware, screenpipe, plugins, memories, transcribe, notifications, speech_profile, \
-    agents, facts, users
+from routers import workflow, chat, firmware, plugins, memories, transcribe, notifications, speech_profile, \
+    agents, facts, users, postprocessing, processing_memories, trends, sdcard
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -19,18 +19,22 @@ else:
 app = FastAPI()
 app.include_router(transcribe.router)
 app.include_router(memories.router)
+app.include_router(postprocessing.router)
 app.include_router(facts.router)
 app.include_router(chat.router)
 app.include_router(plugins.router)
 app.include_router(speech_profile.router)
-app.include_router(screenpipe.router)
+# app.include_router(screenpipe.router)
 app.include_router(workflow.router)
 app.include_router(notifications.router)
 app.include_router(workflow.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(processing_memories.router)
+app.include_router(trends.router)
 
 app.include_router(firmware.router)
+app.include_router(sdcard.router)
 
 modal_app = App(
     name='backend',
@@ -49,13 +53,10 @@ image = (
     memory=(512, 1024),
     cpu=2,
     allow_concurrent_inputs=10,
-    # timeout=24 * 60 * 60,  # avoid timeout with websocket, but then containers do not die
-    # can decrease memory and cpu size?
     timeout=60 * 10,
 )
 @asgi_app()
 def api():
-    print('api')
     return app
 
 
@@ -66,5 +67,32 @@ for path in paths:
 
 
 @modal_app.function(image=image, schedule=Cron('* * * * *'))
-async def start_job():
+async def notifications_cronjob():
     await start_cron_job()
+
+
+@app.post('/webhook')
+async def webhook(data: dict):
+    diarization = data['output']['diarization']
+    joined = []
+    for speaker in diarization:
+        if not joined:
+            joined.append(speaker)
+        else:
+            if speaker['speaker'] == joined[-1]['speaker']:
+                joined[-1]['end'] = speaker['end']
+            else:
+                joined.append(speaker)
+
+    print(data['jobId'], json.dumps(joined))
+    # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
+    with open('scripts/stt/diarization.json', 'r') as f:
+        diarization_data = json.loads(f.read())
+
+    memory_id = diarization_data.get(data['jobId'])
+    if memory_id:
+        diarization_data[memory_id] = joined
+        del diarization_data[data['jobId']]
+        with open('scripts/stt/diarization.json', 'w') as f:
+            json.dump(diarization_data, f, indent=2)
+    return 'ok'

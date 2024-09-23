@@ -1,19 +1,20 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
-  final List<BTDeviceStruct> deviceList;
+  final bool isFromOnboarding;
   final VoidCallback goNext;
 
   const FoundDevices({
     super.key,
-    required this.deviceList,
     required this.goNext,
+    required this.isFromOnboarding,
   });
 
   @override
@@ -23,81 +24,108 @@ class FoundDevices extends StatefulWidget {
 class _FoundDevicesState extends State<FoundDevices> {
   @override
   void initState() {
-    _initiateConnectionListener();
+    //TODO: Already we have a listner in DeviceProvider, so we can remove this
+    // _initiateConnectionListener();
     super.initState();
-  }
-
-  _initiateConnectionListener() async {
-    () {
-      final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
-      onboarding.initiateConnectionListener(
-        mounted: mounted,
-        goNext: widget.goNext,
-      );
-    }.withPostFrameCallback();
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(builder: (context, provider, child) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          !provider.isConnected
-              ? Text(
-                  widget.deviceList.isEmpty
-                      ? 'Searching for devices...'
-                      : '${widget.deviceList.length} ${widget.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 14,
-                    color: Color(0x66FFFFFF),
+      return MessageListener<OnboardingProvider>(
+        showError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red,
+          ));
+        },
+        showInfo: (info) {
+          if (info == "DEVICE_CONNECTED") {
+            // Navigator.of(context).pushAndRemoveUntil(
+            //   MaterialPageRoute(
+            //     builder: (context) => const HomePageWrapper(),
+            //   ),
+            //   (route) => false,
+            // );
+            Navigator.pop(context);
+          } else if (info == 'OPENGLASS_NOT_SUPPORTED') {
+            showDialog(
+                context: context,
+                builder: (context) {
+                  return getDialog(context, () {
+                    Navigator.pop(context);
+                  }, () {
+                    Navigator.pop(context);
+                  }, "OpenGlass isn't supported",
+                      "OpenGlass isn’t available in this version of the app. It will be added in a future update once it's ready",
+                      singleButton: true);
+                });
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(info),
+              backgroundColor: Colors.green,
+            ));
+          }
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            !provider.isConnected
+                ? Text(
+                    provider.deviceList.isEmpty
+                        ? 'Searching for devices...'
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                      color: Color(0x66FFFFFF),
+                    ),
+                  )
+                : const Text(
+                    'PAIRING SUCCESSFUL',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      color: Color(0x66FFFFFF),
+                    ),
                   ),
-                )
-              : const Text(
-                  'PAIRING SUCCESSFUL',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 12,
-                    color: Color(0x66FFFFFF),
-                  ),
+            if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
+            if (!provider.isConnected) ..._devicesList(provider),
+            if (provider.isConnected)
+              Text(
+                '${provider.deviceName} (${BTDeviceStruct.shortId(provider.deviceId)})',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  color: Color(0xCCFFFFFF),
                 ),
-          if (widget.deviceList.isNotEmpty) const SizedBox(height: 16),
-          if (!provider.isConnected) ..._devicesList(provider),
-          if (provider.isConnected)
-            Text(
-              '${provider.deviceName} (${BTDeviceStruct.shortId(provider.deviceId)})',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 18,
-                color: Color(0xCCFFFFFF),
               ),
-            ),
-          if (provider.isConnected)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(
-                  '🔋 ${provider.batteryPercentage.toString()}%',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 18,
-                    color: provider.batteryPercentage <= 25
-                        ? Colors.red
-                        : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
-                ))
-        ],
+            if (provider.isConnected)
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    '🔋 ${provider.batteryPercentage.toString()}%',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 18,
+                      color: provider.batteryPercentage <= 25
+                          ? Colors.red
+                          : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
+                              ? Colors.orange
+                              : Colors.green,
+                    ),
+                  ))
+          ],
+        ),
       );
     });
   }
 
   _devicesList(OnboardingProvider provider) {
-    return (widget.deviceList.mapIndexed(
+    return (provider.deviceList.mapIndexed(
       (index, device) {
         bool isConnecting = provider.connectingToDeviceId == device.id;
 
@@ -106,6 +134,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               ? () async {
                   await provider.handleTap(
                     device: device,
+                    isFromOnboarding: widget.isFromOnboarding,
                     goNext: widget.goNext,
                   );
                 }

@@ -38,6 +38,8 @@ def is_audio_empty(file_path, sample_rate=8000):
 def vad_is_empty(file_path, return_segments: bool = False):
     """Uses vad_modal/vad.py deployment (Best quality)"""
     try:
+        file_duration = AudioSegment.from_wav(file_path).duration_seconds
+        print('vad_is_empty file duration:', file_duration)
         with open(file_path, 'rb') as file:
             files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
             response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
@@ -48,21 +50,23 @@ def vad_is_empty(file_path, return_segments: bool = False):
             return len(segments) == 0  # but also check likelyhood of silence if only 1 segment?
     except Exception as e:
         print('vad_is_empty', e)
+        if return_segments:
+            return []
         return False
 
 
 def apply_vad_for_speech_profile(file_path: str):
+    print('apply_vad_for_speech_profile', file_path)
     voice_segments = vad_is_empty(file_path, return_segments=True)
-    if len(voice_segments) == 0:
+    if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
         raise HTTPException(status_code=400, detail="Audio is empty")
-
     joined_segments = []
     for i, segment in enumerate(voice_segments):
         if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:
             joined_segments[-1]['end'] = segment['end']
         else:
             joined_segments.append(segment)
-    print('joined_segments', joined_segments)
+
     # trim silence out of file_path, but leave 1 sec of silence within chunks
     trimmed_aseg = AudioSegment.empty()
     for i, segment in enumerate(joined_segments):
