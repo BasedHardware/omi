@@ -27,6 +27,8 @@ def postprocess_memory(
     TODO: post llm process here would be great, sometimes whisper x outputs without punctuation
     """
 
+    # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
+
     # Save file
     file_path = f"_temp/{memory_id}_{file.filename}"
     with open(file_path, 'wb') as f:
