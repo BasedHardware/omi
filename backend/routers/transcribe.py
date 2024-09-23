@@ -218,7 +218,9 @@ async def _websocket_util(
                 )
 
                 print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
-                await send_initial_file_path(file_path, deepgram_socket)
+                async def deepgram_socket_send(data):
+                    return deepgram_socket.send(data)
+                await send_initial_file_path(file_path, deepgram_socket_send)
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
@@ -231,7 +233,7 @@ async def _websocket_util(
                 stream_transcript, speech_profile_stream_id, sample_rate, language, preseconds=duration
             )
             if duration:
-                await send_initial_file_path(file_path, speechmatics_socket)
+                await send_initial_file_path(file_path, speechmatics_socket.send)
                 print('speech_profile speechmatics duration', duration)
 
     except Exception as e:
