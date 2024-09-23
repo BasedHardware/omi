@@ -125,7 +125,7 @@ class ServerMemory {
   final String? language; // applies to Friend only
 
   final MemoryExternalData? externalIntegration;
-  MemoryPostProcessing? postprocessing;
+  // MemoryPostProcessing? postprocessing;
   String? processingMemoryId;
 
   bool discarded;
@@ -152,7 +152,7 @@ class ServerMemory {
     this.source,
     this.language,
     this.externalIntegration,
-    this.postprocessing,
+    // this.postprocessing,
     this.processingMemoryId,
   });
 
@@ -177,22 +177,22 @@ class ServerMemory {
       failed: json['failed'] ?? false,
       retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
-      postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
+      // postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
       processingMemoryId: json['processing_memory_id'],
     );
   }
 
-  bool isPostprocessing() {
-    int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
-    return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
-            postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
-        createdSecondsAgo < 120;
-  }
+  // bool isPostprocessing() {
+  //   int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
+  //   return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
+  //           postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
+  //       createdSecondsAgo < 120;
+  // }
 
-  bool isReadyForTranscriptAssignment() {
-    // TODO: only thing matters here, is if !isPostProcessing() and if we have audio file.
-    return !discarded && !deleted && !failed && postprocessing?.status == MemoryPostProcessingStatus.completed;
-  }
+  // bool isReadyForTranscriptAssignment() {
+  //   // TODO: only thing matters here, is if !isPostProcessing() and if we have audio file.
+  //   return !discarded && !deleted && !failed && postprocessing?.status == MemoryPostProcessingStatus.completed;
+  // }
 
   Map<String, dynamic> toJson() {
     return {
@@ -212,7 +212,7 @@ class ServerMemory {
       'failed': failed,
       'retries': retries,
       'external_data': externalIntegration?.toJson(),
-      'postprocessing': postprocessing?.toJson(),
+      // 'postprocessing': postprocessing?.toJson(),
       'processing_memory_id': processingMemoryId,
     };
   }
