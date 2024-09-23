@@ -9,12 +9,10 @@ import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/profile.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
-import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:provider/provider.dart';
 
 import 'device_settings.dart';
 
@@ -95,6 +93,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                 }, _selectedLanguage),
                 getItemAddOn2(
+                  'Profile',
+                  () => routeToPage(context, const ProfilePage()),
+                  icon: Icons.person,
+                ),
+                const SizedBox(height: 20),
+                getItemAddOn2(
                   'Device Settings',
                   () {
                     Navigator.of(context).push(
@@ -116,12 +120,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
                   },
                   icon: Icons.help_outline_outlined,
-                ),
-                const SizedBox(height: 20),
-                getItemAddOn2(
-                  'Profile',
-                  () => routeToPage(context, const ProfilePage()),
-                  icon: Icons.person,
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
