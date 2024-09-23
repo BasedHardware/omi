@@ -37,7 +37,7 @@ Fill in the values for each variable as needed.
 2. Install the requirements.txt by running:
    `pip install -r requirements.txt`
 
-3. Run the project: `fastapi run dev` This will start the FastAPI application.
+3. Run the project: `fastapi run` or `fastapi dev` This will start the FastAPI application.
 
 ## Project Structure
 
