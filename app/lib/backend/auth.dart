@@ -110,7 +110,7 @@ Future<UserCredential?> signInWithGoogle() async {
   try {
     print('Signing in with Google');
     // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+    final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
     print('Google User: $googleUser');
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
