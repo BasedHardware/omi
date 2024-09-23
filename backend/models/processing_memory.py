@@ -24,6 +24,7 @@ class ProcessingMemory(BaseModel):
     memory_id: Optional[str] = None
     message_ids: List[str] = []
 
+
 class BasicProcessingMemory(BaseModel):
     id: str
     timer_start: float

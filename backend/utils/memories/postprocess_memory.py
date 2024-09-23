@@ -16,6 +16,8 @@ from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
 
+# TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
+# TODO: should consider storing non beautified segments, and beautify on read?
 def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedback: bool, streaming_model: str):
     memory_data = _get_memory_by_id(uid, memory_id)
     if not memory_data:
@@ -40,10 +42,7 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.in_progress)
 
     try:
-        # Calling VAD to avoid processing empty parts and getting hallucinations from whisper.
-        # TODO: use this logs to determine if whisperx is failing because of the VAD results.
-        print('previous to vad_is_empty (segments duration):',
-              memory.transcript_segments[-1].end - memory.transcript_segments[0].start)
+        print('previous to vad_is_empty (segments duration):', memory.transcript_segments[-1].end)
         vad_segments = vad_is_empty(file_path, return_segments=True)
         if vad_segments:
             start = vad_segments[0]['start']
