@@ -1,8 +1,5 @@
-import threading
 import math
-import asyncio
-import time
-from typing import List
+import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -16,7 +13,6 @@ from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
-from database.redis_db import get_user_speech_profile
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
@@ -78,6 +74,8 @@ class STTService(str, Enum):
     soniox = "soniox"
     speechmatics = "speechmatics"
 
+    # auto = "auto"
+
     @staticmethod
     def get_model_name(value):
         if value == STTService.deepgram:
@@ -96,15 +94,15 @@ async def _websocket_util(
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,
           stt_service)
 
-    if stt_service == STTService.soniox and (
-            sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
-        stt_service = STTService.deepgram
-    if stt_service == STTService.speechmatics and (sample_rate != 16000 or codec != 'opus'):
+    if stt_service == STTService.soniox and language not in soniox_valid_languages:
+        stt_service = STTService.deepgram  # defaults to deepgram
+
+    if stt_service == STTService.speechmatics:  # defaults to deepgram (no credits + 10 connections max limit)
         stt_service = STTService.deepgram
 
-    # At some point try running all the models together to easily compare
+    # TODO: if language english, use soniox
+    # TODO: else deepgram, if speechmatics credits, prob this for both?
 
-    # Check: Why do we need try-catch around websocket.accept?
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -203,34 +201,36 @@ async def _websocket_util(
     duration = 0
     try:
         file_path, duration = None, 0
+        # TODO: how bee does for recognizing other languages speech profile
         if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
             file_path = get_profile_audio_if_exists(uid)
             print(f'deepgram-obns3: file_path {file_path}')
             duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
-        # Deepgram
+        # DEEPGRAM
         if stt_service == STTService.deepgram:
-            deepgram_codec_value = 'pcm16' if codec == 'opus' else codec
             deepgram_socket = await process_audio_dg(
-                stream_transcript, memory_stream_id, language, sample_rate, deepgram_codec_value, channels,
-                preseconds=duration
+                stream_transcript, memory_stream_id, language, sample_rate, channels, preseconds=duration
             )
             if duration:
                 deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, speech_profile_stream_id, language, sample_rate, deepgram_codec_value, channels
+                    stream_transcript, speech_profile_stream_id, language, sample_rate, channels
                 )
 
                 print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
                 await send_initial_file_path(file_path, deepgram_socket_send)
+        # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
+                stream_transcript, speech_profile_stream_id, sample_rate, language,
+                uid if include_speech_profile else None
             )
+        # SPEECHMATICS
         elif stt_service == STTService.speechmatics:
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, speech_profile_stream_id, language, preseconds=duration
+                stream_transcript, speech_profile_stream_id, sample_rate, language, preseconds=duration
             )
             if duration:
                 await send_initial_file_path(file_path, speechmatics_socket.send)
@@ -372,7 +372,7 @@ async def _websocket_util(
                 id=str(uuid.uuid4()),
                 created_at=datetime.now(timezone.utc),
                 timer_start=timer_start,
-                timer_segment_start=timer_start+segment_start,
+                timer_segment_start=timer_start + segment_start,
                 language=language,
             )
 
@@ -435,7 +435,8 @@ async def _websocket_util(
                     # merge
                     merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
                     nearest_timer_start = processing_memory.timer_starts[-2]
-                    merge_wav_files(merge_file_path, [previous_file_path, file_path], [math.ceil(timer_start-nearest_timer_start), 0])
+                    merge_wav_files(merge_file_path, [previous_file_path, file_path],
+                                    [math.ceil(timer_start - nearest_timer_start), 0])
 
                     # clean
                     os.remove(previous_file_path)
@@ -504,8 +505,8 @@ async def _websocket_util(
         memory = None
         messages = []
         if not processing_memory.memory_id:
-            (new_memory, new_messages, updated_processing_memory) = await create_memory_by_processing_memory(uid,
-                                                                                                             processing_memory.id)
+            new_memory, new_messages, updated_processing_memory = await create_memory_by_processing_memory(
+                uid, processing_memory.id)
             if not new_memory:
                 print("Can not create new memory")
 
@@ -532,7 +533,8 @@ async def _websocket_util(
                                                [segment.dict() for segment in memory.transcript_segments])
 
             # Update finished at
-            memory.finished_at = datetime.fromtimestamp(memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc)
+            memory.finished_at = datetime.fromtimestamp(
+                memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc)
             memories_db.update_memory_finished_at(uid, memory.id, memory.finished_at)
 
             # Process
