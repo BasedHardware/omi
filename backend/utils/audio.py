@@ -3,14 +3,16 @@ import wave
 from pyogg import OpusDecoder
 from pydub import AudioSegment
 
-def merge_wav_files(dest_file_path: str, source_files: [str]):
+def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [int]):
     if len(source_files) == 0 or not dest_file_path:
         return
 
     combined_sounds = AudioSegment.empty()
-    for file_path in source_files:
+    for i in range(len(source_files)):
+        file_path = source_files[i]
         sound = AudioSegment.from_wav(file_path)
-        combined_sounds = combined_sounds + sound
+        silent_sec = silent_seconds[i]
+        combined_sounds = combined_sounds + sound + AudioSegment.silent(duration=silent_sec)
     combined_sounds.export(dest_file_path, format="wav")
 
 
