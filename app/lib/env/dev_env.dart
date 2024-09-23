@@ -35,4 +35,16 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
   final String? gleapApiKey = _DevEnv.gleapApiKey;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
+  final String? intercomAppId = _DevEnv.intercomAppId;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_IOS_API_KEY', obfuscate: true)
+  final String? intercomIOSApiKey = _DevEnv.intercomIOSApiKey;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_ANDROID_API_KEY', obfuscate: true)
+  final String? intercomAndroidApiKey = _DevEnv.intercomAndroidApiKey;
 }
