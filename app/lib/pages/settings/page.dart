@@ -12,6 +12,7 @@ import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'device_settings.dart';
@@ -92,6 +93,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                   MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                 }, _selectedLanguage),
+                getItemAddOn2(
+                  'Need Help? Chat with us',
+                  () async {
+                    await Intercom.instance.displayMessenger();
+                  },
+                  icon: Icons.chat,
+                ),
+                const SizedBox(height: 20),
                 getItemAddOn2(
                   'Profile',
                   () => routeToPage(context, const ProfilePage()),
