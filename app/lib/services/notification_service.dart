@@ -15,6 +15,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NotificationService {
   NotificationService._();
@@ -124,6 +125,7 @@ class NotificationService {
     if (token == null) return;
     String timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
+      await Intercom.instance.sendTokenToIntercom(token);
       await saveFcmTokenServer(token: token, timeZone: timeZone);
     }
   }
