@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -360,13 +359,6 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
         borderSide: BorderSide(color: Colors.grey),
       ),
       suffixIcon: suffixIcon,
-    );
-  }
-
-  _snackBar(String content, {int seconds = 1}) {
-    AppSnackbar.showSnackbar(
-      content,
-      duration: Duration(seconds: seconds),
     );
   }
 }
