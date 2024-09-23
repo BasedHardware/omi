@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/pages/settings/device_settings.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
 class ConnectedDevice extends StatefulWidget {
@@ -162,8 +161,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () {
-                  routeToPage(context, const DeviceSettings());
+                onPressed: () async {
+                  await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
                 },
                 child: const Text(
                   'How to charge?',

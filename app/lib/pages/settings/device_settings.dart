@@ -9,9 +9,8 @@ import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
-
-import '../home/support.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -92,20 +91,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     ),
                 ],
               ),
-              // GestureDetector(
-              //   onTap: () {
-              //     Navigator.push(
-              //       context,
-              //       MaterialPageRoute(
-              //         builder: (context) => const SupportPage(),
-              //       ),
-              //     );
-              //   },
-              //   child: const ListTile(
-              //     title: Text('How to charge device'),
-              //     trailing: Icon(Icons.arrow_forward_ios),
-              //   ),
-              // ),
+              GestureDetector(
+                onTap: () async {
+                  await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
+                },
+                child: const ListTile(
+                  title: Text('How to charge device'),
+                  trailing: Icon(Icons.arrow_forward_ios),
+                ),
+              ),
             ],
           ),
         ),
