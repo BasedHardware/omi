@@ -281,12 +281,15 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
       }
+
       if (context.read<AuthenticationProvider>().user != null) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         await Intercom.instance.loginIdentifiedUser(
           userId: FirebaseAuth.instance.currentUser!.uid,
         );
-      } else {
+        context.read<MessageProvider>().setMessagesFromCache();
+        context.read<MessageProvider>().refreshMessages();
+        } else {
         await Intercom.instance.loginUnidentifiedUser();
       }
     });
