@@ -17,7 +17,7 @@ from models.processing_memory import ProcessingMemory
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
-from utils.stt.vad import VADIterator, model
+from utils.stt.vad import VADIterator, model, is_speech_present, SpeechState
 
 router = APIRouter()
 
@@ -84,19 +84,14 @@ class STTService(str, Enum):
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
-        stt_service: STTService = STTService.deepgram,
+        # stt_service: STTService = STTService.deepgram,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,
-          stt_service)
+    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
 
-    if stt_service == STTService.soniox and language not in soniox_valid_languages:
-        stt_service = STTService.deepgram  # defaults to deepgram
-
-    if stt_service == STTService.speechmatics:  # defaults to deepgram (no credits + 10 connections max limit)
+    if language == 'en':
+        stt_service = STTService.soniox
+    else:
         stt_service = STTService.deepgram
-
-    # TODO: if language english, use soniox
-    # TODO: else deepgram, if speechmatics credits, prob this for both?
 
     try:
         await websocket.accept()
@@ -241,6 +236,7 @@ async def _websocket_util(
 
     vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
+    window_size_bytes = int(window_size_samples * 2 * 2.5)
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
@@ -251,43 +247,47 @@ async def _websocket_util(
         timer_start = time.time()
 
         # nonlocal audio_buffer
-        # audio_buffer = bytearray()
+        audio_buffer = bytearray()
+        speech_state = SpeechState.no_speech
 
-        # speech_state = SpeechState.no_speech
-        # voice_found, not_voice = 0, 0
-        # path = 'scripts/vad/audio_bytes.txt'
-        # if os.path.exists(path):
-        #     os.remove(path)
-        # audio_file = open(path, "a")
         try:
             while websocket_active:
                 raw_data = await websocket.receive_bytes()
                 data = raw_data[:]
-                # audio_buffer.extend(data)
+
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
+                audio_buffer.extend(data)
+                if len(audio_buffer) < window_size_bytes:
+                    continue
+
+                speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
+
+                # if speech_state == SpeechState.no_speech:
+                #     audio_buffer = audio_buffer[window_size_bytes:]
+                #     continue
+
                 if soniox_socket is not None:
-                    await soniox_socket.send(data)
+                    await soniox_socket.send(audio_buffer)
 
                 if speechmatics_socket1 is not None:
-                    await speechmatics_socket1.send(data)
+                    await speechmatics_socket1.send(audio_buffer)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
                     if elapsed_seconds > duration or not dg_socket2:
-                        dg_socket1.send(data)
+                        dg_socket1.send(audio_buffer)
                         if dg_socket2:
                             print('Killing socket2')
                             dg_socket2.finish()
                             dg_socket2 = None
                     else:
-                        dg_socket2.send(data)
+                        dg_socket2.send(audio_buffer)
 
                 # stream
-                stream_audio(raw_data)
-
-                # audio_buffer = bytearray()
+                stream_audio(audio_buffer)
+                audio_buffer = audio_buffer[window_size_bytes:]
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -588,8 +588,8 @@ async def _websocket_util(
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
-        stt_service: STTService = STTService.deepgram
+        # stt_service: STTService = STTService.deepgram
 ):
     await _websocket_util(
-        websocket, uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch, stt_service
+        websocket, uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,  # stt_service
     )
