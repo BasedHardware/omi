@@ -29,6 +29,10 @@
 -keep class io.flutter.**  { *; }
 -keep class io.flutter.plugins.**  { *; }
 
+# For Awesome Notification Plugin
+-keep class com.google.common.reflect.TypeToken
+-keep class * extends com.google.common.reflect.TypeToken
+
 # You might not be using firebase
 -keep class com.google.firebase.** { *; }
 -keep class com.builttoroam.devicecalendar.** { *; }
