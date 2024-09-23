@@ -76,6 +76,8 @@
 		<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 		<key>PermissionGroupNotification</key>
 		<string>You need to enable notifications to receive your pro-active feedback.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Camera access is required to report issues</string>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 		<key>UIBackgroundModes</key>
