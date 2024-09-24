@@ -443,7 +443,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performWriteToStorage(int numFile) {
+  Future<bool> performWriteToStorage(int numFile,int offset) {
     return Future.value(false);
   }
 }

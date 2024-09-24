@@ -33,7 +33,7 @@ static const char *disk_mount_pt = "/SD:/";
 uint32_t get_file_size(uint8_t num){
     char *ptr = generate_new_audio_header(num);
     snprintf(current_full_path, sizeof(current_full_path), "%s%s", disk_mount_pt, ptr);
-    k_free(ptr);
+    // k_free(ptr);
     struct fs_dirent entry;
     fs_stat(&current_full_path,&entry);
     return (uint32_t)entry.size;
@@ -68,7 +68,7 @@ int move_write_pointer(uint8_t num) {
     return 0;   
 }
 
-uint32_t file_num_array[40];
+uint32_t file_num_array[40] = {0};
 
 int mount_sd_card(void)
 {
@@ -96,6 +96,7 @@ int mount_sd_card(void)
             return -1;
         }
     }
+
     mount_point.mnt_point = "/SD:";
     int res = fs_mount(&mount_point);
 

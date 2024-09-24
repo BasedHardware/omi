@@ -100,19 +100,6 @@ void set_led_state()
 	set_led_blue(false);
 }
 
-// void test_sd_card(void) {
-//     char test_data[] = "Hello, SD card!";
-//     int ret = create_file("test.txt");
-//     if (ret) {
-//         LOG_ERR("Failed to create test file: %d", ret);
-//     }
-//     ret = write_file((uint8_t *)test_data, strlen(test_data), false, true);
-//     if (ret) {
-//         LOG_ERR("Failed to write test data: %d", ret);
-//     }
-//     LOG_INF("Successfully wrote test data to SD card");
-// }
-
 // Main loop
 int main(void)
 {
@@ -126,6 +113,12 @@ int main(void)
     }
     // Run the boot LED sequence
     boot_led_sequence();
+    err = mount_sd_card();
+    k_msleep(500);
+    if (err) {
+        LOG_ERR("Failed to mount SD card: %d", err);
+        return err;
+    }
     // Indicate transport initialization
     set_led_green(true);
     err = transport_start();
@@ -141,7 +134,7 @@ int main(void)
     }
     set_led_green(false);
 
-    err = mount_sd_card();
+
     LOG_INF("result of mount:%d",err);
 
     k_msleep(500);

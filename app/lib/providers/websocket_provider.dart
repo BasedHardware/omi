@@ -31,6 +31,10 @@ class WebSocketProvider with ChangeNotifier {
 
   get isConnecting => _isConnecting;
 
+  IOWebSocketChannel? sdCardChannel;
+  WebsocketConnectionStatus sdCardConnectionState = WebsocketConnectionStatus.notConnected;
+  Timer? _sdCardReconnectionTimer;
+
   Future<void> initWebSocket({
     required Function onConnectionSuccess,
     required Function(dynamic) onConnectionFailed,
@@ -161,6 +165,55 @@ class WebSocketProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> setupSdCardWebSocket({required Function onMessageReceived, String? btConnectedTime}) async {
+      try {
+      sdCardChannel = await openSdCardStream(
+          onMessageReceived: onMessageReceived,
+          onWebsocketConnectionSuccess: () {
+          sdCardConnectionState = WebsocketConnectionStatus.connected;
+          debugPrint('WebSocket connected successfully sd');
+          notifyListeners();
+        },
+        onWebsocketConnectionFailed: (err) {
+          sdCardConnectionState = WebsocketConnectionStatus.failed;
+          //reconnectSdCardWebSocket(onMessageReceived: onMessageReceived);
+          debugPrint('WebSocket connection failed sd: $err');
+          notifyListeners();
+        },
+        onWebsocketConnectionClosed: (int? closeCode, String? closeReason) {
+          sdCardConnectionState = WebsocketConnectionStatus.closed;
+          //reconnectSdCardWebSocket(onMessageReceived: onMessageReceived);
+          debugPrint('WebSocket connection closed2 sd: code ~ $closeCode, reason ~ $closeReason');
+          notifyListeners();
+        },
+        onWebsocketConnectionError: (err) {
+          sdCardConnectionState = WebsocketConnectionStatus.error;
+          //reconnectSdCardWebSocket(onMessageReceived: onMessageReceived);
+          debugPrint('WebSocket connection error sd: $err');
+          notifyListeners();
+        },
+        btConnectedTime: btConnectedTime,
+      );
+    } catch (e) {
+      debugPrint('Error in initWebSocket sd: $e');
+      notifyListeners();
+    }
+  }
+
+  // Future<void> reconnectSdCardWebSocket({required Function onMessageReceived}) {
+  //     if (_internetStatus == InternetStatus.disconnected) {
+  //     debugPrint('Cannot attempt reconnection: No internet connection');
+  //     return;
+  //   }
+  //   _sdCardReconnectionTimer?.cancel();
+  //   Timer(Duration(seconds: 2), () {
+  //   sdCardChannel?.sink.close(1000);
+  //   await setupSdCardWebSocket( onMessageReceived: onMessageReceived );
+     
+  //   });
+
+  // }
 
   void _setupInternetListener({
     required Function onConnectionSuccess,

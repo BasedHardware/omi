@@ -19,7 +19,7 @@
 #include <zephyr/drivers/sensor.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
-
+// extern 
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
@@ -326,7 +326,6 @@ void broadcast_battery_level(struct k_work *work_item) {
 //
 // Connection Callbacks
 //
-
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
@@ -339,7 +338,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         return;
     }
 
-    LOG_INF("bluetooth activated");
+    printk("bluetooth activated\n");
 
     current_connection = bt_conn_ref(conn);
     current_mtu = info.le.data_len->tx_max_len;
@@ -371,6 +370,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 {
+    printk("LE data len updatsweessed: T\n");
     LOG_INF("Transport connection parameters update request received.");
     LOG_DBG("Minimum interval: %d, Maximum interval: %d", param->interval_min, param->interval_max);
     LOG_DBG("Latency: %d, Timeout: %d", param->latency, param->timeout);
@@ -381,6 +381,8 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
+    printk("LE data len updatssed: T\n");
+
     LOG_INF("Connection parameters updated.");
 	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
@@ -388,6 +390,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
 static void _le_phy_updated(struct bt_conn *conn,
                             struct bt_conn_le_phy_info *param)
 {
+    printk("LE data len updated: T\n");
     LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
            phy2str(param->tx_phy), phy2str(param->rx_phy));
 }
@@ -395,6 +398,8 @@ static void _le_phy_updated(struct bt_conn *conn,
 static void _le_data_length_updated(struct bt_conn *conn,
                                     struct bt_conn_le_data_len_info *info)
 {
+    printk("LE data len updated: TX\n");
+    k_msleep(100);
     LOG_DBG("LE data len updated: TX (len: %d time: %d)"
            " RX (len: %d time: %d)",
            info->tx_max_len,
@@ -455,7 +460,7 @@ static bool read_from_tx_queue()
     tx_buffer_size = ring_buf_get(&ring_buf, tx_buffer, (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE))
     {
-        LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
+        printk("Failed to read from ring buffer. not enough data %d\n", tx_buffer_size);
         return false;
     }
 
@@ -600,8 +605,13 @@ bool write_to_storage(void) {
 static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
+static int recent_file_size_updated = 0;
 
-
+void update_file_size() 
+{
+    file_num_array[0] = get_file_size(1);
+    printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+}
 
 void pusher(void)
 {
@@ -609,13 +619,30 @@ void pusher(void)
     while (1)
     {
 
-
         //
         // Load current connection
         //
 
         struct bt_conn *conn = current_connection;
-        // bool use_gatt = true;
+
+        bool use_gatt = true;
+        //updating the most recent file size is expensive!
+        static bool file_size_updated = true;
+        static bool connection_was_true = false;
+        if (conn && !connection_was_true) {
+            k_msleep(100);
+            file_size_updated = false;
+            connection_was_true = true;
+        } else if (!conn) {
+            connection_was_true = false;
+        }
+        if (!file_size_updated) {
+            printk("updating file size\n");
+            update_file_size();
+            file_size_updated = true;
+        }
+
+
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -631,14 +658,15 @@ void pusher(void)
         }
         else
         {
+
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
         
-        if (!valid  && !storage_is_on) {
-
+        if (!valid  && !storage_is_on) 
+        {
+        
         bool result = write_to_storage();
-        // file_num_array[file_count-1] = get_file_size(file_count);
-        // printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
+
         if (result)
         {
             // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
@@ -675,7 +703,7 @@ void pusher(void)
 //
 // Public functions
 //
-
+extern struct bt_gatt_service storage_service;
 int transport_start()
 {
     // Configure callbacks
@@ -717,7 +745,7 @@ play_boot_sound();
     
 #endif
     // Start advertising
-    
+    bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
