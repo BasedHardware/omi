@@ -47,7 +47,7 @@ dependencies:
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   mime: ^1.0.5
-  instabug_flutter: ^13.0.0
+  instabug_flutter: ^13.3.0
   instabug_http_client: ^2.4.0
   mixpanel_flutter: ^2.2.0
   expandable_text: ^2.3.0
@@ -94,11 +94,17 @@ dependencies:
   web_socket_channel: ^3.0.1
   talker_flutter:
 
+  intercom_flutter:
+
 
 dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
+  opus_flutter_android:
+    git:
+      url: https://github.com/mdmohsin7/opus_flutter.git
+      path: opus_flutter_android
   # flutter_blue_plus:
     # git:
     #   url: https://github.com/chipweinberger/flutter_blue_plus

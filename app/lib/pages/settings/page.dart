@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/home/support.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/pages/settings/about.dart';
@@ -12,7 +13,10 @@ import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'device_settings.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -91,18 +95,53 @@ class _SettingsPageState extends State<SettingsPage> {
                   MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                 }, _selectedLanguage),
                 getItemAddOn2(
+                  'Need Help? Chat with us',
+                  () async {
+                    await Intercom.instance.displayMessenger();
+                  },
+                  icon: Icons.chat,
+                ),
+                const SizedBox(height: 20),
+                getItemAddOn2(
                   'Profile',
                   () => routeToPage(context, const ProfilePage()),
                   icon: Icons.person,
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
+
                   'SD Card Import',
                   () => routeToPage(context, const SdCardCapturePage()),
                   icon: Icons.sd_card,
                 ),
                 const SizedBox(height: 8),
                 getItemAddOn2(
+
+                  'Device Settings',
+                  () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => DeviceSettings(),
+                      ),
+                    );
+                  },
+                  icon: Icons.bluetooth_connected_sharp,
+                ),
+                const SizedBox(height: 8),
+                getItemAddOn2(
+                  'Guides & Tutorials',
+                  () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const SupportPage(),
+                      ),
+                    );
+                  },
+                  icon: Icons.help_outline_outlined,
+                ),
+                const SizedBox(height: 20),
+                getItemAddOn2(
+
                   'Plugins',
                   () => routeToPage(context, const PluginsPage()),
                   icon: Icons.integration_instructions,

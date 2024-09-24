@@ -29,7 +29,6 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/services/notification_service.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/gleap.dart';
@@ -39,6 +38,7 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
@@ -58,6 +58,13 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
+  if (Env.intercomAppId != null) {
+    await Intercom.instance.initialize(
+      Env.intercomAppId!,
+      iosApiKey: Env.intercomIOSApiKey,
+      androidApiKey: Env.intercomAndroidApiKey,
+    );
+  }
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
@@ -270,14 +277,20 @@ class DeciderWidget extends StatefulWidget {
 class _DeciderWidgetState extends State<DeciderWidget> {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
       }
 
       if (context.read<AuthenticationProvider>().user != null) {
+        context.read<HomeProvider>().setupHasSpeakerProfile();
+        await Intercom.instance.loginIdentifiedUser(
+          userId: FirebaseAuth.instance.currentUser!.uid,
+        );
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<MessageProvider>().refreshMessages();
+        } else {
+        await Intercom.instance.loginUnidentifiedUser();
       }
     });
     super.initState();

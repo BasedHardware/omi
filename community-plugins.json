@@ -577,11 +577,11 @@
       "external_integration"
     ],
     "external_integration": {
-      "triggers_on": "transcript_processed",
+      "triggers_on": "memory_creation",
       "webhook_url": "https://based-hardware--plugins-api.modal.run/multion/process_transcript",
       "setup_completed_url": "https://based-hardware--plugins-api.modal.run/multion/check_setup_completion",
       "setup_instructions_file_path": "/plugins/instructions/multion-amazon/README.md"
     },
-    "deleted": true
+    "deleted": false
   }
 ]
