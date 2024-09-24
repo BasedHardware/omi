@@ -947,6 +947,9 @@ class GetSheetMainOptions extends StatelessWidget {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
                             await provider.reprocessMemory();
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
                           } else {
                             showDialog(
                               builder: (c) => getDialog(
