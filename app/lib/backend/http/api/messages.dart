@@ -24,7 +24,7 @@ Future<List<ServerMessage>> getMessagesServer() async {
 }
 
 Future<List<ServerMessage>> clearChatServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/clear-chat', headers: {}, method: 'DELETE', body: '');
+  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'DELETE', body: '');
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
     return [ServerMessage.fromJson(jsonDecode(response.body))];

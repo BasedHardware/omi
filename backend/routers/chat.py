@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import database.chat as chat_db
 from models.chat import Message, SendMessageRequest, MessageSender
-from utils.chat.chat import clear_user_chat_message
 from utils.llm import qa_rag, initial_chat_message
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
@@ -58,9 +57,9 @@ def send_message(
     return ai_message
 
 
-@router.delete('/v1/clear-chat', tags=['chat'], response_model=Message)
-def clear_chat(uid: str = Depends(auth.get_current_user_uid)):
-    err = clear_user_chat_message(uid)
+@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
+    err = chat_db.clear_chat(uid)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
     return initial_message_util(uid)
