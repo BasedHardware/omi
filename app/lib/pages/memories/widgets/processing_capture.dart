@@ -60,7 +60,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                             ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
                             routeToPage(context, SdCardCapturePage());
                         },  
-                        child: const Text('Dismiss'),
+                        child: const Text('Click here'),
                       ),
                     ],
                     onVisible: () => Future.delayed(const Duration(seconds: 15), () {
