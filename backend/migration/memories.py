@@ -23,8 +23,8 @@ def migration_incorrect_start_finish_time():
             .order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
         )
 
-        memories_ref = users_ref.limit(user_limit).offset(user_offset)
-        users = [doc for doc in memories_ref.stream()]
+        users_ref = users_ref.limit(user_limit).offset(user_offset)
+        users = list(users_ref.stream())
         if not users or len(users) == 0:
             print("no users")
             break
@@ -38,7 +38,7 @@ def migration_incorrect_start_finish_time():
             while True:
                 print(f"running...user...{user.id}...{offset}")
                 memories_ref = memories_ref.limit(limit).offset(offset)
-                docs = [doc for doc in memories_ref.stream()]
+                docs = list(memories_ref.stream())
                 if not docs or len(docs) == 0:
                     print("done")
                     break
@@ -53,7 +53,7 @@ def migration_incorrect_start_finish_time():
 
                     delta = memory.created_at.timestamp() - memory.started_at.timestamp()
                     print(delta)
-                    if math.fabs(delta) < 15*60:
+                    if math.fabs(delta) < 15*60: # gaps in 15' is ok
                         continue
                     td = None
                     if delta > 0:
