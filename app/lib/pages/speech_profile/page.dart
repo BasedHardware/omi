@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -30,6 +31,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await context.read<SpeechProfileProvider>().updateDevice();
     });
+
     super.initState();
   }
 
@@ -65,16 +67,36 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
   @override
   Widget build(BuildContext context) {
+    Future restartDeviceRecording() async {
+      debugPrint("restartDeviceRecording $mounted");
+      if (mounted) {
+        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
+        Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
+          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice,
+        );
+      }
+    }
+
+    Future stopDeviceRecording() async {
+      debugPrint("stopDeviceRecording $mounted");
+      if (mounted) {
+        await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+      }
+    }
+
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
         if (context.read<SpeechProfileProvider>().isInitialised) {
           WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
             await context.read<SpeechProfileProvider>().close();
+
+            // Restart device recording
+            restartDeviceRecording();
           });
         }
       },
-      child: Consumer<SpeechProfileProvider>(builder: (context, provider, child) {
+      child: Consumer2<SpeechProfileProvider, CaptureProvider>(builder: (context, provider, _, child) {
         return MessageListener<SpeechProfileProvider>(
           showInfo: (info) {
             if (info == 'SCROLL_DOWN') {
@@ -320,12 +342,13 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           );
                                           return;
                                         }
-                                        await provider.initialise(false);
-                                        // provider.initiateWebsocket(false);
+
+                                        await stopDeviceRecording();
+                                        await provider.initialise(false, finalizedCallback: restartDeviceRecording);
                                         // 1.5 minutes seems reasonable
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
-                                          provider.finalize(false);
+                                          provider.finalize();
                                         });
                                         provider.updateStartedRecording(true);
                                       },

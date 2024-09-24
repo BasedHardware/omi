@@ -7,7 +7,6 @@ import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -28,6 +27,7 @@ class MemoryCaptureWidget extends StatefulWidget {
 }
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -113,7 +113,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
-      provider.stopStreamRecording();
+      await provider.stopStreamRecording();
       context.read<CaptureProvider>().cancelMemoryCreationTimer();
       await context.read<CaptureProvider>().createMemory();
       MixpanelManager().phoneMicRecordingStopped();
@@ -128,8 +128,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () async {
             Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
-            context.read<WebSocketProvider>().closeWebSocketWithoutReconnect('Recording with phone mic');
-            await provider.initiateWebsocket(BleAudioCodec.pcm16, 16000);
+            await provider.changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();
           },
@@ -155,8 +154,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
       isConnected = deviceProvider.connectedDevice != null;
-    } else if (deviceProvider.connectedDevice != null || captureProvider.recordingState == RecordingState.record) {
+    } else if (captureProvider.recordingDeviceServiceReady && captureProvider.transcriptServiceReady) {
       stateText = "Listening";
+      isConnected = true;
+    } else if (captureProvider.recordingDeviceServiceReady || captureProvider.transcriptServiceReady) {
+      stateText = "Preparing";
       isConnected = true;
     }
 

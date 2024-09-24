@@ -32,6 +32,10 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
             memories.append(doc.to_dict())
     return memories
 
+def get_processing_memory_by_id(uid, processing_memory_id):
+    memory_ref = db.collection('users').document(uid).collection('processing_memories').document(processing_memory_id)
+    return memory_ref.get().to_dict()
+
 def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)

@@ -4,7 +4,7 @@ import time
 from typing import List
 
 import websockets
-from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, ListenWebSocketClient
 from deepgram.clients.live.v1 import LiveOptions
 
 import database.notifications as notification_db
@@ -61,6 +61,22 @@ headers = {
 #     return segments
 
 
+async def send_initial_file_path(file_path: str, transcript_socket_async_send):
+    print('send_initial_file_path')
+    start = time.time()
+    # Reading and sending in chunks
+    with open(file_path, "rb") as file:
+        while True:
+            chunk = file.read(320)
+            if not chunk:
+                break
+            # print('Uploading', len(chunk))
+            await transcript_socket_async_send(bytes(chunk))
+            await asyncio.sleep(0.0001)  # if it takes too long to transcribe
+
+    print('send_initial_file_path', time.time() - start)
+
+
 async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file2')
     start = time.time()
@@ -78,10 +94,10 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, codec: str, channels: int,
+        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int,
         preseconds: int = 0,
 ):
-    print('process_audio_dg', language, sample_rate, codec, channels, preseconds)
+    print('process_audio_dg', language, sample_rate, channels, preseconds)
 
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
@@ -127,7 +143,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram(on_message, on_error, language, sample_rate, codec, channels)
+    return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
 
 
 def process_segments(uid: str, segments: list[dict]):
@@ -135,12 +151,42 @@ def process_segments(uid: str, segments: list[dict]):
     trigger_realtime_integrations(uid, token, segments)
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, codec: str, channels: int):
+def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
     try:
-        dg_connection = deepgram.listen.live.v("1")
+        dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+        def on_open(self, open, **kwargs):
+            print("Connection Open")
+
+        def on_metadata(self, metadata, **kwargs):
+            print(f"Metadata: {metadata}")
+
+        def on_speech_started(self, speech_started, **kwargs):
+            print("Speech Started")
+
+        def on_utterance_end(self, utterance_end, **kwargs):
+            print("Utterance End")
+            global is_finals
+            if len(is_finals) > 0:
+                utterance = " ".join(is_finals)
+                print(f"Utterance End: {utterance}")
+                is_finals = []
+
+        def on_close(self, close, **kwargs):
+            print("Connection Closed")
+
+        def on_unhandled(self, unhandled, **kwargs):
+            print(f"Unhandled Websocket Message: {unhandled}")
+
+        dg_connection.on(LiveTranscriptionEvents.Open, on_open)
+        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+        dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
+        dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
+        dg_connection.on(LiveTranscriptionEvents.Close, on_close)
+        dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
         options = LiveOptions(
             punctuate=True,
             no_delay=True,
@@ -155,7 +201,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             multichannel=channels > 1,
             model='nova-2-general',
             sample_rate=sample_rate,
-            encoding='linear16' if codec == 'pcm8' or codec == 'pcm16' else 'opus'
+            encoding='linear16'
         )
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
@@ -167,10 +213,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
 soniox_valid_languages = ['en']
 
 
-# soniox_valid_languages = ['en', 'es', 'fr', 'ko', 'zh', 'it', 'pt', 'de']
-
-
-async def process_audio_soniox(stream_transcript, stream_id: int, language: str, uid: str):
+async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: int, language: str, uid: str):
     # Fuck, soniox doesn't even support diarization in languages != english
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -182,12 +225,12 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     if language not in soniox_valid_languages:
         raise ValueError(f"Unsupported language '{language}'. Supported languages are: {soniox_valid_languages}")
 
-    has_speech_profile = create_user_speech_profile(uid)  # only english too
+    has_speech_profile = create_user_speech_profile(uid) if uid and sample_rate == 16000 else False  # only english too
 
     # Construct the initial request with all required and optional parameters
     request = {
         'api_key': api_key,
-        'sample_rate_hertz': 16000,
+        'sample_rate_hertz': sample_rate,
         'include_nonfinal': True,
         'enable_endpoint_detection': True,
         'enable_streaming_speaker_diarization': True,
@@ -216,6 +259,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
             try:
                 async for message in soniox_socket:
                     response = json.loads(message)
+                    # print(response)
                     fw = response['fw']
                     if not fw:
                         continue
@@ -257,7 +301,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
                         segments[i]['text'] = segments[i]['text'].strip().replace('  ', '')
 
                     # print('Soniox:', transcript.replace('<end>', ''))
-                    stream_transcript(segments, stream_id)
+                    if segments:
+                        stream_transcript(segments, stream_id)
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
             except Exception as e:
@@ -276,3 +321,119 @@ async def process_audio_soniox(stream_transcript, stream_id: int, language: str,
     except Exception as e:
         print(f"Exception in process_audio_soniox: {e}")
         raise  # Re-raise the exception to be handled by the caller
+
+
+LANGUAGE = "en"
+CONNECTION_URL = f"wss://eu2.rt.speechmatics.com/v2"
+
+
+async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str, preseconds: int = 0):
+    api_key = os.getenv('SPEECHMATICS_API_KEY')
+    uri = 'wss://eu2.rt.speechmatics.com/v2'
+
+    request = {
+        "message": "StartRecognition",
+        "transcription_config": {
+            "language": language,
+            "diarization": "speaker",
+            "operating_point": "enhanced",
+            "max_delay_mode": "flexible",
+            "max_delay": 3,
+            "enable_partials": False,
+            "enable_entities": True,
+            "speaker_diarization_config": {"max_speakers": 4}
+        },
+        "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": sample_rate},
+        # "audio_events_config": {
+        #     "types": [
+        #         "laughter",
+        #         "music",
+        #         "applause"
+        #     ]
+        # }
+    }
+    try:
+        print("Connecting to Speechmatics WebSocket...")
+        socket = await websockets.connect(uri, extra_headers={"Authorization": f"Bearer {api_key}"})
+        print("Connected to Speechmatics WebSocket.")
+
+        await socket.send(json.dumps(request))
+        print(f"Sent initial request: {request}")
+
+        async def on_message():
+            try:
+                async for message in socket:
+                    response = json.loads(message)
+                    if response['message'] == 'AudioAdded':
+                        continue
+                    if response['message'] == 'AddTranscript':
+                        results = response['results']
+                        if not results:
+                            continue
+                        segments = []
+                        for r in results:
+                            # print(r)
+                            if not r['alternatives']:
+                                continue
+
+                            r_data = r['alternatives'][0]
+                            r_type = r['type']  # word | punctuation
+                            r_start = r['start_time']
+                            r_end = r['end_time']
+
+                            r_content = r_data['content']
+                            r_confidence = r_data['confidence']
+                            if r_confidence < 0.4:
+                                print('Low confidence:', r)
+                                continue
+                            r_speaker = r_data['speaker'][1:] if r_data['speaker'] != 'UU' else '1'
+                            speaker = f"SPEAKER_0{r_speaker}"
+
+                            is_user = True if r_speaker == '1' and preseconds > 0 else False
+                            if r_start < preseconds:
+                                # print('Skipping word', r_start, r_content)
+                                continue
+                            # print(r_content, r_speaker, [r_start, r_end])
+                            if not segments:
+                                segments.append({
+                                    'speaker': speaker,
+                                    'start': r_start,
+                                    'end': r_end,
+                                    'text': r_content,
+                                    'is_user': is_user,
+                                    'person_id': None,
+                                })
+                            else:
+                                last_segment = segments[-1]
+                                if last_segment['speaker'] == speaker:
+                                    last_segment['text'] += f' {r_content}'
+                                    last_segment['end'] += r_end
+                                else:
+                                    segments.append({
+                                        'speaker': speaker,
+                                        'start': r_start,
+                                        'end': r_end,
+                                        'text': r_content,
+                                        'is_user': is_user,
+                                        'person_id': None,
+                                    })
+
+                        if segments:
+                            stream_transcript(segments, stream_id)
+                        # print('---')
+                    else:
+                        print(response)
+            except websockets.exceptions.ConnectionClosedOK:
+                print("Speechmatics connection closed normally.")
+            except Exception as e:
+                print(f"Error receiving from Speechmatics: {e}")
+            finally:
+                if not socket.closed:
+                    await socket.close()
+                    print("Speechmatics WebSocket closed in on_message.")
+
+        asyncio.create_task(on_message())
+        return socket
+    except Exception as e:
+        print(f"Exception in process_audio_speechmatics: {e}")
+        raise

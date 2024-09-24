@@ -1,8 +1,11 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/features/calendar.dart';
 
 class MemoryProvider extends ChangeNotifier {
   List<ServerMemory> memories = [];
@@ -88,9 +91,20 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(true);
     var mem = await getMemories();
     memories = mem;
+    createEventsForMemories();
     setLoadingMemories(false);
     notifyListeners();
     return memories;
+  }
+
+  void createEventsForMemories() {
+    for (var memory in memories) {
+      if (memory.structured.events.isNotEmpty &&
+          !memory.structured.events.first.created &&
+          memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
+        _handleCalendarCreation(memory);
+      }
+    }
   }
 
   Future getMoreMemoriesFromServer() async {
@@ -106,8 +120,34 @@ class MemoryProvider extends ChangeNotifier {
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
-    filterMemories('');
+    initFilteredMemories();
     notifyListeners();
+  }
+
+  int addMemoryWithDate(ServerMemory memory) {
+    int idx;
+    var date = memoriesWithDates.indexWhere((element) =>
+        element is DateTime &&
+        element.day == memory.createdAt.day &&
+        element.month == memory.createdAt.month &&
+        element.year == memory.createdAt.year);
+    if (date != -1) {
+      var hour = memoriesWithDates[date + 1].createdAt.hour;
+      var newHour = memory.createdAt.hour;
+      if (newHour > hour) {
+        memoriesWithDates.insert(date + 1, memory);
+        idx = date + 1;
+      } else {
+        memoriesWithDates.insert(date + 2, memory);
+        idx = date + 2;
+      }
+    } else {
+      memoriesWithDates.add(memory.createdAt);
+      memoriesWithDates.add(memory);
+      idx = memoriesWithDates.length - 1;
+    }
+    notifyListeners();
+    return idx;
   }
 
   void updateMemory(ServerMemory memory, [int? index]) {
@@ -121,6 +161,28 @@ class MemoryProvider extends ChangeNotifier {
     }
     initFilteredMemories();
     notifyListeners();
+  }
+
+  _handleCalendarCreation(ServerMemory memory) {
+    if (!SharedPreferencesUtil().calendarEnabled) return;
+    if (SharedPreferencesUtil().calendarType != 'auto') return;
+
+    List<Event> events = memory.structured.events;
+    if (events.isEmpty) return;
+
+    List<int> indexes = events.mapIndexed((index, e) => index).toList();
+    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+    for (var i = 0; i < events.length; i++) {
+      print('Creating event: ${events[i].title}');
+      if (events[i].created) continue;
+      events[i].created = true;
+      CalendarUtil().createEvent(
+        events[i].title,
+        events[i].startsAt,
+        events[i].duration,
+        description: events[i].description,
+      );
+    }
   }
 
   /////////////////////////////////////////////////////////////////

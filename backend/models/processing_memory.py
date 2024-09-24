@@ -14,6 +14,7 @@ class ProcessingMemory(BaseModel):
     audio_url: Optional[str] = None
     created_at: datetime
     timer_start: float
+    timer_segment_start: Optional[float] = None
     timer_starts: List[float] = []
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
     transcript_segments: List[TranscriptSegment] = []
@@ -23,6 +24,13 @@ class ProcessingMemory(BaseModel):
     memory_id: Optional[str] = None
     message_ids: List[str] = []
 
+class BasicProcessingMemory(BaseModel):
+    id: str
+    timer_start: float
+    created_at: datetime
+    geolocation: Optional[Geolocation] = None
+    emotional_feedback: Optional[bool] = False
+
 
 class UpdateProcessingMemory(BaseModel):
     id: Optional[str] = None
@@ -31,4 +39,4 @@ class UpdateProcessingMemory(BaseModel):
 
 
 class UpdateProcessingMemoryResponse(BaseModel):
-    result: ProcessingMemory
+    result: BasicProcessingMemory

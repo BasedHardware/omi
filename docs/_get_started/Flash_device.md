@@ -1,10 +1,10 @@
 ---
 layout: default
-title: Flashing FRIEND Firmware
+title: Update FRIEND Firmware
 nav_order: 3
 ---
 # Video Tutorial
-For a visual walkthrough of the flashing process, watch the [Updating Your FRIEND](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/docs/images/updating_your_friend.mov) video.
+For a visual walkthrough of the flashing process, watch the [Updating Your FRIEND](https://github.com/BasedHardware/omi/blob/main/docs/images/updating_your_friend.mov) video.
 
 # Flashing FRIEND Firmware`   
 
@@ -13,8 +13,12 @@ This guide will walk you through the process of flashing the latest firmware ont
 
 ## Downloading the Firmware
 
-1. Go to the [FRIEND GitHub repository](https://github.com/BasedHardware/Omi) and navigate to the "Devices > FRIEND > firmware" section.
+1. Go to the [FRIEND GitHub repository](https://github.com/BasedHardware/Omi) and navigate to the " FRIEND > firmware" section.
 2. Find the latest firmware release and bootloader, then download the corresponding `.uf2` files.
+
+Or download these files
+   - **Bootloader:** [bootloader0.9.0.uf2](https://github.com/BasedHardware/omi/releases/download/v1.0.3-firmware/update-xiao_nrf52840_ble_sense_bootloader-0.9.0_nosd.uf2)
+   -  **Firmware:** [firmware1.0.4.uf2](https://github.com/BasedHardware/omi/releases/download/v1.0.4-firmware/friend-xiao_nrf52840_ble_sense-1.0.4.uf2)
 
 ## Putting FRIEND into DFU Mode
 
@@ -30,11 +34,11 @@ This guide will walk you through the process of flashing the latest firmware ont
 
 1. Locate the `.uf2` files you downloaded earlier.
 2. Drag and drop the bootloader `.uf2` file onto the `/Volumes/XIAO-SENSE` drive:
-   - **Bootloader:** [bootloader0.9.0.uf2](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/devices/Friend/firmware/bootloader/bootloader0.9.0.uf2)
+   - **Bootloader:** [bootloader0.9.0.uf2](https://github.com/BasedHardware/omi/releases/download/v1.0.3-firmware/update-xiao_nrf52840_ble_sense_bootloader-0.9.0_nosd.uf2)
 3. The device will automatically eject itself once the bootloader flashing process is complete.
 4. After the device forcibly ejects, set the FRIEND device back into DFU mode by double-tapping the reset button.
 5. Drag and drop the FRIEND firmware file onto the `/Volumes/XIAO-SENSE` drive:
-   - **Firmware:** [firmware1.0.4.uf2](https://github.com/ebowwa/omi/blob/firmware-flashing-readme/devices/Friend/firmware/firmware1.0.4.uf2)
+   - **Firmware:** [firmware1.0.4.uf2](https://github.com/BasedHardware/omi/releases/download/v1.0.4-firmware/friend-xiao_nrf52840_ble_sense-1.0.4.uf2)
 
 ## Congratulations!
 

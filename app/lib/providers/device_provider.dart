@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/providers/websocket_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notification_service.dart';
@@ -13,7 +12,6 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
-  WebSocketProvider? webSocketProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
@@ -25,16 +23,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Timer? _disconnectNotificationTimer;
 
-  void setProviders(CaptureProvider provider, WebSocketProvider wsProvider) {
+  DeviceProvider() {
+    ServiceManager.instance().device.subscribe(this, this);
+  }
+
+  void setProviders(CaptureProvider provider) {
     captureProvider = provider;
-    webSocketProvider = wsProvider;
     notifyListeners();
   }
 
   void setConnectedDevice(BTDeviceStruct? device) {
     connectedDevice = device;
     print('setConnectedDevice: $device');
-    captureProvider?.updateConnectedDevice(device);
     notifyListeners();
   }
 
@@ -118,7 +118,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future scanAndConnectToDevice() async {
-    ServiceManager.instance().device.subscribe(this, this);
     updateConnectingStatus(true);
     if (isConnected) {
       if (connectedDevice == null) {
@@ -149,22 +148,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       await initiateBleBatteryListener();
     }
-    await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
-    // if (captureProvider?.webSocketConnected == false) {
-    //   restartWebSocket();
-    // }
 
-    notifyListeners();
-  }
-
-  Future restartWebSocket() async {
-    debugPrint('restartWebSocket');
-
-    await webSocketProvider?.closeWebSocketWithoutReconnect('Restarting WebSocket');
-    if (connectedDevice == null) {
-      return;
-    }
-    await captureProvider?.resetState(restartBytesProcessing: true);
     notifyListeners();
   }
 
@@ -197,7 +181,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(null);
     setIsConnected(false);
     updateConnectingStatus(false);
-    await captureProvider?.resetState(restartBytesProcessing: false);
+    await captureProvider?.stopStreamDeviceRecording(cleanDevice: true);
     captureProvider?.setAudioBytesConnected(false);
     print('after resetState inside initiateConnectionListener');
 
@@ -224,7 +208,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(device);
     setIsConnected(true);
     updateConnectingStatus(false);
-    await captureProvider?.resetState(restartBytesProcessing: true, btDevice: connectedDevice);
+    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true, device: device);
     //  initiateBleBatteryListener();
     // The device is still disconnected for some reason
     if (connectedDevice != null) {

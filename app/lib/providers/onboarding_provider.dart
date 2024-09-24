@@ -250,6 +250,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
+
   @override
   void dispose() {
     //TODO: This does not get called when the page is popped

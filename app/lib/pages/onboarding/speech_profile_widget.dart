@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
@@ -49,13 +52,35 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    Future restartDeviceRecording() async {
+      debugPrint("restartDeviceRecording $mounted");
+
+      // Restart device recording, clear transcripts
+      if (mounted) {
+        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
+        Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
+          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice,
+        );
+      }
+    }
+
+    Future stopDeviceRecording() async {
+      debugPrint("stopDeviceRecording $mounted");
+
+      // Restart device recording, clear transcripts
+      if (mounted) {
+        await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+      }
+    }
+
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvoked: (didPop) async {
         context.read<SpeechProfileProvider>().close();
+        restartDeviceRecording();
       },
-      child: Consumer<SpeechProfileProvider>(
-        builder: (context, provider, child) {
+      child: Consumer2<SpeechProfileProvider, CaptureProvider>(
+        builder: (context, provider, _, child) {
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SCROLL_DOWN') {
@@ -204,10 +229,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     ),
                                     child: TextButton(
                                       onPressed: () async {
-                                        await provider.initialise(true);
+                                        await stopDeviceRecording();
+                                        await provider.initialise(true, finalizedCallback: restartDeviceRecording);
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () async {
-                                          provider.finalize(true);
+                                          provider.finalize();
                                         });
                                         provider.updateStartedRecording(true);
                                       },

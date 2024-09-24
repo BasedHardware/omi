@@ -1,3 +1,4 @@
+import math
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -7,16 +8,16 @@ import opuslib
 import requests
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
+from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
-from database.redis_db import get_user_speech_profile
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
 from models.processing_memory import ProcessingMemory
-from routers.postprocessing import postprocess_memory_util
 from utils.audio import create_wav_from_bytes, merge_wav_files
+from utils.memories.postprocess_memory import postprocess_memory as postprocess_memory_util
 from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_postprocessing_audio
 from utils.processing_memories import create_memory_by_processing_memory
@@ -67,40 +68,22 @@ router = APIRouter()
 #       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
 #
 
-def _combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
-    if not new_segments or len(new_segments) == 0:
-        return segments
-
-    joined_similar_segments = []
-    for new_segment in new_segments:
-        if delta_seconds > 0:
-            new_segment.start += delta_seconds
-            new_segment.end += delta_seconds
-
-        if (joined_similar_segments and
-                (joined_similar_segments[-1].speaker == new_segment.speaker or
-                 (joined_similar_segments[-1].is_user and new_segment.is_user))):
-            joined_similar_segments[-1].text += f' {new_segment.text}'
-            joined_similar_segments[-1].end = new_segment.end
-        else:
-            joined_similar_segments.append(new_segment)
-
-    if (segments and
-            (segments[-1].speaker == joined_similar_segments[0].speaker or
-             (segments[-1].is_user and joined_similar_segments[0].is_user)) and
-            (joined_similar_segments[0].start - segments[-1].end < 30)):
-        segments[-1].text += f' {joined_similar_segments[0].text}'
-        segments[-1].end = joined_similar_segments[0].end
-        joined_similar_segments.pop(0)
-
-    segments.extend(joined_similar_segments)
-
-    return segments
-
 
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
+    speechmatics = "speechmatics"
+
+    # auto = "auto"
+
+    @staticmethod
+    def get_model_name(value):
+        if value == STTService.deepgram:
+            return 'deepgram_streaming'
+        elif value == STTService.soniox:
+            return 'soniox_streaming'
+        elif value == STTService.speechmatics:
+            return 'speechmatics_streaming'
 
 
 async def _websocket_util(
@@ -108,13 +91,18 @@ async def _websocket_util(
         channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
         stt_service: STTService = STTService.deepgram,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
+    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,
+          stt_service)
 
-    if stt_service == STTService.soniox and (
-            sample_rate != 16000 or codec != 'opus' or language not in soniox_valid_languages):
+    if stt_service == STTService.soniox and language not in soniox_valid_languages:
+        stt_service = STTService.deepgram  # defaults to deepgram
+
+    if stt_service == STTService.speechmatics:  # defaults to deepgram (no credits + 10 connections max limit)
         stt_service = STTService.deepgram
 
-    # Check: Why do we need try-catch around websocket.accept?
+    # TODO: if language english, use soniox
+    # TODO: else deepgram, if speechmatics credits, prob this for both?
+
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -141,8 +129,8 @@ async def _websocket_util(
     speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
-    # Soft timeout
-    timeout_seconds = 420  # 7m ~ MODAL_TIME_OUT - 3m
+    # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 420  # 7m
     started_at = time.time()
 
     def stream_transcript(segments, stream_id):
@@ -150,9 +138,26 @@ async def _websocket_util(
         nonlocal processing_memory
         nonlocal processing_memory_synced
         nonlocal memory_transcript_segements
+        nonlocal segment_start
+        nonlocal segment_end
 
         if not segments or len(segments) == 0:
             return
+
+        # Align the start, end segment
+        if not segment_start:
+            start = segments[0]["start"]
+            segment_start = start
+
+        # end
+        end = segments[-1]["end"]
+        if not segment_end or segment_end < end:
+            segment_end = end
+
+        for i, segment in enumerate(segments):
+            segment["start"] -= segment_start
+            segment["end"] -= segment_start
+            segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
@@ -163,7 +168,7 @@ async def _websocket_util(
             delta_seconds = 0
             if processing_memory and processing_memory.timer_start > 0:
                 delta_seconds = timer_start - processing_memory.timer_start
-            memory_transcript_segements = _combine_segments(
+            memory_transcript_segements = TranscriptSegment.combine_segments(
                 memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds
             )
 
@@ -182,41 +187,54 @@ async def _websocket_util(
         processing_audio_frames.append(audio_buffer)
 
     soniox_socket = None
+    speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
     timer_start = None
+    segment_start = None
+    segment_end = None
+    audio_frames_per_sec = 100
     # audio_buffer = None
     duration = 0
     try:
-        # Soniox
-        if stt_service == STTService.deepgram:
-            if language == 'en' and codec == 'opus' and include_speech_profile:
-                second_per_frame: float = 0.01
-                speech_profile = get_user_speech_profile(uid)
-                duration = len(speech_profile) * second_per_frame
-                print('speech_profile', len(speech_profile), duration)
-                if duration:
-                    duration += 10
-            else:
-                speech_profile, duration = [], 0
+        file_path, duration = None, 0
+        # TODO: how bee does for recognizing other languages speech profile
+        if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+            file_path = get_profile_audio_if_exists(uid)
+            print(f'deepgram-obns3: file_path {file_path}')
+            duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
+        # DEEPGRAM
+        if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, memory_stream_id, language, sample_rate, codec, channels, preseconds=duration
+                stream_transcript, memory_stream_id, language, sample_rate, channels, preseconds=duration
             )
             if duration:
                 deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, speech_profile_stream_id, language, sample_rate, codec, channels
+                    stream_transcript, speech_profile_stream_id, language, sample_rate, channels
                 )
 
-                await send_initial_file(speech_profile, deepgram_socket)
+                print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
+                async def deepgram_socket_send(data):
+                    return deepgram_socket.send(data)
+                await send_initial_file_path(file_path, deepgram_socket_send)
+        # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, speech_profile_stream_id, language, uid if include_speech_profile else None
+                stream_transcript, speech_profile_stream_id, sample_rate, language,
+                uid if include_speech_profile else None
             )
-
+        # SPEECHMATICS
+        elif stt_service == STTService.speechmatics:
+            speechmatics_socket = await process_audio_speechmatics(
+                stream_transcript, speech_profile_stream_id, sample_rate, language, preseconds=duration
+            )
+            if duration:
+                await send_initial_file_path(file_path, speechmatics_socket.send)
+                print('speech_profile speechmatics duration', duration)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
@@ -229,7 +247,7 @@ async def _websocket_util(
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
-    async def receive_audio(dg_socket1, dg_socket2, soniox_socket):
+    async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal timer_start
@@ -246,12 +264,17 @@ async def _websocket_util(
         # audio_file = open(path, "a")
         try:
             while websocket_active:
-                data = await websocket.receive_bytes()
+                raw_data = await websocket.receive_bytes()
+                data = raw_data[:]
                 # audio_buffer.extend(data)
+                if codec == 'opus' and sample_rate == 16000:
+                    data = decoder.decode(bytes(data), frame_size=160)
 
                 if soniox_socket is not None:
-                    decoded_opus = decoder.decode(bytes(data), frame_size=160)
-                    await soniox_socket.send(decoded_opus)
+                    await soniox_socket.send(data)
+
+                if speechmatics_socket1 is not None:
+                    await speechmatics_socket1.send(data)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
@@ -265,7 +288,7 @@ async def _websocket_util(
                         dg_socket2.send(data)
 
                 # stream
-                stream_audio(data)
+                stream_audio(raw_data)
 
                 # audio_buffer = bytearray()
 
@@ -273,6 +296,8 @@ async def _websocket_util(
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Could not process audio: error {e}')
+            print(f'deepgram-obns3: receive_audio > dg_socket1 {dg_socket1}')
+            print(f'deepgram-obns3: receive_audio > dg_socket2 {dg_socket2}')
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -282,6 +307,8 @@ async def _websocket_util(
                 dg_socket2.finish()
             if soniox_socket:
                 await soniox_socket.close()
+            if speechmatics_socket:
+                await speechmatics_socket.close()
 
     # heart beat
     async def send_heartbeat():
@@ -332,10 +359,11 @@ async def _websocket_util(
         last_processing_memory_data = processing_memories_db.get_last(uid)
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            segment_end = 0
+            last_segment_end = 0
             for segment in last_processing_memory.transcript_segments:
-                segment_end = max(segment_end, segment.end)
-            if last_processing_memory.timer_start + segment_end + min_seconds_limit > time.time():
+                last_segment_end = max(last_segment_end, segment.end)
+            timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
+            if timer_segment_start + last_segment_end + min_seconds_limit > time.time():
                 processing_memory = last_processing_memory
 
         # Or create new
@@ -344,6 +372,7 @@ async def _websocket_util(
                 id=str(uuid.uuid4()),
                 created_at=datetime.now(timezone.utc),
                 timer_start=timer_start,
+                timer_segment_start=timer_start + segment_start,
                 language=language,
             )
 
@@ -355,7 +384,7 @@ async def _websocket_util(
         processing_memory.timer_starts.append(timer_start)
 
         # Transcript with delta
-        memory_transcript_segements = _combine_segments(
+        memory_transcript_segements = TranscriptSegment.combine_segments(
             processing_memory.transcript_segments, memory_transcript_segements,
             timer_start - processing_memory.timer_start
         )
@@ -376,11 +405,22 @@ async def _websocket_util(
         nonlocal processing_memory
         nonlocal processing_audio_frames
         nonlocal processing_audio_frame_synced
+        nonlocal segment_start
+        nonlocal segment_end
 
         # Create wav
         processing_audio_frame_synced = len(processing_audio_frames)
+
+        # Remove audio frames [start, end]
+        left = 0
+        if segment_start:
+            left = max(left, math.floor(segment_start) * audio_frames_per_sec)
+        right = processing_audio_frame_synced
+        if segment_end:
+            right = min(math.ceil(segment_end) * audio_frames_per_sec, right)
+
         file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-        create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[:processing_audio_frame_synced],
+        create_wav_from_bytes(file_path=file_path, frames=processing_audio_frames[left:right],
                               frame_rate=sample_rate, channels=channels, codec=codec, )
 
         # Try merge new audio with the previous
@@ -394,7 +434,9 @@ async def _websocket_util(
 
                     # merge
                     merge_file_path = f"_temp/{memory.id}_{uuid.uuid4()}_be"
-                    merge_wav_files(merge_file_path, [previous_file_path, file_path])
+                    nearest_timer_start = processing_memory.timer_starts[-2]
+                    merge_wav_files(merge_file_path, [previous_file_path, file_path],
+                                    [math.ceil(timer_start - nearest_timer_start), 0])
 
                     # clean
                     os.remove(previous_file_path)
@@ -411,8 +453,7 @@ async def _websocket_util(
         # Process
         emotional_feedback = processing_memory.emotional_feedback
         status, new_memory = postprocess_memory_util(
-            memory.id, file_path, uid, emotional_feedback,
-            'deepgram_streaming' if stt_service == STTService.deepgram else 'soniox_streaming'
+            memory.id, file_path, uid, emotional_feedback, STTService.get_model_name(stt_service)
         )
         if status == 200:
             memory = new_memory
@@ -442,11 +483,11 @@ async def _websocket_util(
             await _create_processing_memory()
         else:
             # or ensure synced processing transcript
-            processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [processing_memory.id])
-            if len(processing_memories) == 0:
+            processing_memory_data = processing_memories_db.get_processing_memory_by_id(uid, processing_memory.id)
+            if not processing_memory_data:
                 print("processing memory is not found")
                 return
-            processing_memory = ProcessingMemory(**processing_memories[0])
+            processing_memory = ProcessingMemory(**processing_memory_data)
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
@@ -464,8 +505,8 @@ async def _websocket_util(
         memory = None
         messages = []
         if not processing_memory.memory_id:
-            (new_memory, new_messages, updated_processing_memory) = await create_memory_by_processing_memory(uid,
-                                                                                                             processing_memory.id)
+            new_memory, new_messages, updated_processing_memory = await create_memory_by_processing_memory(
+                uid, processing_memory.id)
             if not new_memory:
                 print("Can not create new memory")
 
@@ -490,6 +531,11 @@ async def _websocket_util(
             memory.transcript_segments = processing_memory.transcript_segments
             memories_db.update_memory_segments(uid, memory.id,
                                                [segment.dict() for segment in memory.transcript_segments])
+
+            # Update finished at
+            memory.finished_at = datetime.fromtimestamp(
+                memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc)
+            memories_db.update_memory_finished_at(uid, memory.id, memory.finished_at)
 
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
@@ -527,6 +573,8 @@ async def _websocket_util(
     async def _try_flush_new_memory(time_validate: bool = True):
         nonlocal memory_transcript_segements
         nonlocal timer_start
+        nonlocal segment_start
+        nonlocal segment_end
         nonlocal processing_memory
         nonlocal processing_memory_synced
         nonlocal processing_audio_frames
@@ -537,13 +585,8 @@ async def _websocket_util(
             return
 
         # Validate last segment
-        last_segment = None
-        if len(memory_transcript_segements) > 0:
-            last_segment = memory_transcript_segements[-1]
-        if not last_segment:
+        if not segment_end:
             print("Not last segment or last segment invalid")
-            if last_segment:
-                print(f"{last_segment.dict()}")
             return
 
         # First chunk, create processing memory
@@ -554,7 +597,6 @@ async def _websocket_util(
 
         # Validate transcript
         # Longer 120s
-        segment_end = last_segment.end
         now = time.time()
         should_create_memory_time = True
         if time_validate:
@@ -588,7 +630,8 @@ async def _websocket_util(
             processing_memory = None
 
     try:
-        receive_task = asyncio.create_task(receive_audio(deepgram_socket, deepgram_socket2, soniox_socket))
+        receive_task = asyncio.create_task(
+            receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket))
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
         # Run task

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from models.processing_memory import ProcessingMemory, UpdateProcessingMemory
+from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory
 from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing, TranscriptSegment
 from utils.memories.process_memory import process_memory
 from utils.memories.location import get_google_maps_location
@@ -23,11 +23,11 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     if not transcript_segments or len(transcript_segments) == 0:
         print("Transcript segments is invalid")
         return
-    timer_start = processing_memory.timer_start
+    timer_segment_start = processing_memory.timer_segment_start if processing_memory.timer_segment_start else processing_memory.timer_start
     segment_end = transcript_segments[-1].end
     new_memory = CreateMemory(
-        started_at=datetime.fromtimestamp(timer_start, timezone.utc),
-        finished_at=datetime.fromtimestamp(timer_start + segment_end, timezone.utc),
+        started_at=datetime.fromtimestamp(timer_segment_start, timezone.utc),
+        finished_at=datetime.fromtimestamp(timer_segment_start + segment_end, timezone.utc),
         language=processing_memory.language,
         transcript_segments=transcript_segments,
     )
@@ -55,13 +55,13 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
 
     return (memory, messages, processing_memory)
 
-def update_basic_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> ProcessingMemory:
+def update_basic_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> BasicProcessingMemory:
     # Fetch new
-    processing_memories = processing_memories_db.get_processing_memories_by_id(uid, [update_processing_memory.id])
-    if len(processing_memories) == 0:
+    processing_memory = processing_memories_db.get_processing_memory_by_id(uid, update_processing_memory.id)
+    if not processing_memory:
         print("processing memory is not found")
         return
-    processing_memory = ProcessingMemory(**processing_memories[0])
+    processing_memory = BasicProcessingMemory(**processing_memory)
 
     # geolocation
     if update_processing_memory.geolocation:
