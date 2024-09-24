@@ -51,6 +51,13 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void setPluginsFromCache() {
+    if (SharedPreferencesUtil().pluginsList.isNotEmpty) {
+      plugins = SharedPreferencesUtil().pluginsList;
+    }
+    notifyListeners();
+  }
+
   void updatePrefPlugins() {
     SharedPreferencesUtil().pluginsList = plugins;
   }
