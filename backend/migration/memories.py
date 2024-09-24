@@ -19,6 +19,7 @@ def migration_incorrect_start_finish_time():
     user_offset = 0
     user_limit = 400
     while True:
+        print(f"running...user...{user_offset}")
         users_ref = (
             db.collection('users')
             .order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
@@ -32,7 +33,7 @@ def migration_incorrect_start_finish_time():
             offset = 0
             limit = 400
             while True:
-                print(f"running...user...{user.id}...{offset}")
+                print(f"running...user...{user.id}...memories...{offset}")
                 memories_ref = (
                     db.collection('users').document(user.id).collection("memories")
                     .order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
@@ -40,7 +41,6 @@ def migration_incorrect_start_finish_time():
                 memories_ref = memories_ref.limit(limit).offset(offset)
                 docs = list(memories_ref.stream())
                 if not docs or len(docs) == 0:
-                    print("done")
                     break
                 batch = db.batch()
                 for doc in docs:
@@ -52,7 +52,6 @@ def migration_incorrect_start_finish_time():
                         continue
 
                     delta = memory.created_at.timestamp() - memory.started_at.timestamp()
-                    print(delta)
                     if math.fabs(delta) < 15*60:  # gaps in 15' is ok
                         continue
                     td = None
@@ -63,16 +62,13 @@ def migration_incorrect_start_finish_time():
                     if memory.finished_at:
                         memory.finished_at = memory.finished_at + td
                     memory.started_at = memory.started_at + td
-                    print(f'{memory.dict()}')
 
-                    memory_ref = (
-                        db.collection('users').document(user.id).collection("memories").document(memory.id)
-                    )
+                    memory_ref = db.collection('users').document(user.id).collection('memories').document(memory.id)
 
                     batch.update(memory_ref, memory.dict())
 
                 batch.commit()
                 offset += len(docs)
-                time.sleep(.1)  # sleep 100ms
+                time.sleep(.01)  # sleep 100ms
 
         user_offset = user_offset + len(users)
