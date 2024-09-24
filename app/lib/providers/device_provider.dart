@@ -16,6 +16,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnecting = false;
   bool isConnected = false;
   BTDeviceStruct? connectedDevice;
+  DeviceInfo? deviceInfo;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   Timer? _reconnectionTimer;
@@ -36,6 +37,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     connectedDevice = device;
     print('setConnectedDevice: $device');
     notifyListeners();
+  }
+
+  Future<DeviceInfo> getDeviceInfo() async {
+    if (connectedDevice == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+    var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+    if (connection == null) {
+      return DeviceInfo.getDeviceInfo(null, null);
+    }
+    deviceInfo = await DeviceInfo.getDeviceInfo(connection.device, connection);
+    notifyListeners();
+    return deviceInfo!;
   }
 
   // TODO: thinh, use connection directly
