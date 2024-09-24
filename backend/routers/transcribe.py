@@ -110,8 +110,6 @@ async def _websocket_util(
     memory_watching = new_memory_watch
     processing_memory: ProcessingMemory = None
     processing_memory_synced: int = 0
-    processing_audio_frames = []
-    processing_audio_frame_synced: int = 0
 
     # Stream transcript
     memory_stream_id = 1
@@ -180,7 +178,6 @@ async def _websocket_util(
     timer_start = None
     segment_start = None
     segment_end = None
-    audio_frames_per_sec = 100
     # audio_buffer = None
     duration = 0
     try:
@@ -188,7 +185,6 @@ async def _websocket_util(
         # TODO: how bee does for recognizing other languages speech profile
         if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
             file_path = get_profile_audio_if_exists(uid)
-            print(f'deepgram-obns3: file_path {file_path}')
             duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
         # DEEPGRAM
@@ -200,8 +196,6 @@ async def _websocket_util(
                 deepgram_socket2 = await process_audio_dg(
                     stream_transcript, speech_profile_stream_id, language, sample_rate, channels
                 )
-
-                print(f'deepgram-obns3: send_initial_file_path > deepgram_socket {deepgram_socket}')
 
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
@@ -279,15 +273,12 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
-                # stream_audio(audio_buffer)
                 # audio_buffer = audio_buffer[window_size_bytes:]
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
             print(f'Could not process audio: error {e}')
-            print(f'deepgram-obns3: receive_audio > dg_socket1 {dg_socket1}')
-            print(f'deepgram-obns3: receive_audio > dg_socket2 {dg_socket2}')
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -396,8 +387,6 @@ async def _websocket_util(
         print("create memory")
         nonlocal processing_memory
         nonlocal processing_memory_synced
-        nonlocal processing_audio_frames
-        nonlocal processing_audio_frame_synced
         nonlocal memory_transcript_segements
 
         if not processing_memory:
@@ -495,8 +484,6 @@ async def _websocket_util(
         nonlocal segment_end
         nonlocal processing_memory
         nonlocal processing_memory_synced
-        nonlocal processing_audio_frames
-        nonlocal processing_audio_frame_synced
 
         if not timer_start:
             print("not timer start")
@@ -543,8 +530,6 @@ async def _websocket_util(
             # Clean
             memory_transcript_segements = memory_transcript_segements[processing_memory_synced:]
             processing_memory_synced = 0
-            processing_audio_frames = processing_audio_frames[processing_audio_frame_synced:]
-            processing_audio_frame_synced = 0
             processing_memory = None
 
     try:
