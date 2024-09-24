@@ -9,6 +9,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -19,6 +20,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class AIMessage extends StatefulWidget {
+  final bool showTypingIndicator;
   final ServerMessage message;
   final Function(String) sendMessage;
   final bool displayOptions;
@@ -27,6 +29,7 @@ class AIMessage extends StatefulWidget {
 
   const AIMessage({
     super.key,
+    this.showTypingIndicator = false,
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
@@ -112,12 +115,22 @@ class _AIMessageState extends State<AIMessage> {
                   : const SizedBox(),
               widget.message.type == MessageType.daySummary ? const SizedBox(height: 16) : const SizedBox(),
               SelectionArea(
-                  child: AutoSizeText(
-                messageText,
-                // : utf8.decode(widget.message.text.codeUnits),
-                style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-              )),
-              if (widget.message.id != 1) _getCopyButton(context), // RESTORE ME
+                child: widget.showTypingIndicator
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          TypingIndicator(),
+                        ],
+                      )
+                    : AutoSizeText(
+                        messageText,
+                        // : utf8.decode(widget.message.text.codeUnits),
+                        style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+                      ),
+              ),
+              if (widget.message.id != 1 || !widget.showTypingIndicator) _getCopyButton(context), // RESTORE ME
               if (widget.displayOptions) const SizedBox(height: 8),
               if (widget.displayOptions) ..._getInitialOptions(context),
               if (messageMemories.isNotEmpty) ...[
@@ -303,11 +316,11 @@ class _AIMessageState extends State<AIMessage> {
   _getInitialOptions(BuildContext context) {
     return [
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What\'s been on my mind a lot?'),
+      _getInitialOption(context, 'What did I do yesterday?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'Did I forget to follow up on something?'),
+      _getInitialOption(context, 'What could I do differently today?'),
       const SizedBox(height: 8),
-      _getInitialOption(context, 'What\'s the funniest thing I\'ve said lately?'),
+      _getInitialOption(context, 'Can you teach me something new?'),
     ];
   }
 }
