@@ -24,6 +24,12 @@ abstract class Env {
   static String? get googleMapsApiKey => _instance.googleMapsApiKey;
 
   static String? get gleapApiKey => _instance.gleapApiKey;
+
+  static String? get intercomAppId => _instance.intercomAppId;
+
+  static String? get intercomIOSApiKey => _instance.intercomIOSApiKey;
+
+  static String? get intercomAndroidApiKey => _instance.intercomAndroidApiKey;
 }
 
 abstract class EnvFields {
@@ -40,4 +46,10 @@ abstract class EnvFields {
   String? get googleMapsApiKey;
 
   String? get gleapApiKey;
+
+  String? get intercomAppId;
+
+  String? get intercomIOSApiKey;
+
+  String? get intercomAndroidApiKey;
 }
