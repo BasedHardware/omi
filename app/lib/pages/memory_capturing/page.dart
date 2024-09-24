@@ -4,6 +4,8 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
@@ -134,12 +136,59 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                               child: Text(
                                 provider.segments.isEmpty
                                     ? "No summary"
-                                    : "Available once the conversation finishes.\nBe quiet for 2 minutes 🤫",
+                                    : "We summarize conversations 2 minutes after they end\n\n\nWant to end it now?",
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16),
                               ),
                             ),
                           ),
+                          const SizedBox(
+                            height: 16,
+                          ),
+                          provider.segments.isEmpty
+                              ? const SizedBox()
+                              : Container(
+                                  decoration: BoxDecoration(
+                                    border: const GradientBoxBorder(
+                                      gradient: LinearGradient(colors: [
+                                        Color.fromARGB(127, 208, 208, 208),
+                                        Color.fromARGB(127, 188, 99, 121),
+                                        Color.fromARGB(127, 86, 101, 182),
+                                        Color.fromARGB(127, 126, 190, 236)
+                                      ]),
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  margin: const EdgeInsets.symmetric(horizontal: 48),
+                                  child: MaterialButton(
+                                    onPressed: () async {
+                                      context.read<CaptureProvider>().createMemory();
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => getDialog(
+                                          context,
+                                          () {
+                                            Navigator.pop(context);
+                                            Navigator.pop(context);
+                                          },
+                                          () {
+                                            Navigator.pop(context);
+                                            Navigator.pop(context);
+                                          },
+                                          "Creating Memory",
+                                          "Memory creation has been started. You will be notified once it is ready.",
+                                          singleButton: true,
+                                        ),
+                                      );
+                                    },
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                        child:
+                                            Text('Summarise Now', style: TextStyle(color: Colors.white, fontSize: 16))),
+                                  ),
+                                ),
                         ],
                       ),
                     ],
