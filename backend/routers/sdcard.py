@@ -41,12 +41,13 @@ async def sdcard_streaming_endpoint(
     first_packet_flag=False
     data_packet_length=83
     packet_count = 0
+    seconds_until_timeout = 10.0
     audio_frames = []
 
     try:
         while websocket_active:
             if first_packet_flag:
-                data = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                data = await asyncio.wait_for(websocket.receive_bytes(), timeout=seconds_until_timeout)
 
             else:
                 data = await websocket.receive_bytes()
