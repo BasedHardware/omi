@@ -170,12 +170,6 @@ async def _websocket_util(
                     uid, processing_memory.id, list(map(lambda m: m.dict(), processing_memory.transcript_segments))
                 )
 
-    def stream_audio(audio_buffer):
-        if not new_memory_watch:
-            return
-
-        processing_audio_frames.append(audio_buffer)
-
     soniox_socket = None
     speechmatics_socket = None
     deepgram_socket = None
@@ -247,8 +241,8 @@ async def _websocket_util(
         timer_start = time.time()
 
         # nonlocal audio_buffer
-        audio_buffer = bytearray()
-        speech_state = SpeechState.no_speech
+        # audio_buffer = bytearray()
+        # speech_state = SpeechState.no_speech
 
         try:
             while websocket_active:
@@ -258,36 +252,35 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                audio_buffer.extend(data)
-                if len(audio_buffer) < window_size_bytes:
-                    continue
+                # audio_buffer.extend(data)
+                # if len(audio_buffer) < window_size_bytes:
+                #     continue
 
-                speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
+                # speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
 
                 # if speech_state == SpeechState.no_speech:
                 #     audio_buffer = audio_buffer[window_size_bytes:]
                 #     continue
 
                 if soniox_socket is not None:
-                    await soniox_socket.send(audio_buffer)
+                    await soniox_socket.send(data)
 
                 if speechmatics_socket1 is not None:
-                    await speechmatics_socket1.send(audio_buffer)
+                    await speechmatics_socket1.send(data)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
                     if elapsed_seconds > duration or not dg_socket2:
-                        dg_socket1.send(audio_buffer)
+                        dg_socket1.send(data)
                         if dg_socket2:
                             print('Killing socket2')
                             dg_socket2.finish()
                             dg_socket2 = None
                     else:
-                        dg_socket2.send(audio_buffer)
+                        dg_socket2.send(data)
 
-                # stream
-                stream_audio(audio_buffer)
-                audio_buffer = audio_buffer[window_size_bytes:]
+                # stream_audio(audio_buffer)
+                # audio_buffer = audio_buffer[window_size_bytes:]
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
