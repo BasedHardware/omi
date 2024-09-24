@@ -154,10 +154,19 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() {});
                 }, icon: Icons.code),
                 const SizedBox(height: 32),
-                getItemAddOn2('Sign Out', () {
-                  // TODO: confirmation
-                  signOut();
-                  routeToPage(context, const DeciderWidget(), replace: true);
+                getItemAddOn2('Sign Out', () async {
+                  await showDialog(
+                    context: context,
+                    builder: (ctx) {
+                      return getDialog(context, () {
+                        Navigator.of(context).pop();
+                      }, () {
+                        signOut();
+                        Navigator.of(context).pop();
+                        routeToPage(context, const DeciderWidget(), replace: true);
+                      }, "Sign Out?", "Are you sure you want to sign out?");
+                    },
+                  );
                 }, icon: Icons.logout),
                 const SizedBox(height: 24),
                 Padding(
