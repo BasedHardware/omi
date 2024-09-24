@@ -11,7 +11,7 @@ class SupportPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Support'),
+        title: const Text('Guides & Tutorials'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: Padding(

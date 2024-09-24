@@ -140,7 +140,10 @@ class MixpanelManager {
 
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
-  void deviceConnected() => track('Device Connected');
+  void deviceConnected() =>
+      track('Device Connected', properties: {
+        ..._preferences.btDeviceStruct.toJson(fwverAsString: true),
+      });
 
   void deviceDisconnected() => track('Device Disconnected');
 
