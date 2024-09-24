@@ -105,4 +105,19 @@ class ServerMessage {
       'memories': memories.map((m) => m.toJson()).toList(),
     };
   }
+
+  static ServerMessage empty() {
+    return ServerMessage(
+      '0000',
+      DateTime.now(),
+      '',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+    );
+  }
+
+  bool get isEmpty => id == '0000';
 }

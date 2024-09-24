@@ -31,6 +31,13 @@ class _CalendarPageState extends State<CalendarPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: Consumer<CalenderProvider>(
         builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: Colors.white,
+              ),
+            );
+          }
           return ListView(
             children: [
               Container(

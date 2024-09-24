@@ -45,14 +45,23 @@ class CalenderProvider extends ChangeNotifier {
         setLoading(true);
 
         await _getCalendars();
-        setLoading(false);
+
         if (calendars.isEmpty) {
-          AppSnackbar.showSnackbar(
-            'No calendars found. Please check your device settings.',
-            duration: const Duration(seconds: 5),
-          );
-          calendarEnabled = false;
+          // try to get calendars again
+          await _getCalendars();
+          setLoading(false);
+          if (calendars.isEmpty) {
+            AppSnackbar.showSnackbar(
+              'No calendars found. Please check your device settings.',
+              duration: const Duration(seconds: 5),
+            );
+            calendarEnabled = false;
+          } else {
+            calendarEnabled = true;
+            _mixpanelManager.calendarEnabled();
+          }
         } else {
+          setLoading(false);
           calendarEnabled = true;
           _mixpanelManager.calendarEnabled();
         }
