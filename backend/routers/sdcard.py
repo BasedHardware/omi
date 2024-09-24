@@ -228,7 +228,7 @@ async def sdcard_streaming_endpoint(
                 continue
             temp_memory = CreateMemory(
             started_at= datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=time_to_subtract+zero_base-segments['start']),
-            finished_at= datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=time_to_subtract+zero_base--segments['end']),
+            finished_at= datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=time_to_subtract+zero_base-segments['end']),
     
             transcript_segments = fal_segments,
             source= MemorySource.sdcard,
