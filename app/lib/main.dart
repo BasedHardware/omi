@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
@@ -40,7 +43,9 @@ import 'package:friend_private/utils/logger.dart';
 import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
-import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+// import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'package:opus_flutter_ios/opus_flutter_ios.dart' as opus_flutter_ios;
+import 'package:opus_flutter_android/opus_flutter_android.dart' as opus_flutter_android;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
@@ -58,6 +63,14 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
+  FlutterError.onError = (errorDetails) {
+    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+  };
+  // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
@@ -69,7 +82,9 @@ Future<bool> _init() async {
 
   if (isAuth) MixpanelManager().identify();
   if (isAuth) identifyGleap();
-  initOpus(await opus_flutter.load());
+
+  if(Platform.isIOS) initOpus(await opus_flutter_ios.OpusFlutterIOS().load());
+  if(Platform.isAndroid)  initOpus(await opus_flutter_android.OpusFlutterAndroid().load());
 
   await GrowthbookUtil.init();
   CalendarUtil.init();
