@@ -165,44 +165,55 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       notifyInfo('OPENGLASS_NOT_SUPPORTED');
       return;
     }
-    if (isClicked) return; // if any item is clicked, don't do anything
-    isClicked = true; // Prevent further clicks
-    connectingToDeviceId = device.id; // Mark this device as being connected to
-    notifyListeners();
-    await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-    print('Connected to device: ${device.name}');
-    deviceId = device.id;
-    await SharedPreferencesUtil().btDeviceStructSet(device);
-    deviceName = device.name;
-    var cDevice = await _getConnectedDevice(deviceId);
-    if (cDevice != null) {
-      deviceProvider!.setConnectedDevice(cDevice);
-      SharedPreferencesUtil().btDeviceStruct = cDevice;
-      SharedPreferencesUtil().deviceName = cDevice.name;
-      deviceProvider!.setIsConnected(true);
+    try {
+      if (isClicked) return; // if any item is clicked, don't do anything
+      isClicked = true; // Prevent further clicks
+      connectingToDeviceId = device.id; // Mark this device as being connected to
+      notifyListeners();
+      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      print('Connected to device: ${device.name}');
+      deviceId = device.id;
+      await SharedPreferencesUtil().btDeviceStructSet(device);
+      deviceName = device.name;
+      var cDevice = await _getConnectedDevice(deviceId);
+      if (cDevice != null) {
+        deviceProvider!.setConnectedDevice(cDevice);
+        SharedPreferencesUtil().btDeviceStruct = cDevice;
+        SharedPreferencesUtil().deviceName = cDevice.name;
+        deviceProvider!.setIsConnected(true);
+      }
+      //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
+      // become same and the app won't transcribe at all because inherently there's a mismatch in the
+      //codec for websocket and the codec for the device
+      // await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
+      await deviceProvider?.scanAndConnectToDevice();
+      var connectedDevice = deviceProvider!.connectedDevice;
+      batteryPercentage = deviceProvider!.batteryLevel;
+      isConnected = true;
+      isClicked = false; // Allow clicks again after finishing the operation
+      connectingToDeviceId = null; // Reset the connecting device
+      notifyListeners();
+      stopFindDeviceTimer();
+      await Future.delayed(const Duration(seconds: 2));
+      SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
+      SharedPreferencesUtil().deviceName = connectedDevice.name;
+      foundDevicesMap.clear();
+      deviceList.clear();
+      if (isFromOnboarding) {
+        goNext!();
+      } else {
+        notifyInfo('DEVICE_CONNECTED');
+      }
+    } catch (e) {
+      print('Error connecting to device: $e');
+      foundDevicesMap.remove(device.id);
+      deviceList.removeWhere((element) => element.id == device.id);
+      isClicked = false; // Allow clicks again after finishing the operation
+      connectingToDeviceId = null; // Reset the connecting device
+      deviceProvider!.setIsConnected(false);
+      notifyListeners();
     }
-    //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
-    // become same and the app won't transcribe at all because inherently there's a mismatch in the
-    //codec for websocket and the codec for the device
-    // await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
-    await deviceProvider?.scanAndConnectToDevice();
-    var connectedDevice = deviceProvider!.connectedDevice;
-    batteryPercentage = deviceProvider!.batteryLevel;
-    isConnected = true;
-    isClicked = false; // Allow clicks again after finishing the operation
-    connectingToDeviceId = null; // Reset the connecting device
-    notifyListeners();
-    stopFindDeviceTimer();
-    await Future.delayed(const Duration(seconds: 2));
-    SharedPreferencesUtil().btDeviceStruct = connectedDevice!;
-    SharedPreferencesUtil().deviceName = connectedDevice.name;
-    foundDevicesMap.clear();
-    deviceList.clear();
-    if (isFromOnboarding) {
-      goNext!();
-    } else {
-      notifyInfo('DEVICE_CONNECTED');
-    }
+
     notifyListeners();
   }
 
