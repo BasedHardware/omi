@@ -165,7 +165,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
                 },
                 child: const Text(
-                  'How to charge?',
+                  'Issues charging?',
                   style: TextStyle(
                     color: Colors.white,
                     decoration: TextDecoration.underline,

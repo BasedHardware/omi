@@ -144,7 +144,8 @@ class BTDeviceStruct {
     );
   }
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'rssi': rssi, 'fwver': fwver?.toList(), 'type': type?.name};
+  Map<String, dynamic> toJson({bool fwverAsString = false}) =>
+      {'id': id, 'name': name, 'rssi': rssi, 'fwver': fwverAsString ? fwver?.join('.') : fwver, 'type': type?.name};
 }
 
 class DeviceInfo {

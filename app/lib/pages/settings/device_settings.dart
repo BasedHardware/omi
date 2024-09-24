@@ -96,7 +96,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
                 },
                 child: const ListTile(
-                  title: Text('How to charge device'),
+                  title: Text('Issues charging the device?'),
                   trailing: Icon(Icons.arrow_forward_ios),
                 ),
               ),
