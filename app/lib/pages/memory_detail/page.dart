@@ -11,7 +11,6 @@ import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
@@ -268,17 +267,17 @@ class TranscriptWidgets extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           children: [
             SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-            provider.memory.isPostprocessing()
-                ? Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
-                  )
-                : const SizedBox(height: 0),
+            // provider.memory.isPostprocessing()
+            //     ? Container(
+            //         padding: const EdgeInsets.all(16),
+            //         decoration: BoxDecoration(
+            //           color: Colors.grey.shade800,
+            //           borderRadius: BorderRadius.circular(8),
+            //         ),
+            //         child: Text('🚨 Memory still processing. Please wait before reassigning segments.',
+            //             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
+            //       )
+            //     : const SizedBox(height: 0),
             SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
             provider.memory.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
@@ -297,35 +296,36 @@ class TranscriptWidgets extends StatelessWidget {
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isMemoryDetail: true,
-                    editSegment: !provider.memory.isPostprocessing()
-                        ? (i) {
-                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                            if (!connectivityProvider.isConnected) {
-                              ConnectivityProvider.showNoInternetDialog(context);
-                              return;
-                            }
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              isDismissible: provider.editSegmentLoading ? false : true,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-                              ),
-                              builder: (context) {
-                                return EditSegmentWidget(
-                                  segmentIdx: i,
-                                  people: SharedPreferencesUtil().cachedPeople,
-                                );
-                              },
-                            );
-                          }
-                        : (_) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Memory still processing. Please wait...'),
-                              duration: Duration(seconds: 1),
-                            ));
-                          },
+                    editSegment: (_) {},
+                    // editSegment: !provider.memory.isPostprocessing()
+                    //     ? (i) {
+                    //         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                    //         if (!connectivityProvider.isConnected) {
+                    //           ConnectivityProvider.showNoInternetDialog(context);
+                    //           return;
+                    //         }
+                    //         showModalBottomSheet(
+                    //           context: context,
+                    //           isScrollControlled: true,
+                    //           isDismissible: provider.editSegmentLoading ? false : true,
+                    //           shape: const RoundedRectangleBorder(
+                    //             borderRadius:
+                    //                 BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                    //           ),
+                    //           builder: (context) {
+                    //             return EditSegmentWidget(
+                    //               segmentIdx: i,
+                    //               people: SharedPreferencesUtil().cachedPeople,
+                    //             );
+                    //           },
+                    //         );
+                    //       }
+                    //     : (_) {
+                    //         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    //           content: Text('Memory still processing. Please wait...'),
+                    //           duration: Duration(seconds: 1),
+                    //         ));
+                    //       },
                   ),
             const SizedBox(height: 32)
           ],
@@ -338,6 +338,7 @@ class TranscriptWidgets extends StatelessWidget {
 class EditSegmentWidget extends StatelessWidget {
   final int segmentIdx;
   final List<Person> people;
+
   const EditSegmentWidget({super.key, required this.segmentIdx, required this.people});
 
   @override

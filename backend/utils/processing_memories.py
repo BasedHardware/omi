@@ -1,13 +1,12 @@
-import uuid
 from datetime import datetime, timezone
 
-from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory
-from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing, TranscriptSegment
-from utils.memories.process_memory import process_memory
-from utils.memories.location import get_google_maps_location
-from utils.plugins import trigger_external_integrations
-import database.processing_memories as processing_memories_db
 import database.memories as memories_db
+import database.processing_memories as processing_memories_db
+from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing
+from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory
+from utils.memories.location import get_google_maps_location
+from utils.memories.process_memory import process_memory
+from utils.plugins import trigger_external_integrations
 
 
 async def create_memory_by_processing_memory(uid: str, processing_memory_id: str):
@@ -40,11 +39,12 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     language_code = new_memory.language
     memory = process_memory(uid, language_code, new_memory)
 
-    if not memory.discarded:
-        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
-        # TODO: thinh, check why we need populate postprocessing to client
-        memory.postprocessing = MemoryPostProcessing(status=PostProcessingStatus.not_started,
-                                                     model=PostProcessingModel.fal_whisperx)
+    # if not memory.discarded:
+    #     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
+    #     # TODO: thinh, check why we need populate postprocessing to client
+    #     memory.postprocessing = MemoryPostProcessing(
+    #         status=PostProcessingStatus.not_started, model=PostProcessingModel.fal_whisperx
+    #     )
 
     messages = trigger_external_integrations(uid, memory)
 
@@ -53,9 +53,11 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     processing_memory.message_ids = list(map(lambda m: m.id, messages))
     processing_memories_db.update_processing_memory(uid, processing_memory.id, processing_memory.dict())
 
-    return (memory, messages, processing_memory)
+    return memory, messages, processing_memory
 
-def update_basic_processing_memory(uid: str, update_processing_memory: UpdateProcessingMemory,) -> BasicProcessingMemory:
+
+def update_basic_processing_memory(uid: str,
+                                   update_processing_memory: UpdateProcessingMemory, ) -> BasicProcessingMemory:
     # Fetch new
     processing_memory = processing_memories_db.get_processing_memory_by_id(uid, update_processing_memory.id)
     if not processing_memory:
@@ -72,5 +74,5 @@ def update_basic_processing_memory(uid: str, update_processing_memory: UpdatePro
     # update
     processing_memories_db.update_basic(uid, processing_memory.id,
                                         processing_memory.geolocation.dict() if processing_memory.geolocation else None,
-                                        processing_memory.emotional_feedback,)
+                                        processing_memory.emotional_feedback, )
     return processing_memory
