@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from pydantic import BaseModel
+
 from models.memory import Memory, Message
+
 
 class MessageEvent(BaseModel):
     event_type: str
@@ -10,6 +12,7 @@ class MessageEvent(BaseModel):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         return j
+
 
 class NewMemoryCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
@@ -22,6 +25,7 @@ class NewMemoryCreated(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         return j
+
 
 class NewProcessingMemoryCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
