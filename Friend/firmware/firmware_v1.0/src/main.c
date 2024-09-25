@@ -7,9 +7,12 @@
 #include "config.h"
 #include "audio.h"
 #include "codec.h"
+// #include "nfc.h"
+
 #include "sdcard.h"
 #include "storage.h"
 #include "speaker.h"
+
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -183,6 +186,16 @@ int main(void)
     }
     set_led_red(false);
     set_led_green(false);
+
+    // // Initialize NFC first
+    // LOG_INF("Initializing NFC...");
+    // err = nfc_init();
+    // if (err != 0) {
+    //     LOG_ERR("Failed to initialize NFC: %d", err);
+    //     // Consider whether to continue or return based on the severity of the error
+    // } else {
+    //     LOG_INF("NFC initialized successfully");
+    // }
 
     // Indicate successful initialization
     LOG_INF("Omi firmware initialized successfully\n");
