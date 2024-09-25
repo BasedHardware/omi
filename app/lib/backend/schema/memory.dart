@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/database/geolocation.dart';
-import 'package:friend_private/backend/database/memory.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -35,6 +35,80 @@ class MemoryExternalData {
   Map<String, dynamic> toJson() => {'text': text};
 }
 
+enum MemoryPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
+
+enum MemoryPostProcessingModel { fal_whisperx, custom_whisperx }
+
+class MemoryPostProcessing {
+  final MemoryPostProcessingStatus status;
+  final MemoryPostProcessingModel? model;
+  final String? failReason;
+
+  MemoryPostProcessing({required this.status, required this.model, this.failReason});
+
+  factory MemoryPostProcessing.fromJson(Map<String, dynamic> json) {
+    return MemoryPostProcessing(
+      status: MemoryPostProcessingStatus.values.asNameMap()[json['status']] ?? MemoryPostProcessingStatus.in_progress,
+      model: MemoryPostProcessingModel.values.asNameMap()[json['model']] ?? MemoryPostProcessingModel.fal_whisperx,
+      failReason: json['fail_reason'],
+    );
+  }
+
+  toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
+}
+
+class ServerProcessingMemory {
+  final String id;
+  final DateTime createdAt;
+  final DateTime? startedAt;
+
+  ServerProcessingMemory({
+    required this.id,
+    required this.createdAt,
+    this.startedAt,
+  });
+
+  factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
+    return ServerProcessingMemory(
+      id: json['id'],
+      createdAt: DateTime.parse(json['created_at']).toLocal(),
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'started_at': startedAt?.toUtc().toIso8601String(),
+    };
+  }
+
+  String getTag() {
+    return 'Processing';
+  }
+
+  Color getTagTextColor() {
+    return Colors.white;
+  }
+
+  Color getTagColor() {
+    return Colors.grey.shade800;
+  }
+}
+
+class UpdateProcessingMemoryResponse {
+  final ServerProcessingMemory? result;
+
+  UpdateProcessingMemoryResponse({required this.result});
+
+  factory UpdateProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return UpdateProcessingMemoryResponse(
+      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
+    );
+  }
+}
+
 class ServerMemory {
   final String id;
   final DateTime createdAt;
@@ -51,6 +125,8 @@ class ServerMemory {
   final String? language; // applies to Friend only
 
   final MemoryExternalData? externalIntegration;
+  // MemoryPostProcessing? postprocessing;
+  String? processingMemoryId;
 
   bool discarded;
   final bool deleted;
@@ -76,6 +152,8 @@ class ServerMemory {
     this.source,
     this.language,
     this.externalIntegration,
+    // this.postprocessing,
+    this.processingMemoryId,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -83,8 +161,8 @@ class ServerMemory {
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       structured: Structured.fromJson(json['structured']),
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
-      finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']) : null,
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
+      finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']).toLocal() : null,
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
@@ -99,16 +177,30 @@ class ServerMemory {
       failed: json['failed'] ?? false,
       retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
+      // postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
+      processingMemoryId: json['processing_memory_id'],
     );
   }
+
+  // bool isPostprocessing() {
+  //   int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
+  //   return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
+  //           postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
+  //       createdSecondsAgo < 120;
+  // }
+
+  // bool isReadyForTranscriptAssignment() {
+  //   // TODO: only thing matters here, is if !isPostProcessing() and if we have audio file.
+  //   return !discarded && !deleted && !failed && postprocessing?.status == MemoryPostProcessingStatus.completed;
+  // }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
-      'started_at': startedAt?.toIso8601String(),
-      'finished_at': finishedAt?.toIso8601String(),
+      'started_at': startedAt?.toUtc().toIso8601String(),
+      'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'plugins_results': pluginsResults.map((result) => result.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
@@ -120,6 +212,8 @@ class ServerMemory {
       'failed': failed,
       'retries': retries,
       'external_data': externalIntegration?.toJson(),
+      // 'postprocessing': postprocessing?.toJson(),
+      'processing_memory_id': processingMemoryId,
     };
   }
 

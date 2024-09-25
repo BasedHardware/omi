@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/database/transcript_segment.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -26,10 +27,19 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
-  // TODO: store device object rather
-  set deviceId(String value) => saveString('deviceId', value);
+  set btDeviceStruct(BTDeviceStruct value) {
+    saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
 
-  String get deviceId => getString('deviceId') ?? '';
+  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
+    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  }
+
+  BTDeviceStruct get btDeviceStruct {
+    final String device = getString('btDeviceStruct') ?? '';
+    if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
+    return BTDeviceStruct.fromJson(jsonDecode(device));
+  }
 
   set deviceName(String value) => saveString('deviceName', value);
 
@@ -37,11 +47,21 @@ class SharedPreferencesUtil {
 
   set deviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
 
+  Future setDeviceCodec(BleAudioCodec value) => saveString('deviceCodec', mapCodecToName(value));
+
   BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
 
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
+
+  set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
+
+  bool get notificationsEnabled => getBool('notificationsEnabled') ?? false;
+
+  set locationEnabled(bool value) => saveBool('locationEnabled', value);
+
+  bool get locationEnabled => getBool('locationEnabled') ?? false;
 
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
@@ -63,6 +83,10 @@ class SharedPreferencesUtil {
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
 
+  String get transcriptionModel => getString('transcriptionModel2') ?? 'deepgram';
+
+  set transcriptionModel(String value) => saveString('transcriptionModel2', value);
+
   bool get useFriendApiKeys => getBool('useFriendApiKeys') ?? true;
 
   set useFriendApiKeys(bool value) => saveBool('useFriendApiKeys', value);
@@ -83,25 +107,17 @@ class SharedPreferencesUtil {
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
 
+  bool get optInEmotionalFeedback => getBool('optInEmotionalFeedback') ?? false;
+
+  set optInEmotionalFeedback(bool value) => saveBool('optInEmotionalFeedback', value);
+
   bool get devModeEnabled => getBool('devModeEnabled') ?? false;
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
-  bool get coachNotificationIsChecked => getBool('coachIsChecked') ?? true;
+  bool get permissionStoreRecordingsEnabled => getBool('permissionStoreRecordingsEnabled') ?? false;
 
-  set coachNotificationIsChecked(bool value) => saveBool('coachIsChecked', value);
-
-  bool get postMemoryNotificationIsChecked => getBool('postMemoryNotificationIsChecked') ?? true;
-
-  set postMemoryNotificationIsChecked(bool value) => saveBool('postMemoryNotificationIsChecked', value);
-
-  bool get reconnectNotificationIsChecked => getBool('reconnectNotificationIsChecked') ?? true;
-
-  set reconnectNotificationIsChecked(bool value) => saveBool('reconnectNotificationIsChecked', value);
-
-  List<String> get recordingPaths => getStringList('recordingPaths') ?? [];
-
-  set recordingPaths(List<String> value) => saveStringList('recordingPaths', value);
+  set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile') ?? false;
 
@@ -110,6 +126,15 @@ class SharedPreferencesUtil {
   String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
 
   set locationPermissionState(String value) => saveString('locationPermissionState', value);
+
+  bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
+
+  set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  int get enabledPluginsCount => pluginsList.where((element) => element.enabled).length;
+
+  int get enabledPluginsIntegrationsCount =>
+      pluginsList.where((element) => element.enabled && element.worksExternally()).length;
 
   List<Plugin> get pluginsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
@@ -177,6 +202,45 @@ class SharedPreferencesUtil {
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+  }
+
+  List<Person> get cachedPeople {
+    final List<String> people = getStringList('cachedPeople') ?? [];
+    return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
+  }
+
+  Person? getPersonById(String id) {
+    return cachedPeople.firstWhereOrNull((element) => element.id == id);
+  }
+
+  set cachedPeople(List<Person> value) {
+    final List<String> people = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedPeople', people);
+  }
+
+  addCachedPerson(Person person) {
+    final List<Person> people = cachedPeople;
+    people.add(person);
+    cachedPeople = people;
+  }
+
+  removeCachedPerson(String personId) {
+    final List<Person> people = cachedPeople;
+    Person? person = people.firstWhereOrNull((p) => p.id == personId);
+    if (person != null) {
+      people.remove(person);
+      cachedPeople = people;
+    }
+  }
+
+  replaceCachedPerson(Person person) {
+    final List<Person> people = cachedPeople;
+    Person? oldPerson = people.firstWhereOrNull((p) => p.id == person.id);
+    if (oldPerson != null) {
+      people.remove(oldPerson);
+      people.add(person);
+      cachedPeople = people;
+    }
   }
 
   addFailedMemory(ServerMemory memory) {
@@ -283,13 +347,9 @@ class SharedPreferencesUtil {
 
   bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
 
-  set scriptMemoriesToObjectBoxExecuted(bool value) => saveBool('scriptMemoriesToObjectBoxExecuted', value);
-
-  bool get scriptMemoriesToObjectBoxExecuted => getBool('scriptMemoriesToObjectBoxExecuted') ?? false;
-
   set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
 
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 1;
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
 
   set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
 

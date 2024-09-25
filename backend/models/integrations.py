@@ -11,3 +11,7 @@ class ScreenPipeCreateMemory(BaseModel):
     source: str
     text: str
     timestamp_range: MemoryTimestampRange
+
+
+class EmptyResponse(BaseModel):
+    pass

@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/database/memory.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
@@ -40,7 +40,11 @@ Future<String> getPhotoDescription(Uint8List data) async {
     {
       'role': 'user',
       'content': [
-        {'type': "text", 'text': "What’s in this image?"},
+        {
+          'type': "text",
+          'text':
+              "What’s in this image? Describe in detail. The camera quality may be low, but do your best to accurately describe what you see anyway. The image may or may not be rotated 90 degrees. Do not comment on the image quality, damage, or distortion; only describe the content. If there is any text, please include the text content (including original language and translating to English if necessary).  If there is any media/tv/book/website/screen/etc, do your best to identify what it is and what it's about."
+        },
         {
           'type': "image_url",
           'image_url': {"url": "data:image/jpeg;base64,${base64Encode(data)}"},
@@ -48,7 +52,9 @@ Future<String> getPhotoDescription(Uint8List data) async {
       ],
     },
   ];
-  return await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  var res = await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  if (res == null) return '';
+  return res;
 }
 
 Future<dynamic> gptApiCall({

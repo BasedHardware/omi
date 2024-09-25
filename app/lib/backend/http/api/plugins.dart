@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
@@ -14,9 +15,11 @@ Future<List<Plugin>> retrievePlugins() async {
     body: '',
     method: 'GET',
   );
-  if (response?.statusCode == 200) {
+  if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
-      var plugins = Plugin.fromJsonList(jsonDecode(response!.body));
+      log('plugins: ${response.body}');
+      var plugins = Plugin.fromJsonList(jsonDecode(response.body));
+      plugins = plugins.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().pluginsList = plugins;
       return plugins;
     } catch (e, stackTrace) {
@@ -36,7 +39,7 @@ Future<bool> enablePluginServer(String pluginId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
+  debugPrint('enablePluginServer: $pluginId ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -48,7 +51,7 @@ Future<bool> disablePluginServer(String pluginId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePlugin: ${response.body}');
+  debugPrint('disablePluginServer: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -73,9 +76,8 @@ Future<void> migrateUserServer(String prevUid, String newUid) async {
 }
 
 Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath',
+    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$pluginMarkdownPath',
     method: 'GET',
     headers: {},
     body: '',
@@ -92,7 +94,16 @@ Future<bool> isPluginSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data = jsonDecode(response?.body ?? '{}');
-  print(data);
-  return data['is_setup_completed'] ?? false;
+  var data;
+  try {
+    data = jsonDecode(response?.body ?? '{}');
+    print(data);
+    return data['is_setup_completed'] ?? false;
+  } on FormatException catch (e) {
+    debugPrint('Response not a valid json: $e');
+    return false;
+  } catch (e) {
+    debugPrint('Error triggering memory request at endpoint: $e');
+    return false;
+  }
 }
