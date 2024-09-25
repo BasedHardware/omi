@@ -12,6 +12,7 @@ class MessageProvider extends ChangeNotifier {
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
   bool isClearingChat = false;
+  bool showTypingIndicator = false;
 
   String firstTimeLoadingText = '';
 
@@ -21,6 +22,11 @@ class MessageProvider extends ChangeNotifier {
 
   void setHasCachedMessages(bool value) {
     hasCachedMessages = value;
+    notifyListeners();
+  }
+
+  void setShowTypingIndicator(bool value) {
+    showTypingIndicator = value;
     notifyListeners();
   }
 
@@ -89,8 +95,13 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageToServer(String message, String? pluginId) async {
+    setShowTypingIndicator(true);
+    messages.insert(0, ServerMessage.empty());
     var mes = await sendMessageServer(message, pluginId: pluginId);
-    messages.insert(0, mes);
+    if (messages[0].id == '0000') {
+      messages[0] = mes;
+    }
+    setShowTypingIndicator(false);
     notifyListeners();
   }
 

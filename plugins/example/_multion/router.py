@@ -11,7 +11,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_groq import ChatGroq
 
 import db
-from models import RealtimePluginRequest, TranscriptSegment
+from models import Memory, EndpointResponse
 
 load_dotenv()
 
@@ -159,53 +159,25 @@ async def check_setup_completion(uid: str = Query(...)):
     return {"is_setup_completed": is_setup_completed}
 
 
-@router.post("/multion/process_transcript", tags=['multion'])
-async def initiate_process_transcript(data: RealtimePluginRequest, uid: str = Query(...)):
-    # return {'message': ''}
+@router.post("/multion", response_model=EndpointResponse, tags=['multion'])
+async def multion_endpoint(memory: Memory, uid: str = Query(...)):
     user_id = db.get_multion_user_id(uid)
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
 
-    session_id = 'multion-' + data.session_id
-    db.clean_all_transcripts_except(uid, session_id)
-    transcript: List[TranscriptSegment] = db.append_segment_to_transcript(uid, session_id, data.segments)
-    transcript_str = TranscriptSegment.segments_as_string(transcript)
-    if len(transcript_str) > 100:
-        transcript_str = transcript_str[-100:]
+    books = retrieve_books_to_buy(memory.get_transcript())
+    if not books:
+        return EndpointResponse(message='No books were suggested or mentioned.')
 
     try:
-        books = retrieve_books_to_buy(transcript_str)
-        if not books:
-            return {'message': ''}
-        db.remove_transcript(uid, data.session_id)
         result = await asyncio.wait_for(call_multion(books, user_id), timeout=120)
     except asyncio.TimeoutError:
         print("Timeout error occurred")
-        db.remove_transcript(uid, data.session_id)
-        return
+        return EndpointResponse(message="Timeout error occurred.")
     except Exception as e:
         print(f"Error calling Multion API: {str(e)}")
-        db.remove_transcript(uid, data.session_id)
-        return
-
+        return EndpointResponse(message=f"Error calling Multion API: {str(e)}")
     if isinstance(result, bytes):
         result = result.decode('utf-8')
-        return {"message": result}
 
-    return {"message": str(result)}
-
-# @router.post("/multion", response_model=EndpointResponse, tags=['multion'])
-# async def multion_endpoint(memory: Memory, uid: str = Query(...)):
-#     user_id = db.get_multion_user_id(uid)
-#     if not user_id:
-#         raise HTTPException(status_code=400, detail="Invalid UID or USERID not found.")
-#
-#     books = await retrieve_books_to_buy(memory)
-#     if not books:
-#         return EndpointResponse(message='No books were suggested or mentioned.')
-#
-#     result = await call_multion(books, user_id)
-#     if isinstance(result, bytes):
-#         result = result.decode('utf-8')
-#
-#     return EndpointResponse(message=result)
+    return EndpointResponse(message=result)

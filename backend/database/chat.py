@@ -86,7 +86,7 @@ def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: b
         ]
 
     return messages
-    
+
 
 def batch_delete_messages(parent_doc_ref, batch_size=450):
     messages_ref = parent_doc_ref.collection('messages')

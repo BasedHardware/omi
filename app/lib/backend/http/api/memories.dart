@@ -72,32 +72,6 @@ Future<CreateMemoryResponse?> createMemoryServer({
   return null;
 }
 
-Future<ServerMemory?> memoryPostProcessing(File file, String memoryId) async {
-  var optEmotionalFeedback = GrowthbookUtil().isOmiFeedbackEnabled();
-  var request = http.MultipartRequest(
-    'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/memories/$memoryId/post-processing?emotional_feedback=$optEmotionalFeedback'),
-  );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
-  request.headers.addAll({'Authorization': await getAuthHeader()});
-
-  try {
-    var streamedResponse = await request.send();
-    var response = await http.Response.fromStream(streamedResponse);
-    // TODO: catch here, and set postprocessing to failed
-    if (response.statusCode == 200) {
-      debugPrint('memoryPostProcessing Response body: ${jsonDecode(response.body)}');
-      return ServerMemory.fromJson(jsonDecode(response.body));
-    } else {
-      debugPrint('Failed to memoryPostProcessing. Status code: ${response.statusCode}');
-      return null;
-    }
-  } catch (e) {
-    debugPrint('An error occurred memoryPostProcessing: $e');
-    return null;
-  }
-}
-
 Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
   var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');

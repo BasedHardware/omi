@@ -16,6 +16,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -61,6 +62,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           isScrollingDown = true;
           _showDeleteOption = true;
           setState(() {});
+          Future.delayed(const Duration(seconds: 5), () {
+            if (isScrollingDown) {
+              isScrollingDown = false;
+              _showDeleteOption = false;
+              setState(() {});
+            }
+          });
         }
       }
 
@@ -119,25 +127,27 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     child: Row(
                       children: [
                         const SizedBox(width: 20),
-                        InkWell(
-                          onTap: () async {
-                            await context.read<MessageProvider>().refreshMessages();
-                          },
-                          child: const Text(
-                            'Refresh Chat',
-                            style: TextStyle(color: Colors.white, fontSize: 14),
-                          ),
-                        ),
                         const Spacer(),
                         InkWell(
                           onTap: () async {
-                            setState(() {
-                              _showDeleteOption = false;
-                            });
-                            await context.read<MessageProvider>().clearChat();
+                            showDialog(
+                              context: context,
+                              builder: (ctx) {
+                                return getDialog(context, () {
+                                  Navigator.of(context).pop();
+                                }, () {
+                                  setState(() {
+                                    _showDeleteOption = false;
+                                  });
+                                  context.read<MessageProvider>().clearChat();
+                                  Navigator.of(context).pop();
+                                }, "Clear Chat?",
+                                    "Are you sure you want to clear the chat? This action cannot be undone.");
+                              },
+                            );
                           },
                           child: const Text(
-                            'Clear Chat',
+                            "Clear Chat  \u{1F5D1}",
                             style: TextStyle(color: Colors.white, fontSize: 14),
                           ),
                         ),
@@ -210,6 +220,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
                                     child: message.sender == MessageSender.ai
                                         ? AIMessage(
+                                            showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
                                             message: message,
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,

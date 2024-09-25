@@ -66,7 +66,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
                         SnackBar(
-                          content: const Text('Memory deleted successfully'),
+                          content: const Text('Memory deleted successfully 🗑️'),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                           action: SnackBarAction(
                             label: 'Undo',
