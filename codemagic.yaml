@@ -307,7 +307,7 @@ workflows:
           echo "VERSION_NAME=$VERSION_NAME"
           VERSION_CODE="$(echo $VERSION_STRING | cut -d'+' -f2)"
           echo "VERSION_CODE=$VERSION_CODE"
-          APP_TOKEN="d76e45ab3d19d633477c86ebacaad45d"
+          APP_TOKEN="$INSTABUG_API_KEY"
           PATH_TO_MAPPING_FILE="build/app/outputs/mapping/prodRelease/mapping.txt"
           VERSION='{"code":"'"$VERSION_CODE"'","name":"'"$VERSION_NAME"'"}'
 
