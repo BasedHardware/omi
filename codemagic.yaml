@@ -300,12 +300,15 @@ workflows:
         script: |
           echo "Instabug mapping files uploader"
 
-          # Constants for app token and mapping files
-          pwd
+          GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
+          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
+          echo "Version String: $VERSION_STRING"
+          VERSION_NAME="$(echo $VERSION_STRING | cut -d'+' -f1 | sed 's/^v//')"
+          echo "VERSION_NAME=$VERSION_NAME"
+          VERSION_CODE="$(echo $VERSION_STRING | cut -d'+' -f2)"
+          echo "VERSION_CODE=$VERSION_CODE"
           APP_TOKEN="d76e45ab3d19d633477c86ebacaad45d"
           PATH_TO_MAPPING_FILE="build/app/outputs/mapping/prodRelease/mapping.txt"
-          VERSION_CODE="111"
-          VERSION_NAME="1.0.1"
           VERSION='{"code":"'"$VERSION_CODE"'","name":"'"$VERSION_NAME"'"}'
 
           if [ ! -f $PATH_TO_MAPPING_FILE ]; then
