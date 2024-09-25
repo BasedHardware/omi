@@ -9,8 +9,6 @@ nav_order: 4
 
 This document provides a comprehensive overview of the real-time audio transcription process in the Omi application.
 
-![Post Processing](../../images/transcription-process.png)
-
 ## 📡 Detailed Transcription Flow
 
 Here's a detailed look at how the real-time transcription process works:
