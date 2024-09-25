@@ -12,26 +12,8 @@
 # from utils.endpoints import timeit
 #
 #
-# def set_json_speech_profiles(result):
-#     data = (result.stdout.decode('utf-8').replace('Listing speakers and audios.\n  ', '')
-#             .replace('\n', '').replace('\'', '"').strip())
-#     parsed_json = {}
-#     for part in data.split('}'):
-#         if not part.strip():
-#             continue
-#         part = part.strip() + ' }'
-#         parsed_part = json.loads(part)
-#         if 'name' not in parsed_part:
-#             continue  # means is an audio name
-#         parsed_json[parsed_part['name']] = parsed_part
 #
-#     # for uid in parsed_json.keys():
-#     #     set_user_has_speech_profile(uid)
-#     return parsed_json
-#
-#
-# # result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--list'], capture_output=True)
-# # set_json_speech_profiles(result)
+
 #
 # def add_speaker(uid: str):
 #     result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--add_speaker', '--speaker_name', uid])
@@ -71,38 +53,14 @@
 #     return completed
 #
 #
+import json
+import subprocess
 
-#
-#
-# def train_speaker_profile(uid: str, dir_path: str):
-#     output_path = get_single_file(dir_path)
-#
-#     result = subprocess.run(
-#         [
-#             'python', '-m', 'soniox.manage_speakers', '--add_audio', '--speaker_name', uid, '--audio_name',
-#             'joined_output', '--audio_fn', output_path
-#         ]
-#     )
-#     completed = result.returncode == 0
-#     print('train_speaker_profile:', result)
-#     os.remove(output_path)
-#     # if completed:
-#     #     set_user_has_speech_profile(uid)
-#     return completed
-#
-#
-# def create_speaker_profile(uid: str, dir_path: str):
-#     # if not uid_has_speech_profile(uid):
-#     #     add_speaker(uid)
-#     # else:
-#     #     remove_speaker_audio(uid)
-#     #     # add_speaker(uid)
-#
-#     try:
-#         return train_speaker_profile(uid, dir_path)
-#     except Exception as e:
-#         print(f'Error in create_speaker_profile: {e}')
-#         return False
+from database.redis_db import get_user_has_soniox_speech_profile, set_user_has_soniox_speech_profile
+from utils.other.endpoints import timeit
+from utils.other.storage import get_profile_audio_if_exists
+
+
 #
 #
 # # TRANSCRIPTION
@@ -213,43 +171,86 @@
 #     return _get_transcript_from_result(result)
 #
 #
-# # ------ STREAM
-#
-#
-# async def process_audio_soniox(websocket: WebSocket, language: str, sample_rate: int, codec: str, channels: int):
-#     async def on_message(result):
-#         print("Received message from Soniox")  # Log when message is received
-#         response = json.loads(result)
-#         print(f"Soniox Response: {response}")  # Detailed logging
-#         words = response.get('fw', []) + response.get('nfw', [])
-#         transcript = ' '.join([word['t'] for word in words])
-#         await websocket.send_text(transcript)
-#
-#     api_key = os.getenv('SONIOX_API_KEY')
-#     uri = 'wss://api.soniox.com/transcribe-websocket'
-#     headers = {'Authorization': f'Bearer {api_key}'}
-#
-#     async with websockets.connect(uri, extra_headers=headers) as soniox_socket:
-#         request = {
-#             'api_key': api_key,
-#             # 'include_nonfinal': True,
-#             # 'enable_streaming_speaker_diarization': True,
-#             # 'enable_global_speaker_diarization': True,
-#             # 'enable_endpoint_detection': True,
-#             # 'enable_profanity_filter': False,
-#             # 'enable_dictation': False,
-#             # 'sample_rate_hertz': sample_rate,
-#             'model': f'{language}_v2_lowlatency'
-#         }
-#         await soniox_socket.send(json.dumps(request))
-#
-#         print("Soniox WebSocket connected and request being send")
-#         async for message in soniox_socket:
-#             await on_message(message)
-#         # try:
-#         # except Exception as e:
-#         #     print(f"Error in Soniox WebSocket: {e}")
-#         # finally:
-#         #     print(f"Socket closed Soniox")
-#         #     await soniox_socket.close()
-#     return soniox_socket
+
+def set_json_speech_profiles(result):
+    data = (result.stdout.decode('utf-8').replace('Listing speakers and audios.\n  ', '')
+            .replace('\n', '').replace('\'', '"').strip())
+    parsed_json = {}
+    for part in data.split('}'):
+        if not part.strip():
+            continue
+        part = part.strip() + ' }'
+        parsed_part = json.loads(part)
+        if 'name' not in parsed_part:
+            continue  # means is an audio name
+        parsed_json[parsed_part['name']] = parsed_part
+    print(parsed_json)
+    # for uid in parsed_json.keys():
+    #     set_user_has_speech_profile(uid)
+    return list(parsed_json.keys())
+
+
+def _script():
+    result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--list'], capture_output=True)
+    uids = set_json_speech_profiles(result)
+    print(uids)
+
+
+# _script()
+
+
+def _train_user_speech_profile(uid: str):
+    output_path = get_profile_audio_if_exists(uid, download=True)
+    if not output_path:
+        return False
+    try:
+        result = subprocess.run(
+            [
+                'python', '-m', 'soniox.manage_speakers', '--add_audio', '--speaker_name', uid, '--audio_name',
+                'joined_output', '--audio_fn', output_path
+            ],
+            capture_output=True
+        )
+        completed = result.returncode == 0
+        print('_train_user_speech_profile:', completed)
+        return completed
+    except Exception as e:
+        print(f'Error in _train_user_speech_profile: {e}')
+        return False
+
+
+def _create_user_speech_profile(uid: str):
+    try:
+        result = subprocess.run(
+            ['python', '-m', 'soniox.manage_speakers', '--add_speaker', '--speaker_name', uid], capture_output=True
+        )
+        completed = result.returncode == 0
+        print('_create_user_speech_profile successful:', completed, result.stdout)
+        return completed
+    except Exception as e:
+        print(f'_create_user_speech_profile failed: {e}')
+        return False
+
+
+def _remove_user_speech_profile(uid: str):
+    result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
+    completed = result.returncode == 0
+    print('_remove_user_speech_profile successful:', completed)
+    return completed
+
+
+@timeit
+def create_user_speech_profile(uid: str):
+    if get_user_has_soniox_speech_profile(uid):
+        return True
+    _remove_user_speech_profile(uid)
+    _create_user_speech_profile(uid)
+
+    try:
+        result = _train_user_speech_profile(uid)
+        if result:
+            set_user_has_soniox_speech_profile(uid)
+        return result
+    except Exception as e:
+        print(f'Error in create_speaker_profile: {e}')
+        return False

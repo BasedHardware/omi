@@ -11,12 +11,15 @@ At Friend, your privacy and the security of your data are our top priorities. Th
 ## 1. Information We Collect
 
 ### Personal Information
+
 Includes your name, email, and contact details, necessary for account creation and management.
 
 ### Conversational Data
+
 We record and store your conversations to offer tailored AI mentor feedback and enrich your personal memory bank.
 
 ### Usage Data
+
 Insights into how you interact with our app, like feature usage and time engagement, are crucial for continuous improvement of our services.
 
 ## 2. Purpose of Information Use
@@ -30,17 +33,21 @@ We are dedicated to using your information responsibly:
 ## 3. Data Storage and Security
 
 ### Robust Storage Solutions
+
 Your data is stored on highly secure servers, safeguarded with advanced technology.
 
 ### Uncompromised Security
+
 We employ the latest security protocols to prevent data breaches and ensure your information remains protected against unauthorized access or any form of compromise.
 
 ## 4. Information Sharing
 
 ### Selective Sharing with Service Providers
+
 We collaborate with third-party providers under stringent confidentiality agreements, ensuring they adhere to our privacy standards.
 
 ### Compliance with Legal Obligations
+
 We may disclose your information if required by law, always respecting your privacy rights.
 
 ## 5. Your Privacy Rights
@@ -53,7 +60,8 @@ You are empowered to:
 
 ## 6. Wearable App Version
 
-We offer an alternative version of our app that integrates with wearable devices. In this version, no data is collected by Friend. You bring your own API keys, and all data is stored locally on your device. This ensures that you have complete control over your data and privacy.
+We offer an alternative version of our app that integrates with wearable devices. In this version, no data is collected by Friend. You bring your own API keys, and all data is stored locally on your
+device. This ensures that you have complete control over your data and privacy.
 
 ## 7. Policy Updates
 

@@ -21,10 +21,6 @@ final class DevEnv implements EnvFields {
   final String? mixpanelProjectToken = _DevEnv.mixpanelProjectToken;
 
   @override
-  @EnviedField(varName: 'ONESIGNAL_APP_ID', obfuscate: true)
-  final String? oneSignalAppId = _DevEnv.oneSignalAppId;
-
-  @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
 
@@ -35,4 +31,20 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
+
+  @override
+  @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
+  final String? gleapApiKey = _DevEnv.gleapApiKey;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
+  final String? intercomAppId = _DevEnv.intercomAppId;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_IOS_API_KEY', obfuscate: true)
+  final String? intercomIOSApiKey = _DevEnv.intercomIOSApiKey;
+
+  @override
+  @EnviedField(varName: 'INTERCOM_ANDROID_API_KEY', obfuscate: true)
+  final String? intercomAndroidApiKey = _DevEnv.intercomAndroidApiKey;
 }

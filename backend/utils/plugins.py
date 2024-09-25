@@ -1,15 +1,15 @@
 import threading
-import uuid
 from datetime import datetime
 from typing import List, Optional
 
 import requests
 
 from database.chat import add_plugin_message
-from models.memory import Memory
+from database.redis_db import get_enabled_plugins, get_plugin_reviews
+from models.memory import Memory, MemorySource
+from models.notification_message import NotificationMessage
 from models.plugin import Plugin
-from routers.notifications import send_notification
-from utils.redis_utils import get_enabled_plugins, get_plugin_reviews
+from utils.notifications import send_notification
 
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
@@ -41,8 +41,9 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
         plugin_dict['enabled'] = plugin['id'] in user_enabled
         if include_reviews:
             reviews = get_plugin_reviews(plugin['id'])
-            sorted_reviews = sorted(reviews.values(), key=lambda x: datetime.fromisoformat(x['rated_at']), reverse=True)
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if sorted_reviews else None
+            sorted_reviews = reviews.values()
+
+            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             plugin_dict['reviews'] = []
             plugin_dict['user_review'] = reviews.get(uid)
             plugin_dict['rating_avg'] = rating_avg
@@ -56,7 +57,8 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_on_memory_creation() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return []
 
@@ -71,13 +73,18 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
         memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+
+        # Ignore external data on workflow
+        if memory.source == MemorySource.workflow and 'external_data' in memory_dict:
+            memory_dict['external_data'] = None
+
         url = plugin.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid
         else:
             url += '?uid=' + uid
 
-        response = requests.post(url, json=memory_dict)
+        response = requests.post(url, json=memory_dict)  # TODO: failing?
         if response.status_code != 200:
             print('Plugin integration failed', plugin.id, 'result:', response.content)
             return
@@ -102,7 +109,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
 
 def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if plugin.triggers_realtime() and plugin.enabled]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
         return {}
 
@@ -119,23 +127,19 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
         else:
             url += '?uid=' + uid
 
-        new_segments = [{**segment, 'speaker_id': int(segment['speaker'].split('_')[-1])} for segment in segments]
-
-        payload = {
-            "session_id": uid,
-            "segments": new_segments
-        }
-
         try:
-            response = requests.post(url, json=payload)
+            response = requests.post(url, json={"session_id": uid, "segments": segments})
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
                 return
 
             response_data = response.json()
-            print('response', response_data)
-            if message := response_data.get('message', ''):
-                send_plugin_notification(token, plugin.id, message)
+            if not response_data:
+                return
+            message = response_data.get('message', '')
+            print('Plugin', plugin.id, 'response:', message)
+            if message and len(message) > 5:
+                send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
         except Exception as e:
             print(f"Plugin integration error: {e}")
@@ -154,15 +158,13 @@ def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) ->
     return messages
 
 
-def send_plugin_notification(token: str, plugin_id: str, message: str):
-    data = {
-        "text": message,
-        "plugin_id": plugin_id,
-        'id': str(uuid.uuid4()),
-        'created_at': datetime.now().isoformat(),
-        'sender': 'ai',
-        'type': 'text',
-        'from_integration': 'true',
-        'notification_type': 'plugin',
-    }
-    send_notification(token, plugin_id + ' says', message, data)
+def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, message: str):
+    ai_message = NotificationMessage(
+        text=message,
+        plugin_id=plugin_id,
+        from_integration='true',
+        type='text',
+        notification_type='plugin',
+    )
+
+    send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
