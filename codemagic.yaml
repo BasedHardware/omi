@@ -301,8 +301,9 @@ workflows:
           echo "Instabug mapping files uploader"
 
           # Constants for app token and mapping files
+          pwd
           APP_TOKEN="d76e45ab3d19d633477c86ebacaad45d"
-          PATH_TO_MAPPING_FILE="/build/app/outputs/mapping/prodRelease/mapping.txt"
+          PATH_TO_MAPPING_FILE="build/app/outputs/mapping/prodRelease/mapping.txt"
           VERSION_CODE="111"
           VERSION_NAME="1.0.1"
           VERSION='{"code":"'"$VERSION_CODE"'","name":"'"$VERSION_NAME"'"}'
