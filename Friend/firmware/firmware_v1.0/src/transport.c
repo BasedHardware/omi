@@ -12,6 +12,7 @@
 #include "config.h"
 #include "utils.h"
 #include "btutils.h"
+// #include "nfc.h"
 #include "lib/battery/battery.h"
 #include "speaker.h"
 #include "button.h"
@@ -349,13 +350,18 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+
+	  is_connected = true;
+
+    // // Put NFC to sleep when Bluetooth is connected
+    // nfc_sleep();
 #ifdef CONFIG_ACCELEROMETER
      k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 #endif
 #ifdef CONFIG_ENABLE_BUTTON
     activate_button_work();
 #endif
-    is_connected = true;
+
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -367,6 +373,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     bt_conn_unref(conn);
     current_connection = NULL;
     current_mtu = 0;
+
+	// // restart NFC
+	// nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
