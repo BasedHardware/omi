@@ -19,12 +19,12 @@ class SpeechState(str, Enum):
 
 
 def is_speech_present(data, vad_iterator, window_size_samples=256):
-    data_int16 = np.frombuffer(data, dtype=np.int16)
-    data_float32 = data_int16.astype(np.float32) / 32768.0
+    # data_int16 = np.frombuffer(data, dtype=np.int16)
+    # data_float32 = data_int16.astype(np.float32) / 32768.0
     has_start, has_end = False, False
 
-    for i in range(0, len(data_float32), window_size_samples):
-        chunk = data_float32[i: i + window_size_samples]
+    for i in range(0, len(data), window_size_samples):
+        chunk = data[i: i + window_size_samples]
         if len(chunk) < window_size_samples:
             break
         speech_dict = vad_iterator(chunk, return_seconds=False)
@@ -43,7 +43,7 @@ def is_speech_present(data, vad_iterator, window_size_samples=256):
     #     return SpeechState.speech_found
     # elif has_end:
     #     return SpeechState.no_speech
-    vad_iterator.reset_states()
+    # vad_iterator.reset_states()
     return SpeechState.no_speech
 
 

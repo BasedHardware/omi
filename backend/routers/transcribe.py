@@ -1,8 +1,10 @@
+from collections import deque
 import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
+import numpy as np
 import opuslib
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -230,54 +232,91 @@ async def _websocket_util(
     window_size_samples = 256 if sample_rate == 8000 else 512
     window_size_bytes = int(window_size_samples * 2 * 2.5)
 
-    decoder = opuslib.Decoder(sample_rate, channels)
+    if codec == 'opus':
+        decoder = opuslib.Decoder(sample_rate, channels)
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal timer_start
+        nonlocal decoder
+        speech_timeout = 5.0
+        opus_vad_check_interval_nonactive = 0.2
+        opus_vad_check_interval_active = 1 # Make it longer cause active state already got heavy job for stt socket
         timer_start = time.time()
-
-        # nonlocal audio_buffer
-        # audio_buffer = bytearray()
-        # speech_state = SpeechState.no_speech
+        is_speech_active = False
+        last_vad_check_time = 0
+        last_speech_time = 0
+        REALTIME_RESOLUTION = 0.03
+        audio_buffer = deque(maxlen=window_size_samples)
+        audio_sleep_cursor = 0
+        databuffer = bytearray(b"")
 
         try:
             while websocket_active:
                 raw_data = await websocket.receive_bytes()
+                raw_data_recv_time = time.time()
                 data = raw_data[:]
-
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
-
-                # audio_buffer.extend(data)
-                # if len(audio_buffer) < window_size_bytes:
-                #     continue
-
-                # speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
-
-                # if speech_state == SpeechState.no_speech:
-                #     audio_buffer = audio_buffer[window_size_bytes:]
-                #     continue
+                elif codec not in ['pcm8', 'pcm16']:
+                    raise ValueError(f"Unsupported codec: {codec}")
+                samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0 # Convert into range -1 to 1 earlier to decrease cpu usage later
+                audio_buffer.extend(samples)
+                
+                # VAD processing
+                if len(audio_buffer) >= window_size_samples:
+                    if codec == 'opus' and raw_data_recv_time - last_vad_check_time < opus_vad_check_interval_active and is_speech_active:
+                        pass
+                    elif codec== 'opus' and raw_data_recv_time - last_vad_check_time < opus_vad_check_interval_nonactive and not is_speech_active:
+                        continue
+                    else:
+                        last_vad_check_time = time.time()
+                        is_containing_speech = is_speech_present(list(audio_buffer), vad_iterator, window_size_samples)
+                        if is_containing_speech == SpeechState.speech_found:
+                            # print('+Detected speech at ' + str(raw_data_recv_time))
+                            is_speech_active = True
+                            last_speech_time = raw_data_recv_time + speech_timeout/2
+                        elif is_speech_active:
+                            if raw_data_recv_time - last_speech_time > speech_timeout:
+                                is_speech_active = False
+                                vad_iterator.reset_states()
+                                # print('-NO Detected speech')
+                                continue
+                        else:
+                            continue
+                else:
+                    continue
+                
+                elapsed_time = time.time() - timer_start
+                if elapsed_time < audio_sleep_cursor + REALTIME_RESOLUTION:
+                    sleep_time = (audio_sleep_cursor + REALTIME_RESOLUTION) - elapsed_time
+                    await asyncio.sleep(sleep_time)
+                    
+                databuffer.extend(data)
+                audio_sleep_cursor += REALTIME_RESOLUTION
+                
+                if len(databuffer) < window_size_bytes: #Batching to decrease io to stt
+                    continue
 
                 if soniox_socket is not None:
-                    await soniox_socket.send(data)
+                    await soniox_socket.send(databuffer)
 
                 if speechmatics_socket1 is not None:
-                    await speechmatics_socket1.send(data)
+                    await speechmatics_socket1.send(databuffer)
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
                     if elapsed_seconds > duration or not dg_socket2:
-                        dg_socket1.send(data)
+                        dg_socket1.send(databuffer)
                         if dg_socket2:
                             print('Killing socket2')
                             dg_socket2.finish()
                             dg_socket2 = None
                     else:
-                        dg_socket2.send(data)
+                        dg_socket2.send(databuffer)
 
-                # audio_buffer = audio_buffer[window_size_bytes:]
+                databuffer = bytearray(b"")
 
         except WebSocketDisconnect as e:
             print(f"WebSocket disconnected: {e}")
