@@ -295,7 +295,8 @@ workflows:
             --release \
             --flavor prod
 
-      - name: Extract version information
+
+      - name: Extracting version and Upload mapping file to Instabug
         script: |
           GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
           VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
@@ -306,8 +307,6 @@ workflows:
           echo "VERSION_NAME=$VERSION_NAME"
           echo "VERSION_CODE=$VERSION_CODE"
 
-      - name: Upload mapping file to Instabug
-        script: |
           MAPPING_FILE=build/app/outputs/mapping/prodRelease/mapping.txt
           if [ ! -f $MAPPING_FILE ]; then
               echo "File not found!"
