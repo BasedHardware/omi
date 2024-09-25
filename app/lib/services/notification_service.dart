@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +15,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NotificationService {
   NotificationService._();
@@ -36,7 +39,9 @@ class NotificationService {
 
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    unawaited(_register());
+    // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
+    // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
+    await _firebaseMessaging.getAPNSToken();
     listenForMessages();
   }
 
@@ -73,6 +78,7 @@ class NotificationService {
     Map<String, String?>? payload,
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
+    NotificationLayout layout = NotificationLayout.Default,
   }) {
     _awesomeNotifications.createNotification(
       content: NotificationContent(
@@ -82,15 +88,18 @@ class NotificationService {
         title: title,
         body: body,
         payload: payload,
+        notificationLayout: layout,
       ),
     );
   }
 
-  Future<void> requestNotificationPermissions() async {
+  Future<bool> requestNotificationPermissions() async {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
-      _awesomeNotifications.requestPermissionToSendNotifications();
+      isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
+      _register();
     }
+    return isAllowed;
   }
 
   Future<void> _register() async {
@@ -115,13 +124,23 @@ class NotificationService {
   Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
     String timeZone = await getTimeZone();
-    await saveFcmTokenServer(token: token, timeZone: timeZone);
+    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
+      await Intercom.instance.sendTokenToIntercom(token);
+      await saveFcmTokenServer(token: token, timeZone: timeZone);
+    }
   }
 
   void saveNotificationToken() async {
+    if (Platform.isIOS) {
+      await _firebaseMessaging.getAPNSToken();
+    }
     String? token = await _firebaseMessaging.getToken();
     await saveFcmToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
+  }
+
+  Future<bool> hasNotificationPermissions() async {
+    return await _awesomeNotifications.isNotificationAllowed();
   }
 
   Future<void> createNotification({
@@ -138,15 +157,47 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
+  Future<void> onNotificationTap() async {
+    final message = await FirebaseMessaging.instance.getInitialMessage();
+    if (message != null) {
+      _handleOnTap(message);
+    }
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
+  }
+
+  void _handleOnTap(RemoteMessage message) {
+    final data = message.data;
+    if (data.isNotEmpty) {
+      if (message.data['notification_type'] == 'daily_summary') {
+        SharedPreferencesUtil().pageToShowFromNotification = 1;
+        MyApp.navigatorKey.currentState
+            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+      }
+    }
+  }
 
   Future<void> listenForMessages() async {
+    onNotificationTap();
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
-      if (data.isEmpty) return;
-      if (data['notification_type'] == 'plugin') {
-        _showForegroundNotification(message.notification);
-        data['from_integration'] = data['from_integration'] == 'true';
-        _serverMessageStreamController.add(ServerMessage.fromJson(data));
+      final noti = message.notification;
+
+      // Plugin
+      if (data.isNotEmpty) {
+        if (noti != null) {
+          _showForegroundNotification(noti: noti);
+        }
+        final notificationType = data['notification_type'];
+        if (notificationType == 'plugin' || notificationType == 'daily_summary') {
+          data['from_integration'] = data['from_integration'] == 'true';
+          _serverMessageStreamController.add(ServerMessage.fromJson(data));
+        }
+      }
+
+      // Announcement likes
+      if (noti != null) {
+        _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
       }
     });
   }
@@ -155,11 +206,10 @@ class NotificationService {
 
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
-  Future<void> _showForegroundNotification(RemoteNotification? notification) async {
-    if (notification != null) {
-      final id = Random().nextInt(10000);
-      showNotification(id: id, title: notification.title!, body: notification.body!);
-    }
+  Future<void> _showForegroundNotification(
+      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default}) async {
+    final id = Random().nextInt(10000);
+    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
   }
 }
 

@@ -1,93 +1,43 @@
-import hashlib
-import random
-import threading
-import uuid
-from typing import Union
-
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
-from database.vector import upsert_vector, delete_vector, upsert_vectors
+import database.redis_db as redis_db
+from database.vector_db import delete_vector
 from models.memory import *
-from models.plugin import Plugin
-from models.transcript_segment import TranscriptSegment
-from routers.plugins import get_plugins_data
-from utils import auth
-from utils.llm import generate_embedding, get_transcript_structure, get_plugin_result, summarize_open_glass
-from utils.location import get_google_maps_location
+from routers.speech_profile import expand_speech_profile
+from utils.memories.location import get_google_maps_location
+from utils.memories.process_memory import process_memory
+from utils.other import endpoints as auth
+from utils.other.storage import get_memory_recording_if_exists, \
+    delete_additional_profile_audio, delete_speech_sample_for_people
 from utils.plugins import trigger_external_integrations
 
 router = APIRouter()
 
 
-def _process_memory(
-        uid: str, language_code: str, memory: Union[Memory, CreateMemory], force_process: bool = False, retries: int = 1
-):
-    transcript = memory.get_transcript()
-
-    photos = []
-    try:
-        if memory.photos:
-            structured: Structured = summarize_open_glass(memory.photos)
-            photos = memory.photos
-            memory.photos = []  # Clear photos to avoid saving them in the memory
-        else:
-            structured: Structured = get_transcript_structure(
-                transcript, memory.started_at, language_code, force_process
-            )
-    except Exception as e:
-        print(e)
-        if retries == 2:
-            raise HTTPException(status_code=500, detail="Error processing memory, please try again later")
-        return _process_memory(uid, language_code, memory, force_process, retries + 1)
-
-    discarded = structured.title == ''
-
-    if isinstance(memory, CreateMemory):
-        memory = Memory(
-            id=str(uuid.uuid4()),
-            uid=uid,
-            structured=structured,
-            **memory.dict(),
-            created_at=datetime.utcnow(),
-            transcript=transcript,
-            discarded=discarded,
-            deleted=False,
-        )
-        if photos:
-            memories_db.store_memory_photos(uid, memory.id, photos)
-    else:
-        memory.structured = structured
-        memory.discarded = discarded
-
-    if not discarded:
-        structured_str = str(structured)
-        vector = generate_embedding(structured_str)
-        upsert_vector(uid, memory, vector)
-
-        plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-        filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
-        threads = []
-
-        def execute_plugin(plugin):
-            if result := get_plugin_result(transcript, plugin).strip():
-                memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
-
-        for plugin in filtered_plugins:
-            threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
-
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-
-    memories_db.upsert_memory(uid, memory.dict())
+def _get_memory_by_id(uid: str, memory_id: str) -> dict:
+    memory = memories_db.get_memory(uid, memory_id)
+    if memory is None or memory.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Memory not found")
     return memory
 
 
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
-        uid: str = Depends(auth.get_current_user_uid)
+        source: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Create Memory endpoint.
+    :param source:
+    :param create_memory: data to create memory
+    :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
+    :param language_code: language.
+    :param uid: user id.
+    :return: The new memory created + any messages triggered by on_memory_created integrations.
+
+    TODO: Should receive raw segments by deepgram, instead of the beautified ones? and get beautified on read?
+    """
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
@@ -95,14 +45,23 @@ def create_memory(
     if geolocation and not geolocation.google_place_id:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = create_memory.language
     else:
         create_memory.language = language_code
 
-    memory = _process_memory(uid, language_code, create_memory)
+    if create_memory.processing_memory_id:
+        print(
+            f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}, processing_memory_id: {create_memory.processing_memory_id}")
+
+    memory = process_memory(uid, language_code, create_memory, force_process=source == 'speech_profile_onboarding')
     if not trigger_integrations:
         return CreateMemoryResponse(memory=memory, messages=[])
+
+    if not memory.discarded:
+        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
+        memory.postprocessing = MemoryPostProcessing(status=PostProcessingStatus.not_started,
+                                                     model=PostProcessingModel.fal_whisperx)
 
     messages = trigger_external_integrations(uid, memory)
     return CreateMemoryResponse(memory=memory, messages=messages)
@@ -112,27 +71,25 @@ def create_memory(
 def reprocess_memory(
         memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    """
+    Whenever a user wants to reprocess a memory, or wants to force process a discarded one
+    :return: The updated memory after reprocessing.
+    """
+    print('')
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory = Memory(**memory)
-    if not language_code:  # not breaking change
+    if not language_code:
         language_code = memory.language or 'en'
 
-    return _process_memory(uid, language_code, memory, force_process=True)
+    return process_memory(uid, language_code, memory, force_process=True)
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset)
     return memories_db.get_memories(uid, limit, offset, include_discarded=True)
-
-
-def _get_memory_by_id(uid: str, memory_id: str):
-    memory = memories_db.get_memory(uid, memory_id)
-    if memory is None or memory.get('deleted', False):
-        raise HTTPException(status_code=404, detail="Memory not found")
-    return memory
 
 
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
@@ -146,156 +103,151 @@ def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_u
     return memories_db.get_memory_photos(uid, memory_id)
 
 
+@router.get(
+    "/v1/memories/{memory_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]], tags=['memories']
+)
+def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return memories_db.get_memory_transcripts_by_model(uid, memory_id)
+
+
 @router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    print('delete_memory', memory_id, uid)
     memories_db.delete_memory(uid, memory_id)
     delete_vector(memory_id)
     return {"status": "Ok"}
 
 
-# ************************************************
-# ************ Migrate Local Memories ************
-# ************************************************
+@router.get("/v1/memories/{memory_id}/recording", response_model=dict, tags=['memories'])
+def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
 
 
-def _get_structured(memory: dict):
-    category = memory['structured']['category']
-    if category not in CategoryEnum.__members__:
-        category = 'other'
-    emoji = memory['structured'].get('emoji')
-    try:
-        emoji = emoji.encode('latin1').decode('utf-8')
-    except:
-        emoji = random.choice(['🧠', '🎉'])
+@router.patch("/v1/memories/{memory_id}/events", response_model=dict, tags=['memories'])
+def set_memory_events_state(
+        memory_id: str, data: SetMemoryEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+    events = memory.structured.events
+    for i, event_idx in enumerate(data.events_idx):
+        if event_idx >= len(events):
+            continue
+        events[event_idx].created = data.values[i]
 
-    return Structured(
-        title=memory['structured']['title'],
-        overview=memory['structured']['overview'],
-        emoji=emoji,
-        category=CategoryEnum[category],
-        action_items=[
-            ActionItem(description=description, completed=False) for description in
-            memory['structured']['actionItems']
-        ],
-        events=[
-            Event(
-                title=event['title'],
-                description=event['description'],
-                start=datetime.fromisoformat(event['startsAt']),
-                duration=event['duration'],
-                created=False,
-            ) for event in memory['structured']['events']
-        ],
-    )
+    memories_db.update_memory_events(uid, memory_id, [event.dict() for event in events])
+    return {"status": "Ok"}
 
 
-def _get_geolocation(memory: dict):
-    geolocation = memory.get('geoLocation', {})
-    if geolocation and geolocation.get('googlePlaceId'):
-        geolocation_obj = Geolocation(
-            google_place_id=geolocation['googlePlaceId'],
-            latitude=geolocation['latitude'],
-            longitude=geolocation['longitude'],
-            address=geolocation['address'],
-            location_type=geolocation['locationType'],
-        )
+@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory, tags=['memories'])
+def set_assignee_memory_segment(
+        memory_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
+        use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Another complex endpoint.
+
+    Modify the assignee of a segment in the transcript of a memory.
+    But,
+    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
+
+    Speech training of whom?
+
+    If `assign_type` is 'is_user', the segment will be used for the user speech training.
+    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
+
+    What is required for a segment to be used for speech training?
+    1. The segment must have more than 5 words.
+    2. The memory audio file shuold be already stored in the user's bucket.
+
+    :return: The updated memory.
+    """
+    print('set_assignee_memory_segment', memory_id, segment_idx, assign_type, value, use_for_speech_training, uid)
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+
+    if value == 'null':
+        value = None
+
+    is_unassigning = value is None or value is False
+
+    if assign_type == 'is_user':
+        memory.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
+        memory.transcript_segments[segment_idx].person_id = None
+    elif assign_type == 'person_id':
+        memory.transcript_segments[segment_idx].is_user = False
+        memory.transcript_segments[segment_idx].person_id = value
     else:
-        geolocation_obj = None
-    return geolocation_obj
+        print(assign_type)
+        raise HTTPException(status_code=400, detail="Invalid assign type")
+
+    memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+    segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
+
+    # TODO: can do this async
+    if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
+        person_id = value if assign_type == 'person_id' else None
+        expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    else:
+        path = f'{memory_id}_segment_{segment_idx}.wav'
+        delete_additional_profile_audio(uid, path)
+        delete_speech_sample_for_people(uid, path)
+
+    return memory
 
 
-def generate_uuid4_from_seed(seed):
-    # Use SHA-256 to hash the seed
-    hash_object = hashlib.sha256(seed.encode('utf-8'))
-    hash_digest = hash_object.hexdigest()
-    return uuid.UUID(hash_digest[:32])
+# *********************************************
+# ************* SHARING MEMORIES **************
+# *********************************************
+
+@router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
+def set_memory_visibility(
+        memory_id: str, value: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('update_memory_visibility', memory_id, value, uid)
+    _get_memory_by_id(uid, memory_id)
+    memories_db.set_memory_visibility(uid, memory_id, value)
+    if value == MemoryVisibility.private:
+        redis_db.remove_memory_to_uid(memory_id)
+        redis_db.remove_public_memory(memory_id)
+    else:
+        redis_db.store_memory_to_uid(memory_id, uid)
+        redis_db.add_public_memory(memory_id)
+
+    return {"status": "Ok"}
 
 
-def upload_memory_vectors(uid: str, memories: List[Memory]):
-    if not memories:
-        return
-    vectors = [generate_embedding(str(memory.structured)) for memory in memories]
-    upsert_vectors(uid, vectors, memories)
+@router.get("/v1/memories/{memory_id}/shared", response_model=Memory, tags=['memories'])
+def get_shared_memory_by_id(memory_id: str):
+    uid = redis_db.get_memory_uid(memory_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail="Memory is private")
+
+    # TODO: include speakers and people matched?
+    # TODO: other fields that  shouldn't be included?
+    memory = _get_memory_by_id(uid, memory_id)
+    visibility = memory.get('visibility', MemoryVisibility.private)
+    if not visibility or visibility == MemoryVisibility.private:
+        raise HTTPException(status_code=404, detail="Memory is private")
+    memory = Memory(**memory)
+    memory.geolocation = None
+    return memory
 
 
-@router.post('/v1/migration/memories', tags=['v1'])
-def migrate_local_memories(memories: List[dict], uid: str = Depends(auth.get_current_user_uid)):
-    if not memories:
-        return {'status': 'ok'}
-    memories_vectors = []
-    db_batch = memories_db.get_memories_batch_operation()
-    for i, memory in enumerate(memories):
-        if memory.get('photos'):
-            continue  # Ignore openGlass memories for now
+@router.get("/v1/public-memories", response_model=List[Memory], tags=['memories'])
+def get_public_memories(offset: int = 0, limit: int = 1000):
+    memories = redis_db.get_public_memories()
+    data = []
+    for memory_id in memories:
+        uid = redis_db.get_memory_uid(memory_id)
+        if not uid:
+            continue
+        data.append([uid, memory_id])
+    # TODO: sort in some way to have proper pagination
 
-        structured_obj = _get_structured(memory)
-        # print(structured_obj)
-        if not memory['transcriptSegments'] and memory['transcript']:
-            memory['transcriptSegments'] = [{'text': memory['transcript']}]
-
-        memory_obj = Memory(
-            id=str(generate_uuid4_from_seed(f'{uid}-{memory["createdAt"]}')),
-            uid=uid,
-            structured=structured_obj,
-            created_at=datetime.fromisoformat(memory['createdAt']),
-            started_at=datetime.fromisoformat(memory['startedAt']) if memory['startedAt'] else None,
-            finished_at=datetime.fromisoformat(memory['finishedAt']) if memory['finishedAt'] else None,
-            discarded=memory['discarded'],
-            transcript_segments=[
-                TranscriptSegment(
-                    text=segment['text'],
-                    start=segment.get('start', 0),
-                    end=segment.get('end', 0),
-                    speaker=segment.get('speaker', 'SPEAKER_00'),
-                    is_user=segment.get('is_user', False),
-                ) for segment in memory['transcriptSegments'] if segment.get('text', '')
-            ],
-            plugins_results=[
-                PluginResult(plugin_id=result.get('pluginId'), content=result['content'])
-                for result in memory['pluginsResponse']
-            ],
-            # photos=[
-            #     MemoryPhoto(description=photo['description'], base64=photo['base64']) for photo in memory['photos']
-            # ],
-            geolocation=_get_geolocation(memory),
-            deleted=False,
-        )
-        memories_db.add_memory_to_batch(db_batch, uid, memory_obj.dict())
-
-        if not memory_obj.discarded:
-            memories_vectors.append(memory_obj)
-
-        if i % 10 == 0:
-            threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
-            memories_vectors = []
-
-        if i % 20 == 0:
-            db_batch.commit()
-            db_batch = memories_db.get_memories_batch_operation()
-
-    db_batch.commit()
-    threading.Thread(target=upload_memory_vectors, args=(uid, memories_vectors[:])).start()
-    return {}
-
-# Future<String> dailySummaryNotifications(List<Memory> memories) async {
-#   var msg = 'There were no memories today, don\'t forget to wear your Friend tomorrow 😁';
-#   if (memories.isEmpty) return msg;
-#   if (memories.where((m) => !m.discarded).length <= 1) return msg;
-#   var str = SharedPreferencesUtil().givenName.isEmpty ? 'the user' : SharedPreferencesUtil().givenName;
-#   var prompt = '''
-#   The following are a list of $str\'s memories from today, with the transcripts with its respective structuring, that $str had during his day.
-#   $str wants to get a summary of the key action items he has to take based on his today's memories.
-#
-#   Remember $str is busy so this has to be very efficient and concise.
-#   Respond in at most 50 words.
-#
-#   Output your response in plain text, without markdown.
-#   ```
-#   ${Memory.memoriesToString(memories, includeTranscript: true)}
-#   ```
-#   ''';
-#   debugPrint(prompt);
-#   var result = await executeGptPrompt(prompt);
-#   debugPrint('dailySummaryNotifications result: $result');
-#   return result.replaceAll('```', '').trim();
-# }
+    memories = memories_db.run_get_public_memories(data[offset:offset + limit])
+    for memory in memories:
+        memory['geolocation'] = None
+    return memories

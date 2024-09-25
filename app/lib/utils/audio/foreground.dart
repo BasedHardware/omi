@@ -24,7 +24,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
           "longitude": locationData.longitude,
           'altitude': locationData.altitude,
           'accuracy': locationData.accuracy,
-          'time': locationData.timestamp.toIso8601String(),
+          'time': locationData.timestamp.toUtc().toIso8601String(),
         };
         FlutterForegroundTask.sendDataToMain(loc);
       } else {
@@ -76,6 +76,8 @@ class ForegroundUtil {
       }
     }
   }
+
+  Future<bool> get isIgnoringBatteryOptimizations async => await FlutterForegroundTask.isIgnoringBatteryOptimizations;
 
   static Future<void> initializeForegroundService() async {
     if (await FlutterForegroundTask.isRunningService) return;

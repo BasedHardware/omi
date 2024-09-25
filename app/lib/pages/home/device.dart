@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/ble/connect.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-
-import 'device_settings.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:provider/provider.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
@@ -20,37 +20,29 @@ class ConnectedDevice extends StatefulWidget {
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
 }
 
-
 class _ConnectedDeviceState extends State<ConnectedDevice> {
+  // TODO: thinh, use connection directly
+  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return await connection.disconnect();
+  }
+
   @override
   Widget build(BuildContext context) {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
     return FutureBuilder<DeviceInfo>(
-      future: DeviceInfo.getDeviceInfo(widget.device),
+      future: context.read<DeviceProvider>().getDeviceInfo(),
       builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
             backgroundColor: Theme.of(context).colorScheme.primary,
-            actions: [
-              IconButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => DeviceSettings(
-                        device: widget.device,
-                        deviceInfo: snapshot.data,
-                        isDeviceConnected: deviceConnected,
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.settings),
-              )
-            ],
           ),
           body: Column(
             children: [
@@ -61,7 +53,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${widget.device?.getShortId() ?? ''})',
+                    '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId()})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -150,17 +142,33 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 ),
                 child: TextButton(
                   onPressed: () async {
-                    if (widget.device != null) {
-                      await bleDisconnectDevice(widget.device!);
-                    }
-                    Navigator.of(context).pop();
-                    SharedPreferencesUtil().deviceId = '';
+                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
                     SharedPreferencesUtil().deviceName = '';
+                    if (widget.device != null) {
+                      await _bleDisconnectDevice(widget.device!);
+                    }
+                    context.read<DeviceProvider>().setIsConnected(false);
+                    context.read<DeviceProvider>().setConnectedDevice(null);
+                    context.read<DeviceProvider>().updateConnectingStatus(false);
+                    Navigator.of(context).pop();
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(
                     widget.device == null ? "Unpair" : "Disconnect",
                     style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () async {
+                  await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
+                },
+                child: const Text(
+                  'Issues charging?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
                   ),
                 ),
               ),
