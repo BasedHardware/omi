@@ -114,10 +114,33 @@ workflows:
             --release \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
+
+      - name: Generate and zip dSYM files
+        script: |
+          # Create a directory for dSYM files
+          mkdir -p build/ios/dSYMs
+          
+          # Copy dSYM files to the new directory
+          cp -R build/ios/archive/Runner.xcarchive/dSYMs/* build/ios/dSYMs/
+          
+          # Zip dSYM files
+          cd build/ios/dSYMs
+          zip -r ios_prod_dsyms.zip *.dSYM
+          mv ios_prod_dsyms.zip ../../..
+          cd ../../..
+
+      - name: Upload dSYM to Instabug
+        script: |
+          curl -X POST "https://api.instabug.com/api/sdk/v3/symbols_files" \
+            -F os=iOS \
+            -F symbols_file=@"ios_prod_dsyms.zip" \
+            -F application_token="$INSTABUG_API_KEY"
+            
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
+      - ios_prod_dsyms.zip
     publishing:
       email:
         recipients:
@@ -275,6 +298,42 @@ workflows:
           flutter build appbundle \
             --release \
             --flavor prod
+
+
+      - name: Extracting version and Upload mapping file to Instabug
+        script: |
+          echo "Instabug mapping files uploader"
+
+          GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
+          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
+          echo "Version String: $VERSION_STRING"
+          VERSION_NAME="$(echo $VERSION_STRING | cut -d'+' -f1 | sed 's/^v//')"
+          echo "VERSION_NAME=$VERSION_NAME"
+          VERSION_CODE="$(echo $VERSION_STRING | cut -d'+' -f2)"
+          echo "VERSION_CODE=$VERSION_CODE"
+          APP_TOKEN="$INSTABUG_API_KEY"
+          PATH_TO_MAPPING_FILE="build/app/outputs/mapping/prodRelease/mapping.txt"
+          VERSION='{"code":"'"$VERSION_CODE"'","name":"'"$VERSION_NAME"'"}'
+
+          if [ ! -f $PATH_TO_MAPPING_FILE ]; then
+          echo "File not found!"
+          exit 0
+          fi
+
+          echo "Mapping file found! Uploading..."
+
+          ENDPOINT="https://api.instabug.com/api/sdk/v3/symbols_files"
+          STATUS=$(curl "${ENDPOINT}" --write-out %{http_code} --silent --output /dev/null -F os=android -F app_version="${VERSION}" -F symbols_file=@"${PATH_TO_MAPPING_FILE}" -F application_token="${APP_TOKEN}")
+          if [ $STATUS -ne 200 ]; then
+          echo "Error while uploading mapping files"
+          exit 0
+          fi
+
+
+          echo "Success! Your mapping files got uploaded successfully"
+
+            
+            
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
