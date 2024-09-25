@@ -5,7 +5,7 @@ parent: Backend
 nav_order: 7
 ---
 
-# 🔒 Comprehensive Security Guide for Omi Backend
+# 🔒 Security Guide for Omi Backend
 
 This document provides a detailed overview of the security measures implemented in the Omi backend to protect user data and maintain system integrity.
 
