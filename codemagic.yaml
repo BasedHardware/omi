@@ -298,26 +298,33 @@ workflows:
 
       - name: Extracting version and Upload mapping file to Instabug
         script: |
-          GIT_TAG=$(git describe --tags --match="v*-mobile-cm" --abbrev=0)
-          VERSION_STRING=$(echo $GIT_TAG | sed 's/-mobile-cm$//')
-          VERSION_NAME=$(echo $VERSION_STRING | cut -d'+' -f1 | sed 's/^v//')
-          VERSION_CODE=$(echo $VERSION_STRING | cut -d'+' -f2)
+          echo "Instabug mapping files uploader"
 
-          echo "Version String: $VERSION_STRING"
-          echo "VERSION_NAME=$VERSION_NAME"
-          echo "VERSION_CODE=$VERSION_CODE"
+          # Constants for app token and mapping files
+          APP_TOKEN="d76e45ab3d19d633477c86ebacaad45d"
+          PATH_TO_MAPPING_FILE="/tmp/prodRelease_mapping_mapping.txt"
+          VERSION_CODE="111"
+          VERSION_NAME="1.0.1"
+          VERSION='{"code":"'"$VERSION_CODE"'","name":"'"$VERSION_NAME"'"}'
 
-          MAPPING_FILE=build/app/outputs/mapping/prodRelease/mapping.txt
-          if [ ! -f $MAPPING_FILE ]; then
-              echo "File not found!"
-              exit 0
+          if [ ! -f $PATH_TO_MAPPING_FILE ]; then
+          echo "File not found!"
+          exit 0
           fi
 
-          curl -X POST https://api.instabug.com/api/sdk/v3/symbols_files \
-            -F os="android" \
-            -F application_token="$INSTABUG_API_KEY" \
-            -F app_version='{"code":"$VERSION_CODE","name":"$VERSION_NAME"}' \
-            -F symbols_file=@build/app/outputs/mapping/prodRelease/mapping.txt
+          echo "Mapping file found! Uploading..."
+
+          ENDPOINT="https://api.instabug.com/api/sdk/v3/symbols_files"
+          STATUS=$(curl "${ENDPOINT}" --write-out %{http_code} --silent --output /dev/null -F os=android -F app_version="${VERSION}" -F symbols_file=@"${PATH_TO_MAPPING_FILE}" -F application_token="${APP_TOKEN}")
+          if [ $STATUS -ne 200 ]; then
+          echo "Error while uploading mapping files"
+          exit 0
+          fi
+
+
+          echo "Success! Your mapping files got uploaded successfully"
+
+            
             
     artifacts:
       - build/**/outputs/**/*.aab
