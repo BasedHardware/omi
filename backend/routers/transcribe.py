@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 import opuslib
+import webrtcvad
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
@@ -17,7 +18,7 @@ from models.processing_memory import ProcessingMemory
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
-from utils.stt.vad import VADIterator, model, is_speech_present, SpeechState
+from utils.stt.vad import VADIterator, model
 
 router = APIRouter()
 
@@ -100,6 +101,10 @@ async def _websocket_util(
         return
 
     session_id = str(uuid.uuid4())
+
+    # Initiate a separate vad for each websocket
+    w_vad = webrtcvad.Vad()
+    w_vad.set_mode(1)
 
     flush_new_memory_lock = threading.Lock()
 
@@ -238,6 +243,8 @@ async def _websocket_util(
         # audio_buffer = bytearray()
         # speech_state = SpeechState.no_speech
 
+        with_speech, without_speech = 0, 0
+
         try:
             while websocket_active:
                 raw_data = await websocket.receive_bytes()
@@ -245,6 +252,18 @@ async def _websocket_util(
 
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
+
+                has_speech = w_vad.is_speech(data, sample_rate)
+                # if has_speech:
+                #     with_speech += 1
+                # else:
+                #     without_speech += 1
+                #
+                # if has_speech:
+                #     print(f"speech: {with_speech / (with_speech + without_speech)}")
+
+                if not has_speech:
+                    continue
 
                 # audio_buffer.extend(data)
                 # if len(audio_buffer) < window_size_bytes:
