@@ -20,7 +20,6 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/vad.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
@@ -41,7 +40,6 @@ class CaptureProvider extends ChangeNotifier
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
   TranscripSegmentSocketService? _socket;
-  final vadProcessor = AudioProcessorService();
 
   Timer? _keepAliveTimer;
 
@@ -394,14 +392,12 @@ class CaptureProvider extends ChangeNotifier
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
-    await vadProcessor.init();
     _bleBytesStream = await _getBleAudioBytesListener(
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
         // audioStorage!.storeFramePacket(value);
         // print('audioStorage: ${audioStorage!.frames.length} ${audioStorage!.rawPackets.length}');
-        // vadProcessor.processAudioData(value);
 
         final trimmedValue = value.sublist(3);
 
