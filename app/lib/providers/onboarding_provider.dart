@@ -12,7 +12,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
