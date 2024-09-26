@@ -137,6 +137,8 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   (int, DateTime) addMemoryWithDateGrouped(ServerMemory memory) {
+    memories.insert(0, memory);
+    memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     int idx;
     var memDate = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
     if (groupedMemories.containsKey(memDate)) {
@@ -150,7 +152,7 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       groupedMemories[memDate] = [memory];
       groupedMemories = Map.fromEntries(groupedMemories.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
-      idx = groupedMemories[memDate]!.indexWhere((element) => element.createdAt.isBefore(memory.createdAt));
+      idx = 0;
     }
     return (idx, memDate);
   }
