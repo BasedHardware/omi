@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +28,7 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
@@ -141,6 +140,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+
     super.initState();
   }
 

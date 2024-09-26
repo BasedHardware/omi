@@ -22,17 +22,16 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/vad.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/communication.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:friend_private/utils/other/notifications.dart';
-import 'package:friend_private/utils/pure_socket.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -467,13 +466,13 @@ class CaptureProvider extends ChangeNotifier
   Future getFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 0;
-    writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
+    _writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
   }
 
   Future clearFileFromDevice(int fileNum) async {
     storageUtil.fileNum = fileNum;
     int command = 1;
-    writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
+    _writeToStorage(_recordingDevice!.id, storageUtil.fileNum, command);
   }
 
   void clearTranscripts() {
@@ -556,12 +555,12 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
-  Future<bool> _writeToStorage(String deviceId, int numFile) async {
+  Future<bool> _writeToStorage(String deviceId, int numFile, int command) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(false);
     }
-    return connection.writeToStorage(numFile);
+    return connection.writeToStorage(numFile, command);
   }
 
   Future<List<int>> _getStorageList(String deviceId) async {
