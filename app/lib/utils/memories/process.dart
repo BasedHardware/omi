@@ -7,7 +7,7 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:tuple/tuple.dart';
 
 Future<ServerMemory?> processTranscriptContent({

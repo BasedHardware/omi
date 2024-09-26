@@ -1,7 +1,7 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/services/device_connections.dart';
-import 'package:friend_private/services/frame_connection.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
+import 'package:friend_private/services/devices/device_connection.dart';
+import 'package:friend_private/services/devices/frame_connection.dart';
+import 'package:friend_private/services/devices/models.dart';
 
 enum BleAudioCodec {
   pcm16,

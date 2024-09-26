@@ -7,8 +7,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_sdk/bluetooth.dart';
 import 'package:frame_sdk/frame_sdk.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
-import 'package:friend_private/services/device_connections.dart';
 import 'package:friend_private/services/devices.dart';
+import 'package:friend_private/services/devices/device_connection.dart';
 
 const String _photoHeader =
     "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCExsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA=";
@@ -19,9 +19,7 @@ class FrameDeviceConnection extends DeviceConnection {
   get deviceId => device.id;
 
   @override
-  Future<void> connect(
-      {Function(String deviceId, DeviceConnectionState state)?
-          onConnectionStateChanged}) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await init();
   }
@@ -68,8 +66,7 @@ class FrameDeviceConnection extends DeviceConnection {
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
 
-  Future<String?> getFromLoop(String key,
-      {Duration timeout = const Duration(seconds: 5)}) async {
+  Future<String?> getFromLoop(String key, {Duration timeout = const Duration(seconds: 5)}) async {
     int prefix = switch (key) {
       "loopStatus" => 0xE1,
       "micState" => 0xE2,
@@ -78,8 +75,7 @@ class FrameDeviceConnection extends DeviceConnection {
       _ => throw Exception("Invalid key: $key"),
     };
 
-    final futureResult =
-        _frame!.bluetooth.getDataWithPrefix(prefix).first.timeout(timeout);
+    final futureResult = _frame!.bluetooth.getDataWithPrefix(prefix).first.timeout(timeout);
 
     if (!await sendUntilEchoed("GET $key", maxAttempts: 1, timeout: timeout)) {
       return null;
@@ -98,10 +94,8 @@ class FrameDeviceConnection extends DeviceConnection {
 
   Future<void> setTimeOnFrame() async {
     if (_isLooping == true) {
-      String utcUnixEpochTime =
-          (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000).toString();
-      String timeZoneOffset =
-          DateTime.now().timeZoneOffset.inMinutes > 0 ? '+' : '-';
+      String utcUnixEpochTime = (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000).toString();
+      String timeZoneOffset = DateTime.now().timeZoneOffset.inMinutes > 0 ? '+' : '-';
       timeZoneOffset +=
           '${DateTime.now().timeZoneOffset.inHours.abs().toString().padLeft(2, '0')}:${(DateTime.now().timeZoneOffset.inMinutes.abs() % 60).toString().padLeft(2, '0')}';
       await sendUntilEchoed("timeUtc=$utcUnixEpochTime");
@@ -128,10 +122,9 @@ class FrameDeviceConnection extends DeviceConnection {
     await setTimeOnFrame();
     bool isLoaded = false;
     bool isRunning = false;
-    final String mainLuaContent =
-        (await rootBundle.loadString('assets/device_assets/frame_lib.lua'))
-            .replaceAll("\t", "")
-            .replaceAll("\n\n", "\n");
+    final String mainLuaContent = (await rootBundle.loadString('assets/device_assets/frame_lib.lua'))
+        .replaceAll("\t", "")
+        .replaceAll("\n\n", "\n");
     final int frameLibHash = mainLuaContent.hashCode;
 
     if (_isLooping == false) {
@@ -175,13 +168,9 @@ class FrameDeviceConnection extends DeviceConnection {
       await sendUntilEchoed("CAMERA START");
     } else if (!isLoaded) {
       await _frame!.bluetooth.sendBreakSignal();
-      print(
-          "About to send main.lua to frame, length = ${mainLuaContent.length}");
+      print("About to send main.lua to frame, length = ${mainLuaContent.length}");
       try {
-        await _frame!.files.writeFile(
-            "main.lua",
-            utf8.encode(
-                "$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
+        await _frame!.files.writeFile("main.lua", utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
             checked: true);
         print("Sent main.lua to frame");
         await _frame!.bluetooth.sendResetSignal();
@@ -211,26 +200,21 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   Future<bool> sendUntilEchoed(String data,
-      {int maxAttempts = 3,
-      Duration timeout = const Duration(seconds: 10)}) async {
+      {int maxAttempts = 3, Duration timeout = const Duration(seconds: 10)}) async {
     Uint8List bytesToSend = Uint8List.fromList(utf8.encode(data));
     //print("Sending $data to frame");
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        var future = _frame!.bluetooth.stringResponse
-            .firstWhere((element) => element == "ECHO:$data")
-            .timeout(timeout);
+        var future = _frame!.bluetooth.stringResponse.firstWhere((element) => element == "ECHO:$data").timeout(timeout);
         await _frame!.bluetooth.sendData(bytesToSend);
         await future;
         //print("Received ECHO:$data from frame");
         return true;
       } catch (e) {
         if (e is TimeoutException) {
-          print(
-              "Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
+          print("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
           if (attempt == maxAttempts) {
-            print(
-                "Failed to receive echo for $data after $maxAttempts attempts");
+            print("Failed to receive echo for $data after $maxAttempts attempts");
             //await disconnectDevice();
             return false;
           }
@@ -284,8 +268,7 @@ class FrameDeviceConnection extends DeviceConnection {
       });
     }
 
-    StreamSubscription<Uint8List> subscription =
-        _frame!.bluetooth.getDataWithPrefix(0xEE).listen((value) {
+    StreamSubscription<Uint8List> subscription = _frame!.bluetooth.getDataWithPrefix(0xEE).listen((value) {
       _isLooping = true;
       if (value.isNotEmpty) onAudioBytesReceived(value);
     }, onDone: () async {
@@ -329,8 +312,7 @@ class FrameDeviceConnection extends DeviceConnection {
       }
     }
 
-    StreamSubscription<Uint8List> subscription =
-        _frame!.bluetooth.getDataWithPrefix(0xCC).listen((value) {
+    StreamSubscription<Uint8List> subscription = _frame!.bluetooth.getDataWithPrefix(0xCC).listen((value) {
       _isLooping = true;
       if (value.isNotEmpty) checkBatteryLevel(value);
     });
@@ -349,10 +331,7 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<void> init() async {
     print("Initialising Frame Device");
     var device = bleDevice;
-    if (_frame != null &&
-        device != null &&
-        _frame!.isConnected &&
-        device!.isConnected) {
+    if (_frame != null && device != null && _frame!.isConnected && device!.isConnected) {
       print("Device is already connected in init...?");
       //await afterConnect();
       //return;
@@ -371,15 +350,13 @@ class FrameDeviceConnection extends DeviceConnection {
       if (_isLooping == null || _isLooping == false) {
         Future.microtask(() async {
           try {
-            _firmwareRevision =
-                await _frame!.evaluate("frame.FIRMWARE_VERSION");
+            _firmwareRevision = await _frame!.evaluate("frame.FIRMWARE_VERSION");
             _isLooping = false;
           } catch (e) {
             // Ignore error
           }
           try {
-            _batteryLevel =
-                int.parse(await _frame!.evaluate("frame.battery_level()"));
+            _batteryLevel = int.parse(await _frame!.evaluate("frame.battery_level()"));
             _isLooping = false;
           } catch (e) {
             // Ignore error
@@ -412,8 +389,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetImageListener(
-      {required void Function(Uint8List p1) onImageReceived}) async {
+  Future<StreamSubscription?> performGetImageListener({required void Function(Uint8List p1) onImageReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await Future.doWhile(() async {
         await Future.delayed(Duration(milliseconds: 100));
@@ -421,15 +397,13 @@ class FrameDeviceConnection extends DeviceConnection {
       });
     }
 
-    StreamSubscription<Uint8List> subscription = _frame!.bluetooth
-        .getDataOfType(FrameDataTypePrefixes.photoData)
-        .listen((value) {
+    StreamSubscription<Uint8List> subscription =
+        _frame!.bluetooth.getDataOfType(FrameDataTypePrefixes.photoData).listen((value) {
       if (value.isNotEmpty) {
         print("Received photo data from frame, length = ${value.length}");
         final header = base64.decode(_photoHeader);
         final combinedData = Uint8List.fromList([...header, ...value]);
-        print(
-            "Processed photo data from frame, length = ${combinedData.length}");
+        print("Processed photo data from frame, length = ${combinedData.length}");
         onImageReceived(combinedData);
       }
     });
