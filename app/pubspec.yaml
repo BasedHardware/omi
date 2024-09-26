@@ -93,8 +93,10 @@ dependencies:
   gleap_sdk: ^13.9.1
   web_socket_channel: ^3.0.1
   talker_flutter:
-
   intercom_flutter:
+  flutter_silero_vad:
+    git:
+      url: https://github.com/char5742/flutter_silero_vad.git
 
 
 dependency_overrides:
@@ -152,6 +154,7 @@ flutter:
     - assets/lottie_animations/
     - assets/pdfs/
     - assets/silero_vad.onnx
+    - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
   fonts:
