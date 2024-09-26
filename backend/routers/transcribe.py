@@ -89,7 +89,8 @@ async def _websocket_util(
 ):
     print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
 
-    if language == 'en':
+    # Not when comes from the phone, and only Friend's with 1.0.4
+    if language == 'en' and sample_rate == 16000 and codec == 'opus':
         stt_service = STTService.soniox
     else:
         stt_service = STTService.deepgram
