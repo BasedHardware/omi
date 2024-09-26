@@ -19,7 +19,7 @@ class MemoryProvider extends ChangeNotifier {
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
-    filterSortedMemories('');
+    filterGroupedMemories('');
     notifyListeners();
   }
 
@@ -35,13 +35,11 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    sortMemoriesByDate();
+    groupMemoriesByDate();
     notifyListeners();
   }
 
-/////////////////////////////////////////////////////////////////////////////////
-
-  void sortMemoriesByDate() {
+  void groupMemoriesByDate() {
     groupedMemories = {};
     for (var memory in memories) {
       if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded) continue;
@@ -52,14 +50,13 @@ class MemoryProvider extends ChangeNotifier {
       groupedMemories[date]!.add(memory);
       groupedMemories[date]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
-    print('grouped memories: ${groupedMemories.length}');
     notifyListeners();
   }
 
-  void filterSortedMemories(String query) {
+  void filterGroupedMemories(String query) {
     if (query.isEmpty) {
       groupedMemories = {};
-      sortMemoriesByDate();
+      groupMemoriesByDate();
     } else {
       groupedMemories = {};
       for (var memory in memories) {
@@ -76,7 +73,6 @@ class MemoryProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
-/////////////////////////////////////////////////////////////////////////////////
 
   Future getMemoriesFromServer() async {
     setLoadingMemories(true);
@@ -106,18 +102,18 @@ class MemoryProvider extends ChangeNotifier {
     var newMemories = await getMemories(offset: memories.length);
     memories.addAll(newMemories);
     memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    filterSortedMemories('');
+    filterGroupedMemories('');
     setLoadingMemories(false);
     notifyListeners();
   }
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
-    addMemoryToSortedList(memory);
+    addMemoryToGroupedMemories(memory);
     notifyListeners();
   }
 
-  void addMemoryToSortedList(ServerMemory memory) {
+  void addMemoryToGroupedMemories(ServerMemory memory) {
     var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
     if (groupedMemories.containsKey(date)) {
       groupedMemories[date]!.insert(0, memory);
@@ -169,7 +165,7 @@ class MemoryProvider extends ChangeNotifier {
       }
     }
     memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    filterSortedMemories('');
+    filterGroupedMemories('');
     notifyListeners();
   }
 
@@ -183,7 +179,6 @@ class MemoryProvider extends ChangeNotifier {
     List<int> indexes = events.mapIndexed((index, e) => index).toList();
     setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
     for (var i = 0; i < events.length; i++) {
-      print('Creating event: ${events[i].title}');
       if (events[i].created) continue;
       events[i].created = true;
       CalendarUtil().createEvent(
@@ -219,7 +214,7 @@ class MemoryProvider extends ChangeNotifier {
     if (memoriesToDelete.containsKey(memoryId)) {
       ServerMemory memory = memoriesToDelete.remove(memoryId)!;
       memories.insert(0, memory);
-      addMemoryToSortedList(memory);
+      addMemoryToGroupedMemories(memory);
     }
     notifyListeners();
   }
@@ -228,8 +223,7 @@ class MemoryProvider extends ChangeNotifier {
   void deleteMemory(ServerMemory memory, int index) {
     memories.removeWhere((element) => element.id == memory.id);
     deleteMemoryServer(memory.id);
-    // filterMemories('');
-    filterSortedMemories('');
+    filterGroupedMemories('');
     notifyListeners();
   }
 }
