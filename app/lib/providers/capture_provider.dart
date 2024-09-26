@@ -20,6 +20,7 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/capture/logic/openglass_mixin.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/vad.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -41,6 +42,7 @@ class CaptureProvider extends ChangeNotifier
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
   TranscripSegmentSocketService? _socket;
+  final vadProcessor = AudioProcessorService();
 
   Timer? _keepAliveTimer;
 
@@ -73,6 +75,7 @@ class CaptureProvider extends ChangeNotifier
   RecordingState recordingState = RecordingState.stop;
 
   bool _transcriptServiceReady = false;
+
   bool get transcriptServiceReady => _transcriptServiceReady;
 
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
@@ -392,12 +395,17 @@ class CaptureProvider extends ChangeNotifier
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
+    await vadProcessor.init();
     _bleBytesStream = await _getBleAudioBytesListener(
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
-        audioStorage!.storeFramePacket(value);
+        // audioStorage!.storeFramePacket(value);
+        // print('audioStorage: ${audioStorage!.frames.length} ${audioStorage!.rawPackets.length}');
+        // vadProcessor.processAudioData(value);
+
         final trimmedValue = value.sublist(3);
+
         // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
         // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (_socket?.state == SocketServiceState.connected) {
