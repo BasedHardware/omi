@@ -13,13 +13,12 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/pure_socket.dart';
 import 'package:uuid/uuid.dart';
 
 class SpeechProfileProvider extends ChangeNotifier

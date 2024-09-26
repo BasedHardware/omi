@@ -1,44 +1,69 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/services/devices.dart';
+import 'package:friend_private/services/devices/device_connection.dart';
+import 'package:friend_private/services/devices/errors.dart';
+import 'package:friend_private/services/devices/models.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/ble/device_base.dart';
-import 'package:friend_private/utils/ble/errors.dart';
-import 'package:friend_private/utils/ble/gatt_utils.dart';
 import 'package:friend_private/utils/logger.dart';
 
-class FriendDevice extends DeviceBase {
-  @override
-  final String deviceId;
-  @override
-  late String name;
+class FriendDeviceConnection extends DeviceConnection {
+  BluetoothService? _batteryService;
+  BluetoothService? _friendService;
+  BluetoothService? _storageService;
+  BluetoothService? _accelService;
 
-  FriendDevice(this.deviceId) : super(deviceId) {
-    var device = BluetoothDevice.fromId(deviceId);
-    name = device.platformName;
+  FriendDeviceConnection(super.device, super.bleDevice);
+
+  get deviceId => device.id;
+
+  @override
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+
+    // Services
+    _friendService = await getService(friendServiceUuid);
+    if (_friendService == null) {
+      logServiceNotFoundError('Friend', deviceId);
+      throw Exception("Friend ble service is not found");
+    }
+
+    _batteryService = await getService(batteryServiceUuid);
+    if (_batteryService == null) {
+      logServiceNotFoundError('Battery', deviceId);
+    }
+
+    _storageService = await getService(storageDataStreamServiceUuid);
+    if (_storageService == null) {
+      logServiceNotFoundError('Storage', deviceId);
+    }
+
+    _accelService = await getService(accelDataStreamServiceUuid);
+    if (_accelService == null) {
+      logServiceNotFoundError('Accelerometer', deviceId);
+    }
   }
 
+  // Mimic @app/lib/utils/ble/friend_communication.dart
   @override
   Future<bool> isConnected() async {
-    var device = BluetoothDevice.fromId(deviceId);
-    return device.isConnected;
+    return bleDevice.isConnected;
   }
 
   @override
   Future<int> performRetrieveBatteryLevel() async {
-    final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
-    if (batteryService == null) {
+    if (_batteryService == null) {
       logServiceNotFoundError('Battery', deviceId);
       return -1;
     }
 
-    var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
+    var batteryLevelCharacteristic = getCharacteristic(_batteryService!, batteryLevelCharacteristicUuid);
     if (batteryLevelCharacteristic == null) {
       logCharacteristicNotFoundError('Battery level', deviceId);
       return -1;
@@ -53,13 +78,12 @@ class FriendDevice extends DeviceBase {
   Future<StreamSubscription<List<int>>?> performGetBleBatteryLevelListener({
     void Function(int)? onBatteryLevelChange,
   }) async {
-    final batteryService = await getServiceByUuid(deviceId, batteryServiceUuid);
-    if (batteryService == null) {
+    if (_batteryService == null) {
       logServiceNotFoundError('Battery', deviceId);
       return null;
     }
 
-    var batteryLevelCharacteristic = getCharacteristicByUuid(batteryService, batteryLevelCharacteristicUuid);
+    var batteryLevelCharacteristic = getCharacteristic(_batteryService!, batteryLevelCharacteristicUuid);
     if (batteryLevelCharacteristic == null) {
       logCharacteristicNotFoundError('Battery level', deviceId);
       return null;
@@ -85,7 +109,7 @@ class FriendDevice extends DeviceBase {
       }
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     return listener;
@@ -95,13 +119,12 @@ class FriendDevice extends DeviceBase {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return null;
     }
 
-    var audioDataStreamCharacteristic = getCharacteristicByUuid(friendService, audioDataStreamCharacteristicUuid);
+    var audioDataStreamCharacteristic = getCharacteristic(_friendService!, audioDataStreamCharacteristicUuid);
     if (audioDataStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Audio data stream', deviceId);
       return null;
@@ -111,7 +134,7 @@ class FriendDevice extends DeviceBase {
       // TODO: Unknown GATT error here (code 133) on Android. StackOverflow says that it has to do with smaller MTU size
       // The creator of the plugin says not to use autoConnect
       // https://github.com/chipweinberger/flutter_blue_plus/issues/612
-      final device = BluetoothDevice.fromId(deviceId);
+      final device = bleDevice;
       if (device.isConnected) {
         if (Platform.isAndroid && device.mtuNow < 512) {
           await device.requestMtu(512); // This might fix the code 133 error
@@ -133,7 +156,7 @@ class FriendDevice extends DeviceBase {
       if (value.isNotEmpty) onAudioBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // This will cause a crash in OpenGlass devices
@@ -146,13 +169,12 @@ class FriendDevice extends DeviceBase {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return BleAudioCodec.pcm8;
     }
 
-    var audioCodecCharacteristic = getCharacteristicByUuid(friendService, audioCodecCharacteristicUuid);
+    var audioCodecCharacteristic = getCharacteristic(_friendService!, audioCodecCharacteristicUuid);
     if (audioCodecCharacteristic == null) {
       logCharacteristicNotFoundError('Audio codec', deviceId);
       return BleAudioCodec.pcm8;
@@ -199,13 +221,12 @@ class FriendDevice extends DeviceBase {
   // @override
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
-    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
-    if (storageService == null) {
+    if (_storageService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return Future.value(<int>[]);
     }
 
-    var storageListCharacteristic = getCharacteristicByUuid(storageService, storageReadControlCharacteristicUuid);
+    var storageListCharacteristic = getCharacteristic(_storageService!, storageReadControlCharacteristicUuid);
     if (storageListCharacteristic == null) {
       logCharacteristicNotFoundError('Storage List', deviceId);
       return Future.value(<int>[]);
@@ -237,13 +258,12 @@ class FriendDevice extends DeviceBase {
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
-    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
-    if (storageService == null) {
+    if (_storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
       return null;
     }
 
-    var storageDataStreamCharacteristic = getCharacteristicByUuid(storageService, storageDataStreamCharacteristicUuid);
+    var storageDataStreamCharacteristic = getCharacteristic(_storageService!, storageDataStreamCharacteristicUuid);
     if (storageDataStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Storage data stream', deviceId);
       return null;
@@ -261,7 +281,7 @@ class FriendDevice extends DeviceBase {
       if (value.isNotEmpty) onStorageBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // await storageDataStreamCharacteristic.write([0x00,0x01]);
@@ -274,41 +294,32 @@ class FriendDevice extends DeviceBase {
     return listener;
   }
 
-
-
-Future<bool> performWriteToStorage(
-           int numFile,int command
-) async {
-
-    final storageService = await getServiceByUuid(deviceId, storageDataStreamServiceUuid);
-    if (storageService == null) {
+  Future<bool> performWriteToStorage(int numFile, int command) async {
+    if (_storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
       return false;
     }
 
-    var storageDataStreamCharacteristic = getCharacteristicByUuid(storageService, storageDataStreamCharacteristicUuid);
+    var storageDataStreamCharacteristic = getCharacteristic(_storageService!, storageDataStreamCharacteristicUuid);
     if (storageDataStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Storage data stream', deviceId);
       return false;
     }
     debugPrint('About to write to storage bytes');
-   debugPrint('about to send $numFile');
-    await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF]);
+    debugPrint('about to send $numFile');
+    await storageDataStreamCharacteristic.write([command & 0xFF, numFile & 0xFF]);
     return true;
   }
-
   // Future<List<int>> performGetStorageList();
 
   @override
   Future performCameraStartPhotoController() async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic =
-        getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -322,14 +333,12 @@ Future<bool> performWriteToStorage(
 
   @override
   Future performCameraStopPhotoController() async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic =
-        getCharacteristicByUuid(friendService, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -342,25 +351,23 @@ Future<bool> performWriteToStorage(
 
   @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return false;
     }
-    var imageCaptureControlCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageDataStreamCharacteristicUuid);
     return imageCaptureControlCharacteristic != null;
   }
 
   Future<StreamSubscription?> _getBleImageBytesListener({
     required void Function(List<int>) onImageBytesReceived,
   }) async {
-    final friendService = await getServiceByUuid(deviceId, friendServiceUuid);
-    if (friendService == null) {
+    if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return null;
     }
 
-    var imageStreamCharacteristic = getCharacteristicByUuid(friendService, imageDataStreamCharacteristicUuid);
+    var imageStreamCharacteristic = getCharacteristic(_friendService!, imageDataStreamCharacteristicUuid);
     if (imageStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Image data stream', deviceId);
       return null;
@@ -378,7 +385,7 @@ Future<bool> performWriteToStorage(
       if (value.isNotEmpty) onImageBytesReceived(value);
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     // This will cause a crash in OpenGlass devices
@@ -421,13 +428,12 @@ Future<bool> performWriteToStorage(
   Future<StreamSubscription<List<int>>?> performGetAccelListener({
     void Function(int)? onAccelChange,
   }) async {
-    final accelService = await getServiceByUuid(deviceId, accelDataStreamServiceUuid);
-    if (accelService == null) {
+    if (_accelService == null) {
       logServiceNotFoundError('Accelerometer', deviceId);
       return null;
     }
 
-    var accelCharacteristic = getCharacteristicByUuid(accelService, accelDataStreamCharacteristicUuid);
+    var accelCharacteristic = getCharacteristic(_accelService!, accelDataStreamCharacteristicUuid);
     if (accelCharacteristic == null) {
       logCharacteristicNotFoundError('Accelerometer', deviceId);
       return null;
@@ -500,7 +506,7 @@ Future<bool> performWriteToStorage(
       }
     });
 
-    final device = BluetoothDevice.fromId(deviceId);
+    final device = bleDevice;
     device.cancelWhenDisconnected(listener);
 
     return listener;
