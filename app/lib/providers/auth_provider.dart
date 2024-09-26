@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
