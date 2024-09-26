@@ -1,7 +1,7 @@
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 
 triggerTranscriptSegmentReceivedEvents(
   List<TranscriptSegment> segments,
