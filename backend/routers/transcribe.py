@@ -1,4 +1,5 @@
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from utils.stt.vad import VADIterator, model, is_speech_present, SpeechState
 
 router = APIRouter()
 
+thread_pool = ThreadPoolExecutor(max_workers=4)
 
 # @router.post("/v1/transcribe", tags=['v1'])
 # will be used again in Friend V2
@@ -230,7 +232,7 @@ async def _websocket_util(
     threshold = 0.7
     vad_iterator = VADIterator(model, sampling_rate=sample_rate, threshold=threshold) 
     window_size_samples = 256 if sample_rate == 8000 else 512
-    window_size_bytes = int(window_size_samples * 2 * 2.5)
+    window_size_bytes = int(window_size_samples * 2)
 
     if codec == 'opus':
         decoder = opuslib.Decoder(sample_rate, channels)
@@ -241,15 +243,15 @@ async def _websocket_util(
         nonlocal timer_start
         nonlocal decoder
         speech_timeout = 5.0
-        opus_vad_check_interval_nonactive = 0.2
-        opus_vad_check_interval_active = 1 # Make it longer cause active state already got heavy job for stt socket
+        opus_vad_check_interval_nonactive = 0.1
+        opus_vad_check_interval_active = 0.5
         timer_start = time.time()
         is_speech_active = False
         last_vad_check_time = 0
         last_speech_time = 0
         REALTIME_RESOLUTION = 0.03
         audio_buffer = deque(maxlen=window_size_samples)
-        audio_sleep_cursor = 0
+        audio_cursor = 0
         databuffer = bytearray(b"")
 
         try:
@@ -266,13 +268,15 @@ async def _websocket_util(
                 
                 # VAD processing
                 if len(audio_buffer) >= window_size_samples:
-                    if codec == 'opus' and raw_data_recv_time - last_vad_check_time < opus_vad_check_interval_active and is_speech_active:
+                    if codec == 'opus' and raw_data_recv_time - last_speech_time < speech_timeout/2 and is_speech_active:
+                        pass
+                    elif codec == 'opus' and raw_data_recv_time - last_vad_check_time < opus_vad_check_interval_active and is_speech_active:
                         pass
                     elif codec== 'opus' and raw_data_recv_time - last_vad_check_time < opus_vad_check_interval_nonactive and not is_speech_active:
                         continue
                     else:
                         last_vad_check_time = time.time()
-                        is_containing_speech = is_speech_present(list(audio_buffer), vad_iterator, window_size_samples)
+                        is_containing_speech = await asyncio.get_event_loop().run_in_executor(thread_pool, is_speech_present, list(audio_buffer), vad_iterator, window_size_samples)
                         if is_containing_speech == SpeechState.speech_found:
                             # print('+Detected speech at ' + str(raw_data_recv_time))
                             is_speech_active = True
@@ -288,19 +292,21 @@ async def _websocket_util(
                 else:
                     continue
                 
-                elapsed_time = time.time() - timer_start
-                if elapsed_time < audio_sleep_cursor + REALTIME_RESOLUTION:
-                    sleep_time = (audio_sleep_cursor + REALTIME_RESOLUTION) - elapsed_time
-                    await asyncio.sleep(sleep_time)
+                # elapsed_time = time.time() - timer_start
+                # if elapsed_time < audio_cursor + REALTIME_RESOLUTION:
+                #     sleep_time = (audio_cursor + REALTIME_RESOLUTION) - elapsed_time
+                    # await asyncio.sleep(sleep_time)
                     
                 databuffer.extend(data)
-                audio_sleep_cursor += REALTIME_RESOLUTION
+                # audio_cursor += REALTIME_RESOLUTION
                 
                 if len(databuffer) < window_size_bytes: #Batching to decrease io to stt
                     continue
 
                 if soniox_socket is not None:
                     await soniox_socket.send(databuffer)
+                    # loop = asyncio.get_event_loop()
+                    # threading.Thread(target=send_data_to_stt_threading, args=(databuffer, loop, soniox_socket)).start()
 
                 if speechmatics_socket1 is not None:
                     await speechmatics_socket1.send(databuffer)
@@ -308,13 +314,15 @@ async def _websocket_util(
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
                     if elapsed_seconds > duration or not dg_socket2:
-                        dg_socket1.send(databuffer)
+                        # dg_socket1.send(databuffer)
+                        threading.Thread(target=dg_socket1.send, args=(databuffer,)).start()
                         if dg_socket2:
                             print('Killing socket2')
                             dg_socket2.finish()
                             dg_socket2 = None
                     else:
-                        dg_socket2.send(databuffer)
+                        # dg_socket2.send(databuffer)
+                        threading.Thread(target=dg_socket2.send, args=(databuffer,)).start()
 
                 databuffer = bytearray(b"")
 
