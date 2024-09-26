@@ -239,5 +239,6 @@ uvloop==0.20.0
 watchdog==4.0.2
 watchfiles==0.22.0
 wcwidth==0.2.13
+webrtcvad==2.0.10
 websockets==12.0
 yarl==1.9.4
