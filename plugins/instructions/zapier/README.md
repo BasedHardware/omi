@@ -1,4 +1,5 @@
-1. Connect to Zapier and find the Secret Key 👉 [Zapier x Friend](https://based-hardware--plugins-api.modal.run/setup-zapier).
+1. Accept [beta-test invitation](https://zapier.com/developer/public-invite/209831/fdb4140323d1870eb9f72c76c864c8e0/)
+2.  Connect to Zapier and find the Secret Key 👉 [Zapier x Friend](https://based-hardware--plugins-api.modal.run/setup-zapier).
 
 #### --
 
