@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
 from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing
-from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory, ProcessingMemoryStatus
+from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory, ProcessingMemoryStatus, DetailProcessingMemory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
@@ -55,12 +55,12 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
 
     return memory, messages, processing_memory
 
-def get_processing_memory(uid: str, id: str, ) -> BasicProcessingMemory:
+def get_processing_memory(uid: str, id: str, ) -> DetailProcessingMemory:
     processing_memory = processing_memories_db.get_processing_memory_by_id(uid, id)
     if not processing_memory:
         print("processing memory is not found")
         return
-    processing_memory = BasicProcessingMemory(**processing_memory)
+    processing_memory = DetailProcessingMemory(**processing_memory)
 
     return processing_memory
 

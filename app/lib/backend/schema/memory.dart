@@ -80,6 +80,7 @@ class ServerProcessingMemory {
   final DateTime? startedAt;
   final DateTime? capturingTo;
   final ServerProcessingMemoryStatus? status;
+  final List<TranscriptSegment> transcriptSegments;
 
   ServerProcessingMemory({
     required this.id,
@@ -87,6 +88,7 @@ class ServerProcessingMemory {
     this.startedAt,
     this.capturingTo,
     this.status,
+    this.transcriptSegments = const [],
   });
 
   factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
@@ -96,6 +98,9 @@ class ServerProcessingMemory {
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
       capturingTo: json['capturing_to'] != null ? DateTime.parse(json['capturing_to']).toLocal() : null,
       status: json['status'] != null ? ServerProcessingMemoryStatus.valuesFromString(json['status']) : null,
+      transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
+          .map((segment) => TranscriptSegment.fromJson(segment))
+          .toList(),
     );
   }
 
@@ -106,6 +111,7 @@ class ServerProcessingMemory {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'capturing_to': capturingTo?.toUtc().toIso8601String(),
       'status': status.toString(),
+      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
     };
   }
 

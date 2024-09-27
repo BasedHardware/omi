@@ -79,10 +79,6 @@ class CaptureProvider extends ChangeNotifier
 
   // -----------------------
   // Memory creation variables
-  double? streamStartedAtSecond;
-  DateTime? firstStreamReceivedAt;
-  int? secondsMissedOnReconnect;
-  WavBytesUtil? audioStorage;
   String conversationId = const Uuid().v4();
   int elapsedSeconds = 0;
   List<int> currentStorageFiles = <int>[];
@@ -163,19 +159,32 @@ class CaptureProvider extends ChangeNotifier
     }
     _setCapturingProcessingMemory(result?.result);
 
+    // Set pre-segements
+    if (capturingProcessingMemory != null && (capturingProcessingMemory?.transcriptSegments ?? []).isNotEmpty) {
+      List<TranscriptSegment> transcriptSegments = capturingProcessingMemory!.transcriptSegments;
+      if (segments.isNotEmpty) {
+        int idx = transcriptSegments.indexWhere((e) => e.end > segments.first.start) - 1;
+        if (idx >= 0) {
+          transcriptSegments = transcriptSegments.sublist(0, idx);
+        }
+        transcriptSegments.addAll(segments);
+      }
+      segments = transcriptSegments;
+      setHasTranscripts(segments.isNotEmpty);
+    }
+
     // Update processing memory
     _updateProcessingMemory();
   }
 
   void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
+    var now = DateTime.now();
     debugPrint("${pm?.toJson()}");
     if (pm != null &&
         pm.status == ServerProcessingMemoryStatus.capturing &&
         pm.capturingTo != null &&
-        pm.capturingTo!.isAfter(DateTime.now())) {
+        pm.capturingTo!.isAfter(now)) {
       capturingProcessingMemory = pm;
-
-      // TODO: thinh, might set pre-segments
     } else {
       capturingProcessingMemory = null;
     }
@@ -189,7 +198,7 @@ class CaptureProvider extends ChangeNotifier
     // Or watch
     var id = capturingProcessingMemory!.id;
     var delayMs = capturingProcessingMemory?.capturingTo != null
-        ? capturingProcessingMemory!.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
+        ? capturingProcessingMemory!.capturingTo!.millisecondsSinceEpoch - now.millisecondsSinceEpoch
         : 2 * 60 * 1000; // 2m
     if (delayMs > 0) {
       _processingMemoryWatchTimer?.cancel();
@@ -354,13 +363,8 @@ class CaptureProvider extends ChangeNotifier
   Future _clean() async {
     segments = [];
 
-    audioStorage?.clearAudioBytes();
-
     elapsedSeconds = 0;
 
-    streamStartedAtSecond = null;
-    firstStreamReceivedAt = null;
-    secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
 
@@ -431,17 +435,10 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
-
-    if (segments.isNotEmpty) {
-      // means that it was a reconnection, so we need to reset
-      streamStartedAtSecond = null;
-      secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
-    }
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
-    audioStorage = WavBytesUtil(codec: codec);
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
@@ -449,8 +446,6 @@ class CaptureProvider extends ChangeNotifier
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
-        // audioStorage!.storeFramePacket(value);
-        // print('audioStorage: ${audioStorage!.frames.length} ${audioStorage!.rawPackets.length}');
 
         final trimmedValue = value.sublist(3);
 
@@ -861,18 +856,11 @@ class CaptureProvider extends ChangeNotifier
       // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
       //  losing from the audio the first part of the recording. All other parts are fine.
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
-      var removeUpToSecond = newSegments[0].start.toInt();
-      audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
-      firstStreamReceivedAt = DateTime.now();
     }
 
-    streamStartedAtSecond ??= newSegments[0].start;
     TranscriptSegment.combineSegments(
       segments,
       newSegments,
-      toRemoveSeconds: streamStartedAtSecond ?? 0,
-      toAddSeconds: secondsMissedOnReconnect ?? 0,
     );
     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
       messageProvider?.addMessage(v);
