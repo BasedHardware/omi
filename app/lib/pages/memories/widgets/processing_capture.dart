@@ -26,7 +26,6 @@ class MemoryCaptureWidget extends StatefulWidget {
 }
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
-
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -38,8 +37,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       bool isConnected = deviceProvider.connectedDevice != null ||
           provider.recordingState == RecordingState.record ||
           (provider.memoryCreating && deviceProvider.connectedDevice != null);
+      bool havingCapturingMemory = provider.capturingProcessingMemory != null;
 
-      return (showPhoneMic || isConnected)
+      return (showPhoneMic || isConnected || havingCapturingMemory)
           ? GestureDetector(
               onTap: () async {
                 if (provider.segments.isEmpty && provider.photos.isEmpty) return;
@@ -108,6 +108,10 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   }
 
   _getMemoryHeader(BuildContext context) {
+    // Processing memory
+    var provider = context.read<CaptureProvider>();
+    bool havingCapturingMemory = provider.capturingProcessingMemory != null;
+
     // Connected device
     var deviceProvider = context.read<DeviceProvider>();
 
@@ -138,9 +142,35 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          deviceProvider.connectedDevice == null &&
+                  !deviceProvider.isConnecting &&
+                  !isUsingPhoneMic &&
+                  havingCapturingMemory
+              ? Row(
+                  children: [
+                    const Text(
+                      '🎙️',
+                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        'Waiting for reconnect...',
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
           // mic
           // TODO: improve phone recording UI
-          deviceProvider.connectedDevice == null && !deviceProvider.isConnecting
+          deviceProvider.connectedDevice == null && !deviceProvider.isConnecting && !havingCapturingMemory
               ? Center(
                   child: getPhoneMicRecordingButton(
                     context,

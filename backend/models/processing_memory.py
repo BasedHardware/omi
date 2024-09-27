@@ -60,4 +60,4 @@ class BasicProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
 
 class BasicProcessingMemoriesResponse(BaseModel):
-    result: [BasicProcessingMemory]
+    result: List[BasicProcessingMemory]
