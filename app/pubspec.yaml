@@ -90,7 +90,6 @@ dependencies:
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
-  gleap_sdk: ^13.9.1
   web_socket_channel: ^3.0.1
   talker_flutter:
   intercom_flutter:
@@ -107,16 +106,16 @@ dependency_overrides:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
       path: opus_flutter_android
-  # flutter_blue_plus:
+    # flutter_blue_plus:
     # git:
     #   url: https://github.com/chipweinberger/flutter_blue_plus
     #   ref: 1.32.13
     #   version: ^1.32.13
   manage_calendar_events:
     git:
-       url: https://github.com/beastoin/manage_calendar_events
-       ref: master
-       version: ^2.0.4
+      url: https://github.com/beastoin/manage_calendar_events
+      ref: master
+      version: ^2.0.4
 
 
 dev_dependencies:
