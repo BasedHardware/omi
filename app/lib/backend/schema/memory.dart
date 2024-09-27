@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/message.dart';
@@ -57,15 +58,35 @@ class MemoryPostProcessing {
   toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
 }
 
+enum ServerProcessingMemoryStatus {
+  capturing('capturing'),
+  processing('processing'),
+  done('done'),
+  unknown('unknown'),
+  ;
+
+  final String value;
+  const ServerProcessingMemoryStatus(this.value);
+
+  static ServerProcessingMemoryStatus valuesFromString(String value) {
+    return ServerProcessingMemoryStatus.values.firstWhereOrNull((e) => e.value == value) ??
+        ServerProcessingMemoryStatus.unknown;
+  }
+}
+
 class ServerProcessingMemory {
   final String id;
   final DateTime createdAt;
   final DateTime? startedAt;
+  final DateTime? capturingTo;
+  final ServerProcessingMemoryStatus? status;
 
   ServerProcessingMemory({
     required this.id,
     required this.createdAt,
     this.startedAt,
+    this.capturingTo,
+    this.status,
   });
 
   factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
@@ -73,6 +94,8 @@ class ServerProcessingMemory {
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
+      capturingTo: json['capturing_to'] != null ? DateTime.parse(json['capturing_to']).toLocal() : null,
+      status: json['status'] != null ? ServerProcessingMemoryStatus.valuesFromString(json['status']) : null,
     );
   }
 
@@ -81,6 +104,8 @@ class ServerProcessingMemory {
       'id': id,
       'created_at': createdAt.toUtc().toIso8601String(),
       'started_at': startedAt?.toUtc().toIso8601String(),
+      'capturing_to': capturingTo?.toUtc().toIso8601String(),
+      'status': status.toString(),
     };
   }
 
@@ -94,6 +119,18 @@ class ServerProcessingMemory {
 
   Color getTagColor() {
     return Colors.grey.shade800;
+  }
+}
+
+class ProcessingMemoryResponse {
+  final ServerProcessingMemory? result;
+
+  ProcessingMemoryResponse({required this.result});
+
+  factory ProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
+    return ProcessingMemoryResponse(
+      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
+    );
   }
 }
 

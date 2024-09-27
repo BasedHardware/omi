@@ -92,6 +92,8 @@ class CaptureProvider extends ChangeNotifier
   // -----------------------
 
   String? processingMemoryId;
+  ServerProcessingMemory? capturingProcessingMemory;
+  Timer? _processingMemoryWatchTimer;
 
   String dateTimeStorageString = "";
 
@@ -151,7 +153,55 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
     this.processingMemoryId = processingMemoryId;
+
+    // Fetch and watch capturing status
+    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(
+      id: processingMemoryId,
+    );
+    if (result?.result == null) {
+      debugPrint("Can not fetch processing memory, result null");
+    }
+    _setCapturingProcessingMemory(result?.result);
+
+    // Update processing memory
     _updateProcessingMemory();
+  }
+
+  void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
+    debugPrint("${pm?.toJson()}");
+    if (pm != null &&
+        pm.status == ServerProcessingMemoryStatus.capturing &&
+        pm.capturingTo != null &&
+        pm.capturingTo!.isAfter(DateTime.now())) {
+      capturingProcessingMemory = pm;
+
+      // TODO: thinh, might set pre-segments
+    } else {
+      capturingProcessingMemory = null;
+    }
+    notifyListeners();
+
+    // End
+    if (capturingProcessingMemory == null) {
+      return;
+    }
+
+    // Or watch
+    var id = capturingProcessingMemory!.id;
+    var delayMs = capturingProcessingMemory?.capturingTo != null
+        ? capturingProcessingMemory!.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
+        : 2 * 60 * 1000; // 2m
+    if (delayMs > 0) {
+      _processingMemoryWatchTimer?.cancel();
+      _processingMemoryWatchTimer = Timer(Duration(milliseconds: delayMs), () async {
+        ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: id);
+        if (result?.result == null) {
+          debugPrint("Can not fetch processing memory, result null");
+          return;
+        }
+        _setCapturingProcessingMemory(result?.result);
+      });
+    }
   }
 
   Future<void> _onMemoryCreated(ServerMessageEvent event) async {
@@ -313,7 +363,10 @@ class CaptureProvider extends ChangeNotifier
     secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
+
     processingMemoryId = null;
+    capturingProcessingMemory = null;
+    _processingMemoryWatchTimer?.cancel();
   }
 
   Future _cleanNew() async {
@@ -656,6 +709,7 @@ class CaptureProvider extends ChangeNotifier
     _memoryCreationTimer?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
+    _processingMemoryWatchTimer?.cancel();
     super.dispose();
   }
 
@@ -715,12 +769,13 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    _clean();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    notifyListeners();
+    // Wait reconnect
+    if (capturingProcessingMemory == null) {
+      _clean();
+      setMemoryCreating(false);
+      setHasTranscripts(false);
+      notifyListeners();
+    }
 
     // Keep alived
     _startKeepAlivedServices();
