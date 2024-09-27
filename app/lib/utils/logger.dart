@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gleap_sdk/gleap_sdk.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 class Logger {
@@ -39,6 +39,7 @@ class Logger {
 class LoggerSnackbar extends StatelessWidget {
   final TalkerError? error;
   final TalkerException? exception;
+
   const LoggerSnackbar({super.key, this.error, this.exception}) : assert(error != null || exception != null);
 
   @override
@@ -62,7 +63,7 @@ class LoggerSnackbar extends StatelessWidget {
           icon: const Icon(Icons.share, color: Colors.white),
           onPressed: () async {
             // TODO: Have a custom form which can be prefilled with the error stack trace instead of opening the Gleap Homepage
-            await Gleap.open();
+            await Intercom.instance.displayMessenger();
           },
         ),
       ),

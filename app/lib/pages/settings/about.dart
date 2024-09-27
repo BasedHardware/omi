@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/settings/webview.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:gleap_sdk/gleap_sdk.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {
@@ -53,8 +53,8 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               subtitle: const Text('team@basedhardware.com'),
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               trailing: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 20),
-              onTap: () {
-                Gleap.open();
+              onTap: () async {
+                await Intercom.instance.displayMessenger();
               },
             ),
             ListTile(
