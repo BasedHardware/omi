@@ -14,7 +14,7 @@ import database.memories as memories_db
 import database.processing_memories as processing_memories_db
 from models.memory import Memory, TranscriptSegment
 from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
-from models.processing_memory import ProcessingMemory
+from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
@@ -363,14 +363,16 @@ async def _websocket_util(
 
         # Check the last processing memory
         last_processing_memory_data = processing_memories_db.get_last(uid)
+        now_ts = time.time()
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            last_segment_end = 0
-            for segment in last_processing_memory.transcript_segments:
-                last_segment_end = max(last_segment_end, segment.end)
-            timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
-            if timer_segment_start + last_segment_end + min_seconds_limit > time.time():
-                processing_memory = last_processing_memory
+            if not last_processing_memory.capturing_to or last_processing_memory.capturing_to.timestamp() > now_ts:
+                last_segment_end = 0
+                for segment in last_processing_memory.transcript_segments:
+                    last_segment_end = max(last_segment_end, segment.end)
+                timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
+                if timer_segment_start + last_segment_end + min_seconds_limit > now_ts:
+                    processing_memory = last_processing_memory
 
         # Or create new
         if not processing_memory:
@@ -381,6 +383,10 @@ async def _websocket_util(
                 timer_segment_start=timer_start + segment_start,
                 language=language,
             )
+
+        # Status, capturing to
+        processing_memory.status = ProcessingMemoryStatus.Capturing
+        processing_memory.capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
 
         # Track session changes
         processing_memory.session_id = session_id
@@ -477,6 +483,13 @@ async def _websocket_util(
 
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
+
+        # Update processing memory status
+        processing_memory.status = ProcessingMemoryStatus.Done
+        processing_memories_db.update_processing_memory_status(
+            uid, processing_memory.id,
+            processing_memory.status,
+        )
 
         # Message: completed
         msg = NewMemoryCreated(
