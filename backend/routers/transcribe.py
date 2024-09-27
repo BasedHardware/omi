@@ -95,6 +95,8 @@ async def _websocket_util(
     else:
         stt_service = STTService.deepgram
 
+    stt_service = STTService.deepgram
+
     try:
         await websocket.accept()
     except RuntimeError as e:
