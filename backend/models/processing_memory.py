@@ -45,6 +45,17 @@ class BasicProcessingMemory(BaseModel):
 
     memory_id: Optional[str] = None
 
+class DetailProcessingMemory(BaseModel):
+    id: str
+    timer_start: float
+    created_at: datetime
+    capturing_to: Optional[datetime] = None
+    status: Optional[ProcessingMemoryStatus] = None
+    geolocation: Optional[Geolocation] = None
+    emotional_feedback: Optional[bool] = False
+    transcript_segments: List[TranscriptSegment] = []
+    memory_id: Optional[str] = None
+
 
 class UpdateProcessingMemory(BaseModel):
     id: Optional[str] = None
@@ -55,6 +66,10 @@ class UpdateProcessingMemory(BaseModel):
 
 class UpdateProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
+
+class DetailProcessingMemoryResponse(BaseModel):
+    result: DetailProcessingMemory
+
 
 class BasicProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
