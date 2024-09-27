@@ -5,7 +5,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
-import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -105,7 +104,6 @@ class AuthenticationProvider extends BaseProvider {
       String newUid = user.uid;
       SharedPreferencesUtil().uid = newUid;
       MixpanelManager().identify();
-      identifyGleap();
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError('Unexpected error signing in, please try again');

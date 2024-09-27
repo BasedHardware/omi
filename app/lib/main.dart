@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -30,12 +31,10 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/gleap.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
-import 'package:gleap_sdk/gleap_sdk.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -67,14 +66,12 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
-  if (Env.gleapApiKey != null) Gleap.initialize(token: Env.gleapApiKey!);
   bool isAuth = false;
   try {
     isAuth = (await getIdToken()) != null;
   } catch (e) {} // if no connect this will fail
 
   if (isAuth) MixpanelManager().identify();
-  if (isAuth) identifyGleap();
   initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
