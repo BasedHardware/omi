@@ -12,6 +12,7 @@ getDialog(
   String content, {
   bool singleButton = false,
   String okButtonText = 'Ok',
+  String cancelButtonText = 'Cancel',
 }) {
   var actions = singleButton
       ? [
@@ -23,7 +24,7 @@ getDialog(
       : [
           TextButton(
             onPressed: () => onCancel(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            child: Text(cancelButtonText, style: TextStyle(color: Colors.white)),
           ),
           TextButton(
               onPressed: () => onConfirm(), child: Text(okButtonText, style: const TextStyle(color: Colors.white))),
