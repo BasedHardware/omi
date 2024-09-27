@@ -438,6 +438,13 @@ async def _websocket_util(
                 list(map(lambda m: m.dict(), processing_memory.transcript_segments))
             )
 
+        # Update processing memory status
+        processing_memory.status = ProcessingMemoryStatus.Processing
+        processing_memories_db.update_processing_memory_status(
+            uid, processing_memory.id,
+            processing_memory.status,
+        )
+
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
         if not ok:

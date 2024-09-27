@@ -86,6 +86,25 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
   return [];
 }
 
+Future<List<ServerProcessingMemory>> getProcessingMemories(
+    {List<String> filterIds = const [], int limit = 5, int offset = 0}) async {
+  var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/processing-memories?filter_ids=${filterIds.join(",")}limit=$limit&offset=$offset',
+      headers: {},
+      method: 'GET',
+      body: '');
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
+    var body = utf8.decode(response.bodyBytes);
+    var memories =
+        (jsonDecode(body)["result"] as List<dynamic>).map((memory) => ServerProcessingMemory.fromJson(memory)).toList();
+    debugPrint('getProcessingMemories length: ${memories.length}');
+    return memories;
+  }
+  return [];
+}
+
 Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess',
