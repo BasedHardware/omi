@@ -64,12 +64,17 @@ def get_processing_memory(uid: str, id: str, ) -> DetailProcessingMemory:
 
     return processing_memory
 
-def get_processing_memories(uid: str) -> [BasicProcessingMemory]:
-    processing_memories = processing_memories_db.get_processing_memories(uid, statuses=[ProcessingMemoryStatus.Processing], limit=5)
+def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) -> [DetailProcessingMemory]:
+    processing_memories = []
+    if len(filter_ids) > 0:
+        processing_memories = processing_memories_db.get_processing_memories(uid, filter_ids=filter_ids, limit=limit)
+    else:
+        processing_memories = processing_memories_db.get_processing_memories(uid, statuses=[ProcessingMemoryStatus.Processing], limit=limit)
+
     if not processing_memories or len(processing_memories) == 0:
         return []
 
-    return [BasicProcessingMemory(**processing_memory) for processing_memory in processing_memories]
+    return [DetailProcessingMemory(**processing_memory) for processing_memory in processing_memories]
 
 
 def update_basic_processing_memory(uid: str,

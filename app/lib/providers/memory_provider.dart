@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -15,6 +17,9 @@ class MemoryProvider extends ChangeNotifier {
   bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
+
+  List<ServerProcessingMemory> processingMemories = [];
+  Timer? _processingMemoryWatchTimer;
 
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
@@ -36,6 +41,16 @@ class MemoryProvider extends ChangeNotifier {
       SharedPreferencesUtil().cachedMemories = memories;
     }
     groupMemoriesByDate();
+
+    // Processing memories
+    processingMemories = await getProcessingMemories();
+    debugPrint("Get processing memories ${processingMemories.length}");
+    if (processingMemories.isNotEmpty) {
+      _trackProccessingMemories();
+    } else {
+      _processingMemoryWatchTimer?.cancel();
+    }
+
     notifyListeners();
   }
 
@@ -72,6 +87,22 @@ class MemoryProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  void _trackProccessingMemories() {
+    _processingMemoryWatchTimer?.cancel();
+    _processingMemoryWatchTimer = Timer(const Duration(seconds: 15), () async {
+      debugPrint("processing memory tracking...");
+      if (processingMemories.isEmpty) {
+        return;
+      }
+      var filterIds = processingMemories.map((m) => m.id).toList();
+      var pms = await getProcessingMemories(filterIds: filterIds);
+      for (var i = 0; i < pms.length; i++) {
+		// TODO: thinh
+        debugPrint("Processing memory tracking ${pms[i].id} - ${pms[i].status}");
+      }
+    });
   }
 
   Future getMemoriesFromServer() async {
@@ -227,5 +258,11 @@ class MemoryProvider extends ChangeNotifier {
     deleteMemoryServer(memory.id);
     filterGroupedMemories('');
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _processingMemoryWatchTimer?.cancel();
+    super.dispose();
   }
 }

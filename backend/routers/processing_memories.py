@@ -1,7 +1,8 @@
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 import utils.processing_memories as processing_memory_utils
-from models.processing_memory import UpdateProcessingMemoryResponse, UpdateProcessingMemory, BasicProcessingMemoryResponse, BasicProcessingMemoriesResponse, DetailProcessingMemoryResponse
+from models.processing_memory import UpdateProcessingMemoryResponse, UpdateProcessingMemory, BasicProcessingMemoryResponse, BasicProcessingMemoriesResponse, DetailProcessingMemoryResponse, DetailProcessingMemoriesResponse
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -51,16 +52,16 @@ def get_processing_memory(
 
     return DetailProcessingMemoryResponse(result=processing_memory)
 
-@router.get("/v1/processing-memories", response_model=BasicProcessingMemoriesResponse,
+@router.get("/v1/processing-memories", response_model=DetailProcessingMemoriesResponse,
             tags=['processing_memories'])
-def list_processing_memory(uid: str = Depends(auth.get_current_user_uid),):
+def list_processing_memory(uid: str = Depends(auth.get_current_user_uid), filter_ids: List[str] = []):
     """
     List ProcessingMemory endpoint.
     :param uid: user id.
     :return: The list of processing_memories.
     """
-    processing_memories = processing_memory_utils.get_processing_memories(uid)
+    processing_memories = processing_memory_utils.get_processing_memories(uid, filter_ids=filter_ids, limit=3)
     if not processing_memories or len(processing_memories) == 0:
-        return BasicProcessingMemoriesResponse(result=[])
+        return DetailProcessingMemoriesResponse(result=[])
 
-    return BasicProcessingMemoriesResponse(result=list(processing_memories))
+    return DetailProcessingMemoriesResponse(result=list(processing_memories))

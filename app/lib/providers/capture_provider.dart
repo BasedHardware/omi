@@ -161,15 +161,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Set pre-segements
     if (capturingProcessingMemory != null && (capturingProcessingMemory?.transcriptSegments ?? []).isNotEmpty) {
-      List<TranscriptSegment> transcriptSegments = capturingProcessingMemory!.transcriptSegments;
-      if (segments.isNotEmpty) {
-        int idx = transcriptSegments.indexWhere((e) => e.end > segments.first.start) - 1;
-        if (idx >= 0) {
-          transcriptSegments = transcriptSegments.sublist(0, idx);
-        }
-        transcriptSegments.addAll(segments);
-      }
-      segments = transcriptSegments;
+      segments = capturingProcessingMemory!.transcriptSegments;
       setHasTranscripts(segments.isNotEmpty);
     }
 
