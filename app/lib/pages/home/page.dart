@@ -22,6 +22,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/services/notifications.dart';
+import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -45,11 +46,11 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (SharedPreferencesUtil().notificationsEnabled != await Permission.notification.isGranted) {
         SharedPreferencesUtil().notificationsEnabled = await Permission.notification.isGranted;
-        MixpanelManager().setUserProperty('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+        AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
       }
       if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
-        MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+        AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
