@@ -42,7 +42,6 @@ class BasicProcessingMemory(BaseModel):
     status: Optional[ProcessingMemoryStatus] = None
     geolocation: Optional[Geolocation] = None
     emotional_feedback: Optional[bool] = False
-
     memory_id: Optional[str] = None
 
 class DetailProcessingMemory(BaseModel):
@@ -71,8 +70,13 @@ class DetailProcessingMemoryResponse(BaseModel):
     result: DetailProcessingMemory
 
 
+class DetailProcessingMemoriesResponse(BaseModel):
+    result: List[DetailProcessingMemory]
+
+
 class BasicProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
+
 
 class BasicProcessingMemoriesResponse(BaseModel):
     result: List[BasicProcessingMemory]

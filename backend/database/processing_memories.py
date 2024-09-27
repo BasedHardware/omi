@@ -4,16 +4,6 @@ from ._client import db
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-def get_processing_memories(uid: str, statuses: [str], limit: int = 5):
-    processing_memories_ref = (
-        db.collection('users').document(uid).collection('processing_memories')
-    )
-    if len(statuses) > 0:
-        processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('status', 'in', statuses))
-    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    processing_memories_ref = processing_memories_ref.limit(limit)
-    return [doc.to_dict() for doc in processing_memories_ref.stream()]
-
 def upsert_processing_memory(uid: str, processing_memory_data: dict):
     user_ref = db.collection('users').document(uid)
     processing_memory_ref = user_ref.collection('processing_memories').document(processing_memory_data['id'])
@@ -46,6 +36,18 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
 def get_processing_memory_by_id(uid, processing_memory_id):
     memory_ref = db.collection('users').document(uid).collection('processing_memories').document(processing_memory_id)
     return memory_ref.get().to_dict()
+
+def get_processing_memories(uid: str, statuses: [str] = [], filter_ids: [str] = [], limit: int = 5):
+    processing_memories_ref = (
+        db.collection('users').document(uid).collection('processing_memories')
+    )
+    if len(statuses) > 0:
+        processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if len(filter_ids) > 0:
+        processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('id', 'in', filter_ids))
+    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    processing_memories_ref = processing_memories_ref.limit(limit)
+    return [doc.to_dict() for doc in processing_memories_ref.stream()]
 
 def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
