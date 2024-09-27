@@ -1,10 +1,17 @@
 from datetime import datetime
 from typing import List, Optional
+from enum import Enum
 
 from pydantic import BaseModel
 
 from models.memory import Geolocation
 from models.transcript_segment import TranscriptSegment
+
+
+class ProcessingMemoryStatus(str, Enum):
+    Capturing = 'capturing'
+    Processing = 'processing'
+    Done = 'done'
 
 
 class ProcessingMemory(BaseModel):
@@ -13,6 +20,8 @@ class ProcessingMemory(BaseModel):
     session_ids: List[str] = []
     audio_url: Optional[str] = None
     created_at: datetime
+    capturing_to: Optional[datetime] = None
+    status: Optional[ProcessingMemoryStatus] = None
     timer_start: float
     timer_segment_start: Optional[float] = None
     timer_starts: List[float] = []
@@ -29,15 +38,26 @@ class BasicProcessingMemory(BaseModel):
     id: str
     timer_start: float
     created_at: datetime
+    capturing_to: Optional[datetime] = None
+    status: Optional[ProcessingMemoryStatus] = None
     geolocation: Optional[Geolocation] = None
     emotional_feedback: Optional[bool] = False
+
+    memory_id: Optional[str] = None
 
 
 class UpdateProcessingMemory(BaseModel):
     id: Optional[str] = None
+    capturing_to: Optional[datetime] = None
     geolocation: Optional[Geolocation] = None
     emotional_feedback: Optional[bool] = False
 
 
 class UpdateProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
+
+class BasicProcessingMemoryResponse(BaseModel):
+    result: BasicProcessingMemory
+
+class BasicProcessingMemoriesResponse(BaseModel):
+    result: [BasicProcessingMemory]

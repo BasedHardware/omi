@@ -1,7 +1,18 @@
+from datetime import datetime
+from typing import List
 from ._client import db
 from google.cloud import firestore
-from typing import List
+from google.cloud.firestore_v1 import FieldFilter
 
+def get_processing_memories(uid: str, statuses: [str], limit: int = 5):
+    processing_memories_ref = (
+        db.collection('users').document(uid).collection('processing_memories')
+    )
+    if len(statuses) > 0:
+        processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('status', 'in', statuses))
+    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    processing_memories_ref = processing_memories_ref.limit(limit)
+    return [doc.to_dict() for doc in processing_memories_ref.stream()]
 
 def upsert_processing_memory(uid: str, processing_memory_data: dict):
     user_ref = db.collection('users').document(uid)
@@ -41,12 +52,20 @@ def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({'transcript_segments': segments})
 
-def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool):
+def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool, capturing_to: datetime):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({
         'emotional_feedback': emotional_feedback,
         'geolocation':geolocation,
+        'capturing_to':capturing_to,
+    })
+
+def update_processing_memory_status(uid: str, id: str, status: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('processing_memories').document(id)
+    memory_ref.update({
+        'status': status,
     })
 
 def update_audio_url(uid: str, id: str, audio_url: str):
