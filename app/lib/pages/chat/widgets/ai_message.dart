@@ -121,7 +121,8 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
       updateMemory: updateMemory,
     );
   } else if (message.type == MessageType.daySummary) {
-    return DaySummaryWidget(showTypingIndicator: showTypingIndicator, messageText: message.text);
+    return DaySummaryWidget(
+        showTypingIndicator: showTypingIndicator, messageText: message.text, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text, sendMessage: sendMessage);
@@ -171,8 +172,9 @@ class InitialMessageWidget extends StatelessWidget {
 
 class DaySummaryWidget extends StatelessWidget {
   final bool showTypingIndicator;
+  final DateTime date;
   final String messageText;
-  const DaySummaryWidget({super.key, required this.showTypingIndicator, required this.messageText});
+  const DaySummaryWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.date});
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +183,7 @@ class DaySummaryWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', DateTime.now())}',
+          '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', date)}',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w500,
