@@ -60,7 +60,7 @@ def list_processing_memory(uid: str = Depends(auth.get_current_user_uid), filter
     :param uid: user id.
     :return: The list of processing_memories.
     """
-    processing_memories = processing_memory_utils.get_processing_memories(uid, filter_ids=filter_ids.split(",") if filter_ids else [], limit=3)
+    processing_memories = processing_memory_utils.get_processing_memories(uid, filter_ids=filter_ids.split(",") if filter_ids else [], limit=5)
     if not processing_memories or len(processing_memories) == 0:
         return DetailProcessingMemoriesResponse(result=[])
 
