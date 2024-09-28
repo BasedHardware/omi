@@ -43,7 +43,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: isDeleteing,
+      canPop: !isDeleteing,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
