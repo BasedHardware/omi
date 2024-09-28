@@ -29,6 +29,7 @@ class NewMemoryCreated(MessageEvent):
 
 class NewProcessingMemoryCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
+    memory_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")

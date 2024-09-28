@@ -291,7 +291,7 @@ class CaptureProvider extends ChangeNotifier
 
     // use memory provider to add memory
     MixpanelManager().memoryCreated(memory);
-    memoryProvider?.addMemory(memory);
+    memoryProvider?.upsertMemory(memory);
     if (memoryProvider?.memories.isEmpty ?? false) {
       memoryProvider?.getMoreMemoriesFromServer();
     }
