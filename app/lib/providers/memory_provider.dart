@@ -122,18 +122,21 @@ class MemoryProvider extends ChangeNotifier {
     return;
   }
 
-  Future onNewCombiningMemory(ServerProcessingMemory pm) async {
-    if (pm.memoryId == null) {
-      debugPrint("Processing Memory Id is not found ${pm.id}");
-      return;
+  Future onNewCapturingMemory(ServerProcessingMemory pm) async {
+    // Remove the memory from the main
+    if (pm.memoryId != null) {
+      int idx = memories.indexWhere((m) => m.id == pm.memoryId);
+      if (idx >= 0) {
+        memories.removeAt(idx);
+        filterGroupedMemories('');
+      }
     }
-    int idx = memories.indexWhere((m) => m.id == pm.memoryId);
-    if (idx < 0) {
-      return;
-    }
-    memories.removeAt(idx);
 
-    filterGroupedMemories('');
+    // Tracking the processing status
+    if (pm.status == ServerProcessingMemoryStatus.capturing) {
+      processingMemories.insert(0, pm);
+      _setProcessingMemories(List.from(processingMemories));
+    }
   }
 
   Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
@@ -191,9 +194,9 @@ class MemoryProvider extends ChangeNotifier {
     }
     _processingMemoryWatchTimer?.cancel();
     _processingMemoryWatchTimer = Timer(const Duration(seconds: 7), () async {
-      debugPrint("processing memory tracking...");
       var filterIds = processingMemories
-          .where((m) => m.status == ServerProcessingMemoryStatus.processing)
+          .where((m) =>
+              m.status == ServerProcessingMemoryStatus.processing || m.status == ServerProcessingMemoryStatus.capturing)
           .map((m) => m.id)
           .toList();
       if (filterIds.isEmpty) {
