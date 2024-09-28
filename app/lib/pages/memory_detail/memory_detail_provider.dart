@@ -18,6 +18,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   // late ServerMemory memory;
 
   int memoryIdx = 0;
+  DateTime selectedDate = DateTime.now();
 
   int selectedTab = 0;
   bool isLoading = false;
@@ -28,8 +29,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   final focusOverviewField = FocusNode();
   List<Plugin> pluginsList = [];
 
-  Structured get structured => memoryProvider!.memoriesWithDates[memoryIdx].structured;
-  ServerMemory get memory => memoryProvider!.memoriesWithDates[memoryIdx];
+  Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
+  ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
   List<bool> pluginResponseExpanded = [];
 
   bool editingTitle = false;
@@ -99,8 +100,9 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateMemory(int memIdx) {
+  void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
+    selectedDate = date;
     pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
     notifyListeners();
   }
