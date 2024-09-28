@@ -95,7 +95,6 @@ Future<List<ServerProcessingMemory>> getProcessingMemories(
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body)["result"] as List<dynamic>).map((memory) => ServerProcessingMemory.fromJson(memory)).toList();
-    debugPrint('getProcessingMemories length: ${memories.length}');
     return memories;
   } else {
     debugPrint("[API-Error] $url - ${response.statusCode}");
