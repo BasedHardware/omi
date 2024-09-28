@@ -309,14 +309,10 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
   return SliverList(
     delegate: SliverChildBuilderDelegate(
       (context, index) {
-        if (index == 0) {
-          return const SizedBox(height: 16);
-        }
-
-        var pm = memories[index - 1];
+        var pm = memories[index];
         if (pm.status == ServerProcessingMemoryStatus.processing) {
           return Padding(
-            padding: EdgeInsets.fromLTRB(0, index - 1 == 0 ? 0 : 20, 0, 0),
+            padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
             child: ProcessingMemoryWidget(memory: pm),
           );
         }
@@ -326,7 +322,7 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
 
         return const SizedBox.shrink();
       },
-      childCount: memories.length + 1,
+      childCount: memories.length,
     ),
   );
 }
