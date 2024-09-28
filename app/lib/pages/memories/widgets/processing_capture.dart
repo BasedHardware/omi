@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
+import 'package:friend_private/pages/processing_memories/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -27,7 +29,6 @@ class MemoryCaptureWidget extends StatefulWidget {
 }
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
-
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -39,6 +40,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       bool isConnected = deviceProvider.connectedDevice != null ||
           provider.recordingState == RecordingState.record ||
           (provider.memoryCreating && deviceProvider.connectedDevice != null);
+      bool havingCapturingMemory = provider.capturingProcessingMemory != null;
+
 
       var storageBytes = provider.timeToSend ?? 1;
       var totalTimeSent = provider.timeAlreadySent ?? 1;
@@ -71,7 +74,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
        provider.setStorageIsReady(false);
      }
 
-      return (showPhoneMic || isConnected)
+      return (showPhoneMic || isConnected || havingCapturingMemory)
+
           ? GestureDetector(
               onTap: () async {
                 if (provider.segments.isEmpty && provider.photos.isEmpty) return;
@@ -140,6 +144,10 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   }
 
   _getMemoryHeader(BuildContext context) {
+    // Processing memory
+    var provider = context.read<CaptureProvider>();
+    bool havingCapturingMemory = provider.capturingProcessingMemory != null;
+
     // Connected device
     var deviceProvider = context.read<DeviceProvider>();
 
@@ -170,9 +178,32 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          deviceProvider.connectedDevice == null && !isUsingPhoneMic && havingCapturingMemory
+              ? Row(
+                  children: [
+                    const Text(
+                      '🎙️',
+                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        'Waiting for reconnect...',
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
           // mic
           // TODO: improve phone recording UI
-          deviceProvider.connectedDevice == null && !deviceProvider.isConnecting
+          deviceProvider.connectedDevice == null && !deviceProvider.isConnecting && !havingCapturingMemory
               ? Center(
                   child: getPhoneMicRecordingButton(
                     context,
@@ -305,4 +336,127 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
 
 Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
   return MemoryCaptureWidget(memory: memory);
+}
+
+Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
+  if (memories.isEmpty) {
+    return const SliverToBoxAdapter(child: SizedBox.shrink());
+  }
+  return SliverList(
+    delegate: SliverChildBuilderDelegate(
+      (context, index) {
+        if (index == 0) {
+          return const SizedBox(height: 16);
+        }
+
+        var pm = memories[index - 1];
+        if (pm.status == ServerProcessingMemoryStatus.processing) {
+          return ProcessingMemoryWidget(memory: pm);
+        }
+        if (pm.status == ServerProcessingMemoryStatus.done) {
+          return const SizedBox.shrink();
+        }
+
+        return const SizedBox.shrink();
+      },
+      childCount: memories.length + 1,
+    ),
+  );
+}
+
+// PROCESSING MEMORY
+
+class ProcessingMemoryWidget extends StatefulWidget {
+  final ServerProcessingMemory memory;
+
+  const ProcessingMemoryWidget({
+    super.key,
+    required this.memory,
+  });
+  @override
+  State<ProcessingMemoryWidget> createState() => _ProcessingMemoryWidgetState();
+}
+
+class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
+        builder: (context, provider, deviceProvider, connectivityProvider, child) {
+      return GestureDetector(
+          onTap: () async {
+            if (widget.memory.transcriptSegments.isEmpty) return;
+            routeToPage(
+                context,
+                ProcessingMemoryPage(
+                  memory: widget.memory,
+                ));
+          },
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            width: double.maxFinite,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade900,
+              borderRadius: BorderRadius.circular(16.0),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _getMemoryHeader(context),
+                  widget.memory.transcriptSegments.isNotEmpty
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            getLiteTranscriptWidget(
+                              widget.memory.transcriptSegments,
+                              [],
+                              null,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ],
+              ),
+            ),
+          ));
+    });
+  }
+
+  _getMemoryHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 0, right: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade800,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text(
+                  'Processing',
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          )
+        ],
+      ),
+    );
+  }
 }

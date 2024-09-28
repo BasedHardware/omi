@@ -4,6 +4,7 @@ import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final DeviceInfo deviceInfo;
@@ -129,14 +130,37 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('Current Firmware: ${widget.deviceInfo.firmwareRevision}'),
-                                Text('Latest Firmware: ${latestFirmwareDetails['version']}'),
-                                const SizedBox(height: 10),
                                 Text(
-                                  updateMessage,
-                                  style: const TextStyle(color: Colors.white),
-                                  textAlign: TextAlign.center,
+                                  'Current Version: ${widget.deviceInfo.firmwareRevision}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Latest Version Available: ${latestFirmwareDetails['version']}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                                const SizedBox(height: 16),
+                                if (updateMessage == '0')
+                                  TextButton(
+                                    onPressed: () async {
+                                      await Intercom.instance
+                                          .displayArticle('9918118-updating-the-firmware-on-your-friend-device');
+                                    },
+                                    child: const Text(
+                                      'Open Update Guide',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                if (updateMessage != '0')
+                                  Text(
+                                    updateMessage,
+                                    style: const TextStyle(color: Colors.white),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 const SizedBox(height: 20),
                                 shouldUpdate
                                     ? Container(
