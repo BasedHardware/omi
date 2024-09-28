@@ -13,7 +13,8 @@ import 'package:provider/provider.dart';
 Future updateMemoryDetailProvider(BuildContext context, ServerMemory memory) {
   return Future.microtask(() {
     context.read<MemoryProvider>().addMemory(memory);
-    context.read<MemoryDetailProvider>().updateMemory(0);
+    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    context.read<MemoryDetailProvider>().updateMemory(0, date);
   });
 }
 
@@ -57,6 +58,11 @@ class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
                     memory: context.read<SpeechProfileProvider>().memory!,
                     memoryIdx: 0,
                     isFromOnboarding: true,
+                    date: DateTime(
+                      provider.memory!.createdAt.year,
+                      provider.memory!.createdAt.month,
+                      provider.memory!.createdAt.day,
+                    ),
                   ),
             const SizedBox(height: 24),
             Container(

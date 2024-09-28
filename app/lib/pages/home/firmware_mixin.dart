@@ -106,10 +106,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     Version latestVersion = Version.parse(latestFirmwareDetails['version']);
     Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
     if (currentVersion < minVersion) {
-      return (
-        'The minimum version required to enable OTA Updates is ${minVersion.toString()}. You are on $currentFirmware. Please Update to ${minVersion.toString()} manually.',
-        false
-      );
+      return ('0', false);
     } else {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();

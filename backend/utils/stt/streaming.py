@@ -158,6 +158,9 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
+        # if language == 'es': # TODO: consider it later.
+        #     language = 'multi'
+
         def on_open(self, open, **kwargs):
             print("Connection Open")
 
@@ -240,7 +243,23 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         # 'enable_global_speaker_diarization': False,
         # 'enable_profanity_filter': False,
         # 'enable_dictation': False,
-        # 'speech_context': {},
+        'speech_context': {
+            'entries': [
+                {
+                    'phrases': ['MVP', 'PMF', 'VC', 'API', 'IPO', 'SEO', 'ROI', 'UI', 'UX'],
+                    'boost': 15,
+                },
+                {
+                    'phrases': ['Soniox', 'Deepgram', 'Speechmatics', 'Whisper', 'OpenAI', 'Otter'],
+                    'boost': 15,
+                },
+                {
+                    'phrases': ["Bro", "Sup"],
+                    'boost': 10
+                },
+
+            ]
+        },
         'model': f'{language}_v2_lowlatency'
     }
 

@@ -140,8 +140,7 @@ class MixpanelManager {
 
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
-  void deviceConnected() =>
-      track('Device Connected', properties: {
+  void deviceConnected() => track('Device Connected', properties: {
         ..._preferences.btDeviceStruct.toJson(fwverAsString: true),
       });
 
@@ -278,4 +277,12 @@ class MixpanelManager {
   void assignedSegment(String assignType) => track('Assigned Segment $assignType');
 
   void unassignedSegment() => track('Unassigned Segment');
+
+  void deleteAccountClicked() => track('Delete Account Clicked');
+
+  void deleteAccountConfirmed() => track('Delete Account Confirmed');
+
+  void deleteAccountCancelled() => track('Delete Account Cancelled');
+
+  void deleteUser() => _mixpanel?.getPeople().deleteUser();
 }

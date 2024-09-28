@@ -9,7 +9,7 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:web_socket_channel/io.dart';

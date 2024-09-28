@@ -184,7 +184,7 @@ class WavBytesUtil {
     debugPrint('createWavFile $filename');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
-          debugPrint(' in this branch');
+      debugPrint(' in this branch');
       removeFramesRange(fromSecond: (frames.length ~/ 100) - removeLastNSeconds, toSecond: frames.length ~/ 100);
       framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
     } else {
@@ -369,20 +369,20 @@ class ImageBytesUtil {
 }
 
 class StorageBytesUtil extends WavBytesUtil {
+  StorageBytesUtil() : super();
 
-   StorageBytesUtil() : super();
 // @override
-   int count = 0;
-   List<int> pending = [];
-   List<int> currentStorageList = [];
-   int currentStorageCount = 0;
-   int fileNum = 1;
-   
-   int getFileNum() {
-    return fileNum;
-   }
+  int count = 0;
+  List<int> pending = [];
+  List<int> currentStorageList = [];
+  int currentStorageCount = 0;
+  int fileNum = 1;
 
-  //  void fastStoreFramePacket(value) { //all packets are independent of each other. 
+  int getFileNum() {
+    return fileNum;
+  }
+
+  //  void fastStoreFramePacket(value) { //all packets are independent of each other.
 
   //   if (value.length == 1) {
   //     return;
@@ -398,8 +398,8 @@ class StorageBytesUtil extends WavBytesUtil {
   // pending.addAll(content);
 
   //  }
-   
-   void storeFrameStoragePacket(value) {
+
+  void storeFrameStoragePacket(value) {
     if (value.length == 1) {
       return;
     }
@@ -407,14 +407,14 @@ class StorageBytesUtil extends WavBytesUtil {
       debugPrint('packet too small');
       return;
     }
-    //enforce 
+    //enforce
     // if (value.length ==83 * 5) //83 is one packet, 5 is the packets per bluetooth frame
     rawPackets.add(value);
     int index = value[0] + (value[1] << 8);
     int internal = value[2];
     int amount = value[3];
-    List<int> content = value.sublist(4,4+amount);
-    count =  count +1;
+    List<int> content = value.sublist(4, 4 + amount);
+    count = count + 1;
     // debugPrint('current count: $count');
 
     // Start of a new frame
@@ -454,28 +454,28 @@ class StorageBytesUtil extends WavBytesUtil {
     lastPacketIndex = index; // Update packet id
     // debugPrint('reached end');
   }
-@override
-Future<File> createWav(Uint8List wavBytes,{String? filename}) async {
-  final directory = await getDir();
-  String filename2 = 'recording-$fileNum.wav';
-  final file = File('${directory.path}/$filename2');
-  await file.writeAsBytes(wavBytes);
-  debugPrint('WAV file created: ${file.path}');
-  return file;
-}
 
-@override
-Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
-  Uint8List wavBytes;
+  @override
+  Future<File> createWav(Uint8List wavBytes, {String? filename}) async {
+    final directory = await getDir();
+    String filename2 = 'recording-$fileNum.wav';
+    final file = File('${directory.path}/$filename2');
+    await file.writeAsBytes(wavBytes);
+    debugPrint('WAV file created: ${file.path}');
+    return file;
+  }
+
+  @override
+  Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
+    Uint8List wavBytes;
 
     List<int> decodedSamples = [];
     for (var frame in frames) {
       decodedSamples.addAll(opusDecoder.decode(input: Uint8List.fromList(frame)));
     }
     wavBytes = getUInt8ListBytes(decodedSamples, 16000);
-  return createWav(wavBytes);
-}
+    return createWav(wavBytes);
+  }
 
-static Future<Directory> getDir() => getTemporaryDirectory();
-
+  static Future<Directory> getDir() => getTemporaryDirectory();
 }
