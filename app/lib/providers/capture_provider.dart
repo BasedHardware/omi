@@ -30,7 +30,6 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -246,10 +245,6 @@ class CaptureProvider extends ChangeNotifier
       debugPrint("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    createNotification(
-      title: event.memory!.structured.title,
-      body: event.memory!.structured.overview,
-    );
     _processOnMemoryCreated(event.memory, event.messages ?? []);
   }
 
