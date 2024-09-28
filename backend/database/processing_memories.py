@@ -49,10 +49,13 @@ def get_processing_memories(uid: str, statuses: [str] = [], filter_ids: [str] = 
     processing_memories_ref = processing_memories_ref.limit(limit)
     return [doc.to_dict() for doc in processing_memories_ref.stream()]
 
-def update_processing_memory_segments(uid: str, id: str, segments: List[dict]):
+def update_processing_memory_segments(uid: str, id: str, segments: List[dict], capturing_to: datetime):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
-    memory_ref.update({'transcript_segments': segments})
+    memory_ref.update({
+        'transcript_segments': segments,
+        'capturing_to': capturing_to,
+    })
 
 def update_basic(uid: str, id: str, geolocation: dict, emotional_feedback: bool, capturing_to: datetime):
     user_ref = db.collection('users').document(uid)
