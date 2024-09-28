@@ -7,10 +7,10 @@ import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -96,7 +96,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
+                  await IntercomManager().displayChargingArticle();
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
