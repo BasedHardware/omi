@@ -443,7 +443,7 @@
       "webhook_url": "https://based-hardware--plugins-api.modal.run/conversation-feedback",
       "setup_instructions_file_path": ""
     },
-    "deleted": false
+    "deleted": true
   },
   {
     "id": "emotional-supporter",
@@ -582,6 +582,6 @@
       "setup_completed_url": "https://based-hardware--plugins-api.modal.run/multion/check_setup_completion",
       "setup_instructions_file_path": "/plugins/instructions/multion-amazon/README.md"
     },
-    "deleted": false
+    "deleted": true
   }
 ]
