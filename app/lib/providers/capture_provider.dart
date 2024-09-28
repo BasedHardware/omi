@@ -33,7 +33,6 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/utils/other/notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -82,10 +81,6 @@ class CaptureProvider extends ChangeNotifier
 
   // -----------------------
   // Memory creation variables
-  double? streamStartedAtSecond;
-  DateTime? firstStreamReceivedAt;
-  int? secondsMissedOnReconnect;
-  WavBytesUtil? audioStorage;
   String conversationId = const Uuid().v4();
   int elapsedSeconds = 0;
   List<int> currentStorageFiles = <int>[];
@@ -95,6 +90,8 @@ class CaptureProvider extends ChangeNotifier
   // -----------------------
 
   String? processingMemoryId;
+  ServerProcessingMemory? capturingProcessingMemory;
+  Timer? _processingMemoryWatchTimer;
 
    int totalStorageFileBytes = 0;
    int totalBytesReceived = 0;
@@ -174,9 +171,98 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  Future<void> _onProcessingMemoryStatusChanged(String processingMemoryId, ServerProcessingMemoryStatus status) async {
+    if (capturingProcessingMemory == null || capturingProcessingMemory?.id != processingMemoryId) {
+      debugPrint("Warn: Didn't track processing memory yet $processingMemoryId");
+    }
+
+    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: processingMemoryId);
+    if (result?.result == null) {
+      debugPrint("Can not fetch processing memory, result null");
+      return;
+    }
+    var pm = result!.result!;
+    if (status == ServerProcessingMemoryStatus.processing) {
+      memoryProvider?.onNewProcessingMemory(pm);
+      return;
+    }
+    if (status == ServerProcessingMemoryStatus.done) {
+      memoryProvider?.onProcessingMemoryDone(pm);
+      return;
+    }
+  }
+
   Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
     this.processingMemoryId = processingMemoryId;
+
+    // Fetch and watch capturing status
+    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(
+      id: processingMemoryId,
+    );
+    if (result?.result == null) {
+      debugPrint("Can not fetch processing memory, result null");
+    }
+    _setCapturingProcessingMemory(result?.result);
+
+    // Set pre-segements
+    if (capturingProcessingMemory != null && (capturingProcessingMemory?.transcriptSegments ?? []).isNotEmpty) {
+      segments = capturingProcessingMemory!.transcriptSegments;
+      setHasTranscripts(segments.isNotEmpty);
+    }
+
+    // Notify combining
+    if (capturingProcessingMemory?.memoryId != null) {
+      memoryProvider?.onNewCombiningMemory(capturingProcessingMemory!);
+    }
+
+    // Update processing memory
     _updateProcessingMemory();
+  }
+
+  void _trackCapturingProcessingMemory() {
+    if (capturingProcessingMemory == null) {
+      return;
+    }
+
+    var pm = capturingProcessingMemory!;
+
+    var delayMs = pm.capturingTo != null
+        ? pm.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
+        : 2 * 60 * 1000; // 2m
+    if (delayMs > 0) {
+      _processingMemoryWatchTimer?.cancel();
+      _processingMemoryWatchTimer = Timer(Duration(milliseconds: delayMs), () async {
+        ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: pm.id);
+        if (result?.result == null) {
+          debugPrint("Can not fetch processing memory, result null");
+          return;
+        }
+
+        _setCapturingProcessingMemory(result?.result);
+        if (capturingProcessingMemory == null) {
+          // Force clean
+          _clean();
+        }
+      });
+    }
+  }
+
+  void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
+    if (pm != null &&
+        pm.status == ServerProcessingMemoryStatus.capturing &&
+        pm.capturingTo != null &&
+        pm.capturingTo!.isAfter(DateTime.now())) {
+      capturingProcessingMemory = pm;
+      _trackCapturingProcessingMemory();
+
+      notifyListeners();
+      return;
+    }
+
+    capturingProcessingMemory = null;
+    _processingMemoryWatchTimer?.cancel();
+
+    notifyListeners();
   }
 
   Future<void> _onMemoryCreated(ServerMessageEvent event) async {
@@ -184,10 +270,6 @@ class CaptureProvider extends ChangeNotifier
       debugPrint("Memory is not found, processing memory ${event.processingMemoryId}");
       return;
     }
-    createNotification(
-      title: event.memory!.structured.title,
-      body: event.memory!.structured.overview,
-    );
     _processOnMemoryCreated(event.memory, event.messages ?? []);
   }
 
@@ -229,7 +311,7 @@ class CaptureProvider extends ChangeNotifier
 
     // use memory provider to add memory
     MixpanelManager().memoryCreated(memory);
-    memoryProvider?.addMemory(memory);
+    memoryProvider?.upsertMemory(memory);
     if (memoryProvider?.memories.isEmpty ?? false) {
       memoryProvider?.getMoreMemoriesFromServer();
     }
@@ -329,16 +411,14 @@ class CaptureProvider extends ChangeNotifier
   Future _clean() async {
     segments = [];
 
-    audioStorage?.clearAudioBytes();
-
     elapsedSeconds = 0;
 
-    streamStartedAtSecond = null;
-    firstStreamReceivedAt = null;
-    secondsMissedOnReconnect = null;
     photos = [];
     conversationId = const Uuid().v4();
+
     processingMemoryId = null;
+    capturingProcessingMemory = null;
+    _processingMemoryWatchTimer?.cancel();
   }
 
   Future _cleanNew() async {
@@ -403,17 +483,10 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
-
-    if (segments.isNotEmpty) {
-      // means that it was a reconnection, so we need to reset
-      streamStartedAtSecond = null;
-      secondsMissedOnReconnect = (DateTime.now().difference(firstStreamReceivedAt!).inSeconds);
-    }
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
-    audioStorage = WavBytesUtil(codec: codec);
     if (_bleBytesStream != null) {
       _bleBytesStream?.cancel();
     }
@@ -421,8 +494,6 @@ class CaptureProvider extends ChangeNotifier
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
-        // audioStorage!.storeFramePacket(value);
-        // print('audioStorage: ${audioStorage!.frames.length} ${audioStorage!.rawPackets.length}');
 
         final trimmedValue = value.sublist(3);
 
@@ -706,7 +777,6 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateFriendAudioStreaming() async {
-    debugPrint('_recordingDevice: $_recordingDevice in initiateFriendAudioStreaming');
     if (_recordingDevice == null) return;
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
@@ -804,6 +874,7 @@ Future<void> initiateStorageBytesStreaming() async {
     _memoryCreationTimer?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
+    _processingMemoryWatchTimer?.cancel();
     super.dispose();
   }
 
@@ -863,12 +934,13 @@ Future<void> initiateStorageBytesStreaming() async {
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    _clean();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    notifyListeners();
+    // Wait reconnect
+    if (capturingProcessingMemory == null) {
+      _clean();
+      setMemoryCreating(false);
+      setHasTranscripts(false);
+      notifyListeners();
+    }
 
     // Keep alived
     _startKeepAlivedServices();
@@ -926,6 +998,15 @@ Future<void> initiateStorageBytesStreaming() async {
       return;
     }
 
+    if (event.type == MessageEventType.processingMemoryStatusChanged) {
+      if (event.processingMemoryId == null || event.processingMemoryStatus == null) {
+        debugPrint("Processing memory message event is invalid");
+        return;
+      }
+      _onProcessingMemoryStatusChanged(event.processingMemoryId!, event.processingMemoryStatus!);
+      return;
+    }
+
     if (event.type == MessageEventType.memoryPostProcessingSuccess) {
       if (event.memoryId == null) {
         debugPrint("Post proccess message event is invalid");
@@ -954,18 +1035,11 @@ Future<void> initiateStorageBytesStreaming() async {
       // TODO: small bug -> when memory A creates, and memory B starts, memory B will clean a lot more seconds than available,
       //  losing from the audio the first part of the recording. All other parts are fine.
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      var currentSeconds = (audioStorage?.frames.length ?? 0) ~/ 100;
-      var removeUpToSecond = newSegments[0].start.toInt();
-      audioStorage?.removeFramesRange(fromSecond: 0, toSecond: min(max(currentSeconds - 5, 0), removeUpToSecond));
-      firstStreamReceivedAt = DateTime.now();
     }
 
-    streamStartedAtSecond ??= newSegments[0].start;
     TranscriptSegment.combineSegments(
       segments,
       newSegments,
-      toRemoveSeconds: streamStartedAtSecond ?? 0,
-      toAddSeconds: secondsMissedOnReconnect ?? 0,
     );
     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
       messageProvider?.addMessage(v);

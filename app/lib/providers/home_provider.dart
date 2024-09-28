@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/analytics/analytics_manager.dart';
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
@@ -45,7 +45,7 @@ class HomeProvider extends ChangeNotifier {
     setSpeakerProfile(res);
     SharedPreferencesUtil().hasSpeakerProfile = res;
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
-    MixpanelManager().setUserProperty('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setIsLoading(false);
     notifyListeners();
   }
