@@ -609,8 +609,13 @@ bool write_to_storage(void) {
 static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
+static int recent_file_size_updated = 0;
 
-
+ void update_file_size() 
+ {
+     file_num_array[0] = get_file_size(1);
+     printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+ }
 
 void pusher(void)
 {
@@ -624,7 +629,22 @@ void pusher(void)
         //
 
         struct bt_conn *conn = current_connection;
-        // bool use_gatt = true;
+        bool use_gatt = true;
+         //updating the most recent file size is expensive!
+         static bool file_size_updated = true;
+         static bool connection_was_true = false;
+         if (conn && !connection_was_true) {
+             k_msleep(100);
+             file_size_updated = false;
+             connection_was_true = true;
+         } else if (!conn) {
+             connection_was_true = false;
+         }
+         if (!file_size_updated) {
+             printk("updating file size\n");
+             update_file_size();
+             file_size_updated = true;
+         }
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -643,21 +663,19 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
         
-        if (!valid  && !storage_is_on) {
-
-        bool result = write_to_storage();
-        // file_num_array[file_count-1] = get_file_size(file_count);
-        // printk("file size for file count %d %d\n",file_count,file_num_array[file_count-1]);
-        if (result)
+        if (!valid  && !storage_is_on) 
         {
-            // if (get_file_size(9) > MAX_AUDIO_FILE_SIZE) {
-            //     printk("Audio file size limit reached, making new file\n");
-            //     // make_and_rebase_audio_file(get_info_file_length()+1);
-            // }
-        }
-        else {
-             k_sleep(K_MSEC(10));
-        }
+
+            bool result = write_to_storage();
+
+            if (result)
+            {
+
+            }
+            else 
+            {
+                k_sleep(K_MSEC(10));
+            }
         }    
 
         if (valid)
@@ -678,7 +696,7 @@ void pusher(void)
       k_yield();
     }
 }
-
+extern struct bt_gatt_service storage_service;
 
 
 //
@@ -726,7 +744,7 @@ play_boot_sound();
     
 #endif
     // Start advertising
-    
+    bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);

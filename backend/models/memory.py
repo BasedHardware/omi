@@ -105,6 +105,7 @@ class MemorySource(str, Enum):
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
+    sdcard = 'sdcard'
 
 
 class MemoryVisibility(str, Enum):
