@@ -212,6 +212,7 @@ class DaySummaryWidget extends StatelessWidget {
     var sentences = text.split('. ');
     return ListView.builder(
       shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: sentences.length,
       itemBuilder: (context, index) {
         return ListTile(
