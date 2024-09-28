@@ -127,7 +127,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
         },
         child: getLiteTranscriptWidget(
           provider.segments,
-          provider.photos,
+          [],
           deviceProvider.connectedDevice,
         ),
       );

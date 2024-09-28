@@ -55,10 +55,10 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
 
       // Memory source
       var memorySource = MemorySource.friend;
-      var captureProvider = context.read<CaptureProvider>();
-      if (captureProvider.isGlasses) {
-        memorySource = MemorySource.openglass;
-      }
+      // var captureProvider = context.read<CaptureProvider>();
+      // if (captureProvider.isGlasses) {
+      //   memorySource = MemorySource.openglass;
+      // }
       return PopScope(
         canPop: true,
         child: Scaffold(
@@ -117,7 +117,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                       ListView(
                         shrinkWrap: true,
                         children: [
-                          provider.segments.isEmpty && provider.photos.isEmpty
+                          provider.segments.isEmpty
                               ? Column(
                                   children: [
                                     const SizedBox(height: 80),
@@ -125,8 +125,12 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                         child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
                                   ],
                                 )
-                              : getTranscriptWidget(provider.memoryCreating, provider.segments, provider.photos,
-                                  deviceProvider.connectedDevice)
+                              : getTranscriptWidget(
+                                  provider.memoryCreating,
+                                  provider.segments,
+                                  [],
+                                  deviceProvider.connectedDevice,
+                                )
                         ],
                       ),
                       Padding(

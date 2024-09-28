@@ -8,7 +8,6 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
