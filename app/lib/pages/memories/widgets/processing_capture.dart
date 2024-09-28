@@ -317,7 +317,16 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
         if (index == 0) {
           return const SizedBox(height: 16);
         }
-        return ProcessingMemoryWidget(memory: memories[index - 1]);
+
+        var pm = memories[index - 1];
+        if (pm.status == ServerProcessingMemoryStatus.processing) {
+          return ProcessingMemoryWidget(memory: pm);
+        }
+        if (pm.status == ServerProcessingMemoryStatus.done) {
+          return const SizedBox.shrink();
+        }
+
+        return const SizedBox.shrink();
       },
       childCount: memories.length + 1,
     ),
@@ -400,7 +409,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 20),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade800,
@@ -408,7 +417,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Text(
-                  'Processing...',
+                  'Processing',
                   style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                   maxLines: 1,
                 ),
