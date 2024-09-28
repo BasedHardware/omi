@@ -315,7 +315,10 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
 
         var pm = memories[index - 1];
         if (pm.status == ServerProcessingMemoryStatus.processing) {
-          return ProcessingMemoryWidget(memory: pm);
+          return Padding(
+            padding: EdgeInsets.fromLTRB(0, index - 1 == 0 ? 0 : 20, 0, 0),
+            child: ProcessingMemoryWidget(memory: pm),
+          );
         }
         if (pm.status == ServerProcessingMemoryStatus.done) {
           return const SizedBox.shrink();
