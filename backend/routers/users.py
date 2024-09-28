@@ -17,11 +17,12 @@ router = APIRouter()
 @router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(uid: str = Depends(auth.get_current_user_uid)):
     try:
-        # Set account as deleted in Firestore
-        update_user(uid, {"account_deleted": True})
-        # TODO: delete user data from the database
+        delete_user_data(uid)
+        # delete user from firebase auth
+        auth.delete_account(uid)
         return {'status': 'ok', 'message': 'Account deleted successfully'}
     except Exception as e:
+        print('delete_account', str(e))
         raise HTTPException(status_code=500, detail=str(e))
     
 

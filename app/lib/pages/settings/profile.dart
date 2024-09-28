@@ -8,8 +8,8 @@ import 'package:friend_private/pages/settings/recordings_storage_permission.dart
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import 'delete_account.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -179,19 +179,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               onTap: () {
                 MixpanelManager().pageOpened('Profile Delete Account Dialog');
-                showDialog(
-                    context: context,
-                    builder: (ctx) {
-                      return getDialog(
-                        context,
-                            () => Navigator.of(context).pop(),
-                            () => launchUrl(Uri.parse('mailto:team@basedhardware.com?subject=Delete%20My%20Account')),
-                        'Deleting Account?',
-                        'Please send us an email at team@basedhardware.com',
-                        okButtonText: 'Open Email',
-                        singleButton: false,
-                      );
-                    });
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
               },
             )
           ],
