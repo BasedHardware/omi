@@ -23,6 +23,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   int selectedTab = 0;
   bool isLoading = false;
   bool loadingReprocessMemory = false;
+  String reprocessMemoryId = '';
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
@@ -100,6 +101,11 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
+  void updateRepocessMemoryId(String id) {
+    reprocessMemoryId = id;
+    notifyListeners();
+  }
+
   void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
     selectedDate = date;
@@ -139,10 +145,12 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   Future<bool> reprocessMemory() async {
     debugPrint('_reProcessMemory');
     updateReprocessMemoryLoadingState(true);
+    updateRepocessMemoryId(memory.id);
     try {
       var updatedMemory = await reProcessMemoryServer(memory.id);
       MixpanelManager().reProcessMemory(memory);
       updateReprocessMemoryLoadingState(false);
+      updateRepocessMemoryId('');
       if (updatedMemory == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
@@ -163,6 +171,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       });
       notifyError('REPROCESS_FAILED');
       updateReprocessMemoryLoadingState(false);
+      updateRepocessMemoryId('');
       notifyListeners();
       return false;
     }
