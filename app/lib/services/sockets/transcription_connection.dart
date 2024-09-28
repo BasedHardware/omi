@@ -271,8 +271,8 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
-class SpeechProfileTranscripSegmentSocketService extends TranscripSegmentSocketService {
-  SpeechProfileTranscripSegmentSocketService.create(super.sampleRate, super.codec)
+class SpeechProfileTranscriptSegmentSocketService extends TranscripSegmentSocketService {
+  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
       : super.create(includeSpeechProfile: false, newMemoryWatch: false);
 }
 
