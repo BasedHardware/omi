@@ -186,44 +186,59 @@ class CaptureProvider extends ChangeNotifier
       setHasTranscripts(segments.isNotEmpty);
     }
 
+    // Notify combining
+    if (capturingProcessingMemory?.memoryId != null) {
+      memoryProvider?.onNewCombiningMemory(capturingProcessingMemory!);
+    }
+
     // Update processing memory
     _updateProcessingMemory();
   }
 
-  void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
-    var now = DateTime.now();
-    debugPrint("${pm?.toJson()}");
-    if (pm != null &&
-        pm.status == ServerProcessingMemoryStatus.capturing &&
-        pm.capturingTo != null &&
-        pm.capturingTo!.isAfter(now)) {
-      capturingProcessingMemory = pm;
-    } else {
-      capturingProcessingMemory = null;
-    }
-    notifyListeners();
-
-    // End
+  void _trackCapturingProcessingMemory() {
     if (capturingProcessingMemory == null) {
       return;
     }
 
-    // Or watch
-    var id = capturingProcessingMemory!.id;
-    var delayMs = capturingProcessingMemory?.capturingTo != null
-        ? capturingProcessingMemory!.capturingTo!.millisecondsSinceEpoch - now.millisecondsSinceEpoch
+    var pm = capturingProcessingMemory!;
+
+    var delayMs = pm.capturingTo != null
+        ? pm.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
         : 2 * 60 * 1000; // 2m
     if (delayMs > 0) {
       _processingMemoryWatchTimer?.cancel();
       _processingMemoryWatchTimer = Timer(Duration(milliseconds: delayMs), () async {
-        ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: id);
+        ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: pm.id);
         if (result?.result == null) {
           debugPrint("Can not fetch processing memory, result null");
           return;
         }
+
         _setCapturingProcessingMemory(result?.result);
+        if (capturingProcessingMemory == null) {
+          // Force clean
+          _clean();
+        }
       });
     }
+  }
+
+  void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
+    if (pm != null &&
+        pm.status == ServerProcessingMemoryStatus.capturing &&
+        pm.capturingTo != null &&
+        pm.capturingTo!.isAfter(DateTime.now())) {
+      capturingProcessingMemory = pm;
+      _trackCapturingProcessingMemory();
+
+      notifyListeners();
+      return;
+    }
+
+    capturingProcessingMemory = null;
+    _processingMemoryWatchTimer?.cancel();
+
+    notifyListeners();
   }
 
   Future<void> _onMemoryCreated(ServerMessageEvent event) async {

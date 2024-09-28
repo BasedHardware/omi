@@ -21,8 +21,6 @@ Future<UpdateProcessingMemoryResponse?> updateProcessingMemoryServer({
     bodyData.addAll({"geolocation": geolocation.toJson()});
   }
 
-  debugPrint(jsonEncode(bodyData));
-
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/processing-memories/$id',
     headers: {},
@@ -30,7 +28,6 @@ Future<UpdateProcessingMemoryResponse?> updateProcessingMemoryServer({
     body: jsonEncode(bodyData),
   );
   if (response == null) return null;
-  debugPrint('updateProcessingMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return UpdateProcessingMemoryResponse.fromJson(jsonDecode(response.body));
   } else {
@@ -57,7 +54,6 @@ Future<ProcessingMemoryResponse?> fetchProcessingMemoryServer({
     body: "",
   );
   if (response == null) return null;
-  debugPrint('updateProcessingMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
     return ProcessingMemoryResponse.fromJson(jsonDecode(response.body));
   } else {
