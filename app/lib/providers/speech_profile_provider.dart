@@ -170,7 +170,6 @@ class SpeechProfileProvider extends ChangeNotifier
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       try {
         await uploadProfile(data.item1);
-        await uploadProfileBytes(raw, duration);
       } catch (e) {}
 
       updateLoadingText('Personalizing your experience...');
