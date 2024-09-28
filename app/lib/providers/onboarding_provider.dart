@@ -12,9 +12,9 @@ import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notification_service.dart';
+import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -62,20 +62,20 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void updateLocationPermission(bool value) {
     hasLocationPermission = value;
     SharedPreferencesUtil().locationEnabled = value;
-    MixpanelManager().setUserProperty('Location Enabled', SharedPreferencesUtil().locationEnabled);
+    AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
     notifyListeners();
   }
 
   void updateNotificationPermission(bool value) {
     hasNotificationPermission = value;
     SharedPreferencesUtil().notificationsEnabled = value;
-    MixpanelManager().setUserProperty('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+    AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
     notifyListeners();
   }
 
   void updateBackgroundPermission(bool value) {
     hasBackgroundPermission = value;
-    MixpanelManager().setUserProperty('Background Permission Enabled', hasBackgroundPermission);
+    AnalyticsManager().setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
 
