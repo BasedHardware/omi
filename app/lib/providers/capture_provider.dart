@@ -245,26 +245,6 @@ class CaptureProvider extends ChangeNotifier
     _processOnMemoryCreated(null, []); // force failed
   }
 
-  Future<void> _onMemoryPostProcessSuccess(String memoryId) async {
-    var memory = await getMemoryById(memoryId);
-    if (memory == null) {
-      debugPrint("Memory is not found $memoryId");
-      return;
-    }
-
-    memoryProvider?.updateMemory(memory);
-  }
-
-  Future<void> _onMemoryPostProcessFailed(String memoryId) async {
-    var memory = await getMemoryById(memoryId);
-    if (memory == null) {
-      debugPrint("Memory is not found $memoryId");
-      return;
-    }
-
-    memoryProvider?.updateMemory(memory);
-  }
-
   Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
     if (memory == null) {
       return;
@@ -394,12 +374,8 @@ class CaptureProvider extends ChangeNotifier
       id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
-
-        final trimmedValue = value.sublist(3);
-
-        // TODO: if this (0,3) is not removed, deepgram can't seem to be able to detect the audio.
-        // https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio
         if (_socket?.state == SocketServiceState.connected) {
+          final trimmedValue = value.sublist(3);
           _socket?.send(trimmedValue);
         }
       },
@@ -417,7 +393,7 @@ class CaptureProvider extends ChangeNotifier
     _storageStream = await _getBleStorageBytesListener(id, onStorageBytesReceived: (List<int> value) async {
       if (value.isEmpty) return;
 
-      storageUtil!.storeFrameStoragePacket(value);
+      storageUtil.storeFrameStoragePacket(value);
       if (value.length == 1) {
         //result codes i guess
         debugPrint('returned $value');
@@ -486,12 +462,8 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing');
 
     _cleanupCurrentState();
-    // await _handleMemoryCreation(restartBytesProcessing);
-
     await _recheckCodecChange();
     await _ensureSocketConnection(force: true);
-
-    // await startOpenGlass();
     await _initiateFriendAudioStreaming();
     // TODO: Commenting this for now as DevKit 2 is not yet used in production
     // await initiateStorageBytesStreaming();
@@ -549,14 +521,6 @@ class CaptureProvider extends ChangeNotifier
       return [];
     }
     return connection.getStorageList();
-  }
-
-  Future<bool> _hasPhotoStreamingCharacteristic(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return false;
-    }
-    return connection.hasPhotoStreamingCharacteristic();
   }
 
   Future<bool> _recheckCodecChange() async {
