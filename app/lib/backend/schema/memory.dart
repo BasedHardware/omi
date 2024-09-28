@@ -103,7 +103,7 @@ class ServerProcessingMemory {
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
-      memoryId: json['memoryId'],
+      memoryId: json['memory_id'],
     );
   }
 
@@ -181,6 +181,9 @@ class ServerMemory {
   // local failed memories
   final bool failed;
   int retries;
+
+  // local label
+  bool isNew = false;
 
   ServerMemory({
     required this.id,

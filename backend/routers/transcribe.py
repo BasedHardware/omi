@@ -13,7 +13,7 @@ from starlette.websockets import WebSocketState
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
 from models.memory import Memory, TranscriptSegment
-from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
+from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated, ProcessingMemoryStatusChanged
 from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
@@ -444,6 +444,14 @@ async def _websocket_util(
             uid, processing_memory.id,
             processing_memory.status,
         )
+        # Message: processing memory status changed
+        ok = await _send_message_event(ProcessingMemoryStatusChanged(
+            event_type="processing_memory_status_changed",
+            processing_memory_id=processing_memory.id,
+            status=processing_memory.status),
+        )
+        if not ok:
+            print("Can not send message event processing_memory_status_changed")
 
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
@@ -497,6 +505,15 @@ async def _websocket_util(
             uid, processing_memory.id,
             processing_memory.status,
         )
+        # Message: processing memory status changed
+        ok = await _send_message_event(ProcessingMemoryStatusChanged(
+            event_type="processing_memory_status_changed",
+            processing_memory_id=processing_memory.id,
+            memory_id=processing_memory.memory_id,
+            status=processing_memory.status),
+        )
+        if not ok:
+            print("Can not send message event processing_memory_status_changed")
 
         # Message: completed
         msg = NewMemoryCreated(

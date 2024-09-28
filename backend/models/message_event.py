@@ -34,3 +34,13 @@ class NewProcessingMemoryCreated(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         return j
+
+class ProcessingMemoryStatusChanged(MessageEvent):
+    processing_memory_id: Optional[str] = None
+    status: Optional[str] = None
+    memory_id: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
