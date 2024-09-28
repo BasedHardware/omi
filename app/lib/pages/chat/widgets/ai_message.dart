@@ -143,16 +143,14 @@ class _AIMessageState extends State<AIMessage> {
                         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                         if (connectivityProvider.isConnected) {
                           var memProvider = Provider.of<MemoryProvider>(context, listen: false);
-                          var idx = memProvider.memoriesWithDates.indexWhere((e) {
-                            if (e.runtimeType == ServerMemory) {
-                              return e.id == data.$2.id;
-                            }
-                            return false;
-                          });
+                          var idx = -1;
+                          var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
+                          idx = memProvider.groupedMemories[date]?.indexWhere((element) => element.id == data.$2.id) ??
+                              -1;
 
                           if (idx != -1) {
-                            context.read<MemoryDetailProvider>().updateMemory(idx);
-                            var m = memProvider.memoriesWithDates[idx];
+                            context.read<MemoryDetailProvider>().updateMemory(idx, date);
+                            var m = memProvider.groupedMemories[date]![idx];
                             MixpanelManager().chatMessageMemoryClicked(m);
                             await Navigator.of(context).push(
                               MaterialPageRoute(
@@ -166,10 +164,10 @@ class _AIMessageState extends State<AIMessage> {
                             setState(() => memoryDetailLoading[data.$1] = true);
                             ServerMemory? m = await getMemoryById(data.$2.id);
                             if (m == null) return;
-                            idx = memProvider.addMemoryWithDate(m);
+                            (idx, date) = memProvider.addMemoryWithDateGrouped(m);
                             MixpanelManager().chatMessageMemoryClicked(m);
                             setState(() => memoryDetailLoading[data.$1] = false);
-                            context.read<MemoryDetailProvider>().updateMemory(idx);
+                            context.read<MemoryDetailProvider>().updateMemory(idx, date);
                             await Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (c) => MemoryDetailPage(

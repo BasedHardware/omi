@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/home/support.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/about.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
@@ -121,12 +120,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 8),
                 getItemAddOn2(
                   'Guides & Tutorials',
-                  () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const SupportPage(),
-                      ),
-                    );
+                  () async {
+                    await Intercom.instance.displayHelpCenter();
                   },
                   icon: Icons.help_outline_outlined,
                 ),
