@@ -147,6 +147,27 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  Future<void> _onProcessingMemoryStatusChanged(String processingMemoryId, ServerProcessingMemoryStatus status) async {
+    if (capturingProcessingMemory == null || capturingProcessingMemory?.id != processingMemoryId) {
+      debugPrint("Warn: Didn't track processing memory yet $processingMemoryId");
+    }
+
+    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: processingMemoryId);
+    if (result?.result == null) {
+      debugPrint("Can not fetch processing memory, result null");
+      return;
+    }
+    var pm = result!.result!;
+    if (status == ServerProcessingMemoryStatus.processing) {
+      memoryProvider?.onNewProcessingMemory(pm);
+      return;
+    }
+    if (status == ServerProcessingMemoryStatus.done) {
+      memoryProvider?.onProcessingMemoryDone(pm);
+      return;
+    }
+  }
+
   Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
     this.processingMemoryId = processingMemoryId;
 
@@ -637,7 +658,6 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateFriendAudioStreaming() async {
-    debugPrint('_recordingDevice: $_recordingDevice in initiateFriendAudioStreaming');
     if (_recordingDevice == null) return;
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
@@ -817,6 +837,15 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       _onProcessingMemoryCreated(event.processingMemoryId!);
+      return;
+    }
+
+    if (event.type == MessageEventType.processingMemoryStatusChanged) {
+      if (event.processingMemoryId == null || event.processingMemoryStatus == null) {
+        debugPrint("Processing memory message event is invalid");
+        return;
+      }
+      _onProcessingMemoryStatusChanged(event.processingMemoryId!, event.processingMemoryStatus!);
       return;
     }
 
