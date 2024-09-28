@@ -99,7 +99,22 @@ class MemoryProvider extends ChangeNotifier {
     return;
   }
 
-  Future _onProcessingMemoryDone(ServerProcessingMemory pm) async {
+  Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
+    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
+      // existed
+      debugPrint("Processing memory is existed");
+      return;
+    }
+    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
+      // track processing status only
+      debugPrint("Processing memory status is not processing");
+      return;
+    }
+    processingMemories.insert(0, processingMemory);
+    _setProcessingMemories(List.from(processingMemories));
+  }
+
+  Future onProcessingMemoryDone(ServerProcessingMemory pm) async {
     if (pm.memoryId == null) {
       debugPrint("Processing Memory Id is not found ${pm.id}");
       return;
@@ -117,8 +132,11 @@ class MemoryProvider extends ChangeNotifier {
     if (idx < 0) {
       memories.insert(0, memory);
     } else {
+      // TODO: thinh, remove
       memories[idx] = memory;
     }
+
+    // Warn: Too many notifying!
     initFilteredMemories();
   }
 
@@ -149,9 +167,8 @@ class MemoryProvider extends ChangeNotifier {
 
       var pms = await getProcessingMemories(filterIds: filterIds);
       for (var i = 0; i < pms.length; i++) {
-        debugPrint("${pms[i].id} -- ${pms[i].status}");
         if (pms[i].status == ServerProcessingMemoryStatus.done) {
-          _onProcessingMemoryDone(pms[i]);
+          onProcessingMemoryDone(pms[i]);
         }
       }
       _updateProcessingMemories(pms);

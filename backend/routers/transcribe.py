@@ -448,7 +448,7 @@ async def _websocket_util(
         ok = await _send_message_event(ProcessingMemoryStatusChanged(
             event_type="processing_memory_status_changed",
             processing_memory_id=processing_memory.id,
-            status=processing_memory.status),
+            processing_memory_status=processing_memory.status),
         )
         if not ok:
             print("Can not send message event processing_memory_status_changed")
@@ -510,7 +510,7 @@ async def _websocket_util(
             event_type="processing_memory_status_changed",
             processing_memory_id=processing_memory.id,
             memory_id=processing_memory.memory_id,
-            status=processing_memory.status),
+            processing_memory_status=processing_memory.status),
         )
         if not ok:
             print("Can not send message event processing_memory_status_changed")

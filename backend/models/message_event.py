@@ -37,7 +37,7 @@ class NewProcessingMemoryCreated(MessageEvent):
 
 class ProcessingMemoryStatusChanged(MessageEvent):
     processing_memory_id: Optional[str] = None
-    status: Optional[str] = None
+    processing_memory_status: Optional[str] = None
     memory_id: Optional[str] = None
 
     def to_json(self):
