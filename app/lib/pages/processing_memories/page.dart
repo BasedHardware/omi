@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -51,10 +50,6 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
 
       // Memory source
       var memorySource = MemorySource.friend;
-      var captureProvider = context.read<CaptureProvider>();
-      if (captureProvider.isGlasses) {
-        memorySource = MemorySource.openglass;
-      }
       return PopScope(
         canPop: true,
         child: Scaffold(
