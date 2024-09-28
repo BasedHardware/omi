@@ -142,8 +142,6 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
         upsert_vector(uid, memory, vector)
         _trigger_plugins(uid, memory)
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
-        # if not force_process:  # means it's only creating
-        threading.Thread(target=_extract_trends, args=(memory,)).start()
 
     memories_db.upsert_memory(uid, memory.dict())
     print('process_memory memory.id=', memory.id)
