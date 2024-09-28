@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -98,7 +97,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void setMemoryCreating(bool value) {
-    debugPrint('set memory creating ${value}');
+    debugPrint('set memory creating $value');
     memoryCreating = value;
     notifyListeners();
   }
@@ -314,13 +313,6 @@ class CaptureProvider extends ChangeNotifier
       notifyListeners();
       return;
     }
-
-    // photos
-    if (photos.isNotEmpty) {
-      await _createPhotoCharacteristicMemory();
-    }
-
-    return;
   }
 
   Future<bool?> _createPhotoCharacteristicMemory() async {
@@ -388,7 +380,6 @@ class CaptureProvider extends ChangeNotifier
 
     elapsedSeconds = 0;
 
-    photos = [];
     conversationId = const Uuid().v4();
 
     processingMemoryId = null;
@@ -760,7 +751,7 @@ class CaptureProvider extends ChangeNotifier
     BTDeviceStruct? device,
     bool restartBytesProcessing = true,
   }) async {
-    debugPrint("streamDeviceRecording ${device} ${restartBytesProcessing}");
+    debugPrint("streamDeviceRecording $device $restartBytesProcessing");
     if (device != null) {
       _updateRecordingDevice(device);
     }
@@ -794,7 +785,7 @@ class CaptureProvider extends ChangeNotifier
       notifyListeners();
     }
 
-    // Keep alived
+    // Keep alive
     _startKeepAlivedServices();
   }
 
