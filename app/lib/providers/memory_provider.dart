@@ -21,6 +21,77 @@ class MemoryProvider extends ChangeNotifier {
   List<ServerProcessingMemory> processingMemories = [];
   Timer? _processingMemoryWatchTimer;
 
+  void _populateMemoriesWithDatesWithoutNotify() {
+    memoriesWithDates = [];
+    for (var i = 0; i < filteredMemories.length; i++) {
+      if (i == 0) {
+        memoriesWithDates.add(filteredMemories[i]);
+      } else {
+        if (filteredMemories[i].createdAt.day != filteredMemories[i - 1].createdAt.day) {
+          memoriesWithDates.add(filteredMemories[i].createdAt);
+        }
+        memoriesWithDates.add(filteredMemories[i]);
+      }
+    }
+  }
+
+  void _filterMemoriesWithoutNotify(String query) {
+    filteredMemories = [];
+    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
+        ? memories
+        : memories.where((memory) => !memory.discarded || memory.isNew).toList();
+    filteredMemories = query.isEmpty
+        ? filteredMemories
+        : filteredMemories
+            .where(
+              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
+                  .toLowerCase()
+                  .contains(query.toLowerCase()),
+            )
+            .toList();
+    if (query == '' && filteredMemories.isEmpty) {
+      filteredMemories = memories;
+      SharedPreferencesUtil().showDiscardedMemories = true;
+      hasNonDiscardedMemories = false;
+    }
+  }
+
+  void populateMemoriesWithDates() {
+    _populateMemoriesWithDatesWithoutNotify();
+    notifyListeners();
+  }
+
+  void initFilteredMemories() {
+    _filterMemoriesWithoutNotify('');
+    _populateMemoriesWithDatesWithoutNotify();
+    notifyListeners();
+  }
+
+  void filterMemories(String query) {
+    filteredMemories = [];
+    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
+        ? memories
+        : memories.where((memory) => !memory.discarded || memory.isNew).toList();
+    filteredMemories = query.isEmpty
+        ? filteredMemories
+        : filteredMemories
+            .where(
+              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
+                  .toLowerCase()
+                  .contains(query.toLowerCase()),
+            )
+            .toList();
+    if (query == '' && filteredMemories.isEmpty) {
+      filteredMemories = memories;
+      SharedPreferencesUtil().showDiscardedMemories = true;
+      hasNonDiscardedMemories = false;
+    }
+
+    _populateMemoriesWithDatesWithoutNotify();
+
+    notifyListeners();
+  }
+
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
@@ -99,6 +170,20 @@ class MemoryProvider extends ChangeNotifier {
     return;
   }
 
+  Future onNewCombiningMemory(ServerProcessingMemory pm) async {
+    if (pm.memoryId == null) {
+      debugPrint("Processing Memory Id is not found ${pm.id}");
+      return;
+    }
+    int idx = memories.indexWhere((m) => m.id == pm.memoryId);
+    if (idx < 0) {
+      return;
+    }
+    memories.removeAt(idx);
+
+    initFilteredMemories();
+  }
+
   Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
     if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
       // existed
@@ -132,11 +217,10 @@ class MemoryProvider extends ChangeNotifier {
     if (idx < 0) {
       memories.insert(0, memory);
     } else {
-      // TODO: thinh, remove
       memories[idx] = memory;
     }
 
-    // Warn: Too many notifying!
+    // Warn: Too many notifies!
     initFilteredMemories();
   }
 
