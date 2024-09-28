@@ -86,3 +86,8 @@ def timeit(func):
         return result
 
     return measure_time
+
+
+def delete_account(uid: str):
+    auth.delete_user(uid)
+    return {"message": "User deleted"}
