@@ -106,6 +106,7 @@ class CaptureProvider extends ChangeNotifier
    bool sendNotification = false;
    String btConnectedTime = "";
    String dateTimeStorageString = "";
+   Timer? sdCardReconnectionTimer;
 
 
 
@@ -445,6 +446,7 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
      if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
+        sdCardSocket.sdCardChannel?.sink.close();
         await sdCardSocket.setupSdCardWebSocket(
         onMessageReceived: () {
         debugPrint('onMessageReceived');
@@ -501,11 +503,33 @@ class CaptureProvider extends ChangeNotifier
               //means we are disconnected, stop all transmission. attempt reconnection
               if (!sdCardIsDownloading) 
               {
+                debugPrint('sdCardIsDownloading: $sdCardIsDownloading');
                  return;
               }
+              sdCardIsDownloading = false;
               pauseFileFromDevice(storageUtil.getFileNum());
               debugPrint('paused file from device');
-              sdCardIsDownloading = false;
+              //attempt reconnection
+              sdCardSocket.sdCardChannel?.sink.close();
+              sdCardSocket.attemptReconnection(        
+              onMessageReceived: () {
+              debugPrint('onMessageReceived');
+              memoryProvider?.getMoreMemoriesFromServer();
+              _notifySdCardComplete();
+              return;
+              },
+              btConnectedTime: btConnectedTime,
+        );
+            sdCardReconnectionTimer?.cancel();
+            sdCardReconnectionTimer = Timer(Duration(seconds:10), () {
+              debugPrint('sdCardReconnectionTimer');
+              if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
+              sdCardIsDownloading = true;
+              getFileFromDevice(storageUtil.getFileNum(),totalBytesReceived);
+            }
+            });
+              
+              //call attempt reconnection
               return;
        
         }
@@ -520,6 +544,8 @@ class CaptureProvider extends ChangeNotifier
     getFileFromDevice(storageUtil.getFileNum(),totalBytesReceived);
     //  notifyListeners();
   }
+
+  
 
   Future getFileFromDevice(int fileNum,int offset) async {
     storageUtil.fileNum = fileNum;
@@ -739,6 +765,7 @@ Future<void> initiateStorageBytesStreaming() async {
       onMessageReceived: () {
         debugPrint('onMessageReceived');
         memoryProvider?.getMemoriesFromServer();
+        notifyListeners();
         _notifySdCardComplete();
         return;
       },
