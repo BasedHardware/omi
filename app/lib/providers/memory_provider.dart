@@ -118,7 +118,7 @@ class MemoryProvider extends ChangeNotifier {
       return;
     }
 
-    _trackProccessingMemories();
+    _trackprocessingMemories();
     return;
   }
 
@@ -185,7 +185,7 @@ class MemoryProvider extends ChangeNotifier {
     _setProcessingMemories(List.from(processingMemories));
   }
 
-  void _trackProccessingMemories() {
+  void _trackprocessingMemories() {
     if (_processingMemoryWatchTimer?.isActive ?? false) {
       return;
     }
