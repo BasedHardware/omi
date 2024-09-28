@@ -43,13 +43,8 @@ class MemoryProvider extends ChangeNotifier {
     groupMemoriesByDate();
 
     // Processing memories
-    processingMemories = await getProcessingMemories();
-    debugPrint("Get processing memories ${processingMemories.length}");
-    if (processingMemories.isNotEmpty) {
-      _trackProccessingMemories();
-    } else {
-      _processingMemoryWatchTimer?.cancel();
-    }
+    var pms = await getProcessingMemories();
+    await _setProcessingMemories(pms);
 
     notifyListeners();
   }
@@ -89,19 +84,77 @@ class MemoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future _setProcessingMemories(List<ServerProcessingMemory> pms) async {
+    processingMemories = pms;
+    notifyListeners();
+
+    debugPrint("Set processing memories ${pms.length}");
+
+    if (processingMemories.isEmpty) {
+      _processingMemoryWatchTimer?.cancel();
+      return;
+    }
+
+    _trackProccessingMemories();
+    return;
+  }
+
+  Future _onProcessingMemoryDone(ServerProcessingMemory pm) async {
+    if (pm.memoryId == null) {
+      debugPrint("Processing Memory Id is not found ${pm.id}");
+      return;
+    }
+    var memory = await getMemoryById(pm.memoryId!);
+    if (memory == null) {
+      debugPrint("Memory is not found ${pm.memoryId}");
+      return;
+    }
+
+    // local labling
+    memory.isNew = true;
+
+    int idx = memories.indexWhere((m) => m.id == memory.id);
+    if (idx < 0) {
+      memories.insert(0, memory);
+    } else {
+      memories[idx] = memory;
+    }
+    initFilteredMemories();
+  }
+
+  Future _updateProcessingMemories(List<ServerProcessingMemory> pms) async {
+    for (var i = 0; i < processingMemories.length; i++) {
+      var pm = pms.firstWhereOrNull((m) => m.id == processingMemories[i].id);
+      if (pm != null) {
+        processingMemories[i] = pm;
+      }
+    }
+    _setProcessingMemories(List.from(processingMemories));
+  }
+
   void _trackProccessingMemories() {
+    if (_processingMemoryWatchTimer?.isActive ?? false) {
+      return;
+    }
     _processingMemoryWatchTimer?.cancel();
-    _processingMemoryWatchTimer = Timer(const Duration(seconds: 15), () async {
+    _processingMemoryWatchTimer = Timer(const Duration(seconds: 7), () async {
       debugPrint("processing memory tracking...");
-      if (processingMemories.isEmpty) {
+      var filterIds = processingMemories
+          .where((m) => m.status == ServerProcessingMemoryStatus.processing)
+          .map((m) => m.id)
+          .toList();
+      if (filterIds.isEmpty) {
         return;
       }
-      var filterIds = processingMemories.map((m) => m.id).toList();
+
       var pms = await getProcessingMemories(filterIds: filterIds);
       for (var i = 0; i < pms.length; i++) {
-		// TODO: thinh
-        debugPrint("Processing memory tracking ${pms[i].id} - ${pms[i].status}");
+        debugPrint("${pms[i].id} -- ${pms[i].status}");
+        if (pms[i].status == ServerProcessingMemoryStatus.done) {
+          _onProcessingMemoryDone(pms[i]);
+        }
       }
+      _updateProcessingMemories(pms);
     });
   }
 

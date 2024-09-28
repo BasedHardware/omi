@@ -46,10 +46,18 @@ class _MemoryListItemState extends State<MemoryListItem> {
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade900,
-              borderRadius: BorderRadius.circular(16.0),
-            ),
+            decoration: widget.memory.isNew
+                ? BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: Border.all(
+                      color: Colors.lightBlue,
+                      width: 1,
+                    ))
+                : BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
