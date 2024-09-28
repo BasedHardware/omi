@@ -21,77 +21,6 @@ class MemoryProvider extends ChangeNotifier {
   List<ServerProcessingMemory> processingMemories = [];
   Timer? _processingMemoryWatchTimer;
 
-  void _populateMemoriesWithDatesWithoutNotify() {
-    memoriesWithDates = [];
-    for (var i = 0; i < filteredMemories.length; i++) {
-      if (i == 0) {
-        memoriesWithDates.add(filteredMemories[i]);
-      } else {
-        if (filteredMemories[i].createdAt.day != filteredMemories[i - 1].createdAt.day) {
-          memoriesWithDates.add(filteredMemories[i].createdAt);
-        }
-        memoriesWithDates.add(filteredMemories[i]);
-      }
-    }
-  }
-
-  void _filterMemoriesWithoutNotify(String query) {
-    filteredMemories = [];
-    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
-        ? memories
-        : memories.where((memory) => !memory.discarded || memory.isNew).toList();
-    filteredMemories = query.isEmpty
-        ? filteredMemories
-        : filteredMemories
-            .where(
-              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
-                  .toLowerCase()
-                  .contains(query.toLowerCase()),
-            )
-            .toList();
-    if (query == '' && filteredMemories.isEmpty) {
-      filteredMemories = memories;
-      SharedPreferencesUtil().showDiscardedMemories = true;
-      hasNonDiscardedMemories = false;
-    }
-  }
-
-  void populateMemoriesWithDates() {
-    _populateMemoriesWithDatesWithoutNotify();
-    notifyListeners();
-  }
-
-  void initFilteredMemories() {
-    _filterMemoriesWithoutNotify('');
-    _populateMemoriesWithDatesWithoutNotify();
-    notifyListeners();
-  }
-
-  void filterMemories(String query) {
-    filteredMemories = [];
-    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
-        ? memories
-        : memories.where((memory) => !memory.discarded || memory.isNew).toList();
-    filteredMemories = query.isEmpty
-        ? filteredMemories
-        : filteredMemories
-            .where(
-              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
-                  .toLowerCase()
-                  .contains(query.toLowerCase()),
-            )
-            .toList();
-    if (query == '' && filteredMemories.isEmpty) {
-      filteredMemories = memories;
-      SharedPreferencesUtil().showDiscardedMemories = true;
-      hasNonDiscardedMemories = false;
-    }
-
-    _populateMemoriesWithDatesWithoutNotify();
-
-    notifyListeners();
-  }
-
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
@@ -123,7 +52,7 @@ class MemoryProvider extends ChangeNotifier {
   void groupMemoriesByDate() {
     groupedMemories = {};
     for (var memory in memories) {
-      if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded) continue;
+      if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded && !memory.isNew) continue;
       var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
       if (!groupedMemories.containsKey(date)) {
         groupedMemories[date] = [];
@@ -159,8 +88,6 @@ class MemoryProvider extends ChangeNotifier {
     processingMemories = pms;
     notifyListeners();
 
-    debugPrint("Set processing memories ${pms.length}");
-
     if (processingMemories.isEmpty) {
       _processingMemoryWatchTimer?.cancel();
       return;
@@ -181,7 +108,7 @@ class MemoryProvider extends ChangeNotifier {
     }
     memories.removeAt(idx);
 
-    initFilteredMemories();
+    filterGroupedMemories('');
   }
 
   Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
@@ -220,8 +147,7 @@ class MemoryProvider extends ChangeNotifier {
       memories[idx] = memory;
     }
 
-    // Warn: Too many notifies!
-    initFilteredMemories();
+    filterGroupedMemories('');
   }
 
   Future _updateProcessingMemories(List<ServerProcessingMemory> pms) async {
