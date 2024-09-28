@@ -99,7 +99,7 @@ async def process_audio_dg(
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
-    def on_message(self, result, **kwargs):
+    async def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
         sentence = result.channel.alternatives[0].transcript
         # print(sentence)
@@ -139,11 +139,11 @@ async def process_audio_dg(
         # stream
         stream_transcript(segments, stream_id)
 
-    def on_error(self, error, **kwargs):
+    async def on_error(self, error, **kwargs):
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
+    return await connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
 
 
 def process_segments(uid: str, segments: list[dict]):
@@ -151,23 +151,23 @@ def process_segments(uid: str, segments: list[dict]):
     trigger_realtime_integrations(uid, token, segments)
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
+async def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
     # 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=8000&language=$recordingsLanguage&model=nova-2-general&no_delay=true&endpointing=100&interim_results=false&smart_format=true&diarize=true'
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        dg_connection = deepgram.listen.asyncwebsocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-        def on_open(self, open, **kwargs):
+        async def on_open(self, open, **kwargs):
             print("Connection Open")
 
-        def on_metadata(self, metadata, **kwargs):
+        async def on_metadata(self, metadata, **kwargs):
             print(f"Metadata: {metadata}")
 
-        def on_speech_started(self, speech_started, **kwargs):
+        async def on_speech_started(self, speech_started, **kwargs):
             print("Speech Started")
 
-        def on_utterance_end(self, utterance_end, **kwargs):
+        async def on_utterance_end(self, utterance_end, **kwargs):
             print("Utterance End")
             global is_finals
             if len(is_finals) > 0:
@@ -175,10 +175,10 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
                 print(f"Utterance End: {utterance}")
                 is_finals = []
 
-        def on_close(self, close, **kwargs):
+        async def on_close(self, close, **kwargs):
             print("Connection Closed")
 
-        def on_unhandled(self, unhandled, **kwargs):
+        async def on_unhandled(self, unhandled, **kwargs):
             print(f"Unhandled Websocket Message: {unhandled}")
 
         dg_connection.on(LiveTranscriptionEvents.Open, on_open)
@@ -203,7 +203,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             sample_rate=sample_rate,
             encoding='linear16'
         )
-        result = dg_connection.start(options)
+        result = await dg_connection.start(options)
         print('Deepgram connection started:', result)
         return dg_connection
     except Exception as e:
@@ -253,11 +253,17 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         # Send the initial request
         await soniox_socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
-
+        
+        # Fuck latency and buffer length, this is how you manage (or unmanage lol) high traffic        
+        soniox_socket.ping_timeout = None
+        
         # Start listening for messages from Soniox
         async def on_message():
             try:
-                async for message in soniox_socket:
+                while True:
+                    message = await soniox_socket.recv()
+                    if message is None:
+                        continue
                     response = json.loads(message)
                     # print(response)
                     fw = response['fw']
@@ -308,11 +314,10 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
             except Exception as e:
                 print(f"Error receiving from Soniox: {e}")
             finally:
-                if not soniox_socket.closed:
-                    await soniox_socket.close()
-                    print("Soniox WebSocket closed in on_message.")
-
-        # Start the on_message coroutine
+                await soniox_socket.close()
+                print("Soniox WebSocket closed in on_message.")
+            
+        # Start the on_message task
         asyncio.create_task(on_message())
 
         # Return the Soniox WebSocket object
