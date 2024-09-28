@@ -145,7 +145,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           deviceProvider.connectedDevice == null &&
-                  !deviceProvider.isConnecting &&
                   !isUsingPhoneMic &&
                   havingCapturingMemory
               ? Row(

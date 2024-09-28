@@ -34,6 +34,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
         context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
+        Provider.of<MemoryProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
         routeToPage(
           context,
           MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
