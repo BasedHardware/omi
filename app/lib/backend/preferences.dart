@@ -71,6 +71,10 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
+  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
+
+  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
+
   String get webhookOnMemoryCreated => getString('webhookUrl') ?? '';
 
   set webhookOnMemoryCreated(String value) => saveString('webhookUrl', value);

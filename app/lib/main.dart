@@ -32,11 +32,11 @@ import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
@@ -56,13 +56,7 @@ Future<bool> _init() async {
     await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform, name: 'dev');
   }
 
-  if (Env.intercomAppId != null) {
-    await Intercom.instance.initialize(
-      Env.intercomAppId!,
-      iosApiKey: Env.intercomIOSApiKey,
-      androidApiKey: Env.intercomAndroidApiKey,
-    );
-  }
+  await IntercomManager().initIntercom();
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
@@ -149,7 +143,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    debugPrint("App > lifecycle changed $state");
     if (state == AppLifecycleState.detached) {
       _deinit();
     }
@@ -281,15 +274,16 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
       if (context.read<AuthenticationProvider>().user != null) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        await Intercom.instance.loginIdentifiedUser(
+        await IntercomManager.instance.intercom.loginIdentifiedUser(
           userId: FirebaseAuth.instance.currentUser!.uid,
         );
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<PluginProvider>().setPluginsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
-        await Intercom.instance.loginUnidentifiedUser();
+        await IntercomManager.instance.intercom.loginUnidentifiedUser();
       }
+      IntercomManager.instance.setUserAttributes();
     });
     super.initState();
   }
