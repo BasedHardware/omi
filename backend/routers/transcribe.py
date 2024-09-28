@@ -175,8 +175,14 @@ async def _websocket_util(
             if processing_memory and int(time.time()) % 3 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
+
+                now_ts = time.time()
+                capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+
                 processing_memories_db.update_processing_memory_segments(
-                    uid, processing_memory.id, list(map(lambda m: m.dict(), processing_memory.transcript_segments))
+                    uid, processing_memory.id,
+                    list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
+                    capturing_to,
                 )
 
     soniox_socket = None
@@ -435,9 +441,14 @@ async def _websocket_util(
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
+
+            now_ts = time.time()
+            capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+
             processing_memories_db.update_processing_memory_segments(
                 uid, processing_memory.id,
-                list(map(lambda m: m.dict(), processing_memory.transcript_segments))
+                list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
+                capturing_to,
             )
 
         # Update processing memory status
