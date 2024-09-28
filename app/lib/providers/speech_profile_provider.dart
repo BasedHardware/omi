@@ -1,25 +1,21 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/memories/process.dart';
-import 'package:uuid/uuid.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -98,7 +94,7 @@ class SpeechProfileProvider extends ChangeNotifier
     if (device != null) await initiateFriendAudioStreaming();
     if (_socket?.state != SocketServiceState.connected) {
       // wait for websocket to connect
-      await Future.delayed(Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 2));
     }
 
     setInitialising(false);
@@ -166,7 +162,6 @@ class SpeechProfileProvider extends ChangeNotifier
       _bleBytesStream?.cancel();
 
       updateLoadingText('Memorizing your voice...');
-      List<List<int>> raw = List.from(audioStorage.rawPackets);
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       try {
         await uploadProfile(data.item1);
@@ -281,47 +276,14 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<bool?> createMemory({bool forcedCreation = false}) async {
     debugPrint('_createMemory forcedCreation: $forcedCreation');
 
-    // if (memoryCreating) return null;
-    // if (segments.isEmpty && photos.isEmpty) return false;
-
-    // TODO: should clean variables here? and keep them locally?
-    // setMemoryCreating(true);
-    File? file;
-    if (audioStorage.frames.isNotEmpty == true) {
-      try {
-        file = (await audioStorage.createWavFile(removeLastNSeconds: 0)).item1;
-        uploadFile(file);
-      } catch (e) {
-        print("creating and uploading file error: $e");
-      } // in case was a local recording and not a BLE recording
-    }
-
-    memory = await processTranscriptContent(
-      segments: segments,
-      startedAt: null,
-      finishedAt: null,
-      geolocation: null,
-      photos: [],
-      triggerIntegrations: true,
-      language: SharedPreferencesUtil().recordingsLanguage,
-      source: 'speech_profile_onboarding',
+    CreateMemoryResponse? result = await createMemoryServer(
+      startedAt: DateTime.now().subtract(Duration(seconds: segments.last.end.toInt())),
+      finishedAt: DateTime.now(),
+      transcriptSegments: segments,
+      geolocation: null, // TODO: include geolocation
     );
-    debugPrint(memory.toString());
-    if (memory == null && (segments.isNotEmpty)) {
-      memory = ServerMemory(
-        id: const Uuid().v4(),
-        createdAt: DateTime.now(),
-        structured: Structured('', '', emoji: '⛓️‍💥', category: 'other'),
-        discarded: true,
-        transcriptSegments: segments,
-        failed: true,
-        source: segments.isNotEmpty ? MemorySource.friend : MemorySource.openglass,
-        language: segments.isNotEmpty ? SharedPreferencesUtil().recordingsLanguage : null,
-      );
-      SharedPreferencesUtil().addFailedMemory(memory!);
-      // TODO: store anyways something temporal and retry once connected again.
-    }
-
+    if (result == null || result.memory == null) return false;
+    memory = result.memory;
     notifyListeners();
     return true;
   }
