@@ -10,12 +10,14 @@ import 'package:provider/provider.dart';
 
 class MemoryListItem extends StatefulWidget {
   final bool isFromOnboarding;
+  final DateTime date;
   final int memoryIdx;
   final ServerMemory memory;
 
   const MemoryListItem({
     super.key,
     required this.memory,
+    required this.date,
     required this.memoryIdx,
     this.isFromOnboarding = false,
   });
@@ -31,7 +33,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
     return GestureDetector(
       onTap: () async {
         MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx);
+        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
         routeToPage(
           context,
           MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
@@ -62,7 +64,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                 onDismissed: (direction) {
                   var memory = widget.memory;
                   var memoryIdx = widget.memoryIdx;
-                  provider.deleteMemoryLocally(memory, memoryIdx);
+                  provider.deleteMemoryLocally(memory, memoryIdx, widget.date);
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
                         SnackBar(
