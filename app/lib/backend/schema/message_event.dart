@@ -5,8 +5,6 @@ enum MessageEventType {
   newMemoryCreating('new_memory_creating'),
   newMemoryCreated('new_memory_created'),
   newMemoryCreateFailed('new_memory_create_failed'),
-  memoryPostProcessingSuccess('memory_post_processing_success'),
-  memoryPostProcessingFailed('memory_post_processing_failed'),
   newProcessingMemoryCreated('new_processing_memory_created'),
   processingMemoryStatusChanged('processing_memory_status_changed'),
   ping('ping'),
