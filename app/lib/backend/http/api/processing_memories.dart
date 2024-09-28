@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -44,9 +43,7 @@ Future<UpdateProcessingMemoryResponse?> updateProcessingMemoryServer({
   return null;
 }
 
-Future<ProcessingMemoryResponse?> fetchProcessingMemoryServer({
-  required String id,
-}) async {
+Future<ProcessingMemoryResponse?> fetchProcessingMemoryServer({required String id}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/processing-memories/$id',
     headers: {},
