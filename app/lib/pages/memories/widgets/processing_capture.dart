@@ -144,9 +144,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          deviceProvider.connectedDevice == null &&
-                  !isUsingPhoneMic &&
-                  havingCapturingMemory
+          deviceProvider.connectedDevice == null && !isUsingPhoneMic && havingCapturingMemory
               ? Row(
                   children: [
                     const Text(
