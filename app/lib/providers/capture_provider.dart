@@ -178,9 +178,9 @@ class CaptureProvider extends ChangeNotifier
       setHasTranscripts(segments.isNotEmpty);
     }
 
-    // Notify combining
-    if (capturingProcessingMemory?.memoryId != null) {
-      memoryProvider?.onNewCombiningMemory(capturingProcessingMemory!);
+    // Notify capturing
+    if (capturingProcessingMemory != null) {
+      memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
     }
 
     // Update processing memory
