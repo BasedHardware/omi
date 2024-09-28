@@ -44,7 +44,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       return (showPhoneMic || isConnected || havingCapturingMemory)
           ? GestureDetector(
               onTap: () async {
-                if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+                if (provider.segments.isEmpty) return;
                 routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
               },
               child: Container(
@@ -193,9 +193,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
-                        captureProvider.segments.isNotEmpty || captureProvider.photos.isNotEmpty
-                            ? 'In progress...'
-                            : 'Say something...',
+                        captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
                         style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                         maxLines: 1,
                       ),
@@ -339,6 +337,7 @@ class ProcessingMemoryWidget extends StatefulWidget {
     super.key,
     required this.memory,
   });
+
   @override
   State<ProcessingMemoryWidget> createState() => _ProcessingMemoryWidgetState();
 }
