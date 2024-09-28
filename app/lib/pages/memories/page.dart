@@ -49,7 +49,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             SliverToBoxAdapter(child: getMemoryCaptureWidget()),
-            if (memoryProvider.memoriesWithDates.isEmpty && !memoryProvider.isLoadingMemories)
+            if (memoryProvider.groupedMemories.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -58,7 +58,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   ),
                 ),
               )
-            else if (memoryProvider.memoriesWithDates.isEmpty && memoryProvider.isLoadingMemories)
+            else if (memoryProvider.groupedMemories.isEmpty && memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -72,8 +72,9 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             else
               SliverList(
                 delegate: SliverChildBuilderDelegate(
+                  childCount: memoryProvider.groupedMemories.length + 1,
                   (context, index) {
-                    if (index == memoryProvider.memoriesWithDates.length) {
+                    if (index == memoryProvider.groupedMemories.length) {
                       if (memoryProvider.isLoadingMemories) {
                         return const Center(
                           child: Padding(
@@ -92,21 +93,29 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                             memoryProvider.getMoreMemoriesFromServer();
                           }
                         },
-                        child: const SizedBox(height: 80, width: double.maxFinite),
+                        child: const SizedBox(height: 20, width: double.maxFinite),
+                      );
+                    } else {
+                      var date = memoryProvider.groupedMemories.keys.elementAt(index);
+                      List<ServerMemory> memoriesForDate = memoryProvider.groupedMemories[date]!;
+                      print('date: $date, memories: ${memoriesForDate.length}');
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (index == 0) const SizedBox(height: 16),
+                          DateListItem(date: date, isFirst: index == 0),
+                          ...memoriesForDate.map(
+                            (memory) => MemoryListItem(
+                              memory: memory,
+                              memoryIdx: memoryProvider.groupedMemories[date]!.indexOf(memory),
+                              date: date,
+                            ),
+                          ),
+                        ],
                       );
                     }
-
-                    if (memoryProvider.memoriesWithDates[index].runtimeType == DateTime) {
-                      return DateListItem(
-                          date: memoryProvider.memoriesWithDates[index] as DateTime, isFirst: index == 0);
-                    }
-                    var memory = memoryProvider.memoriesWithDates[index] as ServerMemory;
-                    return MemoryListItem(
-                      memoryIdx: memoryProvider.memoriesWithDates.indexOf(memory),
-                      memory: memory,
-                    );
                   },
-                  childCount: memoryProvider.memoriesWithDates.length + 1,
                 ),
               ),
             const SliverToBoxAdapter(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;
@@ -41,18 +42,12 @@ class _NameWidgetState extends State<NameWidget> {
             enabled: true,
             focusNode: focusNode,
             controller: nameController,
-            // textCapitalization: TextCapitalization.sentences,
             obscureText: false,
-            // canRequestFocus: true,
             textAlign: TextAlign.center,
             textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
               hintText: 'How Omi should call you?',
-              // label: const Text('What should Omi call you?'),
               hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
-              // border: UnderlineInputBorder(
-              //   borderSide: BorderSide(color: Colors.grey.shade200),
-              // ),
               border: GradientOutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 gradient: const LinearGradient(
@@ -106,6 +101,21 @@ class _NameWidgetState extends State<NameWidget> {
                 ),
               )
             ],
+          ),
+          const SizedBox(
+            height: 12,
+          ),
+          InkWell(
+            child: Text(
+              'Need Help?',
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+            onTap: () {
+              Intercom.instance.displayMessenger();
+            },
           ),
         ],
       ),

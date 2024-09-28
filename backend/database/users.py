@@ -43,3 +43,34 @@ def update_person(uid: str, person_id: str, name: str):
 def delete_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'deleted': True})
+
+
+def delete_user_data(uid: str):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = user_ref.collection('memories')
+    # delete all memories
+    batch = db.batch()
+    for doc in memories_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    # delete chat messages
+    messages_ref = user_ref.collection('messages')
+    batch = db.batch()
+    for doc in messages_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    # delete facts
+    batch = db.batch()
+    facts_ref = user_ref.collection('facts')
+    for doc in facts_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    # delete processing memories
+    processing_memories_ref = user_ref.collection('processing_memories')
+    batch = db.batch()
+    for doc in processing_memories_ref.stream():
+        batch.delete(doc.reference)
+    batch.commit()
+    # delete user
+    user_ref.delete()
+    return {'status': 'ok', 'message': 'Account deleted successfully'}
