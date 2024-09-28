@@ -18,7 +18,7 @@ class SdCardSocketService {
 
     IOWebSocketChannel? sdCardChannel;
     WebsocketConnectionStatus sdCardConnectionState = WebsocketConnectionStatus.notConnected;
-
+    Timer? _reconnectionTimer;
     SdCardSocketService();
 
 Future<void> setupSdCardWebSocket({required Function onMessageReceived, String? btConnectedTime}) async {
@@ -58,6 +58,17 @@ Future<void> setupSdCardWebSocket({required Function onMessageReceived, String? 
      }
     
    }
+
+ Future<void> attemptReconnection({required Function onMessageReceived, String? btConnectedTime})async {
+    _reconnectionTimer?.cancel();
+    debugPrint('Attempting reconnection');
+    _reconnectionTimer = Timer(Duration(seconds:5), () {
+      setupSdCardWebSocket(
+        onMessageReceived: onMessageReceived,
+         btConnectedTime: btConnectedTime,
+      );
+    });
+ }
 
 Future<IOWebSocketChannel?> openSdCardStream({
   required VoidCallback onWebsocketConnectionSuccess,
