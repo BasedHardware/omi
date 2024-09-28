@@ -21,6 +21,20 @@ class MemoryProvider extends ChangeNotifier {
   List<ServerProcessingMemory> processingMemories = [];
   Timer? _processingMemoryWatchTimer;
 
+  void onMemoryTap(int idx) {
+    if (idx < 0 || idx > memories.length - 1) {
+      return;
+    }
+    var changed = false;
+    if (memories[idx].isNew) {
+      memories[idx].isNew = false;
+      changed = true;
+    }
+    if (changed) {
+      filterGroupedMemories('');
+    }
+  }
+
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
@@ -40,7 +54,7 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    groupMemoriesByDate();
+    _groupMemoriesByDateWithoutNotify();
 
     // Processing memories
     var pms = await getProcessingMemories();
@@ -49,7 +63,7 @@ class MemoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void groupMemoriesByDate() {
+  void _groupMemoriesByDateWithoutNotify() {
     groupedMemories = {};
     for (var memory in memories) {
       if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded && !memory.isNew) continue;
@@ -57,16 +71,23 @@ class MemoryProvider extends ChangeNotifier {
       if (!groupedMemories.containsKey(date)) {
         groupedMemories[date] = [];
       }
-      groupedMemories[date]!.add(memory);
-      groupedMemories[date]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      groupedMemories[date]?.add(memory);
     }
+    // Sort
+    for (final date in groupedMemories.keys) {
+      groupedMemories[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+  }
+
+  void groupMemoriesByDate() {
+    _groupMemoriesByDateWithoutNotify();
     notifyListeners();
   }
 
-  void filterGroupedMemories(String query) {
+  void _filterGroupedMemoriesWithoutNotify(String query) {
     if (query.isEmpty) {
       groupedMemories = {};
-      groupMemoriesByDate();
+      _groupMemoriesByDateWithoutNotify();
     } else {
       groupedMemories = {};
       for (var memory in memories) {
@@ -77,10 +98,14 @@ class MemoryProvider extends ChangeNotifier {
         if ((memory.getTranscript() + memory.structured.title + memory.structured.overview)
             .toLowerCase()
             .contains(query.toLowerCase())) {
-          groupedMemories[date]!.add(memory);
+          groupedMemories[date]?.add(memory);
         }
       }
     }
+  }
+
+  void filterGroupedMemories(String query) {
+    _filterGroupedMemoriesWithoutNotify(query);
     notifyListeners();
   }
 
@@ -222,6 +247,15 @@ class MemoryProvider extends ChangeNotifier {
     memories.insert(0, memory);
     addMemoryToGroupedMemories(memory);
     notifyListeners();
+  }
+
+  void upsertMemory(ServerMemory memory) {
+    int idx = memories.indexWhere((m) => m.id == memory.id);
+    if (idx < 0) {
+      addMemory(memory);
+    } else {
+      updateMemory(memory, idx);
+    }
   }
 
   void addMemoryToGroupedMemories(ServerMemory memory) {

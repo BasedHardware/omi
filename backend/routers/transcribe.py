@@ -408,7 +408,9 @@ async def _websocket_util(
         # Message: New processing memory created
         ok = await _send_message_event(NewProcessingMemoryCreated(
             event_type="new_processing_memory_created",
-            processing_memory_id=processing_memory.id),
+            processing_memory_id=processing_memory.id,
+            memory_id=processing_memory.memory_id,
+        ),
         )
         if not ok:
             print("Can not send message event new_processing_memory_created")
