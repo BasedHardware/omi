@@ -372,13 +372,8 @@ async def _websocket_util(
         now_ts = time.time()
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            if not last_processing_memory.capturing_to or last_processing_memory.capturing_to.timestamp() > now_ts:
-                last_segment_end = 0
-                for segment in last_processing_memory.transcript_segments:
-                    last_segment_end = max(last_segment_end, segment.end)
-                timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
-                if timer_segment_start + last_segment_end + min_seconds_limit > now_ts:
-                    processing_memory = last_processing_memory
+            if last_processing_memory.capturing_to and last_processing_memory.capturing_to.timestamp() > now_ts:
+                processing_memory = last_processing_memory
 
         # Or create new
         if not processing_memory:
