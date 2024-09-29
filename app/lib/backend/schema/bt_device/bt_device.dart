@@ -275,9 +275,10 @@ class BtDevice {
   }
 
   void _initialize() async {
-    var connection = await ServiceManager.instance().device.ensureConnection(id);
-    if (_info == null || _info!.modelNumber == 'Unknown') {
-      _info = await getDeviceInfo(connection);
-    }
+    // do not use this for now. Wait till we have a better way because this will result in a loop
+    // var connection = await ServiceManager.instance().device.ensureConnection(id);
+    // if (_info == null || _info!.modelNumber == 'Unknown') {
+    //   _info = await getDeviceInfo(connection);
+    // }
   }
 }
