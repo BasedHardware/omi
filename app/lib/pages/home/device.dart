@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device_info.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
@@ -11,7 +12,7 @@ import 'package:provider/provider.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
-  final BTDeviceStruct? device;
+  final BtDevice? device;
   final int batteryLevel;
 
   const ConnectedDevice({super.key, required this.device, required this.batteryLevel});
@@ -22,7 +23,7 @@ class ConnectedDevice extends StatefulWidget {
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+  Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
@@ -35,9 +36,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
     var deviceConnected = widget.device != null;
 
-    return FutureBuilder<DeviceInfo>(
+    return FutureBuilder<BtDeviceInfo>(
       future: context.read<DeviceProvider>().getDeviceInfo(),
-      builder: (BuildContext context, AsyncSnapshot<DeviceInfo> snapshot) {
+      builder: (BuildContext context, AsyncSnapshot<BtDeviceInfo> snapshot) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
@@ -53,7 +54,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Text(
-                    '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDeviceStruct.getShortId()})',
+                    '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDevice.getShortId()})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16.0,
@@ -142,7 +143,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 ),
                 child: TextButton(
                   onPressed: () async {
-                    await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
+                    await SharedPreferencesUtil()
+                        .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
                     SharedPreferencesUtil().deviceName = '';
                     if (widget.device != null) {
                       await _bleDisconnectDevice(widget.device!);

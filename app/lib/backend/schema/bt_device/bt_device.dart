@@ -109,8 +109,6 @@ class BtDevice {
   BtDevice({required this.name, required this.id, required this.type, required this.rssi, BtDeviceInfo? info}) {
     if (info != null) {
       _info = info;
-    } else {
-      _info = BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', type);
     }
   }
 
@@ -126,13 +124,21 @@ class BtDevice {
     }
   }
 
+  Future<BtDevice> updateDeviceInfo(DeviceConnection? conn) async {
+    if (conn == null) {
+      return this;
+    }
+    _info = await getDeviceInfo(conn);
+    return this;
+  }
+
   Future<BtDeviceInfo> getDeviceInfo(DeviceConnection? conn) async {
     if (conn == null) {
       if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
         var device = SharedPreferencesUtil().btDevice;
-        return device.info ?? BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', device.type);
+        return device.info ?? BtDeviceInfo('Unknown22', 'Unknown', 'Unknown', 'Unknown', device.type);
       } else {
-        return BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
+        return BtDeviceInfo('Unknown33', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
       }
     }
 

@@ -423,7 +423,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   } else {
                     return GestureDetector(
                       onTap: () async {
-                        if (SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+                        if (SharedPreferencesUtil().btDevice.id.isEmpty) {
                           routeToPage(context, const ConnectDevicePage());
                           MixpanelManager().connectFriendClicked();
                         } else {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -153,7 +153,7 @@ getTranscriptWidget(
   bool memoryCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
+  BtDevice? btDevice,
 ) {
   if (memoryCreating) {
     return const Padding(
@@ -173,7 +173,7 @@ getTranscriptWidget(
 getLiteTranscriptWidget(
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
+  BtDevice? btDevice,
 ) {
   return Column(
     children: [
@@ -188,7 +188,7 @@ getLiteTranscriptWidget(
 }
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
     visible: true,
     child: Padding(

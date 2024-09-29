@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
@@ -265,7 +265,7 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 }
 
 getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState state) {
-  if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
   return MaterialButton(
     onPressed: state == RecordingState.initialising ? null : toggleRecording,
     child: Row(
