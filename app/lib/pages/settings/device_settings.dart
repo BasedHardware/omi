@@ -33,7 +33,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DeviceProvider>().getDeviceInfo();
+      if (context.read<DeviceProvider>().deviceInfo == null) {
+        context.read<DeviceProvider>().getDeviceInfo();
+      }
     });
     super.initState();
   }
