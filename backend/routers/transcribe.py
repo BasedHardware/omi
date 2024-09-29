@@ -23,6 +23,26 @@ from utils.stt.streaming import *
 router = APIRouter()
 
 
+# Minor script generate wav from raw audio bytes
+# import wave
+# import os
+#
+# # Parameters for the WAV file
+# sample_rate = 16000  # Assuming a sample rate of 16000 Hz
+# channels = 1  # Mono audio
+# sample_width = 2  # Assuming 16-bit audio (2 bytes per sample)
+#
+# # Read the raw audio data from the file
+# with open("audio.raw", "rb") as raw_file:
+#     raw_audio_data = raw_file.read()
+#
+# if __name__ == '__main__':
+#     with wave.open("output.wav", "wb") as wav_file:
+#         wav_file.setnchannels(channels)  # Set mono/stereo
+#         wav_file.setsampwidth(sample_width)  # Set sample width to 16 bits (2 bytes)
+#         wav_file.setframerate(sample_rate)  # Set sample rate to 16000 Hz
+#         wav_file.writeframes(raw_audio_data)  # Write raw audio data to WAV
+
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
