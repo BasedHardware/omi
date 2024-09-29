@@ -84,10 +84,6 @@ async def _websocket_util(
     # Initiate a separate vad for each websocket
     w_vad = webrtcvad.Vad()
     w_vad.set_mode(1)
-    # TODO: improvement? if keep a 500ms buffer before it detects speech? all the time,
-    # so any pieces before are send, and maybe is more accurate?, but I think is 5 to 10% less accurate, not terrible
-    # TODO: question, how slow it is?
-
     flush_new_memory_lock = threading.Lock()
 
     min_seconds_limit = 120
@@ -238,6 +234,10 @@ async def _websocket_util(
                 if not has_speech:
                     continue
 
+                # TODO: is the VAD slowing down the STT service? specially soniox?
+                # - but from write data, it feels faster, but the processing is having issues
+                # - and soniox after missingn a couple filtered bytes get's slower
+                # - specially after waiting for like a couple seconds.
                 # f.write(data)
 
                 if soniox_socket is not None:
