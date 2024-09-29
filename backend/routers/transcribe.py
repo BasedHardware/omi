@@ -147,14 +147,12 @@ async def _websocket_util(
             if processing_memory and int(time.time()) % 3 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
-
-                now_ts = time.time()
-                capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+                processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
 
                 processing_memories_db.update_processing_memory_segments(
                     uid, processing_memory.id,
                     list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
-                    capturing_to,
+                    processing_memory.capturing_to,
                 )
 
     soniox_socket = None
@@ -321,10 +319,9 @@ async def _websocket_util(
 
         # Check the last processing memory
         last_processing_memory_data = processing_memories_db.get_last(uid)
-        now_ts = time.time()
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            if last_processing_memory.capturing_to and last_processing_memory.capturing_to.timestamp() > now_ts:
+            if last_processing_memory.capturing_to and last_processing_memory.capturing_to.timestamp() > time.time():
                 processing_memory = last_processing_memory
 
         # Or create new
@@ -336,10 +333,6 @@ async def _websocket_util(
                 timer_segment_start=timer_start + segment_start,
                 language=language,
             )
-
-        # Status, capturing to
-        processing_memory.status = ProcessingMemoryStatus.Capturing
-        processing_memory.capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
 
         # Track session changes
         processing_memory.session_id = session_id
@@ -353,9 +346,13 @@ async def _websocket_util(
             processing_memory.transcript_segments, memory_transcript_segements,
             timer_start - processing_memory.timer_start
         )
-
         processing_memory_synced = len(memory_transcript_segements)
         processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
+
+        # Status, capturing to
+        processing_memory.status = ProcessingMemoryStatus.Capturing
+        processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
+
         processing_memories_db.upsert_processing_memory(uid, processing_memory.dict())
 
         # Message: New processing memory created
@@ -388,14 +385,12 @@ async def _websocket_util(
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
-
-            now_ts = time.time()
-            capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+            processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
 
             processing_memories_db.update_processing_memory_segments(
                 uid, processing_memory.id,
                 list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
-                capturing_to,
+                processing_memory.capturing_to,
             )
 
         # Update processing memory status
@@ -418,9 +413,18 @@ async def _websocket_util(
         if not ok:
             print("Can not send message event new_memory_creating")
 
-        # Not existed memory then create new one
+        # Memory
         messages = []
-        if not processing_memory.memory_id:
+        memory = None
+        if processing_memory.memory_id:
+            memory_data = memories_db.get_memory(uid, processing_memory.memory_id)
+            if memory_data is None:
+                print(f"Memory is not found. Uid: {uid}. Memory: {processing_memory.memory_id}")
+            else:
+                memory = Memory(**memory_data)
+
+        # Not existed memory then create new one
+        if not memory:
             new_memory, new_messages, updated_processing_memory = await create_memory_by_processing_memory(
                 uid, processing_memory.id
             )
@@ -437,13 +441,6 @@ async def _websocket_util(
             messages = new_messages
             processing_memory = updated_processing_memory
         else:
-            # Or process the existed with new transcript
-            memory_data = memories_db.get_memory(uid, processing_memory.memory_id)
-            if memory_data is None:
-                print(f"Memory is not found. Uid: {uid}. Memory: {processing_memory.memory_id}")
-                return
-            memory = Memory(**memory_data)
-
             # Update transcripts
             memory.transcript_segments = processing_memory.transcript_segments
             memories_db.update_memory_segments(
