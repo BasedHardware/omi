@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -7,10 +7,9 @@ import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class FirmwareUpdate extends StatefulWidget {
-  final DeviceInfo deviceInfo;
-  final BTDeviceStruct? device;
+  final BtDevice? device;
 
-  const FirmwareUpdate({super.key, required this.deviceInfo, this.device});
+  const FirmwareUpdate({super.key, this.device});
 
   @override
   State<FirmwareUpdate> createState() => _FirmwareUpdateState();
@@ -29,7 +28,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       });
       await getLatestVersion(deviceName: widget.device!.name);
       var (a, b) = await shouldUpdateFirmware(
-          currentFirmware: widget.deviceInfo.firmwareRevision, deviceName: widget.device!.name);
+          currentFirmware: widget.device!.info!.firmwareRevision, deviceName: widget.device!.name);
       if (mounted) {
         setState(() {
           shouldUpdate = b;
@@ -131,7 +130,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Current Version: ${widget.deviceInfo.firmwareRevision}',
+                                  'Current Version: ${widget.device!.info!.firmwareRevision}',
                                   style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                                 const SizedBox(height: 8),
