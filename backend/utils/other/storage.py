@@ -31,6 +31,12 @@ def upload_profile_audio(file_path: str, uid: str):
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
+def get_user_has_speech_profile(uid: str) -> bool:
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    blob = bucket.blob(f'{uid}/speech_profile.wav')
+    return blob.exists()
+
+
 def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/speech_profile.wav'
