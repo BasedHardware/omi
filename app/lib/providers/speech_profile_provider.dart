@@ -7,9 +7,9 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
@@ -23,7 +23,7 @@ class SpeechProfileProvider extends ChangeNotifier
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
-  BTDeviceStruct? device;
+  BtDevice? device;
 
   final targetWordsCount = 70;
   final maxDuration = 90;
@@ -324,7 +324,7 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   @override
-  void onDevices(List<BTDeviceStruct> devices) {}
+  void onDevices(List<BtDevice> devices) {}
 
   @override
   void onStatusChanged(DeviceServiceStatus status) {}

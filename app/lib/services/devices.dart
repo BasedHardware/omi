@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
 
@@ -31,21 +31,21 @@ enum DeviceConnectionState {
 }
 
 abstract class IDeviceServiceSubsciption {
-  void onDevices(List<BTDeviceStruct> devices);
+  void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
-  List<BTDeviceStruct> _devices = [];
+  List<BtDevice> _devices = [];
   List<ScanResult> _bleDevices = [];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
   DeviceConnection? _connection;
 
-  List<BTDeviceStruct> get devices => _devices;
+  List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
 
@@ -92,27 +92,28 @@ class DeviceService implements IDeviceService {
   Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
     _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
     _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
-
     // Set devices
-    _devices = _bleDevices.map<BTDeviceStruct>((deviceResult) {
-      DeviceType? deviceType;
-      if (deviceResult.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
-        deviceType = DeviceType.friend;
-      } else if (deviceResult.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
-        deviceType = DeviceType.frame;
-      }
-      if (deviceType != null) {
-        deviceTypeMap[deviceResult.device.remoteId.toString()] = deviceType;
-      } else if (deviceTypeMap.containsKey(deviceResult.device.remoteId.toString())) {
-        deviceType = deviceTypeMap[deviceResult.device.remoteId.toString()];
-      }
-      return BTDeviceStruct(
-        name: deviceResult.device.platformName,
-        id: deviceResult.device.remoteId.str,
-        rssi: deviceResult.rssi,
-        type: deviceType,
-      );
-    }).toList();
+
+    // _devices = _bleDevices.map<BtDevice>((deviceResult) {
+    //   DeviceType? deviceType;
+    //   if (deviceResult.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
+    //     deviceType = DeviceType.friend;
+    //   } else if (deviceResult.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
+    //     deviceType = DeviceType.frame;
+    //   }
+    //   if (deviceType != null) {
+    //     deviceTypeMap[deviceResult.device.remoteId.toString()] = deviceType;
+    //   } else if (deviceTypeMap.containsKey(deviceResult.device.remoteId.toString())) {
+    //     deviceType = deviceTypeMap[deviceResult.device.remoteId.toString()];
+    //   }
+    //   return BtDevice(
+    //     name: deviceResult.device.platformName,
+    //     id: deviceResult.device.remoteId.str,
+    //     rssi: deviceResult.rssi,
+    //     type: deviceType,
+    //   );
+    // }).toList();
+    _devices = _bleDevices.map<BtDevice>((e) => BtDevice.fromScanResult(e)).toList();
     onDevices(devices);
 
     // Check desirable device
@@ -194,7 +195,7 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  void onDevices(List<BTDeviceStruct> devices) {
+  void onDevices(List<BtDevice> devices) {
     for (var s in _subscriptions.values) {
       s.onDevices(devices);
     }

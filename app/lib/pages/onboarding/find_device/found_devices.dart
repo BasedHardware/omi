@@ -1,7 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -94,7 +94,7 @@ class _FoundDevicesState extends State<FoundDevices> {
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
-                '${provider.deviceName} (${BTDeviceStruct.shortId(provider.deviceId)})',
+                '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
