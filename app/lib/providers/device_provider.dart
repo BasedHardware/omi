@@ -43,9 +43,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<BtDeviceInfo> getDeviceInfo() async {
     if (connectedDevice == null) {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-        return BtDeviceInfo('Unknown44', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
+        return BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
       } else {
-        return SharedPreferencesUtil().btDevice.info!;
+        deviceInfo = SharedPreferencesUtil().btDevice.info!;
+        return deviceInfo!;
       }
     } else {
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
@@ -233,6 +234,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // The device is still disconnected for some reason
     if (connectedDevice != null) {
       MixpanelManager().deviceConnected();
+      await getDeviceInfo();
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice!.name;
     }
