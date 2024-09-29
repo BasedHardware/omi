@@ -36,12 +36,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
 
-      bool showPhoneMic = deviceProvider.connectedDevice == null && !deviceProvider.isConnecting;
-      bool isConnected = deviceProvider.connectedDevice != null ||
-          provider.recordingState == RecordingState.record ||
-          (provider.memoryCreating && deviceProvider.connectedDevice != null);
-      bool havingCapturingMemory = provider.capturingProcessingMemory != null;
-
       /// Friend V2 SD CARD functionality
       String totalTimeRemainingString = (provider.timeToSend - provider.timeAlreadySent).toStringAsFixed(2);
 
@@ -71,41 +65,39 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         provider.setStorageIsReady(false);
       }
 
-      return (showPhoneMic || isConnected || havingCapturingMemory)
-          ? GestureDetector(
-              onTap: () async {
-                if (provider.segments.isEmpty) return;
-                routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
-              },
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                width: double.maxFinite,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getMemoryHeader(context),
-                      provider.segments.isNotEmpty
-                          ? const Column(
-                              children: [
-                                SizedBox(height: 8),
-                                LiteCaptureWidget(),
-                                SizedBox(height: 8),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          : const SizedBox.shrink();
+      return GestureDetector(
+        onTap: () async {
+          if (provider.segments.isEmpty) return;
+          routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          width: double.maxFinite,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade900,
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _getMemoryHeader(context),
+                provider.segments.isNotEmpty
+                    ? const Column(
+                        children: [
+                          SizedBox(height: 8),
+                          LiteCaptureWidget(),
+                          SizedBox(height: 8),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ],
+            ),
+          ),
+        ),
+      );
     });
   }
 
@@ -140,118 +132,129 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   }
 
   _getMemoryHeader(BuildContext context) {
-    // Processing memory
     var provider = context.read<CaptureProvider>();
-    bool havingCapturingMemory = provider.capturingProcessingMemory != null;
-
-    // Connected device
     var deviceProvider = context.read<DeviceProvider>();
-
-    // State
-    var stateText = "";
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
-    bool isConnected = false;
-    if (!connectivityProvider.isConnected) {
+
+    bool internetConnectionStateOk = connectivityProvider.isConnected;
+    bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
+    bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
+    bool isHavingCapturingMemory = provider.capturingProcessingMemory != null;
+    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+        captureProvider.recordingState == RecordingState.initialising ||
+        captureProvider.recordingState == RecordingState.pause;
+
+    // Left
+    Widget left = Row(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade800,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            'Waiting for reconnect...',
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+            maxLines: 1,
+          ),
+        ),
+      ],
+    );
+    if (deviceServiceStateOk && transcriptServiceStateOk) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    } else if (!isHavingCapturingMemory && (!deviceProvider.isConnected || isUsingPhoneMic)) {
+      left = Center(
+        child: getPhoneMicRecordingButton(
+          context,
+          () => _toggleRecording(context, captureProvider),
+          captureProvider.recordingState,
+        ),
+      );
+    } else if (isHavingCapturingMemory &&
+        (!internetConnectionStateOk || !transcriptServiceStateOk || !deviceServiceStateOk)) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              'Waiting for reconnect...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Right
+    var stateText = "";
+    if (deviceServiceStateOk && transcriptServiceStateOk) {
+      stateText = "Listening";
+    } else if (!internetConnectionStateOk) {
       stateText = "No connection";
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
-      isConnected = deviceProvider.connectedDevice != null;
-    } else if (captureProvider.recordingDeviceServiceReady && captureProvider.transcriptServiceReady) {
-      stateText = "Listening";
-      isConnected = true;
-    } else if (captureProvider.recordingDeviceServiceReady || captureProvider.transcriptServiceReady) {
-      stateText = "Preparing";
-      isConnected = true;
     }
-
-    var isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
-        captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause;
+    Widget right = Expanded(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: RecordingStatusIndicator(),
+          ),
+          stateText.isNotEmpty ? const SizedBox(width: 8) : const SizedBox.shrink(),
+          stateText.isNotEmpty
+              ? Text(
+                  stateText,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  maxLines: 1,
+                  textAlign: TextAlign.end,
+                )
+              : const SizedBox.shrink(),
+        ],
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          deviceProvider.connectedDevice == null && !isUsingPhoneMic && havingCapturingMemory
-              ? Row(
-                  children: [
-                    const Text(
-                      '🎙️',
-                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        'Waiting for reconnect...',
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-          // mic
-          // TODO: improve phone recording UI
-          deviceProvider.connectedDevice == null && !deviceProvider.isConnecting && !havingCapturingMemory
-              ? Center(
-                  child: getPhoneMicRecordingButton(
-                    context,
-                    () => _toggleRecording(context, captureProvider),
-                    captureProvider.recordingState,
-                  ),
-                )
-              : const SizedBox.shrink(),
-          isConnected && !isUsingPhoneMic
-              ? Row(
-                  children: [
-                    const Text(
-                      '🎙️',
-                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-          isConnected && !isUsingPhoneMic
-              ? Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: RecordingStatusIndicator(),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        stateText,
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                        maxLines: 1,
-                        textAlign: TextAlign.end,
-                      ),
-                    ],
-                  ),
-                )
-              : const SizedBox.shrink(),
+          left,
+          right,
         ],
       ),
     );
