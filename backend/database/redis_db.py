@@ -92,6 +92,14 @@ def get_user_speech_profile(uid: str) -> List[List[int]]:
     return eval(data)
 
 
+def remove_user_speech_profiles():
+    for key in r.scan_iter('users:*:speech_profile'):
+        r.delete(key)
+    for key in r.scan_iter('users:*:speech_profile_duration'):
+        r.delete(key)
+
+
+
 def store_user_speech_profile_duration(uid: str, duration: int):
     r.set(f'users:{uid}:speech_profile_duration', duration)
 
