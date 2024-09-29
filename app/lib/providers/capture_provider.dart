@@ -635,10 +635,9 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _ensureSocketConnection({bool force = false}) async {
-    debugPrint("_ensureSocketConnection");
+    debugPrint("_ensureSocketConnection ${_socket?.state}");
     var codec = SharedPreferencesUtil().deviceCodec;
-    if (force || (codec != _socket?.codec || _socket?.state != SocketServiceState.connected)) {
-      await _socket?.stop(reason: 'reset state, force $force');
+    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(force: force);
     }
   }

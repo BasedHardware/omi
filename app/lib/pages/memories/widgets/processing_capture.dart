@@ -162,7 +162,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         ),
       ],
     );
-    if (deviceServiceStateOk && transcriptServiceStateOk) {
+    if (!isUsingPhoneMic && deviceServiceStateOk && transcriptServiceStateOk) {
       left = Row(
         children: [
           const Text(
@@ -184,7 +184,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    } else if (!isHavingCapturingMemory && (!deviceProvider.isConnected || isUsingPhoneMic)) {
+    } else if (isUsingPhoneMic &&
+        !isHavingCapturingMemory &&
+        !(deviceProvider.isConnected || deviceProvider.isConnecting)) {
       left = Center(
         child: getPhoneMicRecordingButton(
           context,
@@ -226,27 +228,26 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
     }
-    Widget right = Expanded(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: RecordingStatusIndicator(),
-          ),
-          stateText.isNotEmpty ? const SizedBox(width: 8) : const SizedBox.shrink(),
-          stateText.isNotEmpty
-              ? Text(
-                  stateText,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  maxLines: 1,
-                  textAlign: TextAlign.end,
-                )
-              : const SizedBox.shrink(),
-        ],
-      ),
-    );
+    Widget right = stateText.isNotEmpty
+        ? Expanded(
+            child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: RecordingStatusIndicator(),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                stateText,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                maxLines: 1,
+                textAlign: TextAlign.end,
+              )
+            ],
+          ))
+        : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
