@@ -133,7 +133,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
 
   _getMemoryHeader(BuildContext context) {
     var provider = context.read<CaptureProvider>();
-    var deviceProvider = context.read<DeviceProvider>();
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
 
@@ -162,7 +161,15 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         ),
       ],
     );
-    if (!isUsingPhoneMic && deviceServiceStateOk && transcriptServiceStateOk) {
+    if (isUsingPhoneMic || SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+      left = Center(
+        child: getPhoneMicRecordingButton(
+          context,
+          () => _toggleRecording(context, captureProvider),
+          captureProvider.recordingState,
+        ),
+      );
+    } else if (deviceServiceStateOk && transcriptServiceStateOk) {
       left = Row(
         children: [
           const Text(
@@ -183,16 +190,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
           ),
         ],
-      );
-    } else if (isUsingPhoneMic &&
-        !isHavingCapturingMemory &&
-        !(deviceProvider.isConnected || deviceProvider.isConnecting)) {
-      left = Center(
-        child: getPhoneMicRecordingButton(
-          context,
-          () => _toggleRecording(context, captureProvider),
-          captureProvider.recordingState,
-        ),
       );
     } else if (isHavingCapturingMemory &&
         (!internetConnectionStateOk || !transcriptServiceStateOk || !deviceServiceStateOk)) {
