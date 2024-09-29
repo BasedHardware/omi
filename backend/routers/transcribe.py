@@ -301,7 +301,7 @@ async def _websocket_util(
             websocket_active = False
 
     async def _send_message_event(msg: MessageEvent):
-        print(f"Message: ${msg.to_json()}")
+        print(f"Message: type ${msg.event_type}")
         try:
             await websocket.send_json(msg.to_json())
             return True
@@ -490,7 +490,6 @@ async def _websocket_util(
         nonlocal memory_watching
         nonlocal websocket_active
         while memory_watching and websocket_active:
-            print(f"new memory watch, uid: {uid}, session: {session_id}")
             await asyncio.sleep(5)
             await _try_flush_new_memory_with_lock()
 
@@ -512,12 +511,10 @@ async def _websocket_util(
 
         # Validate last segment
         if not segment_end:
-            print("Not last segment or last segment invalid")
             return
 
         # First chunk, create processing memory
         should_create_processing_memory = not processing_memory and len(memory_transcript_segements) > 0
-        print(f"Should create processing {should_create_processing_memory}")
         if should_create_processing_memory:
             await _create_processing_memory()
 
