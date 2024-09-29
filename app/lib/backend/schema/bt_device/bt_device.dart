@@ -4,6 +4,7 @@ import 'package:friend_private/backend/schema/bt_device/bt_device_info.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/frame_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
+import 'package:friend_private/services/services.dart';
 
 enum BleAudioCodec {
   pcm16,
@@ -110,6 +111,7 @@ class BtDevice {
     if (info != null) {
       _info = info;
     }
+    _initialize();
   }
 
   BtDeviceInfo? get info => _info;
@@ -136,9 +138,9 @@ class BtDevice {
     if (conn == null) {
       if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
         var device = SharedPreferencesUtil().btDevice;
-        return device.info ?? BtDeviceInfo('Unknown22', 'Unknown', 'Unknown', 'Unknown', device.type);
+        return device.info ?? BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', device.type);
       } else {
-        return BtDeviceInfo('Unknown33', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
+        return BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
       }
     }
 
@@ -159,10 +161,6 @@ class BtDevice {
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
-
-    // if (device == null) {
-    //   return BtDeviceInfo(modelNumber, firmwareRevision, hardwareRevision, manufacturerName, DeviceType.friend);
-    // }
 
     var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
     if (deviceInformationService != null) {
@@ -274,5 +272,12 @@ class BtDevice {
       'type': type.index,
       'rssi': rssi,
     };
+  }
+
+  void _initialize() async {
+    var connection = await ServiceManager.instance().device.ensureConnection(id);
+    if (_info == null || _info!.modelNumber == 'Unknown') {
+      _info = await getDeviceInfo(connection);
+    }
   }
 }
