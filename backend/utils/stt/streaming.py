@@ -243,23 +243,23 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         # 'enable_global_speaker_diarization': False,
         # 'enable_profanity_filter': False,
         # 'enable_dictation': False,
-        'speech_context': {
-            'entries': [
-                {
-                    'phrases': ['MVP', 'PMF', 'VC', 'API', 'IPO', 'SEO', 'ROI', 'UI', 'UX'],
-                    'boost': 15,
-                },
-                {
-                    'phrases': ['Soniox', 'Deepgram', 'Speechmatics', 'Whisper', 'OpenAI', 'Otter'],
-                    'boost': 15,
-                },
-                {
-                    'phrases': ["Bro", "Sup"],
-                    'boost': 10
-                },
-
-            ]
-        },
+        # 'speech_context': {
+        #     'entries': [
+        #         {
+        #             'phrases': ['MVP', 'PMF', 'VC', 'API', 'IPO', 'SEO', 'ROI', 'UI', 'UX'],
+        #             'boost': 15,
+        #         },
+        #         {
+        #             'phrases': ['Soniox', 'Deepgram', 'Speechmatics', 'Whisper', 'OpenAI', 'Otter'],
+        #             'boost': 15,
+        #         },
+        #         {
+        #             'phrases': ["Bro", "Sup"],
+        #             'boost': 10
+        #         },
+        #
+        #     ]
+        # },
         'model': f'{language}_v2_lowlatency'
     }
 
@@ -340,10 +340,6 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
     except Exception as e:
         print(f"Exception in process_audio_soniox: {e}")
         raise  # Re-raise the exception to be handled by the caller
-
-
-LANGUAGE = "en"
-CONNECTION_URL = f"wss://eu2.rt.speechmatics.com/v2"
 
 
 async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str, preseconds: int = 0):

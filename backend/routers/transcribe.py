@@ -13,56 +13,14 @@ from starlette.websockets import WebSocketState
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
 from models.memory import Memory, TranscriptSegment
-from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated, ProcessingMemoryStatusChanged
+from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated, \
+    ProcessingMemoryStatusChanged
 from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
-from utils.stt.vad import VADIterator, model
 
 router = APIRouter()
-
-
-# @router.post("/v1/transcribe", tags=['v1'])
-# will be used again in Friend V2
-# def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
-#     upload_id = str(uuid.uuid4())
-#     file_path = f"_temp/{upload_id}_{file.filename}"
-#     with open(file_path, 'wb') as f:
-#         f.write(file.file.read())
-#
-#     aseg = AudioSegment.from_wav(file_path)
-#     print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
-#
-#     if vad_is_empty(file_path):  # TODO: get vad segments
-#         os.remove(file_path)
-#         return []
-#     transcript = transcribe_file_deepgram(file_path, language=language)
-#     os.remove(file_path)
-#     return transcript
-
-
-# templates = Jinja2Templates(directory="templates")
-
-# @router.get("/", response_class=HTMLResponse) // FIXME
-# def get(request: Request):
-#     return templates.TemplateResponse("index.html", {"request": request})
-
-#
-# Q: Why do we need try-catch around websocket.accept?
-# A: When a modal (modal app) timeout occurs, it allows a new request to be made, and a new WebSocket is initiated. Everything seems fine, right?
-#    But what if the receive[1], which belongs to the old request, is still lingering somewhere in the application?
-#    Yes, you know that if the app doesn’t manage the receive well, the new socket may receive messages from the existing receive. That’s why when a modal timeout happens, you might see various RuntimeErrors like:
-#    - Expected ASGI message "websocket.connect" but got "websocket.receive"
-#    - Expected ASGI message "websocket.connect" but got "websocket.disconnect"
-#    These messages are from the old receive. I called it Dirty Receive.
-#
-#    Because modal don't open their proto source code yet. So to deal with that kind of modal app error, lets support the grateful accept.
-#
-#    [1] receive in the WebSocket init function
-#    class WebSocket(HTTPConnection):
-#       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
-#
 
 
 class STTService(str, Enum):
@@ -94,8 +52,6 @@ async def _websocket_util(
         stt_service = STTService.soniox
     else:
         stt_service = STTService.deepgram
-
-    # stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
@@ -239,9 +195,7 @@ async def _websocket_util(
         await websocket.close(code=websocket_close_code)
         return
 
-    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
-    window_size_bytes = int(window_size_samples * 2 * 2.5)
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
@@ -251,12 +205,7 @@ async def _websocket_util(
         nonlocal timer_start
         timer_start = time.time()
 
-        # nonlocal audio_buffer
-        # audio_buffer = bytearray()
-        # speech_state = SpeechState.no_speech
-
-        with_speech, without_speech = 0, 0
-
+        # f = open("audio.raw", "ab")
         try:
             while websocket_active:
                 raw_data = await websocket.receive_bytes()
@@ -266,26 +215,10 @@ async def _websocket_util(
                     data = decoder.decode(bytes(data), frame_size=160)
 
                 has_speech = w_vad.is_speech(data, sample_rate)
-                # if has_speech:
-                #     with_speech += 1
-                # else:
-                #     without_speech += 1
-                #
-                # if has_speech:
-                #     print(f"speech: {with_speech / (with_speech + without_speech)}")
-
                 if not has_speech:
                     continue
 
-                # audio_buffer.extend(data)
-                # if len(audio_buffer) < window_size_bytes:
-                #     continue
-
-                # speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
-
-                # if speech_state == SpeechState.no_speech:
-                #     audio_buffer = audio_buffer[window_size_bytes:]
-                #     continue
+                # f.write(data)
 
                 if soniox_socket is not None:
                     await soniox_socket.send(data)
@@ -303,8 +236,6 @@ async def _websocket_util(
                             dg_socket2 = None
                     else:
                         dg_socket2.send(data)
-
-                # audio_buffer = audio_buffer[window_size_bytes:]
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
