@@ -312,7 +312,7 @@ async def _websocket_util(
         return False
 
     # Create proccesing memory
-    async def _create_processing_memory():
+    async def _prepare_processing_memory(should_new: bool = False):
         nonlocal processing_memory
         nonlocal memory_transcript_segements
         nonlocal processing_memory_synced
@@ -325,7 +325,7 @@ async def _websocket_util(
                 processing_memory = last_processing_memory
 
         # Or create new
-        if not processing_memory:
+        if not processing_memory and should_new:
             processing_memory = ProcessingMemory(
                 id=str(uuid.uuid4()),
                 created_at=datetime.now(timezone.utc),
@@ -333,6 +333,9 @@ async def _websocket_util(
                 timer_segment_start=timer_start + segment_start,
                 language=language,
             )
+
+        if not processing_memory:
+            return
 
         # Track session changes
         processing_memory.session_id = session_id
@@ -373,8 +376,7 @@ async def _websocket_util(
         nonlocal memory_transcript_segements
 
         if not processing_memory:
-            # Force create one
-            await _create_processing_memory()
+            await _prepare_processing_memory(should_new=True)
         else:
             # or ensure synced processing transcript
             processing_memory_data = processing_memories_db.get_processing_memory_by_id(uid, processing_memory.id)
@@ -489,13 +491,15 @@ async def _websocket_util(
         nonlocal websocket_active
         while memory_watching and websocket_active:
             await asyncio.sleep(5)
-            await _try_flush_new_memory_with_lock()
+            await _flush_new_memory_with_lock()
 
-    async def _try_flush_new_memory_with_lock(time_validate: bool = True):
+    async def _flush_new_memory_with_lock(time_validate: bool = True):
         with flush_new_memory_lock:
-            return await _try_flush_new_memory(time_validate=time_validate)
+            if not processing_memory:
+                await _prepare_processing_memory()
+            return await _flush_new_memory(time_validate=time_validate)
 
-    async def _try_flush_new_memory(time_validate: bool = True):
+    async def _flush_new_memory(time_validate: bool = True):
         nonlocal memory_transcript_segements
         nonlocal timer_start
         nonlocal segment_start
@@ -512,9 +516,9 @@ async def _websocket_util(
             return
 
         # First chunk, create processing memory
-        should_create_processing_memory = not processing_memory and len(memory_transcript_segements) > 0
-        if should_create_processing_memory:
-            await _create_processing_memory()
+        should_create_processing_memory = len(memory_transcript_segements) > 0
+        if not processing_memory and should_create_processing_memory:
+            await _prepare_processing_memory(should_new=True)
 
         # Validate transcript
         # Longer 120s
@@ -568,7 +572,7 @@ async def _websocket_util(
 
         # Flush new memory watch
         if new_memory_watch:
-            await _try_flush_new_memory_with_lock(time_validate=False)
+            await _flush_new_memory_with_lock(time_validate=False)
 
         # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
