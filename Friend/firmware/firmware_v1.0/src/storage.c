@@ -10,6 +10,7 @@
 #include <zephyr/sys/atomic.h>
 #include "utils.h"
 #include "sdcard.h"
+#include "storage.h"
 #include "transport.h"
 
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
@@ -339,7 +340,6 @@ void storage_write(void)
 
 int storage_init() 
 {
-    bt_gatt_service_register(&storage_service);
     k_thread_create(&storage_thread, storage_stack, K_THREAD_STACK_SIZEOF(storage_stack), (k_thread_entry_t)storage_write, NULL, NULL, NULL, K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
     return 0;
 }
