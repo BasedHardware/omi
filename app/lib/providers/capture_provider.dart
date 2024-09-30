@@ -23,7 +23,6 @@ import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
