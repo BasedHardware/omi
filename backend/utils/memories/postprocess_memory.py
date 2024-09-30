@@ -90,8 +90,8 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
             # TODO: FAL fails too much and is fucking expensive. Remove it.
             fail_reason = 'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
             memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.failed, fail_reason=fail_reason)
-            memory.postprocessing = MemoryPostProcessing(
-                status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
+            # memory.postprocessing = MemoryPostProcessing(
+            #     status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_memory, if any segment still matched to user or people
             return 200, memory
 
@@ -107,8 +107,8 @@ def postprocess_memory(memory_id: str, file_path: str, uid: str, emotional_feedb
         return 500, str(e)
 
     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.completed)
-    result.postprocessing = MemoryPostProcessing(
-        status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
+    # result.postprocessing = MemoryPostProcessing(
+    #     status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
     return 200, result
 
