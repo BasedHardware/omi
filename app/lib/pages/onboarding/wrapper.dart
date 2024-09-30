@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
@@ -79,6 +81,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onSignIn: () {
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
+          IntercomManager.instance.intercom.loginIdentifiedUser(
+            userId: FirebaseAuth.instance.currentUser!.uid,
+          );
           if (SharedPreferencesUtil().onboardingCompleted) {
             // previous users
             // Not needed anymore, because AuthProvider already does this
@@ -90,6 +95,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       NameWidget(goNext: () {
         _goNext();
+        IntercomManager.instance.updateUser(
+          FirebaseAuth.instance.currentUser!.email,
+          FirebaseAuth.instance.currentUser!.displayName,
+          FirebaseAuth.instance.currentUser!.uid,
+        );
         MixpanelManager().onboardingStepCompleted('Name');
       }),
       PermissionsWidget(
@@ -199,7 +209,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     SizedBox(
                       height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
                           ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context))
-                          : max(MediaQuery.of(context).size.height - 500 - 60, maxHeightWithTextScale(context)),
+                          : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context)),
                       child: Padding(
                         padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                         child: TabBarView(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -9,63 +11,34 @@ import 'package:friend_private/utils/features/calendar.dart';
 
 class MemoryProvider extends ChangeNotifier {
   List<ServerMemory> memories = [];
-  List<ServerMemory> filteredMemories = [];
-  List memoriesWithDates = [];
+  Map<DateTime, List<ServerMemory>> groupedMemories = {};
 
   bool isLoadingMemories = false;
   bool hasNonDiscardedMemories = true;
 
   String previousQuery = '';
 
-  void populateMemoriesWithDates() {
-    memoriesWithDates = [];
-    for (var i = 0; i < filteredMemories.length; i++) {
-      if (i == 0) {
-        memoriesWithDates.add(filteredMemories[i]);
-      } else {
-        if (filteredMemories[i].createdAt.day != filteredMemories[i - 1].createdAt.day) {
-          memoriesWithDates.add(filteredMemories[i].createdAt);
-        }
-        memoriesWithDates.add(filteredMemories[i]);
-      }
-    }
-    notifyListeners();
-  }
+  List<ServerProcessingMemory> processingMemories = [];
+  Timer? _processingMemoryWatchTimer;
 
-  void initFilteredMemories() {
-    filterMemories('');
-    populateMemoriesWithDates();
-    notifyListeners();
-  }
-
-  void filterMemories(String query) {
-    filteredMemories = [];
-    filteredMemories = SharedPreferencesUtil().showDiscardedMemories
-        ? memories
-        : memories.where((memory) => !memory.discarded).toList();
-    filteredMemories = query.isEmpty
-        ? filteredMemories
-        : filteredMemories
-            .where(
-              (memory) => (memory.getTranscript() + memory.structured.title + memory.structured.overview)
-                  .toLowerCase()
-                  .contains(query.toLowerCase()),
-            )
-            .toList();
-    if (query == '' && filteredMemories.isEmpty) {
-      filteredMemories = memories;
-      SharedPreferencesUtil().showDiscardedMemories = true;
-      hasNonDiscardedMemories = false;
+  void onMemoryTap(int idx) {
+    if (idx < 0 || idx > memories.length - 1) {
+      return;
     }
-    populateMemoriesWithDates();
-    notifyListeners();
+    var changed = false;
+    if (memories[idx].isNew) {
+      memories[idx].isNew = false;
+      changed = true;
+    }
+    if (changed) {
+      filterGroupedMemories('');
+    }
   }
 
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
-    filterMemories('');
-    populateMemoriesWithDates();
+    filterGroupedMemories('');
     notifyListeners();
   }
 
@@ -81,16 +54,167 @@ class MemoryProvider extends ChangeNotifier {
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
-    initFilteredMemories();
-    // No need to retry memories anymore as it is handled by the server
-    // retryFailedMemories();
+    _groupMemoriesByDateWithoutNotify();
+
+    // Processing memories
+    var pms = await getProcessingMemories();
+    await _setProcessingMemories(pms);
+
     notifyListeners();
+  }
+
+  void _groupMemoriesByDateWithoutNotify() {
+    groupedMemories = {};
+    for (var memory in memories) {
+      if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded && !memory.isNew) continue;
+      var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+      if (!groupedMemories.containsKey(date)) {
+        groupedMemories[date] = [];
+      }
+      groupedMemories[date]?.add(memory);
+    }
+    // Sort
+    for (final date in groupedMemories.keys) {
+      groupedMemories[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+  }
+
+  void groupMemoriesByDate() {
+    _groupMemoriesByDateWithoutNotify();
+    notifyListeners();
+  }
+
+  void _filterGroupedMemoriesWithoutNotify(String query) {
+    if (query.isEmpty) {
+      groupedMemories = {};
+      _groupMemoriesByDateWithoutNotify();
+    } else {
+      groupedMemories = {};
+      for (var memory in memories) {
+        var date = memory.createdAt;
+        if (!groupedMemories.containsKey(date)) {
+          groupedMemories[date] = [];
+        }
+        if ((memory.getTranscript() + memory.structured.title + memory.structured.overview)
+            .toLowerCase()
+            .contains(query.toLowerCase())) {
+          groupedMemories[date]?.add(memory);
+        }
+      }
+    }
+  }
+
+  void filterGroupedMemories(String query) {
+    _filterGroupedMemoriesWithoutNotify(query);
+    notifyListeners();
+  }
+
+  Future _setProcessingMemories(List<ServerProcessingMemory> pms) async {
+    processingMemories = pms;
+    notifyListeners();
+
+    if (processingMemories.isEmpty) {
+      _processingMemoryWatchTimer?.cancel();
+      return;
+    }
+
+    _trackprocessingMemories();
+    return;
+  }
+
+  Future onNewCombiningMemory(ServerProcessingMemory pm) async {
+    if (pm.memoryId == null) {
+      debugPrint("Processing Memory Id is not found ${pm.id}");
+      return;
+    }
+    int idx = memories.indexWhere((m) => m.id == pm.memoryId);
+    if (idx < 0) {
+      return;
+    }
+    memories.removeAt(idx);
+
+    filterGroupedMemories('');
+  }
+
+  Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
+    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
+      // existed
+      debugPrint("Processing memory is existed");
+      return;
+    }
+    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
+      // track processing status only
+      debugPrint("Processing memory status is not processing");
+      return;
+    }
+    processingMemories.insert(0, processingMemory);
+    _setProcessingMemories(List.from(processingMemories));
+  }
+
+  Future onProcessingMemoryDone(ServerProcessingMemory pm) async {
+    if (pm.memoryId == null) {
+      debugPrint("Processing Memory Id is not found ${pm.id}");
+      return;
+    }
+    var memory = await getMemoryById(pm.memoryId!);
+    if (memory == null) {
+      debugPrint("Memory is not found ${pm.memoryId}");
+      return;
+    }
+
+    // local labling
+    memory.isNew = true;
+
+    int idx = memories.indexWhere((m) => m.id == memory.id);
+    if (idx < 0) {
+      memories.insert(0, memory);
+    } else {
+      memories[idx] = memory;
+    }
+
+    filterGroupedMemories('');
+  }
+
+  Future _updateProcessingMemories(List<ServerProcessingMemory> pms) async {
+    for (var i = 0; i < processingMemories.length; i++) {
+      var pm = pms.firstWhereOrNull((m) => m.id == processingMemories[i].id);
+      if (pm != null) {
+        processingMemories[i] = pm;
+      }
+    }
+    _setProcessingMemories(List.from(processingMemories));
+  }
+
+  void _trackprocessingMemories() {
+    if (_processingMemoryWatchTimer?.isActive ?? false) {
+      return;
+    }
+    _processingMemoryWatchTimer?.cancel();
+    _processingMemoryWatchTimer = Timer(const Duration(seconds: 7), () async {
+      debugPrint("processing memory tracking...");
+      var filterIds = processingMemories
+          .where((m) => m.status == ServerProcessingMemoryStatus.processing)
+          .map((m) => m.id)
+          .toList();
+      if (filterIds.isEmpty) {
+        return;
+      }
+
+      var pms = await getProcessingMemories(filterIds: filterIds);
+      for (var i = 0; i < pms.length; i++) {
+        if (pms[i].status == ServerProcessingMemoryStatus.done) {
+          onProcessingMemoryDone(pms[i]);
+        }
+      }
+      _updateProcessingMemories(pms);
+    });
   }
 
   Future getMemoriesFromServer() async {
     setLoadingMemories(true);
     var mem = await getMemories();
     memories = mem;
+    memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     createEventsForMemories();
     setLoadingMemories(false);
     notifyListeners();
@@ -113,41 +237,69 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(true);
     var newMemories = await getMemories(offset: memories.length);
     memories.addAll(newMemories);
-    filterMemories('');
+    memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    filterGroupedMemories('');
     setLoadingMemories(false);
     notifyListeners();
   }
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
-    initFilteredMemories();
+    addMemoryToGroupedMemories(memory);
     notifyListeners();
   }
 
-  int addMemoryWithDate(ServerMemory memory) {
-    int idx;
-    var date = memoriesWithDates.indexWhere((element) =>
-        element is DateTime &&
-        element.day == memory.createdAt.day &&
-        element.month == memory.createdAt.month &&
-        element.year == memory.createdAt.year);
-    if (date != -1) {
-      var hour = memoriesWithDates[date + 1].createdAt.hour;
-      var newHour = memory.createdAt.hour;
-      if (newHour > hour) {
-        memoriesWithDates.insert(date + 1, memory);
-        idx = date + 1;
-      } else {
-        memoriesWithDates.insert(date + 2, memory);
-        idx = date + 2;
-      }
+  void upsertMemory(ServerMemory memory) {
+    int idx = memories.indexWhere((m) => m.id == memory.id);
+    if (idx < 0) {
+      addMemory(memory);
     } else {
-      memoriesWithDates.add(memory.createdAt);
-      memoriesWithDates.add(memory);
-      idx = memoriesWithDates.length - 1;
+      updateMemory(memory, idx);
+    }
+  }
+
+  void addMemoryToGroupedMemories(ServerMemory memory) {
+    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    if (groupedMemories.containsKey(date)) {
+      groupedMemories[date]!.insert(0, memory);
+      groupedMemories[date]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } else {
+      groupedMemories[date] = [memory];
+      groupedMemories = Map.fromEntries(groupedMemories.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
     }
     notifyListeners();
-    return idx;
+  }
+
+  void updateMemoryInSortedList(ServerMemory memory) {
+    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    if (groupedMemories.containsKey(date)) {
+      int idx = groupedMemories[date]!.indexWhere((element) => element.id == memory.id);
+      if (idx != -1) {
+        groupedMemories[date]![idx] = memory;
+      }
+    }
+    notifyListeners();
+  }
+
+  (int, DateTime) addMemoryWithDateGrouped(ServerMemory memory) {
+    memories.insert(0, memory);
+    memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    int idx;
+    var memDate = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    if (groupedMemories.containsKey(memDate)) {
+      idx = groupedMemories[memDate]!.indexWhere((element) => element.createdAt.isBefore(memory.createdAt));
+      if (idx == -1) {
+        groupedMemories[memDate]!.insert(0, memory);
+        idx = 0;
+      } else {
+        groupedMemories[memDate]!.insert(idx, memory);
+      }
+    } else {
+      groupedMemories[memDate] = [memory];
+      groupedMemories = Map.fromEntries(groupedMemories.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
+      idx = 0;
+    }
+    return (idx, memDate);
   }
 
   void updateMemory(ServerMemory memory, [int? index]) {
@@ -159,7 +311,8 @@ class MemoryProvider extends ChangeNotifier {
         memories[i] = memory;
       }
     }
-    initFilteredMemories();
+    memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    filterGroupedMemories('');
     notifyListeners();
   }
 
@@ -173,7 +326,6 @@ class MemoryProvider extends ChangeNotifier {
     List<int> indexes = events.mapIndexed((index, e) => index).toList();
     setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
     for (var i = 0; i < events.length; i++) {
-      print('Creating event: ${events[i].title}');
       if (events[i].created) continue;
       events[i].created = true;
       CalendarUtil().createEvent(
@@ -190,10 +342,13 @@ class MemoryProvider extends ChangeNotifier {
 
   Map<String, ServerMemory> memoriesToDelete = {};
 
-  void deleteMemoryLocally(ServerMemory memory, int index) {
+  void deleteMemoryLocally(ServerMemory memory, int index, DateTime date) {
     memoriesToDelete[memory.id] = memory;
     memories.removeWhere((element) => element.id == memory.id);
-    filterMemories('');
+    groupedMemories[date]!.removeAt(index);
+    if (groupedMemories[date]!.isEmpty) {
+      groupedMemories.remove(date);
+    }
     notifyListeners();
   }
 
@@ -205,8 +360,8 @@ class MemoryProvider extends ChangeNotifier {
   void undoDeleteMemory(String memoryId, int index) {
     if (memoriesToDelete.containsKey(memoryId)) {
       ServerMemory memory = memoriesToDelete.remove(memoryId)!;
-      memories.insert(index, memory);
-      filterMemories('');
+      memories.insert(0, memory);
+      addMemoryToGroupedMemories(memory);
     }
     notifyListeners();
   }
@@ -215,7 +370,13 @@ class MemoryProvider extends ChangeNotifier {
   void deleteMemory(ServerMemory memory, int index) {
     memories.removeWhere((element) => element.id == memory.id);
     deleteMemoryServer(memory.id);
-    filterMemories('');
+    filterGroupedMemories('');
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _processingMemoryWatchTimer?.cancel();
+    super.dispose();
   }
 }
