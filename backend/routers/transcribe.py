@@ -143,8 +143,8 @@ async def _websocket_util(
                 memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds
             )
 
-            # Sync processing transcript, periodly
-            if processing_memory and int(time.time()) % 3 == 0:
+            # Sync the processing transcript
+            if processing_memory:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
                 processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
