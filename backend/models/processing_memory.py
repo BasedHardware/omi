@@ -12,6 +12,7 @@ class ProcessingMemoryStatus(str, Enum):
     Capturing = 'capturing'
     Processing = 'processing'
     Done = 'done'
+    Failed = 'failed'
 
 
 class ProcessingMemory(BaseModel):
