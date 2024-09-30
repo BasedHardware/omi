@@ -51,7 +51,7 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              memory.discarded ? 'Discarded Memory' : '${memory.structured.title}',
+              memory.discarded ? 'Discarded Memory' : memory.structured.title},
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
