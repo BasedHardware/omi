@@ -26,9 +26,9 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.deviceInfo == null ||
+                if (device.pairedDevice == null ||
                     !device.isConnected ||
-                    device.deviceInfo?.firmwareRevision == '1.0.2') {
+                    device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -95,9 +95,9 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (provider.deviceInfo == null || !provider.isConnected)
+        return (provider.pairedDevice == null || !provider.isConnected)
             ? const SizedBox()
-            : (provider.deviceInfo?.firmwareRevision != '1.0.2')
+            : (provider.pairedDevice?.firmwareRevision != '1.0.2')
                 ? const SizedBox()
                 : Stack(
                     children: [

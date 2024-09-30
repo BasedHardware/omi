@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device_info.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -17,7 +16,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnecting = false;
   bool isConnected = false;
   BtDevice? connectedDevice;
-  BtDeviceInfo? deviceInfo;
+  BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   Timer? _reconnectionTimer;
@@ -34,29 +33,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  void setConnectedDevice(BtDevice? device) {
+  void setConnectedDevice(BtDevice? device) async {
     connectedDevice = device;
+    pairedDevice = device;
+    await getDeviceInfo();
     print('setConnectedDevice: $device');
     notifyListeners();
   }
 
-  Future<BtDeviceInfo> getDeviceInfo() async {
-    if (connectedDevice == null) {
-      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-        return BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
-      } else {
-        deviceInfo = SharedPreferencesUtil().btDevice.info!;
-        return deviceInfo!;
-      }
-    } else {
+  Future getDeviceInfo() async {
+    if (connectedDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
-      if (connection == null) {
-        return connectedDevice!.getDeviceInfo(null);
+      pairedDevice = await connectedDevice!.getDeviceInfo(connection);
+      SharedPreferencesUtil().btDevice = pairedDevice!;
+    } else {
+      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+        pairedDevice = BtDevice.empty();
+      } else {
+        pairedDevice = SharedPreferencesUtil().btDevice;
       }
-      deviceInfo = await connectedDevice!.getDeviceInfo(connection);
-      notifyListeners();
-      return deviceInfo!;
     }
+    notifyListeners();
   }
 
   // TODO: thinh, use connection directly
@@ -143,7 +140,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       if (connectedDevice == null) {
         connectedDevice = await _getConnectedDevice();
-        SharedPreferencesUtil().btDevice = connectedDevice!;
+        // SharedPreferencesUtil().btDevice = connectedDevice!;
         SharedPreferencesUtil().deviceName = connectedDevice!.name;
         MixpanelManager().deviceConnected();
       }
@@ -157,7 +154,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         var cDevice = await _getConnectedDevice();
         if (cDevice != null) {
           setConnectedDevice(cDevice);
-          SharedPreferencesUtil().btDevice = cDevice;
+          // SharedPreferencesUtil().btDevice = cDevice;
           SharedPreferencesUtil().deviceName = cDevice.name;
           MixpanelManager().deviceConnected();
           setIsConnected(true);
@@ -235,7 +232,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connectedDevice != null) {
       MixpanelManager().deviceConnected();
       await getDeviceInfo();
-      SharedPreferencesUtil().btDevice = connectedDevice!;
+      // SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice!.name;
     }
     notifyListeners();

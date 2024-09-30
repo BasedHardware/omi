@@ -10,11 +10,7 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class ConnectedDevice extends StatefulWidget {
-  // TODO: retrieve this from here instead of params
-  final BtDevice? device;
-  final int batteryLevel;
-
-  const ConnectedDevice({super.key, required this.device, required this.batteryLevel});
+  const ConnectedDevice({super.key});
 
   @override
   State<ConnectedDevice> createState() => _ConnectedDeviceState();
@@ -32,14 +28,11 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   Widget build(BuildContext context) {
-    var deviceName = widget.device?.name ?? SharedPreferencesUtil().deviceName;
-    var deviceConnected = widget.device != null;
-
     return Consumer<DeviceProvider>(builder: (context, provider, child) {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
+          title: Text(provider.connectedDevice != null ? 'Connected Device' : 'Paired Device'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
         body: Column(
@@ -51,7 +44,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 Text(
-                  '$deviceName (${widget.device?.getShortId() ?? SharedPreferencesUtil().btDevice.getShortId()})',
+                  '${provider.pairedDevice?.name} (${provider.pairedDevice?.getShortId() ?? SharedPreferencesUtil().btDevice.getShortId()})',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16.0,
@@ -61,11 +54,11 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                if (provider.deviceInfo != null)
+                if (provider.pairedDevice != null)
                   Column(
                     children: [
                       Text(
-                        '${provider.deviceInfo?.modelNumber}, firmware ${provider.deviceInfo?.firmwareRevision}',
+                        '${provider.pairedDevice?.modelNumber}, firmware ${provider.pairedDevice?.firmwareRevision}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10.0,
@@ -76,7 +69,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'by ${provider.deviceInfo?.manufacturerName}',
+                        'by ${provider.pairedDevice?.manufacturerName}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10.0,
@@ -88,7 +81,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       const SizedBox(height: 12),
                     ],
                   ),
-                widget.device != null
+                provider.connectedDevice != null
                     ? Container(
                         decoration: BoxDecoration(
                           color: Colors.transparent,
@@ -101,9 +94,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                               width: 10,
                               height: 10,
                               decoration: BoxDecoration(
-                                color: widget.batteryLevel > 75
+                                color: provider.batteryLevel > 75
                                     ? const Color.fromARGB(255, 0, 255, 8)
-                                    : widget.batteryLevel > 20
+                                    : provider.batteryLevel > 20
                                         ? Colors.yellow.shade700
                                         : Colors.red,
                                 shape: BoxShape.circle,
@@ -111,7 +104,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                             ),
                             const SizedBox(width: 8.0),
                             Text(
-                              '${widget.batteryLevel.toString()}% Battery',
+                              '${provider.batteryLevel.toString()}% Battery',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -143,8 +136,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   await SharedPreferencesUtil()
                       .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
                   SharedPreferencesUtil().deviceName = '';
-                  if (widget.device != null) {
-                    await _bleDisconnectDevice(widget.device!);
+                  if (provider.connectedDevice != null) {
+                    await _bleDisconnectDevice(provider.connectedDevice!);
                   }
                   context.read<DeviceProvider>().setIsConnected(false);
                   context.read<DeviceProvider>().setConnectedDevice(null);
@@ -153,7 +146,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   MixpanelManager().disconnectFriendClicked();
                 },
                 child: Text(
-                  widget.device == null ? "Unpair" : "Disconnect",
+                  provider.connectedDevice == null ? "Unpair" : "Disconnect",
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ),
