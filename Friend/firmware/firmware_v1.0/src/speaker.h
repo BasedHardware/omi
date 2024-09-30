@@ -22,7 +22,7 @@ int speaker_init();
  * 
  * @return The amount of data successfully sent in bytes.
  */
-uint16_t speak();
+uint16_t speak(uint16_t len, const void *buf);
 
 /**
  * @brief Play a chime effect

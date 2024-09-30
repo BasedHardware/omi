@@ -6,8 +6,8 @@
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
-#include "transport.h"
 #include "button.h"
+#include "transport.h"
 
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 

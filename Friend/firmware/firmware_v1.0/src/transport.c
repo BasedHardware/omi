@@ -18,6 +18,7 @@
 #include "sdcard.h"
 #include "storage.h"
 #include "lib/battery/battery.h"
+#include "btutils.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -130,7 +131,8 @@ void broadcast_accel(struct k_work *work_item) {
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
-    if (err) {
+    if (err) 
+    {
        LOG_ERR("Error updating Accelerometer data");
     }
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
@@ -138,7 +140,8 @@ void broadcast_accel(struct k_work *work_item) {
 
 
 //use d4,d5
-static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+{
     if (value == BT_GATT_CCC_NOTIFY)
     {
         LOG_INF("Client subscribed for notifications");
@@ -153,15 +156,18 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
 }
 
-int accel_start() {
+int accel_start() 
+{
     struct sensor_value odr_attr;
     lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
     k_msleep(50);
-    if (lsm6dsl_dev == NULL) {
+    if (lsm6dsl_dev == NULL) 
+    {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
 	}
-    if (!device_is_ready(lsm6dsl_dev)) {
+    if (!device_is_ready(lsm6dsl_dev)) 
+    {
 		LOG_ERR("LSM6DSL: not ready");
 		return 0;
 	}
@@ -169,18 +175,20 @@ int accel_start() {
 	odr_attr.val2 = 0;
 
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+    {
+	    LOG_ERR("Cannot set sampling frequency for Accelerometer.");
 		return 0;
 	}
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
-		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_ERR("Cannot set sampling frequency for gyro.");
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	    LOG_ERR("Cannot set sampling frequency for gyro.");
 	    return 0;
 	}
-    if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
-    LOG_ERR("Sensor sample update error");
-    return 0;
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
+    {
+        LOG_ERR("Sensor sample update error");
+        return 0;
 	}
 
     LOG_INF("Accelerometer is ready for use \n");
@@ -345,9 +353,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
-#ifdef CONFIG_ACCELEROMETER
-     k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
-#endif
+// #ifdef CONFIG_ACCELEROMETER
+//      k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+// #endif
 
 }
 
@@ -384,8 +392,8 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
 static void _le_phy_updated(struct bt_conn *conn,
                             struct bt_conn_le_phy_info *param)
 {
-    LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
-           phy2str(param->tx_phy), phy2str(param->rx_phy));
+    // LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
+    //        phy2str(param->tx_phy), phy2str(param->rx_phy));
 }
 
 static void _le_data_length_updated(struct bt_conn *conn,
@@ -467,7 +475,7 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 2048);
+K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
@@ -531,14 +539,15 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define MAX_WRITE_SIZE 400
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-bool write_to_storage(void) {
+bool write_to_storage(void) 
+{
     if (!read_from_tx_queue())
     {
         return false;
     }
 
     uint8_t *buffer = tx_buffer+2;
-    uint32_t packet_size = tx_buffer_size;
+    const uint32_t packet_size = tx_buffer_size;
     //load into write at 400 bytes at a time. is faster 
     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
@@ -598,25 +607,21 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 
- void update_file_size() 
- {
-     file_num_array[0] = get_file_size(1);
-     printk("file size for file count %d %d\n",file_count,file_num_array[0]);
- }
+void update_file_size() 
+{
+    file_num_array[0] = get_file_size(1);
+    printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+}
 
 void pusher(void)
 {
     k_msleep(500);
     while (1)
     {
-
-
         //
         // Load current connection
         //
-
         struct bt_conn *conn = current_connection;
-        bool use_gatt = true;
          //updating the most recent file size is expensive!
         static bool file_size_updated = true;
         static bool connection_was_true = false;
@@ -663,19 +668,17 @@ void pusher(void)
             }
             else 
             {
-                k_sleep(K_MSEC(10));
+       
             }
         }    
         if (valid)
         {
-
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
-                k_sleep(K_MSEC(50));
+                // k_sleep(K_MSEC(50));
             }
         }
-
         if (conn)
         {
             bt_conn_unref(conn);
@@ -702,7 +705,7 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
-  //  Enable accelerometer
+    //  Enable accelerometer
 #ifdef CONFIG_ACCELEROMETER
     err = accel_start();
     if (!err) 
@@ -711,10 +714,11 @@ int transport_start()
     }
     else 
     {
+        LOG_INF("Accelerometer initialized");
         bt_gatt_service_register(&accel_service);
     }
 #endif
-  //  Enable button
+    //  Enable button
 #ifdef CONFIG_ENABLE_BUTTON
     button_init();
     register_button_service();
@@ -734,7 +738,6 @@ int transport_start()
     }
 
     play_boot_sound();
-    
 #endif
     // Start advertising
 
