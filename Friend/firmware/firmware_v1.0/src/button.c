@@ -1,13 +1,14 @@
-#include <zephyr/logging/log.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
-#include "transport.h"
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
 #include "button.h"
+#include "transport.h"
+
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
@@ -25,8 +26,9 @@ static struct bt_gatt_attr button_service_attr[] = {
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
-static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-        if (value == BT_GATT_CCC_NOTIFY)
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+{
+    if (value == BT_GATT_CCC_NOTIFY)
     {
         LOG_INF("Client subscribed for notifications");
     }
@@ -56,15 +58,19 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
     current_button_time = k_cycle_get_32();
-	if (current_button_time - previous_button_time < max_debounce_interval) { //too low!
+	if (current_button_time - previous_button_time < max_debounce_interval) 
+    { //too low!
 	}
-	else { //right...    
+	else 
+    { //right...    
         int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
-        if (temp) {
-            was_pressed = true;
-        }
-        else {
+        if (temp) 
+        {
             was_pressed = false;
+        }
+        else 
+        {
+            was_pressed = true;
         }
 	}
 	previous_button_time = current_button_time;
@@ -89,87 +95,113 @@ static FSM_STATE_T current_button_state = IDLE;
 static uint32_t inc_count_1 = 0;
 static uint32_t inc_count_0 = 0;
 
-
 static int final_button_state[2] = {0,0};
 const static int threshold = 10;
 
-
-static void reset_count() {
+static void reset_count() 
+{
     inc_count_0 = 0;
     inc_count_1 = 0;
 }
-static void notify_press() {
+static inline void notify_press() 
+{
     final_button_state[0] = BUTTON_PRESS;
     LOG_INF("pressed");
-    bt_gatt_notify(get_current_connection(), &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL)
+    { 
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
 }
 
-static void notify_unpress() {
+static inline void notify_unpress() 
+{
     final_button_state[0] = BUTTON_RELEASE; 
     LOG_INF("unpressed");
-    bt_gatt_notify(get_current_connection(), &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL)
+    { 
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
 }
 
-static void notify_tap() {
-      final_button_state[0] = SINGLE_TAP;
+static inline void notify_tap() 
+{
+    final_button_state[0] = SINGLE_TAP;
     LOG_INF("tap");
-    bt_gatt_notify(get_current_connection(), &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL)
+    { 
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
 }
 
-static void notify_double_tap() {
-      final_button_state[0] = DOUBLE_TAP; //button press
+static inline void notify_double_tap() 
+{
+    final_button_state[0] = DOUBLE_TAP; //button press
     LOG_INF("double tap");
-    bt_gatt_notify(get_current_connection(), &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL)
+    { 
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
 }
 
-static void notify_long_tap() {
+static inline void notify_long_tap() 
+{
     final_button_state[0] = LONG_TAP; //button press
     LOG_INF("long tap");
-    bt_gatt_notify(get_current_connection(), &button_service.attrs[1], &final_button_state, sizeof(final_button_state));  
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL)
+    { 
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
 }
 
 #define LONG_PRESS_INTERVAL 50
 #define SINGLE_PRESS_INTERVAL 2
-void check_button_level(struct k_work *work_item) {
-    if (get_current_connection() == NULL)  {
-        return;
-    }
-
+void check_button_level(struct k_work *work_item) 
+{
      //insert the current button state here
     int state_ = was_pressed ? 1 : 0;
-    if (current_button_state == IDLE) {
-
-        if (state_ == 0) {
+    if (current_button_state == IDLE) 
+    {
+        if (state_ == 0) 
+        {
             //Do nothing!
         }
-
-        else if (state_ == 1) {
+        else if (state_ == 1) 
+        {
             //Also do nothing, but transition to the next state
             notify_press();
             current_button_state = ONE_PRESS;
         }
-
     }
 
-    else if (current_button_state == ONE_PRESS) {
-
-        if (state_ == 0) {
+    else if (current_button_state == ONE_PRESS) 
+    {
+        if (state_ == 0) 
+        {
             
-            if(inc_count_0 == 0) {
-            notify_unpress();
+            if(inc_count_0 == 0) 
+            {
+                notify_unpress();
             }
             inc_count_0++; //button is unpressed
-            if (inc_count_0 > SINGLE_PRESS_INTERVAL) {
+            if (inc_count_0 > SINGLE_PRESS_INTERVAL) 
+            {
                 //If button is not pressed for a little while....... 
                 //transition to Two_press. button could be a single or double tap
                 current_button_state = TWO_PRESS;
                 reset_count();          
             }
         }
-        if (state_ == 1) {
+        if (state_ == 1) 
+        {
             inc_count_1++; //button is pressed
 
-            if (inc_count_1 > LONG_PRESS_INTERVAL) {
+            if (inc_count_1 > LONG_PRESS_INTERVAL) 
+            {
                 //If button is pressed for a long time.......
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
@@ -181,35 +213,40 @@ void check_button_level(struct k_work *work_item) {
 
     }
 
-    else if (current_button_state == TWO_PRESS) {
-
-        if (state_ == 0) {
-             
-                if (inc_count_1 > 0) { // if button has been pressed......
+    else if (current_button_state == TWO_PRESS) 
+    {
+        if (state_ == 0) 
+        {
+            if (inc_count_1 > 0) 
+            { // if button has been pressed......
                 notify_unpress();
                 notify_double_tap();
                 
                 //Fire the notify and enter a grace period
                 current_button_state = GRACE;
                 reset_count();
-             }
+            }
              //single button press
-            else if (inc_count_0 > 10){
+            else if (inc_count_0 > 10)
+            {
                 notify_tap(); //Fire the notify and enter a grace period
                 current_button_state = GRACE;
                 reset_count();
-
-             }
-             else {
+            }
+            else 
+            {
                 inc_count_0++; //not pressed
-             }
+            }
         }
-        else if (state_ == 1 ) {
-            if (inc_count_1 == 0) {
+        else if (state_ == 1 ) 
+        {
+            if (inc_count_1 == 0) 
+            {
                 notify_press();
                 inc_count_1++;
             }
-            if (inc_count_1 > threshold) {
+            if (inc_count_1 > threshold) 
+            {
                 notify_long_tap();
                 //Fire the notify and enter a grace period
                 current_button_state = GRACE;
@@ -218,91 +255,109 @@ void check_button_level(struct k_work *work_item) {
         }
     }
 
-    else if (current_button_state == GRACE) {
-        if (state_ == 0) {
-            if (inc_count_0 == 0 && (inc_count_1 > 0)) {
-            notify_unpress();
+    else if (current_button_state == GRACE) 
+    {
+        if (state_ == 0) 
+        {
+            if (inc_count_0 == 0 && (inc_count_1 > 0)) 
+            {
+                notify_unpress();
             }
             inc_count_0++;
-            if (inc_count_0 > 10) {
-            current_button_state = IDLE;
-            reset_count();
+            if (inc_count_0 > 10) 
+            {
+                current_button_state = IDLE;
+                reset_count();
             }
         }
-        else if (state_ == 1) {
-              inc_count_1++;
+        else if (state_ == 1) 
+        {
+            inc_count_1++;
         }
     }
-
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-
 }
 
 
-static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
-     LOG_INF("button_data_read_characteristic");
-     int lint = 1;
-     LOG_INF("was_pressed: %d", was_pressed);
+static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
+{
+    LOG_INF("button_data_read_characteristic");
+    int lint = 1;
+    LOG_INF("was_pressed: %d", was_pressed);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &lint, sizeof(lint));
 
 }
-int button_init() {
-    	if (gpio_is_ready_dt(&d4_pin)) {
-		LOG_INF("D4 Pin ready");
+int button_init() 
+{
+    if (gpio_is_ready_dt(&d4_pin)) 
+    {
+	    LOG_INF("D4 Pin ready");
 	}
-    	else {
+    else 
+    {
 		LOG_ERR("Error setting up D4 Pin");
-        return 0;
+        return -1;
 	}
-
-	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) {
+	if (gpio_pin_configure_dt(&d4_pin, GPIO_OUTPUT_ACTIVE) < 0) 
+    {
 		LOG_ERR("Error setting up D4 Pin Voltage");
-        return 0;
+        return -1;
 	}
-	else {
+	else 
+    {
 		LOG_INF("D4 ready to transmit voltage");
 	}
-	if (gpio_is_ready_dt(&d5_pin_input)) {
+	if (gpio_is_ready_dt(&d5_pin_input)) 
+    {
 		LOG_INF("D5 Pin ready");
 	}
-	else {
+	else 
+    {
 		LOG_ERR("D5 Pin not ready");
-        return 0;
+        return -1;
 	}
 
 	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
 
-	if (err2 != 0) {
+	if (err2 != 0) 
+    {
 		LOG_ERR("Error setting up D5 Pin");
-		return 0;
+		return -1;
 	}
-	else {
+	else 
+    {
 		LOG_INF("D5 ready");
 	}
+
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
-	if (err2 != 0) {
+	if (err2 != 0) 
+    {
 		LOG_ERR("D5 unable to detect button presses");
-		return 0;
+		return -1;
 	}
-	else {
+	else 
+    {
 		LOG_INF("D5 ready to detect button presses");
 	}
 
     gpio_init_callback(&button_cb_data, button_pressed, BIT(d5_pin_input.pin));
 	gpio_add_callback(d5_pin_input.port, &button_cb_data);
 
-    return 1;
+    return 0;
 }
 
-void activate_button_work() {
+void activate_button_work() 
+{
      k_work_schedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
 }
 
-void register_button_service() {
+void register_button_service() 
+{
     bt_gatt_service_register(&button_service);
 }
 
-FSM_STATE_T get_current_button_state() {
+FSM_STATE_T get_current_button_state() 
+{
     return current_button_state;
 }
