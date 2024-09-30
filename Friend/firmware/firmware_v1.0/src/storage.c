@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define READ_COMMAND 0
 #define DELETE_COMMAND 1
 #define NUKE 2
+#define STOP_COMMAND 3
 
 #define INVALID_FILE_SIZE 3
 #define ZERO_FILE_SIZE 4
@@ -34,7 +35,7 @@ static struct bt_uuid_128 storage_write_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCO
 static struct bt_uuid_128 storage_read_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295782, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
-K_THREAD_STACK_DEFINE(storage_stack, 2048);
+K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
@@ -50,12 +51,13 @@ static struct bt_gatt_attr storage_service_attr[] = {
 
 };
 
-static struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
+struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
 bool storage_is_on = false;
 
 
-static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
+static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+{
 
     storage_is_on = true;
     if (value == BT_GATT_CCC_NOTIFY)
@@ -73,15 +75,14 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
 
 }
 
-static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) {
+static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
+{
     k_msleep(10);
-    // char amount[1] = {file_count};
     uint32_t amount[50] = {0};
     for (int i = 0; i < file_count; i++) {
            amount[i] = file_num_array[i];
         }
-
-    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, file_count * sizeof(uint32_t));
+    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 1 * sizeof(uint32_t));
     return result;
 }
 
@@ -96,7 +97,7 @@ static uint32_t offset = 0;
 static uint8_t index = 0;
 static uint8_t current_packet_size = 0;
 static uint8_t tx_buffer_size = 0;
-
+static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 static uint8_t current_read_num = 1;
 uint32_t remaining_length = 0;
@@ -190,6 +191,11 @@ static uint8_t parse_storage_command(void *buf,uint16_t len) {
     else if (command == NUKE) {
         nuke_started = 1;
     }
+   else if (command == STOP_COMMAND) 
+     {
+         remaining_length = 80;
+         stop_started = 1;
+     }
     else {
         LOG_INF("invalid command \n");
         return 6;
@@ -245,6 +251,7 @@ static void write_to_gatt(struct bt_conn *conn) {
 
 void storage_write(void) {
   while (1) {
+    struct bt_conn *conn = get_current_connection();
     
     if ( transport_started ) {
         LOG_INF("transpor started in side : %d",transport_started);
@@ -259,9 +266,13 @@ void storage_write(void) {
         if (err) {
             printk("error clearing\n");
         }
-        else{
-        uint8_t result_buffer[1] = {100};
-        bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer,1);
+        else 
+        {
+            uint8_t result_buffer[1] = {200};
+            if (conn) 
+            {
+                bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer,1);
+            }
         }
         delete_started = 0;
         k_msleep(10);
@@ -270,27 +281,42 @@ void storage_write(void) {
         clear_audio_directory();
         nuke_started = 0;
     }
+    if (stop_started) 
+     { 
+        remaining_length = 0;
+        stop_started = 0;
+
+     }
 
     if(remaining_length > 0 ) {
 
-        struct bt_conn *conn = get_current_connection();
+
         if (conn == NULL)  {
             LOG_ERR("invalid connection");
+            remaining_length = 0;
             k_yield();
         }
         write_to_gatt(conn);
 
         transport_started = 0;
-        if (remaining_length == 0) {
-           LOG_INF("done. attempting to download more files\n");
-           uint8_t stop_result[1] = {100};
-           int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
-           k_sleep(K_MSEC(10));
-           
-        }
-        
-        }
-        k_yield();
+       if (remaining_length == 0 ) 
+         {
+             if(stop_started)
+             {
+                 stop_started = 0;
+             }
+             else
+             {
+                 printk("done. attempting to download more files\n");
+                 uint8_t stop_result[1] = {100};
+                 int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
+                 k_sleep(K_MSEC(10));
+             }
+
+         }   
+     }
+     k_yield();
+
   }
 
 }
