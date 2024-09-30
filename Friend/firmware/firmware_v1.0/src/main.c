@@ -7,7 +7,6 @@
 #include "config.h"
 #include "codec.h"
 // #include "nfc.h"
-
 #include "sdcard.h"
 #include "storage.h"
 #include "speaker.h"
@@ -120,11 +119,13 @@ int main(void)
     boot_led_sequence();
     // Indicate transport initialization
     set_led_green(true);
+    set_led_green(false);
     err = mount_sd_card();
     LOG_INF("result of mount:%d",err);
 
     k_msleep(500);
     storage_init();
+
     err = transport_start();
     if (err) 
     {
@@ -138,8 +139,6 @@ int main(void)
         set_led_green(false);
         return err;
     }
-    set_led_green(false);
-
     init_haptic_pin();
     set_led_blue(true);
     set_codec_callback(codec_handler);

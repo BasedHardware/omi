@@ -16,6 +16,7 @@
 #include "speaker.h"
 #include "button.h"
 #include "sdcard.h"
+#include "storage.h"
 #include "lib/battery/battery.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
@@ -61,10 +62,10 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-#ifdef CONFIG_ENABLE_SPEAKER
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
-#endif
+// #ifdef CONFIG_ENABLE_SPEAKER
+//     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+//     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+// #endif
     
 };
 
@@ -138,7 +139,7 @@ void broadcast_accel(struct k_work *work_item) {
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-        if (value == BT_GATT_CCC_NOTIFY)
+    if (value == BT_GATT_CCC_NOTIFY)
     {
         LOG_INF("Client subscribed for notifications");
     }
@@ -233,12 +234,12 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 }
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
- {
-     uint16_t amount = 0;
-     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
-     amount = speak(len, buf);
-     return len;
- }
+{
+    uint16_t amount = 0;
+    bt_gatt_notify(conn, attr, &amount, sizeof(amount));
+    amount = speak(len, buf);
+    return len;
+}
 
 //
 // DFU Service Handlers
@@ -684,8 +685,6 @@ void pusher(void)
     }
 }
 extern struct bt_gatt_service storage_service;
-
-
 //
 // Public functions
 //
@@ -703,7 +702,7 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
-    //Enable accelerometer
+  //  Enable accelerometer
 #ifdef CONFIG_ACCELEROMETER
     err = accel_start();
     if (!err) 
@@ -715,7 +714,7 @@ int transport_start()
         bt_gatt_service_register(&accel_service);
     }
 #endif
-    //Enable button
+  //  Enable button
 #ifdef CONFIG_ENABLE_BUTTON
     button_init();
     register_button_service();
@@ -738,12 +737,11 @@ int transport_start()
     
 #endif
     // Start advertising
+
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
-
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
