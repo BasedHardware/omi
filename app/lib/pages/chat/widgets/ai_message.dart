@@ -202,7 +202,11 @@ class DaySummaryWidget extends StatelessWidget {
                     TypingIndicator(),
                   ],
                 )
-              : daySummaryMessagesList(messageText),
+              : AutoSizeText(
+                  messageText,
+                  // : utf8.decode(widget.message.text.codeUnits),
+                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+                ),
         ),
       ],
     );
