@@ -4,6 +4,7 @@
 #include "utils.h"
 
 LOG_MODULE_REGISTER(led, CONFIG_LOG_DEFAULT_LEVEL);
+
 int led_start()
 {
     ASSERT_TRUE(gpio_is_ready_dt(&led_red));

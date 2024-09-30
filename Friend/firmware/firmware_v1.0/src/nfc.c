@@ -5,6 +5,7 @@
 #include <nfc/ndef/msg.h>
 #include <nfc/ndef/uri_msg.h>
 
+//for later......
 LOG_MODULE_REGISTER(nfc, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_URI_LENGTH 64

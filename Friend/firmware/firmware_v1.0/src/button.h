@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BUTTON_H
+#define BUTTON_H
 
 typedef enum {
     IDLE, 
@@ -12,3 +13,5 @@ void activate_button_work();
 void register_button_service();
 
 FSM_STATE_T get_current_button_state();
+
+#endif
