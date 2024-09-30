@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import datetime
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -100,15 +101,15 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 print('failed to get fal segments')
                 continue
             temp_memory = CreateMemory(
-                started_at=datetime.utcnow(),
-                finished_at=datetime.utcnow(),
+                started_at=datetime.datetime.now(datetime.UTC),
+                finished_at=datetime.datetime.now(datetime.UTC),
                 transcript_segments=fal_segments,
                 source=MemorySource.sdcard,
                 language='en'
             )
-            result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=True)
+            result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=False)
             # TODO: should use the websocket to send each memory as created to the client, check transcribe.py
-            # websocket.send_json(msg.to_json()) 
+            # websocket.send_json(result.to_json()) 
         await websocket.send_json({"type": "done"})
 
     except Exception as e:

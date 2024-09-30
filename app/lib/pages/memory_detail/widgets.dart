@@ -34,6 +34,12 @@ class GetSummaryWidgets extends StatelessWidget {
         : '${dateTimeFormat('h:mm a', startedAt)} to ${dateTimeFormat('h:mm a', finishedAt)}';
   }
 
+  String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
+    return startedAt == null
+        ? dateTimeFormat('h:mm a', createdAt)
+        : '${dateTimeFormat('h:mm a', startedAt)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<MemoryDetailProvider, ServerMemory>(
@@ -45,12 +51,12 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title,
+              memory.discarded ? 'Discarded Memory' : '${memory.structured.title}',
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
             Text(
-              '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
+              memory.source == MemorySource.sdcard ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}' : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),

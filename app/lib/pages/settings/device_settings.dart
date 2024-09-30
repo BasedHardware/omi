@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
+import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 
@@ -178,6 +180,36 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
         ),
       ),
     ),
+  GestureDetector(
+    onTap: () {
+      if (!SharedPreferencesUtil().deviceIsV2) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.of(context).pop(),
+            () => {},
+            'V2 undetected',
+            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+              singleButton: true,
+            ),
+          );
+      }
+      else {
+            var page = const SdCardCapturePage();
+            routeToPage(context, page);
+      }
+  },
+    child: ListTile(
+    title: const Text('SD Card Import'),
+    subtitle: Text(''),
+    trailing: const Icon(
+      Icons.arrow_forward_ios,
+      size: 16,
+    ),
+  ),
+  ),
+
     ListTile(
       title: const Text('Hardware Revision'),
       subtitle: Text(deviceInfo?.hardwareRevision ?? 'XIAO'),
