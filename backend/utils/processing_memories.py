@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import time
 
 import database.processing_memories as processing_memories_db
 from models.memory import CreateMemory
@@ -68,16 +69,33 @@ def get_processing_memory(uid: str, id: str, ) -> DetailProcessingMemory:
 
 def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) -> [DetailProcessingMemory]:
     processing_memories = []
+    tracking_status = False
     if len(filter_ids) > 0:
         processing_memories = processing_memories_db.get_processing_memories(uid, filter_ids=filter_ids, limit=limit)
     else:
         processing_memories = processing_memories_db.get_processing_memories(uid, statuses=[
             ProcessingMemoryStatus.Processing], limit=limit)
+        tracking_status = True
 
     if not processing_memories or len(processing_memories) == 0:
         return []
 
-    return [DetailProcessingMemory(**processing_memory) for processing_memory in processing_memories]
+    resp = [DetailProcessingMemory(**processing_memory) for processing_memory in processing_memories]
+
+    # Tracking status
+    # Warn: it's suck, remove soon!
+    if tracking_status:
+        new_resp = []
+        for pm in resp:
+            # Keep processing after 5m from the capturing to, there are something went wrong.
+            if pm.status == ProcessingMemoryStatus.Processing and pm.capturing_to and pm.capturing_to.timestamp() < time.time() - 300:
+                pm.status = ProcessingMemoryStatus.Failed
+                processing_memories_db.update_processing_memory_status(uid, pm.id, pm.status)
+                continue
+            new_resp.append(pm)
+        resp = new_resp
+
+    return resp
 
 
 def update_basic_processing_memory(
