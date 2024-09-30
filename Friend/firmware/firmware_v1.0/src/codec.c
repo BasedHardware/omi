@@ -1,14 +1,13 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/ring_buffer.h>
 #include "codec.h"
-#include "audio.h"
 #include "config.h"
 #include "utils.h"
 #include "sdcard.h"
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif
-// #include "sdcard.c"
+
 LOG_MODULE_REGISTER(codec, CONFIG_LOG_DEFAULT_LEVEL);
 
 //
@@ -34,8 +33,7 @@ int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic da
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
     if (written != len * 2)
     {
-
-        // printk("Failed to write %d bytes to codec ring buffer\n", len * 2);
+        LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
         return -1;
     }
     
@@ -121,40 +119,6 @@ int codec_start()
     // Success
     return 0;
 }
-
-//
-// MU-Law codec
-//
-
-#if CODEC_MU_LAW
-
-uint16_t execute_codec()
-{
-    for (int i = 0; i < CODEC_PACKAGE_SAMPLES / CODEC_DIVIDER; i++)
-    {
-        codec_output_bytes[i] = linear2ulaw(codec_input_samples[i * CODEC_DIVIDER]);
-    }
-    return CODEC_PACKAGE_SAMPLES / CODEC_DIVIDER;
-}
-
-#endif
-
-//
-// PCM codec
-//
-
-#if CODEC_PCM
-
-uint16_t execute_codec()
-{
-    for (int i = 0; i < CODEC_PACKAGE_SAMPLES / CODEC_DIVIDER; i++)
-    {
-        codec_output_bytes[i * 2] = codec_input_samples[i * CODEC_DIVIDER] & 0xFF;
-        codec_output_bytes[i * 2 + 1] = (codec_input_samples[i * CODEC_DIVIDER] >> 8) & 0xFF;
-    }
-    return (CODEC_PACKAGE_SAMPLES / CODEC_DIVIDER) * 2;
-}
-#endif
 
 //
 // Opus codec

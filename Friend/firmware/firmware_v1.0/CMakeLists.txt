@@ -10,14 +10,13 @@ target_sources(app PRIVATE
     src/transport.c
     src/mic.c
     src/led.c
-    src/audio.c
     src/codec.c
-	src/nfc.c
     src/lib/battery/battery.c
     src/button.c
     src/speaker.c
     src/sdcard.c
     src/storage.c
+	# src/nfc.c future release
 )
 
 target_sources_ifdef(CONFIG_CODEC_OPUS app PRIVATE
@@ -168,3 +167,4 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_CONFIG_H")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_ALLOCA_H")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsingle-precision-constant") # A lot of constants are written as doubles
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_LRINT -DHAVE_LRINTF")
+

@@ -1,6 +1,7 @@
 #ifndef NFC_H
 #define NFC_H
 
+//for later.......
 int nfc_sleep(void);
 int nfc_wake(void);
 
