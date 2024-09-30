@@ -6,7 +6,7 @@
 #include <math.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
-
+#include "speaker.h"
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 
@@ -140,8 +140,8 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
 void generate_gentle_chime(int16_t *buffer, int num_samples)
 {
     LOG_INF("Generating gentle chime");//2500
-    float frequencies[] = {523.25, 659.25, 783.99, 1046.50}; // C5, E5, G5, C6
-    int num_freqs = sizeof(frequencies) / sizeof(frequencies[0]);//4
+    const float frequencies[] = {523.25, 659.25, 783.99, 1046.50}; // C5, E5, G5, C6
+    const int num_freqs = sizeof(frequencies) / sizeof(frequencies[0]);//4
 
     for (int i = 0; i < num_samples; i++) 
     { 
@@ -162,7 +162,7 @@ int play_boot_sound(void)
 {
     int ret;
     int16_t *buffer = (int16_t *) buzz_buffer;
-    int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
+    const int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
 
     generate_gentle_chime(buffer, samples_per_block);
     LOG_INF("Writing to speaker");
