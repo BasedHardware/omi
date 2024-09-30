@@ -15,20 +15,7 @@
 #define PDM_PWR_PIN NRF_GPIO_PIN_MAP(1, 10)
 
 // Codecs
-// #define CODEC_PCM 1
-// #define CODEC_MU_LAW 1
 #define CODEC_OPUS 1
-
-// Codec packages
-#if CODEC_PCM | CODEC_MU_LAW
-#define CODEC_DIVIDER 2           // 1 or 2
-#define CODEC_PACKAGE_SAMPLES 160 // 10ms
-#if CODEC_PCM
-#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES * 2
-#else
-#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES
-#endif
-#endif
 
 #if CODEC_OPUS
 #define CODEC_PACKAGE_SAMPLES 160
@@ -41,21 +28,6 @@
 #define CONFIG_OPUS_MODE CONFIG_OPUS_MODE_CELT
 
 // Codec IDs
-#ifdef CODEC_PCM
-#if CODEC_DIVIDER == 1
-#define CODEC_ID 0
-#elif CODEC_DIVIDER == 2
-#define CODEC_ID 1
-#endif
-#endif
-
-#ifdef CODEC_MU_LAW
-#if CODEC_DIVIDER == 1
-#define CODEC_ID 10
-#elif CODEC_DIVIDER == 2
-#define CODEC_ID 11
-#endif
-#endif
 
 #ifdef CODEC_OPUS
 #define CODEC_ID 20
