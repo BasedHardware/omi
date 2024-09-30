@@ -33,7 +33,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<DeviceProvider>().deviceInfo == null) {
+      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
         context.read<DeviceProvider>().getDeviceInfo();
       }
     });
@@ -56,7 +56,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.connectedDevice, context),
+                    children: deviceSettingsWidgets(provider.pairedDevice, context),
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -174,7 +174,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
       },
       child: ListTile(
         title: const Text('Update Latest Version'),
-        subtitle: Text('Current: ${device?.info?.firmwareRevision ?? '1.0.2'}'),
+        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
         trailing: const Icon(
           Icons.arrow_forward_ios,
           size: 16,
@@ -183,15 +183,15 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ),
     ListTile(
       title: const Text('Hardware Revision'),
-      subtitle: Text(device?.info?.hardwareRevision ?? 'XIAO'),
+      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(device?.info?.modelNumber ?? 'Friend'),
+      subtitle: Text(device?.modelNumber ?? 'Friend'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),
-      subtitle: Text(device?.info?.manufacturerName ?? 'Based Hardware'),
+      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
     ),
   ];
 }
