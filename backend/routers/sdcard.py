@@ -30,7 +30,6 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
     big_file_path = f"_temp/_temp{session_id}.wav"
     first_packet_flag = False
     data_packet_length = 83
-    packet_count = 0
     seconds_until_timeout = 10.0
     audio_frames = []
 
@@ -58,13 +57,13 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
         print("websocket gone")
     except asyncio.TimeoutError:
         print('timeout condition, exitting')
-        websocket_active = False
     except Exception as e:
-        print('somethign went wrong')
+        print('something went wrong')
     finally:
         websocket_active = False
-    duration_of_file = len(audio_frames) / 100.0
-    if duration_of_file < 5.0:  # seconds
+    frames_per_second = 100.0
+    file_seconds = len(audio_frames) / frames_per_second
+    if file_seconds < 5.0:  
         print('audio file too small')
         return
 
@@ -75,7 +74,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
         print(vad_segments)
         if vad_segments:
             temp_file_list = []
-            vad_segments_combined = combine_val_segments(vad_segments)
+            vad_segments_combined = combine_vad_segments(vad_segments)
             aseg = AudioSegment.from_wav(big_file_path)
 
             for i, segments in enumerate(vad_segments_combined):
@@ -109,6 +108,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
             )
             result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=True)
             # TODO: should use the websocket to send each memory as created to the client, check transcribe.py
+            # websocket.send_json(msg.to_json()) 
         await websocket.send_json({"type": "done"})
 
     except Exception as e:
@@ -120,21 +120,22 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
     return
 
 
-def combine_val_segments(val_segments):
-    if len(val_segments) == 1:
-        return val_segments
+def combine_vad_segments(vad_segments):
+    seconds_between_conversations = 120.0
+    if len(vad_segments) == 1:
+        return vad_segments
     segments_result = []
     temp_segment = None
-    for i in range(len(val_segments)):
+    for i in range(len(vad_segments)):
         if not temp_segment:
-            temp_segment = val_segments[i]
+            temp_segment = vad_segments[i]
             continue
         else:
-            if (val_segments[i]['start'] - val_segments[i - 1]['end']) > 120.0:
+            if (vad_segments[i]['start'] - vad_segments[i - 1]['end']) > seconds_between_conversations:
                 segments_result.append(temp_segment)
-                temp_segment = None
+                temp_segment = vad_segments[i]
             else:
-                temp_segment['end'] = val_segments[i]['end']
+                temp_segment['end'] = vad_segments[i]['end']
     if temp_segment is not None:
         segments_result.append(temp_segment)
     return segments_result
