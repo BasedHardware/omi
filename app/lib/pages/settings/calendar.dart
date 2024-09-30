@@ -68,11 +68,14 @@ class _CalendarPageState extends State<CalendarPage> {
                   ],
                 ),
               ),
-              const Text(
-                'Omi can automatically schedule events from your conversations, or ask for your confirmation first.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey,
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                child: Text(
+                  'Omi can automatically schedule events from your conversations, or ask for your confirmation first.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),

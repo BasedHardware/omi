@@ -271,8 +271,8 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
-class SpeechProfileTranscripSegmentSocketService extends TranscripSegmentSocketService {
-  SpeechProfileTranscripSegmentSocketService.create(super.sampleRate, super.codec)
+class SpeechProfileTranscriptSegmentSocketService extends TranscripSegmentSocketService {
+  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
       : super.create(includeSpeechProfile: false, newMemoryWatch: false);
 }
 
@@ -359,7 +359,6 @@ class TranscripSegmentSocketService implements IPureSocketListener {
 
   @override
   void onMessage(event) {
-    debugPrint("[TranscriptSegmentService] onMessage ${event}");
     if (event == 'ping') return;
 
     // Decode json
@@ -385,8 +384,6 @@ class TranscripSegmentSocketService implements IPureSocketListener {
       });
       return;
     }
-
-    debugPrint(event);
 
     // Message event
     if (jsonEvent.containsKey("type")) {

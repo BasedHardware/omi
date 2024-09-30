@@ -7,9 +7,10 @@ import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -78,12 +79,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                           ),
                           child: const Center(
                             child: Text(
-                              'Connect your device to access these settings',
+                              'Connect your device to\naccess these settings',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 16,
+                                fontSize: 18,
+                                height: 1.3,
                                 fontWeight: FontWeight.w500,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           ),
                         ),
@@ -93,11 +96,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await Intercom.instance.displayArticle('9907475-how-to-charge-the-device');
+                  await IntercomManager().displayChargingArticle();
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
-                  trailing: Icon(Icons.arrow_forward_ios),
+                  subtitle: Text('Tap to see the guide'),
                 ),
               ),
             ],
@@ -164,20 +167,15 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
     ),
     GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => FirmwareUpdate(
-              deviceInfo: deviceInfo!,
-              device: device,
-            ),
-          ),
-        );
+        routeToPage(context, FirmwareUpdate(deviceInfo: deviceInfo!, device: device));
       },
       child: ListTile(
-        title: const Text('Firmware Update'),
-        subtitle: Text(deviceInfo?.firmwareRevision ?? '1.0.2'),
-        trailing: const Icon(Icons.arrow_forward_ios),
+        title: const Text('Update Latest Version'),
+        subtitle: Text('Current: ${deviceInfo?.firmwareRevision ?? '1.0.2'}'),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
       ),
     ),
     ListTile(

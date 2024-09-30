@@ -18,18 +18,20 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   // late ServerMemory memory;
 
   int memoryIdx = 0;
+  DateTime selectedDate = DateTime.now();
 
   int selectedTab = 0;
   bool isLoading = false;
   bool loadingReprocessMemory = false;
+  String reprocessMemoryId = '';
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
   List<Plugin> pluginsList = [];
 
-  Structured get structured => memoryProvider!.memoriesWithDates[memoryIdx].structured;
-  ServerMemory get memory => memoryProvider!.memoriesWithDates[memoryIdx];
+  Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
+  ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
   List<bool> pluginResponseExpanded = [];
 
   bool editingTitle = false;
@@ -99,8 +101,14 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateMemory(int memIdx) {
+  void updateRepocessMemoryId(String id) {
+    reprocessMemoryId = id;
+    notifyListeners();
+  }
+
+  void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
+    selectedDate = date;
     pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
     notifyListeners();
   }
@@ -137,10 +145,12 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   Future<bool> reprocessMemory() async {
     debugPrint('_reProcessMemory');
     updateReprocessMemoryLoadingState(true);
+    updateRepocessMemoryId(memory.id);
     try {
       var updatedMemory = await reProcessMemoryServer(memory.id);
       MixpanelManager().reProcessMemory(memory);
       updateReprocessMemoryLoadingState(false);
+      updateRepocessMemoryId('');
       if (updatedMemory == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
@@ -161,6 +171,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       });
       notifyError('REPROCESS_FAILED');
       updateReprocessMemoryLoadingState(false);
+      updateRepocessMemoryId('');
       notifyListeners();
       return false;
     }

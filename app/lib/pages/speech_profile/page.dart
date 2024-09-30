@@ -13,8 +13,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
@@ -329,14 +329,13 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                             builder: (c) => getDialog(
                                               context,
                                               () => Navigator.pop(context),
-                                              () {
-                                                Navigator.pop(context);
-                                                launchUrl(Uri.parse(
-                                                    'https://github.com/BasedHardware/Omi/releases/tag/v1.0.4-firmware'));
+                                              () async {
+                                                await Intercom.instance.displayArticle(
+                                                    '9918118-updating-the-firmware-on-your-friend-device');
                                               },
-                                              'Firmware Update Required',
-                                              'Please update your device firmware to set-up your speech profile.',
-                                              okButtonText: 'Do now',
+                                              'Device Update Required',
+                                              'Your current device has an old firmware version (1.0.2). Please check our guide on how to update it.',
+                                              okButtonText: 'View Guide',
                                             ),
                                             barrierDismissible: false,
                                           );
