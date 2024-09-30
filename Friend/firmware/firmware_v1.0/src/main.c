@@ -120,11 +120,6 @@ int main(void)
     // Indicate transport initialization
     set_led_green(true);
     set_led_green(false);
-    err = mount_sd_card();
-    LOG_INF("result of mount:%d",err);
-
-    k_msleep(500);
-    storage_init();
 
     err = transport_start();
     if (err) 
@@ -137,9 +132,27 @@ int main(void)
             k_msleep(200);
         }
         set_led_green(false);
-        return err;
+        // return err;
     }
-    init_haptic_pin();
+    err = mount_sd_card();
+    if (err)
+    {
+        LOG_ERR("Failed to mount SD card: %d", err);
+    }
+    LOG_INF("result of mount:%d",err);
+
+    k_msleep(500);
+    err = storage_init();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize storage: %d", err);
+    }
+    err = init_haptic_pin();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize haptic pin: %d", err);
+    }
+    
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();

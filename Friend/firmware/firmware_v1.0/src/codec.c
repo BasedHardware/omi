@@ -3,7 +3,6 @@
 #include "codec.h"
 #include "config.h"
 #include "utils.h"
-#include "sdcard.h"
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif

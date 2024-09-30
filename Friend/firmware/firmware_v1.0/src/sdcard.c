@@ -50,7 +50,7 @@ int mount_sd_card(void)
         return -1;
 	}
     //initialize the sd card
-    static const char *disk_pdrv = "SD";  
+    const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
     LOG_INF("disk_access_init: %d\n", err);
     if (err) 
@@ -238,7 +238,8 @@ int write_to_file(uint8_t *data,uint32_t length)
     return 0;
 }
     
-int initialize_audio_file(uint8_t num) {
+int initialize_audio_file(uint8_t num) 
+{
     char *header = generate_new_audio_header(num);
     if (header == NULL) 
     {
@@ -379,7 +380,7 @@ int clear_audio_directory()
         return -1;
     }
     printk("done with clearing\n");
-    
+
     file_count = 1;  
     move_write_pointer(1);
     return 0;

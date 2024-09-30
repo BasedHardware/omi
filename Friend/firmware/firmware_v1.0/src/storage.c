@@ -104,7 +104,7 @@ uint32_t remaining_length = 0;
 
 static int setup_storage_tx() 
 {
-    transport_started= (uint8_t)0; 
+    transport_started = (uint8_t)0; 
     // offset = 0;
     LOG_INF("about to transmit storage\n");
     k_msleep(1000);
@@ -146,8 +146,8 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
         LOG_INF("invalid command");
         return INVALID_COMMAND;
     }
-    uint8_t command = ((uint8_t*)buf)[0];
-    uint8_t file_num = ((uint8_t*)buf)[1];
+    const uint8_t command = ((uint8_t*)buf)[0];
+    const uint8_t file_num = ((uint8_t*)buf)[1];
     uint32_t size = 0;
     if ( len == 6 ) 
     {
@@ -169,7 +169,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
     if (command == READ_COMMAND) //read 
     { 
         uint32_t temp = file_num_array[file_num-1];
-        if ( file_num == (file_count ) ) 
+        if ( file_num == ( file_count ) ) 
         {
             LOG_INF("file_count == final file");
             offset = size;
@@ -240,7 +240,7 @@ static void write_to_gatt(struct bt_conn *conn)
     storage_write_buffer[1] = (id >> 8) & 0xFF;
     storage_write_buffer[2] = index;
 
-    uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
+    const uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
 
     int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
     offset = offset + packet_size;
@@ -260,8 +260,6 @@ static void write_to_gatt(struct bt_conn *conn)
 //     printk("remaining length%d\n",remaining_length);
 //     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
 // }
-
-
 
 void storage_write(void) 
 {
@@ -326,7 +324,7 @@ void storage_write(void)
             {
                 printk("done. attempting to download more files\n");
                 uint8_t stop_result[1] = {100};
-                int err = bt_gatt_notify(conn, &storage_service.attrs[1], &stop_result,1);
+                int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result,1);
                 k_sleep(K_MSEC(10));
             }
 
