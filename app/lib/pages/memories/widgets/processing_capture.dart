@@ -12,6 +12,7 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -41,7 +42,40 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           (provider.memoryCreating && deviceProvider.connectedDevice != null);
       bool havingCapturingMemory = provider.capturingProcessingMemory != null;
 
+
+      var storageBytes = provider.timeToSend ?? 1;
+      var totalTimeSent = provider.timeAlreadySent ?? 1;
+      var totalTimeRemaining = storageBytes - totalTimeSent;
+      String totalTimeRemainingString = totalTimeRemaining.toStringAsFixed(2);
+
+     if(provider.storageIsReady) {
+     var banner = 'You have ' + totalTimeRemainingString + ' seconds of Storage Remaining. Click here to see';
+     Future.delayed(Duration.zero, () {
+         ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+         ScaffoldMessenger.of(context).showMaterialBanner(
+           MaterialBanner(
+                     content: Text(banner),
+                     backgroundColor: Colors.green,
+                     actions: [
+                       TextButton(
+                         onPressed: () {
+                             ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                             routeToPage(context, SdCardCapturePage());
+                         },  
+                         child: const Text('Click here'),
+                       ),
+                     ],
+                     onVisible: () => Future.delayed(const Duration(seconds: 15), () {
+                       ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                     }),
+                   ),
+                 );
+               });
+       provider.setStorageIsReady(false);
+     }
+
       return (showPhoneMic || isConnected || havingCapturingMemory)
+
           ? GestureDetector(
               onTap: () async {
                 if (provider.segments.isEmpty) return;
