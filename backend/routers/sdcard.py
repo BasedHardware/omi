@@ -1,45 +1,40 @@
-import os
-from typing import Optional
-import os
-from models.memory import *
-import requests
-from fastapi import APIRouter, FastAPI,Depends, HTTPException, UploadFile
-from utils.memories.process_memory import process_memory, process_user_emotion
-from utils.other.storage import upload_sdcard_audio,create_signed_postprocessing_audio_url
-from utils.other import endpoints as auth
-import datetime
-import uuid
-from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
-from utils.audio import create_wav_from_bytes
-from utils.stt.vad import vad_is_empty
-from fastapi.websockets import WebSocketDisconnect, WebSocket
-from starlette.websockets import WebSocketState
-from utils.stt.vad import VADIterator, model
 import asyncio
-import opuslib
+import uuid
+
+from fastapi import APIRouter
+from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
-import time
+
+from models.memory import *
+from utils.audio import create_wav_from_bytes
+from utils.memories.process_memory import process_memory
+from utils.other.storage import upload_sdcard_audio
+from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.vad import vad_is_empty
+from datetime import timezone, timedelta
+
 router = APIRouter()
+
 
 @router.websocket("/sdcard_stream")
 async def sdcard_streaming_endpoint(
-        websocket: WebSocket, uid: str,bt_connected_time: str
+        websocket: WebSocket, uid: str, bt_connected_time: str
 ):
+    bt_connected_time_dt = datetime.strptime(bt_connected_time, '%Y-%m-%d %H:%M:%S.%fZ').replace(
+        tzinfo=timezone.utc)
 
-    bt_connected_time_dt = datetime.datetime.strptime(bt_connected_time, '%Y-%m-%d %H:%M:%S.%fZ').replace(tzinfo=datetime.timezone.utc)
-    
     try:
         await websocket.accept()
     except RuntimeError as e:
         print(e)
         return
-    
-    #activate the websocket
+
+    # activate the websocket
     websocket_active = True
     session_id = str(uuid.uuid4())
     big_file_path = f"_temp/_temp{session_id}.wav"
-    first_packet_flag=False
-    data_packet_length=83
+    first_packet_flag = False
+    data_packet_length = 83
     packet_count = 0
     seconds_until_timeout = 10.0
     audio_frames = []
@@ -52,16 +47,16 @@ async def sdcard_streaming_endpoint(
             else:
                 data = await websocket.receive_bytes()
 
-            if (len(data) == data_packet_length): #valid packet size
+            if len(data) == data_packet_length:  # valid packet size
                 if not first_packet_flag:
                     first_packet_flag = True
                     print('first valid packet received')
-            if data == 100: #valid code
+            if data == 100:  # valid code
                 print('done.')
                 websocket_active = False
                 break
             amount = int(data[3])
-            frame_to_decode = bytes(list(data[4:4+amount]))
+            frame_to_decode = bytes(list(data[4:4 + amount]))
             audio_frames.append(frame_to_decode)
 
     except WebSocketDisconnect:
@@ -74,18 +69,17 @@ async def sdcard_streaming_endpoint(
     finally:
         websocket_active = False
     duration_of_file = len(audio_frames) / 100.0
-    if duration_of_file < 5.0:#seconds
+    if duration_of_file < 5.0:  # seconds
         print('audio file too small')
-        return 
-    
+        return
+
     create_wav_from_bytes(big_file_path, audio_frames, "opus", 16000, 1, 2)
 
     try:
-        temp_file_path = f"_temp/{session_id}"#+file_num .wav
+        temp_file_path = f"_temp/{session_id}"  # +file_num .wav
         current_file_num = 1
         temp_file_name = 'temp' + str(current_file_num)
 
-        
         vad_segments = vad_is_empty(big_file_path, return_segments=True)
         print(vad_segments)
         temp_file_list = []
@@ -93,7 +87,6 @@ async def sdcard_streaming_endpoint(
         if vad_segments:
             vad_segments_combined = combine_val_segments(vad_segments)
             for segments in vad_segments_combined:
-                
                 start = segments['start']
                 end = segments['end']
                 aseg = AudioSegment.from_wav(big_file_path)
@@ -101,17 +94,17 @@ async def sdcard_streaming_endpoint(
                 temp_file_name = temp_file_path + str(current_file_num) + '.wav'
                 temp_file_list.append(temp_file_name)
                 aseg.export(temp_file_name, format="wav")
-                current_file_num+=1
-                
+                current_file_num += 1
+
         else:
             print('nothing worth using memory for')
-            return 
-            
-        for file, segments in zip(temp_file_list,vad_segments_combined):
+            return
+
+        for file, segments in zip(temp_file_list, vad_segments_combined):
             signed_url = upload_sdcard_audio(file)
             aseg = AudioSegment.from_wav(file)
-            words = fal_whisperx(signed_url, 1, 2)
-            duration_entire_process = datetime.datetime.now(datetime.timezone.utc)
+            words = fal_whisperx(signed_url, 4, 2)
+            duration_entire_process = datetime.now(timezone.utc)
             time_to_subtract = (duration_entire_process - bt_connected_time_dt).total_seconds()
             zero_base = duration_of_file
             fal_segments = fal_postprocessing(words, aseg.duration_seconds)
@@ -120,14 +113,16 @@ async def sdcard_streaming_endpoint(
                 print('failed to get fal segments')
                 continue
             temp_memory = CreateMemory(
-            started_at= datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=time_to_subtract+zero_base-segments['start']),
-            finished_at= datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=time_to_subtract+zero_base-segments['end']),
-    
-            transcript_segments = fal_segments,
-            source= MemorySource.sdcard,
-            language = 'en'
+                started_at=datetime.now(timezone.utc) - timedelta(
+                    seconds=time_to_subtract + zero_base - segments['start']),
+                finished_at=datetime.now(timezone.utc) - timedelta(
+                    seconds=time_to_subtract + zero_base - segments['end']),
+
+                transcript_segments=fal_segments,
+                source=MemorySource.sdcard,
+                language='en'
             )
-            result: Memory = process_memory(uid , temp_memory.language, temp_memory, force_process=True)
+            result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=True)
         await websocket.send_json({"type": "done"})
 
     except Exception as e:
@@ -137,6 +132,7 @@ async def sdcard_streaming_endpoint(
 
     print('finished')
     return
+
 
 def combine_val_segments(val_segments):
     if len(val_segments) == 1:
@@ -148,7 +144,7 @@ def combine_val_segments(val_segments):
             temp_segment = val_segments[i]
             continue
         else:
-            if (val_segments[i]['start'] - val_segments[i-1]['end']) > 120.0:
+            if (val_segments[i]['start'] - val_segments[i - 1]['end']) > 120.0:
                 segments_result.append(temp_segment)
                 temp_segment = None
             else:
