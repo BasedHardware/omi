@@ -300,7 +300,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-      if (provider.loadingReprocessMemory) {
+      if (provider.loadingReprocessMemory && provider.reprocessMemoryId == provider.memory.id) {
         return const Center(
           child: Padding(
             padding: EdgeInsets.only(top: 18.0),
