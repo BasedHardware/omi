@@ -122,12 +122,12 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text, date: message.createdAt);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text, sendMessage: sendMessage);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, sendMessage: sendMessage);
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text);
+    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting);
   }
 }
 
@@ -202,34 +202,62 @@ class DaySummaryWidget extends StatelessWidget {
                     TypingIndicator(),
                   ],
                 )
-              : AutoSizeText(
-                  messageText,
-                  // : utf8.decode(widget.message.text.codeUnits),
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
+              : daySummaryMessagesList(messageText),
         ),
       ],
     );
   }
 
+  List<String> splitMessage(String message) {
+    // Check if the string contains numbered items using regex
+    bool hasNumbers = RegExp(r'^\d+\.\s').hasMatch(message);
+
+    if (hasNumbers) {
+      // Remove numbers followed by period and space
+      String cleanedMessage = message.replaceAll(RegExp(r'\d+\.\s'), '');
+      return cleanedMessage.split(RegExp(r'\n|\.\s')).where((msg) => msg.trim().isNotEmpty).toList();
+    } else {
+      // Split by period followed by space
+      List<String> listOfMessages = message.split('. ');
+      return listOfMessages
+          .map((msg) => msg.endsWith('.') ? msg.substring(0, msg.length - 1) : msg)
+          .where((msg) => msg.trim().isNotEmpty)
+          .toList();
+    }
+  }
+
   Widget daySummaryMessagesList(String text) {
-    var sentences = text.split('. ');
+    var sentences = splitMessage(text);
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: sentences.length,
       itemBuilder: (context, index) {
         return ListTile(
-          visualDensity: const VisualDensity(horizontal: 0, vertical: -1),
-          contentPadding: EdgeInsets.zero,
-          horizontalTitleGap: 10,
-          minLeadingWidth: 2,
-          leading: Icon(Icons.circle, size: 8, color: Colors.grey.shade300),
+          visualDensity: const VisualDensity(horizontal: 0, vertical: -4),
+          contentPadding: const EdgeInsets.symmetric(vertical: 2),
+          horizontalTitleGap: 12,
+          minLeadingWidth: 0,
+          leading: Text(
+            '${index + 1}.',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade500,
+            ),
+          ),
           title: AutoSizeText(
             sentences[index],
-            // : utf8.decode(widget.message.text.codeUnits),
-            style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+            style: const TextStyle(
+              fontSize: 15.0,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+              color: Colors.white,
+            ),
             softWrap: true,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         );
       },
