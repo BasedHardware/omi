@@ -84,7 +84,7 @@ class ServerMessage {
     return ServerMessage(
       json['id'],
       DateTime.parse(json['created_at']).toLocal(),
-      json['text'],
+      json['text'] ?? "",
       MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
