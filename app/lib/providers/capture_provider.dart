@@ -384,6 +384,7 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    notifyListeners();
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
@@ -634,10 +635,9 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _ensureSocketConnection({bool force = false}) async {
-    debugPrint("_ensureSocketConnection");
+    debugPrint("_ensureSocketConnection ${_socket?.state}");
     var codec = SharedPreferencesUtil().deviceCodec;
-    if (force || (codec != _socket?.codec || _socket?.state != SocketServiceState.connected)) {
-      await _socket?.stop(reason: 'reset state, force $force');
+    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
       await _initiateWebsocket(force: force);
     }
   }
@@ -793,8 +793,8 @@ class CaptureProvider extends ChangeNotifier
       _clean();
       setMemoryCreating(false);
       setHasTranscripts(false);
-      notifyListeners();
     }
+    notifyListeners();
 
     // Keep alive
     _startKeepAliveServices();
@@ -822,6 +822,12 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('err: $err');
     notifyListeners();
     _startKeepAliveServices();
+  }
+
+  @override
+  void onConnected() {
+    _transcriptServiceReady = true;
+    notifyListeners();
   }
 
   @override

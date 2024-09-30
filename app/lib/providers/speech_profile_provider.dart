@@ -363,4 +363,7 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyInfo('SCROLL_DOWN');
     debugPrint('Memory creation timer restarted');
   }
+
+  @override
+  void onConnected() {}
 }

@@ -19,6 +19,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
 abstract class IPureSocketListener {
+  void onConnected();
   void onMessage(dynamic message);
   void onClosed();
   void onError(Object err, StackTrace trace);
@@ -137,6 +138,7 @@ class PureSocket implements IPureSocket {
       return false;
     }
     _status = PureSocketStatus.connected;
+    _listener?.onConnected();
     _retries = 0;
 
     final that = this;
@@ -268,6 +270,7 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);
   void onSegmentReceived(List<TranscriptSegment> segments);
   void onError(Object err);
+  void onConnected();
   void onClosed();
 }
 
@@ -422,5 +425,12 @@ class TranscripSegmentSocketService implements IPureSocketListener {
       body: 'Unable to connect to the transcript service.'
           ' Please restart the app or contact support if the problem persists.',
     );
+  }
+
+  @override
+  void onConnected() {
+    _listeners.forEach((k, v) {
+      v.onConnected();
+    });
   }
 }
