@@ -486,7 +486,7 @@ class CaptureProvider extends ChangeNotifier
             btConnectedTime: btConnectedTime,
           );
           sdCardReconnectionTimer?.cancel();
-          sdCardReconnectionTimer = Timer(Duration(seconds: 10), () {
+          sdCardReconnectionTimer = Timer(const Duration(seconds: 10), () {
             debugPrint('sdCardReconnectionTimer');
             if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
               sdCardIsDownloading = true;
