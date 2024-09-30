@@ -108,8 +108,28 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'SD Card Import',
-                  () => routeToPage(context, const SdCardCapturePage()),
+                  'SD Card Import (V2)',
+                  () {
+                    if (!SharedPreferencesUtil().deviceIsV2) {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.of(context).pop(),
+                        () => {},
+                        'V2 undetected',
+                        'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+                          singleButton: true,
+                        ),
+                      );
+                    }
+                    else {
+                    var page = const SdCardCapturePage();
+                    routeToPage(context, page);
+                    }
+
+                  },
+                  // https://www.omi.me/products/friend-dev-kit-2
                   icon: Icons.sd_card,
                 ),
                 const SizedBox(height: 8),
