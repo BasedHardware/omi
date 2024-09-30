@@ -135,6 +135,18 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
+
+  set currentStorageBytes(int value) => saveInt('currentStorageBytes', value);
+
+  int get previousStorageBytes => getInt('previousStorageBytes') ?? 0;
+
+  set previousStorageBytes(int value) => saveInt('previousStorageBytes', value);
+
+  bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
+
+  set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
+
   int get enabledPluginsCount => pluginsList.where((element) => element.enabled).length;
 
   int get enabledPluginsIntegrationsCount =>
@@ -407,11 +419,4 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
-  int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
-
-  set currentStorageBytes(int value) => saveInt('currentStorageBytes', value);
-
-  int get previousStorageBytes => getInt('previousStorageBytes') ?? 0;
-
-  set previousStorageBytes(int value) => saveInt('previousStorageBytes', value);
 }

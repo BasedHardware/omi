@@ -14,13 +14,13 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(builder: (context, provider, deviceProvider, child) {
-      String timeRemaining = (provider.timeToSend - provider.timeAlreadySent).toStringAsFixed(2);
+      String sdCardSecondsRemaining = (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
       String percentageRemaining = provider.totalStorageFileBytes == 0
           ? '0.0'
           : (provider.totalBytesReceived / provider.totalStorageFileBytes * 100).toStringAsFixed(2);
 
-      String displayText = 'about $timeRemaining seconds remaining\n$percentageRemaining% there';
-      if (provider.isDone) {
+      String displayText = 'about $sdCardSecondsRemaining seconds remaining\n$percentageRemaining% there';
+      if (provider.sdCardDownloadDone) {
         displayText = 'Done! Check back later for your memories.';
       }
 
@@ -44,7 +44,7 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               LinearProgressIndicator(
-                value: provider.timeAlreadySent / provider.timeToSend,
+                value: provider.sdCardSecondsReceived / (provider.sdCardSecondsTotal == 0 ? 1 : provider.sdCardSecondsTotal),
                 backgroundColor: Colors.grey,
                 color: Colors.green,
                 minHeight: 10,
@@ -60,7 +60,7 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
                 ),
                 onPressed: () {
                   setState(() {
-                    displayText = 'about $timeRemaining seconds remaining, about $percentageRemaining% there';
+                    displayText = 'about $sdCardSecondsRemaining seconds remaining, about $percentageRemaining% there';
                   });
                   if (!provider.sdCardIsDownloading) {
                     provider.sendStorage(deviceProvider.connectedDevice!.id);
