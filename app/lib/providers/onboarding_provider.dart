@@ -173,13 +173,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       var c = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       print('Connected to device: ${device.name}');
       deviceId = device.id;
-      await device.getDeviceInfo(c);
+      //  device = await device.getDeviceInfo(c);
       await SharedPreferencesUtil().btDeviceSet(device);
       deviceName = device.name;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
-        SharedPreferencesUtil().btDevice = cDevice;
+        // SharedPreferencesUtil().btDevice = cDevice;
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
