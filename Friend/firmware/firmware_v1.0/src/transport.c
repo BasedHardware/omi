@@ -1,23 +1,24 @@
-#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
-#include <zephyr/sys/ring_buffer.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/services/bas.h>
-#include <zephyr/sys/atomic.h>
+#include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/ring_buffer.h>
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
-#include "btutils.h"
 // #include "nfc.h"
-#include "lib/battery/battery.h"
 #include "speaker.h"
 #include "button.h"
 #include "sdcard.h"
-#include <zephyr/drivers/sensor.h>
+#include "storage.h"
+#include "lib/battery/battery.h"
+#include "btutils.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -62,10 +63,10 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-#ifdef CONFIG_ENABLE_SPEAKER
-     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
-     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
-#endif
+// #ifdef CONFIG_ENABLE_SPEAKER
+//     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+//     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+// #endif
     
 };
 
@@ -87,16 +88,6 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 //Acceleration data
 //this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
 //
-typedef struct sensors{
-
-	struct sensor_value a_x;
-	struct sensor_value a_y;
-	struct sensor_value a_z;
-    struct sensor_value g_x;
-    struct sensor_value g_y;
-    struct sensor_value g_z;
-
-};
 static struct sensors mega_sensor;
 static struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
@@ -140,7 +131,8 @@ void broadcast_accel(struct k_work *work_item) {
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
-    if (err) {
+    if (err) 
+    {
        LOG_ERR("Error updating Accelerometer data");
     }
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
@@ -148,8 +140,9 @@ void broadcast_accel(struct k_work *work_item) {
 
 
 //use d4,d5
-static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) {
-        if (value == BT_GATT_CCC_NOTIFY)
+static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+{
+    if (value == BT_GATT_CCC_NOTIFY)
     {
         LOG_INF("Client subscribed for notifications");
     }
@@ -163,15 +156,18 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
 }
 
-int accel_start() {
+int accel_start() 
+{
     struct sensor_value odr_attr;
     lsm6dsl_dev = DEVICE_DT_GET_ONE(st_lsm6dsl);
     k_msleep(50);
-    if (lsm6dsl_dev == NULL) {
+    if (lsm6dsl_dev == NULL) 
+    {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
 	}
-    if (!device_is_ready(lsm6dsl_dev)) {
+    if (!device_is_ready(lsm6dsl_dev)) 
+    {
 		LOG_ERR("LSM6DSL: not ready");
 		return 0;
 	}
@@ -179,18 +175,20 @@ int accel_start() {
 	odr_attr.val2 = 0;
 
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+    {
+	    LOG_ERR("Cannot set sampling frequency for Accelerometer.");
 		return 0;
 	}
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
-		    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	LOG_ERR("Cannot set sampling frequency for gyro.");
+		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+	    LOG_ERR("Cannot set sampling frequency for gyro.");
 	    return 0;
 	}
-    if (sensor_sample_fetch(lsm6dsl_dev) < 0) {
-    LOG_ERR("Sensor sample update error");
-    return 0;
+    if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
+    {
+        LOG_ERR("Sensor sample update error");
+        return 0;
 	}
 
     LOG_INF("Accelerometer is ready for use \n");
@@ -244,12 +242,12 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 }
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
- {
-     uint16_t amount = 0;
-     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
-     amount = speak(len, buf);
-     return len;
- }
+{
+    uint16_t amount = 0;
+    bt_gatt_notify(conn, attr, &amount, sizeof(amount));
+    amount = speak(len, buf);
+    return len;
+}
 
 //
 // DFU Service Handlers
@@ -351,16 +349,13 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 
-	  is_connected = true;
+	is_connected = true;
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
-#ifdef CONFIG_ACCELEROMETER
-     k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
-#endif
-#ifdef CONFIG_ENABLE_BUTTON
-    activate_button_work();
-#endif
+// #ifdef CONFIG_ACCELEROMETER
+//      k_work_schedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
+// #endif
 
 }
 
@@ -397,8 +392,8 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
 static void _le_phy_updated(struct bt_conn *conn,
                             struct bt_conn_le_phy_info *param)
 {
-    LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
-           phy2str(param->tx_phy), phy2str(param->rx_phy));
+    // LOG_DBG("LE PHY updated: TX PHY %s, RX PHY %s",
+    //        phy2str(param->tx_phy), phy2str(param->rx_phy));
 }
 
 static void _le_data_length_updated(struct bt_conn *conn,
@@ -480,7 +475,7 @@ static bool read_from_tx_queue()
 //
 
 // Thread
-K_THREAD_STACK_DEFINE(pusher_stack, 2048);
+K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
@@ -544,14 +539,15 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define MAX_WRITE_SIZE 400
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-bool write_to_storage(void) {
+bool write_to_storage(void) 
+{
     if (!read_from_tx_queue())
     {
         return false;
     }
 
     uint8_t *buffer = tx_buffer+2;
-    uint32_t packet_size = tx_buffer_size;
+    const uint32_t packet_size = tx_buffer_size;
     //load into write at 400 bytes at a time. is faster 
     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
@@ -611,40 +607,40 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 
- void update_file_size() 
- {
-     file_num_array[0] = get_file_size(1);
-     printk("file size for file count %d %d\n",file_count,file_num_array[0]);
- }
+void update_file_size() 
+{
+    file_num_array[0] = get_file_size(1);
+    printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+}
 
 void pusher(void)
 {
     k_msleep(500);
     while (1)
     {
-
-
         //
         // Load current connection
         //
-
         struct bt_conn *conn = current_connection;
-        bool use_gatt = true;
          //updating the most recent file size is expensive!
-         static bool file_size_updated = true;
-         static bool connection_was_true = false;
-         if (conn && !connection_was_true) {
-             k_msleep(100);
-             file_size_updated = false;
-             connection_was_true = true;
-         } else if (!conn) {
-             connection_was_true = false;
-         }
-         if (!file_size_updated) {
-             printk("updating file size\n");
-             update_file_size();
-             file_size_updated = true;
-         }
+        static bool file_size_updated = true;
+        static bool connection_was_true = false;
+        if (conn && !connection_was_true) 
+        {
+            k_msleep(100);
+            file_size_updated = false;
+            connection_was_true = true;
+        } 
+        else if (!conn) 
+        {
+            connection_was_true = false;
+        }
+        if (!file_size_updated) 
+        {
+            printk("updating file size\n");
+            update_file_size();
+            file_size_updated = true;
+        }
         if (conn)
         {
             conn = bt_conn_ref(conn);
@@ -665,29 +661,24 @@ void pusher(void)
         
         if (!valid  && !storage_is_on) 
         {
-
             bool result = write_to_storage();
-
             if (result)
             {
-
+  
             }
             else 
             {
-                k_sleep(K_MSEC(10));
+       
             }
         }    
-
         if (valid)
         {
-
             bool sent = push_to_gatt(conn);
             if (!sent)
             {
-                k_sleep(K_MSEC(50));
+                // k_sleep(K_MSEC(50));
             }
         }
-
         if (conn)
         {
             bt_conn_unref(conn);
@@ -697,8 +688,6 @@ void pusher(void)
     }
 }
 extern struct bt_gatt_service storage_service;
-
-
 //
 // Public functions
 //
@@ -716,38 +705,46 @@ int transport_start()
         return err;
     }
     LOG_INF("Transport bluetooth initialized");
+    //  Enable accelerometer
 #ifdef CONFIG_ACCELEROMETER
     err = accel_start();
-    if (!err) {
+    if (!err) 
+    {
         LOG_INF("Accelerometer failed to activate\n");
     }
-    else {
+    else 
+    {
+        LOG_INF("Accelerometer initialized");
         bt_gatt_service_register(&accel_service);
     }
 #endif
-
+    //  Enable button
 #ifdef CONFIG_ENABLE_BUTTON
-
-     button_init();
-     register_button_service();
+    button_init();
+    register_button_service();
+    activate_button_work();
 #endif
 
 #ifdef CONFIG_ENABLE_SPEAKER
+    err = speaker_init();
+    if (err) 
+    {
+        LOG_ERR("Speaker failed to start");
+        return 0;
+    }
+    else
+    {
+        LOG_INF("Speaker initialized");
+    }
 
-err = speaker_init();
-if(!err) {
-    LOG_ERR("Speaker failed to start");
-    return 0;
-}
-
-play_boot_sound();
-    
+    play_boot_sound();
 #endif
     // Start advertising
+
+    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err)
     {
@@ -760,10 +757,8 @@ play_boot_sound();
     }
 
     int battErr = 0;
-
 	battErr |= battery_init();
 	battErr |= battery_charge_start();
-
 	if (battErr)
 	{
 		LOG_ERR("Battery init failed (err %d)", battErr);

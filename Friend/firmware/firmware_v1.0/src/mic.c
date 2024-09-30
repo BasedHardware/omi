@@ -97,6 +97,7 @@ int mic_start()
     return 0;
 }
 
-void set_mic_callback(mix_handler callback) {
+void set_mic_callback(mix_handler callback) 
+{
     _callback = callback;
 }

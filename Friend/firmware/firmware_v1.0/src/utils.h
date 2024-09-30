@@ -1,4 +1,6 @@
-#pragma once
+#ifndef UTILS_H
+#define UTILS_H
+
 #include <zephyr/logging/log.h>
 #include <zephyr/bluetooth/gatt.h>
 
@@ -15,3 +17,5 @@
         LOG_ERR("Error at %s:%d:%d", __FILE__, __LINE__, result); \
         return -1;                                                 \
     }
+
+#endif
