@@ -1,10 +1,8 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device_info.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/frame_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
-import 'package:friend_private/services/services.dart';
 
 enum BleAudioCodec {
   pcm16,
@@ -105,16 +103,48 @@ class BtDevice {
   String id;
   DeviceType type;
   int rssi;
-  BtDeviceInfo? _info;
+  String? _modelNumber;
+  String? _firmwareRevision;
+  String? _hardwareRevision;
+  String? _manufacturerName;
 
-  BtDevice({required this.name, required this.id, required this.type, required this.rssi, BtDeviceInfo? info}) {
-    if (info != null) {
-      _info = info;
-    }
-    _initialize();
+  BtDevice(
+      {required this.name,
+      required this.id,
+      required this.type,
+      required this.rssi,
+      String? modelNumber,
+      String? firmwareRevision,
+      String? hardwareRevision,
+      String? manufacturerName}) {
+    _modelNumber = modelNumber;
+    _firmwareRevision = firmwareRevision;
+    _hardwareRevision = hardwareRevision;
+    _manufacturerName = manufacturerName;
   }
 
-  BtDeviceInfo? get info => _info;
+  // create an empty device
+  BtDevice.empty()
+      : name = '',
+        id = '',
+        type = DeviceType.friend,
+        rssi = 0,
+        _modelNumber = '',
+        _firmwareRevision = '',
+        _hardwareRevision = '',
+        _manufacturerName = '';
+
+  // getters
+  String get modelNumber => _modelNumber ?? 'Unknown11';
+  String get firmwareRevision => _firmwareRevision ?? 'Unknown';
+  String get hardwareRevision => _hardwareRevision ?? 'Unknown';
+  String get manufacturerName => _manufacturerName ?? 'Unknown';
+
+  // set details
+  set modelNumber(String modelNumber) => _modelNumber = modelNumber;
+  set firmwareRevision(String firmwareRevision) => _firmwareRevision = firmwareRevision;
+  set hardwareRevision(String hardwareRevision) => _hardwareRevision = hardwareRevision;
+  set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
 
   String getShortId() => BtDevice.shortId(id);
 
@@ -126,37 +156,65 @@ class BtDevice {
     }
   }
 
-  Future<BtDevice> updateDeviceInfo(DeviceConnection? conn) async {
+  BtDevice copyWith(
+      {String? name,
+      String? id,
+      DeviceType? type,
+      int? rssi,
+      String? modelNumber,
+      String? firmwareRevision,
+      String? hardwareRevision,
+      String? manufacturerName}) {
+    return BtDevice(
+      name: name ?? this.name,
+      id: id ?? this.id,
+      type: type ?? this.type,
+      rssi: rssi ?? this.rssi,
+      modelNumber: modelNumber ?? _modelNumber,
+      firmwareRevision: firmwareRevision ?? _firmwareRevision,
+      hardwareRevision: hardwareRevision ?? _hardwareRevision,
+      manufacturerName: manufacturerName ?? _manufacturerName,
+    );
+  }
+
+  Future updateDeviceInfo(DeviceConnection? conn) async {
     if (conn == null) {
       return this;
     }
-    _info = await getDeviceInfo(conn);
-    return this;
+    return await getDeviceInfo(conn);
   }
 
-  Future<BtDeviceInfo> getDeviceInfo(DeviceConnection? conn) async {
+  Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
     if (conn == null) {
       if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
         var device = SharedPreferencesUtil().btDevice;
-        return device.info ?? BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', device.type);
+        return copyWith(
+          id: device.id,
+          name: device.name,
+          type: device.type,
+          rssi: device.rssi,
+          modelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+        );
       } else {
-        return BtDeviceInfo('Unknown', 'Unknown', 'Unknown', 'Unknown', DeviceType.friend);
+        return BtDevice.empty();
       }
     }
 
     if (type == DeviceType.friend) {
-      _info = await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromFriend(conn);
     } else if (type == DeviceType.openglass) {
-      _info = await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromFriend(conn);
     } else if (type == DeviceType.frame) {
-      _info = await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
+      return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else {
-      _info = await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromFriend(conn);
     }
-    return _info!;
   }
 
-  Future<BtDeviceInfo> _getDeviceInfoFromFriend(DeviceConnection conn) async {
+  Future _getDeviceInfoFromFriend(DeviceConnection conn) async {
     var modelNumber = 'Friend';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
@@ -202,23 +260,23 @@ class BtDevice {
       }
     }
 
-    return BtDeviceInfo(
-      modelNumber,
-      firmwareRevision,
-      hardwareRevision,
-      manufacturerName,
-      t,
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: t,
     );
   }
 
-  static Future<BtDeviceInfo> _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
+  Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
     await conn.init();
-    return BtDeviceInfo(
-      conn.modelNumber,
-      conn.firmwareRevision,
-      conn.hardwareRevision,
-      conn.manufacturerName,
-      DeviceType.frame,
+    return copyWith(
+      modelNumber: conn.modelNumber,
+      firmwareRevision: conn.firmwareRevision,
+      hardwareRevision: conn.hardwareRevision,
+      manufacturerName: conn.manufacturerName,
+      type: DeviceType.frame,
     );
   }
 
@@ -261,6 +319,10 @@ class BtDevice {
       id: json['id'],
       type: DeviceType.values[json['type']],
       rssi: json['rssi'],
+      modelNumber: json['modelNumber'],
+      firmwareRevision: json['firmwareRevision'],
+      hardwareRevision: json['hardwareRevision'],
+      manufacturerName: json['manufacturerName'],
     );
   }
 
@@ -271,14 +333,10 @@ class BtDevice {
       'id': id,
       'type': type.index,
       'rssi': rssi,
+      'modelNumber': modelNumber,
+      'firmwareRevision': firmwareRevision,
+      'hardwareRevision': hardwareRevision,
+      'manufacturerName': manufacturerName,
     };
-  }
-
-  void _initialize() async {
-    // do not use this for now. Wait till we have a better way because this will result in a loop
-    // var connection = await ServiceManager.instance().device.ensureConnection(id);
-    // if (_info == null || _info!.modelNumber == 'Unknown') {
-    //   _info = await getDeviceInfo(connection);
-    // }
   }
 }
