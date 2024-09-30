@@ -97,12 +97,12 @@ class NotificationService {
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
-      _register();
+      register();
     }
     return isAllowed;
   }
 
-  Future<void> _register() async {
+  Future<void> register() async {
     try {
       await platform.invokeMethod(
         'setNotificationOnKillService',

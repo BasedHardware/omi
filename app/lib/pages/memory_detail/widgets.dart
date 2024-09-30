@@ -19,6 +19,7 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -382,7 +383,9 @@ class GetPluginsWidgets extends StatelessWidget {
               ? [child!]
               : [
                   // TODO: include a way to trigger specific plugins
-                  if (provider.memory.pluginsResults.isNotEmpty && !provider.memory.discarded) ...[
+                  if (provider.memory.pluginsResults.isNotEmpty &&
+                      !provider.memory.discarded &&
+                      provider.pluginResponseExpanded.isNotEmpty) ...[
                     provider.memory.structured.actionItems.isEmpty
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
@@ -463,7 +466,7 @@ class GetPluginsWidgets extends StatelessWidget {
                                     )
                                   : const SizedBox.shrink(),
                               ExpandableTextWidget(
-                                text: pluginResponse.content.trim(),
+                                text: pluginResponse.content.decodeSting.trim(),
                                 isExpanded: provider.pluginResponseExpanded[i],
                                 toggleExpand: () {
                                   print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
