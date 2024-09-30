@@ -39,7 +39,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       }
                     },
                     title: const Text(
-                      'Allow Omi to run in the background to improve stability',
+                      'Let Omi run in the background for better stability.',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     contentPadding: const EdgeInsets.only(left: 8),
@@ -110,7 +110,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 }
               },
               title: const Text(
-                'Enable background location access for Omi\'s full experience.',
+                'Enable background location for the full experience',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),
@@ -129,7 +129,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 }
               },
               title: const Text(
-                'Enable notification access for Omi\'s full experience.',
+                'Enable notifications to stay informed',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               contentPadding: const EdgeInsets.only(left: 8),
