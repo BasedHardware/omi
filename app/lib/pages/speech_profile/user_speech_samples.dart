@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/providers/user_speech_samples_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
