@@ -11,18 +11,13 @@ from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_sdcard_audio
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
-from datetime import timezone, timedelta
 
 router = APIRouter()
 
 
+# TODO: version -> /v1/sdcard_stream
 @router.websocket("/sdcard_stream")
-async def sdcard_streaming_endpoint(
-        websocket: WebSocket, uid: str, bt_connected_time: str
-):
-    bt_connected_time_dt = datetime.strptime(bt_connected_time, '%Y-%m-%d %H:%M:%S.%fZ').replace(
-        tzinfo=timezone.utc)
-
+async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -76,25 +71,21 @@ async def sdcard_streaming_endpoint(
     create_wav_from_bytes(big_file_path, audio_frames, "opus", 16000, 1, 2)
 
     try:
-        temp_file_path = f"_temp/{session_id}"  # +file_num .wav
-        current_file_num = 1
-        temp_file_name = 'temp' + str(current_file_num)
-
         vad_segments = vad_is_empty(big_file_path, return_segments=True)
         print(vad_segments)
-        temp_file_list = []
-        vad_segments_combined = []
         if vad_segments:
+            temp_file_list = []
             vad_segments_combined = combine_val_segments(vad_segments)
-            for segments in vad_segments_combined:
-                start = segments['start']
-                end = segments['end']
-                aseg = AudioSegment.from_wav(big_file_path)
-                aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
-                temp_file_name = temp_file_path + str(current_file_num) + '.wav'
+            aseg = AudioSegment.from_wav(big_file_path)
+
+            for i, segments in enumerate(vad_segments_combined):
+                start, end = segments['start'], segments['end']
+
+                segment_aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+                temp_file_name = f"_temp/{session_id}_{i}.wav"
+                segment_aseg.export(temp_file_name, format="wav")
+
                 temp_file_list.append(temp_file_name)
-                aseg.export(temp_file_name, format="wav")
-                current_file_num += 1
 
         else:
             print('nothing worth using memory for')
@@ -102,27 +93,22 @@ async def sdcard_streaming_endpoint(
 
         for file, segments in zip(temp_file_list, vad_segments_combined):
             signed_url = upload_sdcard_audio(file)
-            aseg = AudioSegment.from_wav(file)
             words = fal_whisperx(signed_url, 4, 2)
-            duration_entire_process = datetime.now(timezone.utc)
-            time_to_subtract = (duration_entire_process - bt_connected_time_dt).total_seconds()
-            zero_base = duration_of_file
-            fal_segments = fal_postprocessing(words, aseg.duration_seconds)
+            fal_segments = fal_postprocessing(words, 0)
             print(fal_segments)
+            # TODO: need to detect language here for each, whisperx should be able to return that in the response.
             if not fal_segments:
                 print('failed to get fal segments')
                 continue
             temp_memory = CreateMemory(
-                started_at=datetime.now(timezone.utc) - timedelta(
-                    seconds=time_to_subtract + zero_base - segments['start']),
-                finished_at=datetime.now(timezone.utc) - timedelta(
-                    seconds=time_to_subtract + zero_base - segments['end']),
-
+                started_at=datetime.utcnow(),
+                finished_at=datetime.utcnow(),
                 transcript_segments=fal_segments,
                 source=MemorySource.sdcard,
                 language='en'
             )
             result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=True)
+            # TODO: should use the websocket to send each memory as created to the client, check transcribe.py
         await websocket.send_json({"type": "done"})
 
     except Exception as e:
