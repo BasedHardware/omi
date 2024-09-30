@@ -81,27 +81,6 @@ def remove_user_soniox_speech_profile(uid: str):
     r.delete(f'users:{uid}:has_soniox_speech_profile')
 
 
-def store_user_speech_profile(uid: str, data: List[List[int]]):
-    r.set(f'users:{uid}:speech_profile', str(data))
-
-
-def get_user_speech_profile(uid: str) -> List[List[int]]:
-    data = r.get(f'users:{uid}:speech_profile')
-    if not data:
-        return []
-    return eval(data)
-
-
-def store_user_speech_profile_duration(uid: str, duration: int):
-    r.set(f'users:{uid}:speech_profile_duration', duration)
-
-
-def get_user_speech_profile_duration(uid: str) -> int:
-    data = r.get(f'users:{uid}:speech_profile_duration')
-    if not data:
-        return 0
-    return int(data)
-
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
     r.set(f'users:{uid}:name', name)

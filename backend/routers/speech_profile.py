@@ -5,8 +5,7 @@ from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
 from database.memories import get_memory
-from database.redis_db import store_user_speech_profile, store_user_speech_profile_duration, get_user_speech_profile, \
-    remove_user_soniox_speech_profile
+from database.redis_db import remove_user_soniox_speech_profile
 from database.users import get_person
 from models.memory import Memory
 from models.other import UploadProfile
@@ -14,7 +13,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import upload_profile_audio, get_profile_audio_if_exists, get_memory_recording_if_exists, \
     upload_additional_profile_audio, delete_additional_profile_audio, get_additional_profile_recordings, \
     upload_user_person_speech_sample, delete_user_person_speech_sample, get_user_person_speech_samples, \
-    delete_speech_sample_for_people
+    delete_speech_sample_for_people, get_user_has_speech_profile
 from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
@@ -22,7 +21,7 @@ router = APIRouter()
 
 @router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': len(get_user_speech_profile(uid)) > 0}
+    return {'has_profile': get_user_has_speech_profile(uid) > 0}
 
 
 @router.get('/v4/speech-profile', tags=['v3'])
@@ -44,8 +43,6 @@ def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user
     if data.duration > 120:
         raise HTTPException(status_code=400, detail="Audio duration is too long")
 
-    store_user_speech_profile(uid, data.bytes)
-    store_user_speech_profile_duration(uid, data.duration)
     return {'status': 'ok'}
 
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
@@ -26,6 +28,10 @@ class IntercomManager {
 
   Future displayChargingArticle() async {
     return await intercom.displayArticle('9907475-how-to-charge-the-device');
+  }
+
+  Future displayFirmwareUpdateArticle() async {
+    return await intercom.displayArticle('9918118-updating-your-friend-device-firmware');
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
