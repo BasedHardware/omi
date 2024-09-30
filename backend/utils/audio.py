@@ -1,7 +1,8 @@
-import io
 import wave
-from pyogg import OpusDecoder
+
 from pydub import AudioSegment
+from pyogg import OpusDecoder
+
 
 def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [int]):
     if len(source_files) == 0 or not dest_file_path:
@@ -17,7 +18,8 @@ def merge_wav_files(dest_file_path: str, source_files: [str], silent_seconds: [i
 
 
 # frames is 2darray
-def create_wav_from_bytes(file_path: str, frames: [], codec: str, frame_rate: int = 16000, channels: int = 1, sample_width: int = 2):
+def create_wav_from_bytes(file_path: str, frames: [], codec: str, frame_rate: int = 16000, channels: int = 1,
+                          sample_width: int = 2):
     # opus
     if codec == "opus":
         # Create an Opus decoder

@@ -5,9 +5,8 @@ enum MessageEventType {
   newMemoryCreating('new_memory_creating'),
   newMemoryCreated('new_memory_created'),
   newMemoryCreateFailed('new_memory_create_failed'),
-  memoryPostProcessingSuccess('memory_post_processing_success'),
-  memoryPostProcessingFailed('memory_post_processing_failed'),
   newProcessingMemoryCreated('new_processing_memory_created'),
+  processingMemoryStatusChanged('processing_memory_status_changed'),
   ping('ping'),
   unknown('unknown'),
   ;
@@ -26,6 +25,7 @@ class ServerMessageEvent {
   String? processingMemoryId;
   ServerMemory? memory;
   List<ServerMessage>? messages;
+  ServerProcessingMemoryStatus? processingMemoryStatus;
 
   ServerMessageEvent(
     this.type,
@@ -33,6 +33,7 @@ class ServerMessageEvent {
     this.processingMemoryId,
     this.memory,
     this.messages,
+    this.processingMemoryStatus,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -42,6 +43,9 @@ class ServerMessageEvent {
       json['processing_memory_id'],
       json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
       ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
+      json['processing_memory_status'] != null
+          ? ServerProcessingMemoryStatus.valuesFromString(json['processing_memory_status'])
+          : null,
     );
   }
 }

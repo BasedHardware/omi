@@ -294,7 +294,7 @@ class FriendDeviceConnection extends DeviceConnection {
     return listener;
   }
 
-  Future<bool> performWriteToStorage(int numFile, int command) async {
+  Future<bool> performWriteToStorage(int numFile, int command,int offset) async {
     if (_storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
       return false;
@@ -307,7 +307,16 @@ class FriendDeviceConnection extends DeviceConnection {
     }
     debugPrint('About to write to storage bytes');
     debugPrint('about to send $numFile');
-    await storageDataStreamCharacteristic.write([command & 0xFF, numFile & 0xFF]);
+       debugPrint('about to send $command');
+     debugPrint('about to send offset$offset');
+     var offsetBytes = [
+       (offset >> 24) & 0xFF,
+       (offset >> 16) & 0xFF,
+       (offset >> 8) & 0xFF,
+       offset & 0xFF,
+     ]; 
+
+     await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF,offsetBytes[0],offsetBytes[1],offsetBytes[2],offsetBytes[3]]);
     return true;
   }
   // Future<List<int>> performGetStorageList();
