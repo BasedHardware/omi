@@ -105,6 +105,7 @@ class MemorySource(str, Enum):
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
+    sdcard = 'sdcard'
 
 
 class MemoryVisibility(str, Enum):
@@ -148,8 +149,6 @@ class Memory(BaseModel):
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
-
-    postprocessing: Optional[MemoryPostProcessing] = None
 
     discarded: bool = False
     deleted: bool = False

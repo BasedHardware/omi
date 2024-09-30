@@ -43,26 +43,26 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
           appBar: AppBar(
             title: const Text('Speech Samples'),
             backgroundColor: Theme.of(context).colorScheme.primary,
-            actions: [
-              IconButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context),
-                        () => Navigator.pop(context),
-                        'How to take more samples?',
-                        '1. Authorize Omi to store your memories audio recordings.\n2. Once you create a new memory with this settings, you can edit your transcript, and select segments to expand your speech profile.',
-                        singleButton: true,
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.question_mark,
-                    size: 20,
-                  ))
-            ],
+            // actions: [
+            //   IconButton(
+            //       onPressed: () {
+            //         showDialog(
+            //           context: context,
+            //           builder: (c) => getDialog(
+            //             context,
+            //             () => Navigator.pop(context),
+            //             () => Navigator.pop(context),
+            //             'How to take more samples?',
+            //             '1. Authorize Omi to store your memories audio recordings.\n2. Once you create a new memory with this settings, you can edit your transcript, and select segments to expand your speech profile.',
+            //             singleButton: true,
+            //           ),
+            //         );
+            //       },
+            //       icon: const Icon(
+            //         Icons.question_mark,
+            //         size: 20,
+            //       ))
+            // ],
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: provider.loading
@@ -71,28 +71,28 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                   color: Colors.white,
                 ))
               : ListView.builder(
-                  itemCount: provider.samplesUrl.length + 1,
+                  itemCount: provider.samplesUrl.length,
                   itemBuilder: (context, index) {
-                    if (index == provider.samplesUrl.length) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'How to take more samples?',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                            SizedBox(height: 16),
-                            Text('1. Authorize Omi to store your memories audio recordings.'),
-                            SizedBox(height: 8),
-                            Text(
-                                '2. Once you create a new memory with this settings, you will be able to edit your transcript, and select which segments include.'),
-                          ],
-                        ),
-                      );
-                    }
+                    // if (index == provider.samplesUrl.length) {
+                    //   return const Padding(
+                    //     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    //     child: Column(
+                    //       mainAxisAlignment: MainAxisAlignment.start,
+                    //       crossAxisAlignment: CrossAxisAlignment.start,
+                    //       children: [
+                    //         Text(
+                    //           'How to take more samples?',
+                    //           style: TextStyle(fontSize: 16),
+                    //         ),
+                    //         SizedBox(height: 16),
+                    //         Text('1. Authorize Omi to store your memories audio recordings.'),
+                    //         SizedBox(height: 8),
+                    //         Text(
+                    //             '2. Once you create a new memory with this settings, you will be able to edit your transcript, and select which segments include.'),
+                    //       ],
+                    //     ),
+                    //   );
+                    // }
                     return Column(
                       children: [
                         ListTile(

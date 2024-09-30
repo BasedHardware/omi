@@ -35,19 +35,6 @@ Future<String?> getUserSpeechProfile() async {
   return null;
 }
 
-Future<bool> uploadProfileBytes(List<List<int>> bytes, int duration) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/upload-bytes',
-    headers: {},
-    body: jsonEncode({'bytes': bytes, 'duration': duration}),
-    method: 'POST',
-  );
-  debugPrint('uploadProfileBytes: ${response?.body}');
-  if (response == null) return false;
-  if (response.statusCode != 200) return false;
-  return true;
-}
-
 Future<bool> uploadProfile(File file) async {
   var request = http.MultipartRequest(
     'POST',
@@ -90,8 +77,6 @@ Future<List<String>> getExpandedProfileSamples() async {
   }
   return [];
 }
-
-// DELETE v3/speech-profile/expand?memory_id&segment_idx
 
 Future<bool> deleteProfileSample(
   String memoryId,

@@ -13,57 +13,35 @@ from starlette.websockets import WebSocketState
 import database.memories as memories_db
 import database.processing_memories as processing_memories_db
 from models.memory import Memory, TranscriptSegment
-from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated
-from models.processing_memory import ProcessingMemory
+from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated, \
+    ProcessingMemoryStatusChanged
+from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus
 from utils.memories.process_memory import process_memory
 from utils.processing_memories import create_memory_by_processing_memory
 from utils.stt.streaming import *
-from utils.stt.vad import VADIterator, model
 
 router = APIRouter()
 
 
-# @router.post("/v1/transcribe", tags=['v1'])
-# will be used again in Friend V2
-# def transcribe_auth(file: UploadFile, uid: str, language: str = 'en'):
-#     upload_id = str(uuid.uuid4())
-#     file_path = f"_temp/{upload_id}_{file.filename}"
-#     with open(file_path, 'wb') as f:
-#         f.write(file.file.read())
+# Minor script generate wav from raw audio bytes
+# import wave
+# import os
 #
-#     aseg = AudioSegment.from_wav(file_path)
-#     print(f'Transcribing audio {aseg.duration_seconds} secs and {aseg.frame_rate / 1000} khz')
+# # Parameters for the WAV file
+# sample_rate = 16000  # Assuming a sample rate of 16000 Hz
+# channels = 1  # Mono audio
+# sample_width = 2  # Assuming 16-bit audio (2 bytes per sample)
 #
-#     if vad_is_empty(file_path):  # TODO: get vad segments
-#         os.remove(file_path)
-#         return []
-#     transcript = transcribe_file_deepgram(file_path, language=language)
-#     os.remove(file_path)
-#     return transcript
-
-
-# templates = Jinja2Templates(directory="templates")
-
-# @router.get("/", response_class=HTMLResponse) // FIXME
-# def get(request: Request):
-#     return templates.TemplateResponse("index.html", {"request": request})
-
+# # Read the raw audio data from the file
+# with open("audio.raw", "rb") as raw_file:
+#     raw_audio_data = raw_file.read()
 #
-# Q: Why do we need try-catch around websocket.accept?
-# A: When a modal (modal app) timeout occurs, it allows a new request to be made, and a new WebSocket is initiated. Everything seems fine, right?
-#    But what if the receive[1], which belongs to the old request, is still lingering somewhere in the application?
-#    Yes, you know that if the app doesn’t manage the receive well, the new socket may receive messages from the existing receive. That’s why when a modal timeout happens, you might see various RuntimeErrors like:
-#    - Expected ASGI message "websocket.connect" but got "websocket.receive"
-#    - Expected ASGI message "websocket.connect" but got "websocket.disconnect"
-#    These messages are from the old receive. I called it Dirty Receive.
-#
-#    Because modal don't open their proto source code yet. So to deal with that kind of modal app error, lets support the grateful accept.
-#
-#    [1] receive in the WebSocket init function
-#    class WebSocket(HTTPConnection):
-#       def __init__(self, scope: Scope, receive: Receive, send: Send) -> None:
-#
-
+# if __name__ == '__main__':
+#     with wave.open("output.wav", "wb") as wav_file:
+#         wav_file.setnchannels(channels)  # Set mono/stereo
+#         wav_file.setsampwidth(sample_width)  # Set sample width to 16 bits (2 bytes)
+#         wav_file.setframerate(sample_rate)  # Set sample rate to 16000 Hz
+#         wav_file.writeframes(raw_audio_data)  # Write raw audio data to WAV
 
 class STTService(str, Enum):
     deepgram = "deepgram"
@@ -95,8 +73,6 @@ async def _websocket_util(
     else:
         stt_service = STTService.deepgram
 
-    # stt_service = STTService.deepgram
-
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -108,10 +84,6 @@ async def _websocket_util(
     # Initiate a separate vad for each websocket
     w_vad = webrtcvad.Vad()
     w_vad.set_mode(1)
-    # TODO: improvement? if keep a 500ms buffer before it detects speech? all the time,
-    # so any pieces before are send, and maybe is more accurate?, but I think is 5 to 10% less accurate, not terrible
-    # TODO: question, how slow it is?
-
     flush_new_memory_lock = threading.Lock()
 
     min_seconds_limit = 120
@@ -175,8 +147,14 @@ async def _websocket_util(
             if processing_memory and int(time.time()) % 3 == 0:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
+
+                now_ts = time.time()
+                capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+
                 processing_memories_db.update_processing_memory_segments(
-                    uid, processing_memory.id, list(map(lambda m: m.dict(), processing_memory.transcript_segments))
+                    uid, processing_memory.id,
+                    list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
+                    capturing_to,
                 )
 
     soniox_socket = None
@@ -233,9 +211,7 @@ async def _websocket_util(
         await websocket.close(code=websocket_close_code)
         return
 
-    vad_iterator = VADIterator(model, sampling_rate=sample_rate)  # threshold=0.9
     window_size_samples = 256 if sample_rate == 8000 else 512
-    window_size_bytes = int(window_size_samples * 2 * 2.5)
 
     decoder = opuslib.Decoder(sample_rate, channels)
 
@@ -245,12 +221,7 @@ async def _websocket_util(
         nonlocal timer_start
         timer_start = time.time()
 
-        # nonlocal audio_buffer
-        # audio_buffer = bytearray()
-        # speech_state = SpeechState.no_speech
-
-        with_speech, without_speech = 0, 0
-
+        # f = open("audio.raw", "ab")
         try:
             while websocket_active:
                 raw_data = await websocket.receive_bytes()
@@ -259,27 +230,16 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                has_speech = w_vad.is_speech(data, sample_rate)
-                # if has_speech:
-                #     with_speech += 1
-                # else:
-                #     without_speech += 1
-                #
-                # if has_speech:
-                #     print(f"speech: {with_speech / (with_speech + without_speech)}")
+                if include_speech_profile:
+                    has_speech = w_vad.is_speech(data, sample_rate)
+                    if not has_speech:
+                        continue
 
-                if not has_speech:
-                    continue
-
-                # audio_buffer.extend(data)
-                # if len(audio_buffer) < window_size_bytes:
-                #     continue
-
-                # speech_state = is_speech_present(audio_buffer[:window_size_bytes], vad_iterator, window_size_samples)
-
-                # if speech_state == SpeechState.no_speech:
-                #     audio_buffer = audio_buffer[window_size_bytes:]
-                #     continue
+                # TODO: is the VAD slowing down the STT service? specially soniox?
+                # - but from write data, it feels faster, but the processing is having issues
+                # - and soniox after missingn a couple filtered bytes get's slower
+                # - specially after waiting for like a couple seconds.
+                # f.write(data)
 
                 if soniox_socket is not None:
                     await soniox_socket.send(data)
@@ -297,8 +257,6 @@ async def _websocket_util(
                             dg_socket2 = None
                     else:
                         dg_socket2.send(data)
-
-                # audio_buffer = audio_buffer[window_size_bytes:]
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -344,7 +302,7 @@ async def _websocket_util(
             websocket_active = False
 
     async def _send_message_event(msg: MessageEvent):
-        print(f"Message: ${msg.to_json()}")
+        print(f"Message: type ${msg.event_type}")
         try:
             await websocket.send_json(msg.to_json())
             return True
@@ -363,13 +321,10 @@ async def _websocket_util(
 
         # Check the last processing memory
         last_processing_memory_data = processing_memories_db.get_last(uid)
+        now_ts = time.time()
         if last_processing_memory_data:
             last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            last_segment_end = 0
-            for segment in last_processing_memory.transcript_segments:
-                last_segment_end = max(last_segment_end, segment.end)
-            timer_segment_start = last_processing_memory.timer_segment_start if last_processing_memory.timer_segment_start else last_processing_memory.timer_start
-            if timer_segment_start + last_segment_end + min_seconds_limit > time.time():
+            if last_processing_memory.capturing_to and last_processing_memory.capturing_to.timestamp() > now_ts:
                 processing_memory = last_processing_memory
 
         # Or create new
@@ -381,6 +336,10 @@ async def _websocket_util(
                 timer_segment_start=timer_start + segment_start,
                 language=language,
             )
+
+        # Status, capturing to
+        processing_memory.status = ProcessingMemoryStatus.Capturing
+        processing_memory.capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
 
         # Track session changes
         processing_memory.session_id = session_id
@@ -402,7 +361,9 @@ async def _websocket_util(
         # Message: New processing memory created
         ok = await _send_message_event(NewProcessingMemoryCreated(
             event_type="new_processing_memory_created",
-            processing_memory_id=processing_memory.id),
+            processing_memory_id=processing_memory.id,
+            memory_id=processing_memory.memory_id,
+        ),
         )
         if not ok:
             print("Can not send message event new_processing_memory_created")
@@ -427,10 +388,30 @@ async def _websocket_util(
 
             processing_memory_synced = len(memory_transcript_segements)
             processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
+
+            now_ts = time.time()
+            capturing_to = datetime.fromtimestamp(now_ts + min_seconds_limit, timezone.utc)
+
             processing_memories_db.update_processing_memory_segments(
                 uid, processing_memory.id,
-                list(map(lambda m: m.dict(), processing_memory.transcript_segments))
+                list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
+                capturing_to,
             )
+
+        # Update processing memory status
+        processing_memory.status = ProcessingMemoryStatus.Processing
+        processing_memories_db.update_processing_memory_status(
+            uid, processing_memory.id,
+            processing_memory.status,
+        )
+        # Message: processing memory status changed
+        ok = await _send_message_event(ProcessingMemoryStatusChanged(
+            event_type="processing_memory_status_changed",
+            processing_memory_id=processing_memory.id,
+            processing_memory_status=processing_memory.status),
+        )
+        if not ok:
+            print("Can not send message event processing_memory_status_changed")
 
         # Message: creating
         ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
@@ -478,6 +459,22 @@ async def _websocket_util(
             # Process
             memory = process_memory(uid, memory.language, memory, force_process=True)
 
+        # Update processing memory status
+        processing_memory.status = ProcessingMemoryStatus.Done
+        processing_memories_db.update_processing_memory_status(
+            uid, processing_memory.id,
+            processing_memory.status,
+        )
+        # Message: processing memory status changed
+        ok = await _send_message_event(ProcessingMemoryStatusChanged(
+            event_type="processing_memory_status_changed",
+            processing_memory_id=processing_memory.id,
+            memory_id=processing_memory.memory_id,
+            processing_memory_status=processing_memory.status),
+        )
+        if not ok:
+            print("Can not send message event processing_memory_status_changed")
+
         # Message: completed
         msg = NewMemoryCreated(
             event_type="new_memory_created", processing_memory_id=processing_memory.id, memory_id=memory.id,
@@ -494,7 +491,6 @@ async def _websocket_util(
         nonlocal memory_watching
         nonlocal websocket_active
         while memory_watching and websocket_active:
-            print(f"new memory watch, uid: {uid}, session: {session_id}")
             await asyncio.sleep(5)
             await _try_flush_new_memory_with_lock()
 
@@ -516,12 +512,10 @@ async def _websocket_util(
 
         # Validate last segment
         if not segment_end:
-            print("Not last segment or last segment invalid")
             return
 
         # First chunk, create processing memory
         should_create_processing_memory = not processing_memory and len(memory_transcript_segements) > 0
-        print(f"Should create processing {should_create_processing_memory}")
         if should_create_processing_memory:
             await _create_processing_memory()
 

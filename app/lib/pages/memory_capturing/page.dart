@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -23,11 +24,13 @@ class MemoryCapturingPage extends StatefulWidget {
 class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
+  late bool showSummarizeConfirmation;
 
   @override
   void initState() {
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
+    showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
     super.initState();
   }
 
@@ -52,10 +55,10 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
 
       // Memory source
       var memorySource = MemorySource.friend;
-      var captureProvider = context.read<CaptureProvider>();
-      if (captureProvider.isGlasses) {
-        memorySource = MemorySource.openglass;
-      }
+      // var captureProvider = context.read<CaptureProvider>();
+      // if (captureProvider.isGlasses) {
+      //   memorySource = MemorySource.openglass;
+      // }
       return PopScope(
         canPop: true,
         child: Scaffold(
@@ -114,7 +117,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                       ListView(
                         shrinkWrap: true,
                         children: [
-                          provider.segments.isEmpty && provider.photos.isEmpty
+                          provider.segments.isEmpty
                               ? Column(
                                   children: [
                                     const SizedBox(height: 80),
@@ -122,74 +125,103 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                         child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
                                   ],
                                 )
-                              : getTranscriptWidget(provider.memoryCreating, provider.segments, provider.photos,
-                                  deviceProvider.connectedDevice)
+                              : getTranscriptWidget(
+                                  provider.memoryCreating,
+                                  provider.segments,
+                                  [],
+                                  deviceProvider.connectedDevice,
+                                )
                         ],
                       ),
-                      ListView(
-                        shrinkWrap: true,
-                        children: [
-                          const SizedBox(height: 80),
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                              child: Text(
-                                provider.segments.isEmpty
-                                    ? "No summary"
-                                    : "We summarize conversations 2 minutes after they end\n\n\nWant to end it now?",
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 16),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 140),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            const SizedBox(height: 80),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                                child: Text(
+                                  provider.segments.isEmpty
+                                      ? "No summary"
+                                      : "We summarize conversations 2 minutes after they end\n\nWant to end it now?",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(
-                            height: 16,
-                          ),
-                          provider.segments.isEmpty
-                              ? const SizedBox()
-                              : Container(
-                                  decoration: BoxDecoration(
-                                    border: const GradientBoxBorder(
-                                      gradient: LinearGradient(colors: [
-                                        Color.fromARGB(127, 208, 208, 208),
-                                        Color.fromARGB(127, 188, 99, 121),
-                                        Color.fromARGB(127, 86, 101, 182),
-                                        Color.fromARGB(127, 126, 190, 236)
-                                      ]),
-                                      width: 2,
+                            const SizedBox(
+                              height: 16,
+                            ),
+                            provider.segments.isEmpty
+                                ? const SizedBox()
+                                : Container(
+                                    decoration: BoxDecoration(
+                                      border: const GradientBoxBorder(
+                                        gradient: LinearGradient(colors: [
+                                          Color.fromARGB(127, 208, 208, 208),
+                                          Color.fromARGB(127, 188, 99, 121),
+                                          Color.fromARGB(127, 86, 101, 182),
+                                          Color.fromARGB(127, 126, 190, 236)
+                                        ]),
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  margin: const EdgeInsets.symmetric(horizontal: 48),
-                                  child: MaterialButton(
-                                    onPressed: () async {
-                                      context.read<CaptureProvider>().createMemory();
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => getDialog(
-                                          context,
-                                          () {
-                                            Navigator.pop(context);
-                                            Navigator.pop(context);
-                                          },
-                                          () {
-                                            Navigator.pop(context);
-                                            Navigator.pop(context);
-                                          },
-                                          "Creating Memory",
-                                          "Memory creation has been started. You will be notified once it is ready.",
-                                          singleButton: true,
-                                        ),
-                                      );
-                                    },
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    child: const Padding(
+                                    margin: const EdgeInsets.symmetric(horizontal: 48),
+                                    child: MaterialButton(
+                                      onPressed: () async {
+                                        print(showSummarizeConfirmation);
+                                        if (!showSummarizeConfirmation) {
+                                          context.read<CaptureProvider>().createMemory();
+                                          return;
+                                        }
+                                        showDialog(
+                                            context: context,
+                                            builder: (context) {
+                                              return StatefulBuilder(builder: (context, setState) {
+                                                return ConfirmationDialog(
+                                                  title: "Stop Recording?",
+                                                  description:
+                                                      "Are you sure you want to stop recording and summarise the conversation now?",
+                                                  checkboxValue: !showSummarizeConfirmation,
+                                                  checkboxText: "Don't ask me again",
+                                                  updateCheckboxValue: (value) {
+                                                    if (value != null) {
+                                                      setState(() {
+                                                        showSummarizeConfirmation = !value;
+                                                      });
+                                                    }
+                                                  },
+                                                  onCancel: () {
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                  onConfirm: () {
+                                                    SharedPreferencesUtil().showSummarizeConfirmation =
+                                                        showSummarizeConfirmation;
+                                                    context.read<CaptureProvider>().createMemory();
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                );
+                                              });
+                                            });
+                                      },
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      child: const Padding(
                                         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                        child:
-                                            Text('Summarise Now', style: TextStyle(color: Colors.white, fontSize: 16))),
+                                        child: Text(
+                                          'Stop Recording',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),

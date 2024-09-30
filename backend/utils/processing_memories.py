@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 
-import database.memories as memories_db
 import database.processing_memories as processing_memories_db
-from models.memory import CreateMemory, PostProcessingModel, PostProcessingStatus, MemoryPostProcessing
-from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory
+from models.memory import CreateMemory
+from models.processing_memory import ProcessingMemory, UpdateProcessingMemory, BasicProcessingMemory, \
+    ProcessingMemoryStatus, DetailProcessingMemory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
@@ -56,8 +56,33 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     return memory, messages, processing_memory
 
 
-def update_basic_processing_memory(uid: str,
-                                   update_processing_memory: UpdateProcessingMemory, ) -> BasicProcessingMemory:
+def get_processing_memory(uid: str, id: str, ) -> DetailProcessingMemory:
+    processing_memory = processing_memories_db.get_processing_memory_by_id(uid, id)
+    if not processing_memory:
+        print("processing memory is not found")
+        return
+    processing_memory = DetailProcessingMemory(**processing_memory)
+
+    return processing_memory
+
+
+def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) -> [DetailProcessingMemory]:
+    processing_memories = []
+    if len(filter_ids) > 0:
+        processing_memories = processing_memories_db.get_processing_memories(uid, filter_ids=filter_ids, limit=limit)
+    else:
+        processing_memories = processing_memories_db.get_processing_memories(uid, statuses=[
+            ProcessingMemoryStatus.Processing], limit=limit)
+
+    if not processing_memories or len(processing_memories) == 0:
+        return []
+
+    return [DetailProcessingMemory(**processing_memory) for processing_memory in processing_memories]
+
+
+def update_basic_processing_memory(
+        uid: str, update_processing_memory: UpdateProcessingMemory
+) -> BasicProcessingMemory:
     # Fetch new
     processing_memory = processing_memories_db.get_processing_memory_by_id(uid, update_processing_memory.id)
     if not processing_memory:
@@ -70,9 +95,14 @@ def update_basic_processing_memory(uid: str,
         processing_memory.geolocation = update_processing_memory.geolocation
     # emotional feedback
     processing_memory.emotional_feedback = update_processing_memory.emotional_feedback
+    # capturing to
+    if update_processing_memory.capturing_to:
+        processing_memory.capturing_to = update_processing_memory.capturing_to
 
     # update
     processing_memories_db.update_basic(uid, processing_memory.id,
                                         processing_memory.geolocation.dict() if processing_memory.geolocation else None,
-                                        processing_memory.emotional_feedback, )
+                                        processing_memory.emotional_feedback,
+                                        processing_memory.capturing_to,
+                                        )
     return processing_memory

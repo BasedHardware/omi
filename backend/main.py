@@ -95,3 +95,6 @@ async def webhook(data: dict):
         with open('scripts/stt/diarization.json', 'w') as f:
             json.dump(diarization_data, f, indent=2)
     return 'ok'
+
+# opuslib not found? brew install opus &
+# DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH

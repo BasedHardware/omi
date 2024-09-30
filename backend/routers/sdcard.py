@@ -1,112 +1,140 @@
-import os
-from typing import Optional
-import os
+import asyncio
+import uuid
+
+from fastapi import APIRouter
+from fastapi.websockets import WebSocketDisconnect, WebSocket
+from pydub import AudioSegment
+
 from models.memory import *
-import requests
-from fastapi import APIRouter, FastAPI,Depends, HTTPException, UploadFile
-from utils.memories.process_memory import process_memory, process_user_emotion
+from utils.audio import create_wav_from_bytes
+from utils.memories.process_memory import process_memory
 from utils.other.storage import upload_sdcard_audio
-from utils.other import endpoints as auth
-import datetime
+from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
 
 
-url = "https://api.deepgram.com/v1/listen"
-headers = {
-    "Authorization": "Token 19e6bff945ec7b8346da429548a80b40973704e4", 
-    "Content-Type": "audio/*",
-            }
+# TODO: version -> /v1/sdcard_stream
+@router.websocket("/sdcard_stream")
+async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e)
+        return
 
-params = {
-    "model": "whisper"
-        }
-@router.post("/sdcard_memory", response_model=List[Memory], tags=['memories'])
-async def download_wav(
-        file: UploadFile, #, uid: str = Depends(auth.get_current_user_uid)
-        date_time: str,
-        uid: str = Depends(auth.get_current_user_uid)
-):      
-        #save file here?
-        # print(uid)
-        file_path = f"_temp/_{file.filename}"
-        with open(file_path, 'wb') as f:
-            f.write(file.file.read())
+    # activate the websocket
+    websocket_active = True
+    session_id = str(uuid.uuid4())
+    big_file_path = f"_temp/_temp{session_id}.wav"
+    first_packet_flag = False
+    data_packet_length = 83
+    packet_count = 0
+    seconds_until_timeout = 10.0
+    audio_frames = []
 
-        temp_url = upload_sdcard_audio(file_path)
-        # print(date_time)
-        datetime_now = datetime.datetime.now(datetime.timezone.utc) #save the current time. will be used to determine elapsed time
-        #start of audio to transcription stage
-        try:   
-            f_ = open(file_path,'rb')
-            response = requests.post(url, headers=headers, params = params,data=f_.read())
-            f_.close()
-        except:
-            print("eror parsing")
-            return 
-        response2 = response.json()
-        #end of audio to transcriptoin stage
-        print(response2)
-        if response2['metadata']['duration'] == 0.0:
-            return 400
-        if not response2['results']['channels']:
-            return 400
-        #this part is for more accurate time measurement
-        # date_string = "2024-09-14T14:43:46.560643" #the true start of transcription is the time of download + file duration
-        # format_string = "%Y-%m-%dT%H:%M:%S.%f"
-        # datetime_object = datetime.datetime.strptime( date_string, format_string) 
-        file_duration = response2['metadata']['duration']
-        approximate_file_delay = file_duration * 2.2 #based on empirical observations of ble download speed. 2.2 is tunable
-        #partitioning stage
-        partitioned_transcripts = partition_transcripts(response2)
-        memory_list = []
-        print('length of list:',len(partitioned_transcripts))
-        for partitions in partitioned_transcripts:
-            #weed out the transcripts here
-            if not partitions: #empty list
-                 continue
-            if len(partitions[0].text.split()) < 8: #too small
-                 continue
-            temp_start_time = partitions[0].start
-            temp_end_time = partitions[0].end
-            partitions[0].start = 0.0
-            partitions[0].end = temp_end_time-temp_start_time
+    try:
+        while websocket_active:
+            if first_packet_flag:
+                data = await asyncio.wait_for(websocket.receive_bytes(), timeout=seconds_until_timeout)
+
+            else:
+                data = await websocket.receive_bytes()
+
+            if len(data) == data_packet_length:  # valid packet size
+                if not first_packet_flag:
+                    first_packet_flag = True
+                    print('first valid packet received')
+            if data == 100:  # valid code
+                print('done.')
+                websocket_active = False
+                break
+            amount = int(data[3])
+            frame_to_decode = bytes(list(data[4:4 + amount]))
+            audio_frames.append(frame_to_decode)
+
+    except WebSocketDisconnect:
+        print("websocket gone")
+    except asyncio.TimeoutError:
+        print('timeout condition, exitting')
+        websocket_active = False
+    except Exception as e:
+        print('somethign went wrong')
+    finally:
+        websocket_active = False
+    duration_of_file = len(audio_frames) / 100.0
+    if duration_of_file < 5.0:  # seconds
+        print('audio file too small')
+        return
+
+    create_wav_from_bytes(big_file_path, audio_frames, "opus", 16000, 1, 2)
+
+    try:
+        vad_segments = vad_is_empty(big_file_path, return_segments=True)
+        print(vad_segments)
+        if vad_segments:
+            temp_file_list = []
+            vad_segments_combined = combine_val_segments(vad_segments)
+            aseg = AudioSegment.from_wav(big_file_path)
+
+            for i, segments in enumerate(vad_segments_combined):
+                start, end = segments['start'], segments['end']
+
+                segment_aseg = aseg[max(0, (start - 1) * 1000):min((end + 1) * 1000, aseg.duration_seconds * 1000)]
+                temp_file_name = f"_temp/{session_id}_{i}.wav"
+                segment_aseg.export(temp_file_name, format="wav")
+
+                temp_file_list.append(temp_file_name)
+
+        else:
+            print('nothing worth using memory for')
+            return
+
+        for file, segments in zip(temp_file_list, vad_segments_combined):
+            signed_url = upload_sdcard_audio(file)
+            words = fal_whisperx(signed_url, 4, 2)
+            fal_segments = fal_postprocessing(words, 0)
+            print(fal_segments)
+            # TODO: need to detect language here for each, whisperx should be able to return that in the response.
+            if not fal_segments:
+                print('failed to get fal segments')
+                continue
             temp_memory = CreateMemory(
-            started_at= datetime_now - datetime.timedelta(seconds=(file_duration - temp_start_time)) - datetime.timedelta(seconds=approximate_file_delay),
-            finished_at= datetime_now  - datetime.timedelta(seconds=(file_duration - temp_end_time)) - datetime.timedelta(seconds=approximate_file_delay),
-            transcript_segments = partitions,
-            language = 'en'
+                started_at=datetime.utcnow(),
+                finished_at=datetime.utcnow(),
+                transcript_segments=fal_segments,
+                source=MemorySource.sdcard,
+                language='en'
             )
-            result: Memory = process_memory(uid , temp_memory.language, temp_memory, force_process=True)
-            print(temp_memory.transcript_segments)
+            result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=True)
+            # TODO: should use the websocket to send each memory as created to the client, check transcribe.py
+        await websocket.send_json({"type": "done"})
 
-            memory_list.append(result)
-        if not memory_list:
-            return 400
-        
-        return memory_list
+    except Exception as e:
+        print('error bruf')
+        print(e)
+        return
 
-def partition_transcripts(json_file):
-    #may be transcription dervice dependant
-    transcript_list =json_file['results']['channels'][0]['alternatives'][0]['words']
-    list_of_conversations = []
-    previous_end_time = 0.0
-    tr_threshold = 30.0
-    current_transcript_string = ''
-    current_start_num = 0.0
-    for words in transcript_list:
-        word_ = words['word']
-        end = words['end']
-        start = words['start']
-        if (start - previous_end_time > tr_threshold):
-            test1 = TranscriptSegment(text=current_transcript_string,is_user = True,start = current_start_num,end = previous_end_time)
-            current_start_num = words['start']
-            list_of_conversations.append([test1])
-            current_transcript_string= ''
-        #TODO:partition within segment for different speakers
-        #if different speaker: do this....
-        current_transcript_string = current_transcript_string + word_ + ' '
-        previous_end_time = end
-    final_conv = TranscriptSegment(text=current_transcript_string,is_user=True ,start = current_start_num,end = previous_end_time)
-    list_of_conversations.append([final_conv])
-    return list_of_conversations
+    print('finished')
+    return
+
+
+def combine_val_segments(val_segments):
+    if len(val_segments) == 1:
+        return val_segments
+    segments_result = []
+    temp_segment = None
+    for i in range(len(val_segments)):
+        if not temp_segment:
+            temp_segment = val_segments[i]
+            continue
+        else:
+            if (val_segments[i]['start'] - val_segments[i - 1]['end']) > 120.0:
+                segments_result.append(temp_segment)
+                temp_segment = None
+            else:
+                temp_segment['end'] = val_segments[i]['end']
+    if temp_segment is not None:
+        segments_result.append(temp_segment)
+    return segments_result
