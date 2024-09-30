@@ -406,4 +406,12 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
+
+  int get currentStorageBytes => getInt('currentStorageBytes') ?? 0;
+
+  set currentStorageBytes(int value) => saveInt('currentStorageBytes', value);
+
+  int get previousStorageBytes => getInt('previousStorageBytes') ?? 0;
+
+  set previousStorageBytes(int value) => saveInt('previousStorageBytes', value);
 }
