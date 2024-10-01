@@ -108,12 +108,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'SD Card Import',
-                  () => routeToPage(context, const SdCardCapturePage()),
-                  icon: Icons.sd_card,
-                ),
-                const SizedBox(height: 8),
-                getItemAddOn2(
                   'Device Settings',
                   () {
                     Navigator.of(context).push(

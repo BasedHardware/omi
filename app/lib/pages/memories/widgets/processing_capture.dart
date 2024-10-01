@@ -37,10 +37,10 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
 
       /// Friend V2 SD CARD functionality
-      String totalTimeRemainingString = (provider.timeToSend - provider.timeAlreadySent).toStringAsFixed(2);
+      String totalsdCardSecondsRemainingString = (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
 
-      if (provider.storageIsReady) {
-        var banner = 'You have $totalTimeRemainingString seconds of Storage Remaining. Click here to see';
+      if (provider.sdCardReady) {
+        var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
         Future.delayed(Duration.zero, () {
           ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
           ScaffoldMessenger.of(context).showMaterialBanner(
@@ -62,7 +62,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
           );
         });
-        provider.setStorageIsReady(false);
+        provider.setsdCardReady(false);
       }
 
       return GestureDetector(
