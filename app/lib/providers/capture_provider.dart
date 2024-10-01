@@ -749,6 +749,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   stopStreamRecording() {
+    _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
   }
 
