@@ -37,7 +37,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
 
       /// Friend V2 SD CARD functionality
-      String totalsdCardSecondsRemainingString = (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
+      String totalsdCardSecondsRemainingString =
+          (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
 
       if (provider.sdCardReady) {
         var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
@@ -65,6 +66,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         provider.setsdCardReady(false);
       }
 
+      var header = _getMemoryHeader(context);
+      if (header == null) {
+        return const SizedBox.shrink();
+      }
+
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty) return;
@@ -83,7 +89,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _getMemoryHeader(context),
+                header,
                 provider.segments.isNotEmpty
                     ? const Column(
                         children: [
@@ -131,7 +137,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     }
   }
 
-  _getMemoryHeader(BuildContext context) {
+  Widget? _getMemoryHeader(BuildContext context) {
     var provider = context.read<CaptureProvider>();
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
@@ -145,27 +151,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.pause;
 
     // Left
-    Widget left = Row(
-      children: [
-        const Text(
-          '🎙️',
-          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(width: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade800,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            'Waiting for reconnect...',
-            style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
+    Widget? left;
     if (isUsingPhoneMic || SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
       left = Center(
         child: getPhoneMicRecordingButton(
@@ -196,6 +182,34 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
+    } else if (isHavingCapturingMemory &&
+        (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              'Waiting for reconnect...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Hide
+    if (left == null) {
+      return null;
     }
 
     // Right
