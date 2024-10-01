@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
@@ -23,7 +23,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 1;
 
   // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+  Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
@@ -31,7 +31,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     return await connection.disconnect();
   }
 
-  Future<void> startDfu(BTDeviceStruct btDevice, {bool fileInAssets = false}) async {
+  Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false}) async {
     setState(() {
       isInstalling = true;
     });

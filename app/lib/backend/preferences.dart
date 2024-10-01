@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
@@ -27,18 +27,18 @@ class SharedPreferencesUtil {
 
   String get uid => getString('uid') ?? '';
 
-  set btDeviceStruct(BTDeviceStruct value) {
-    saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  set btDevice(BtDevice value) {
+    saveString('btDevice', jsonEncode(value.toJson()));
   }
 
-  Future<void> btDeviceStructSet(BTDeviceStruct value) async {
-    await saveString('btDeviceStruct', jsonEncode(value.toJson()));
+  Future<void> btDeviceSet(BtDevice value) async {
+    await saveString('btDevice', jsonEncode(value.toJson()));
   }
 
-  BTDeviceStruct get btDeviceStruct {
-    final String device = getString('btDeviceStruct') ?? '';
-    if (device.isEmpty) return BTDeviceStruct(id: '', name: '');
-    return BTDeviceStruct.fromJson(jsonDecode(device));
+  BtDevice get btDevice {
+    final String device = getString('btDevice') ?? '';
+    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0);
+    return BtDevice.fromJson(jsonDecode(device));
   }
 
   set deviceName(String value) => saveString('deviceName', value);
