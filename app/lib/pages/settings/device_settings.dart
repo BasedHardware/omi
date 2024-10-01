@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -24,7 +24,7 @@ class DeviceSettings extends StatefulWidget {
 
 class _DeviceSettingsState extends State<DeviceSettings> {
   // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+  Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
@@ -35,7 +35,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DeviceProvider>().getDeviceInfo();
+      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
+        context.read<DeviceProvider>().getDeviceInfo();
+      }
     });
     super.initState();
   }
@@ -56,7 +58,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.deviceInfo, provider.connectedDevice, context),
+                    children: deviceSettingsWidgets(provider.pairedDevice, context),
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -127,7 +129,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   ),
                   child: TextButton(
                     onPressed: () async {
-                      await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
+                      await SharedPreferencesUtil()
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleDisconnectDevice(provider.connectedDevice!);
@@ -157,7 +160,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 }
 
-List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   return [
     ListTile(
       title: const Text('Device Name'),
@@ -169,11 +172,11 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
     ),
     GestureDetector(
       onTap: () {
-        routeToPage(context, FirmwareUpdate(deviceInfo: deviceInfo!, device: device));
+        routeToPage(context, FirmwareUpdate(device: device));
       },
       child: ListTile(
         title: const Text('Update Latest Version'),
-        subtitle: Text('Current: ${deviceInfo?.firmwareRevision ?? '1.0.2'}'),
+        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
         trailing: const Icon(
           Icons.arrow_forward_ios,
           size: 16,
@@ -212,15 +215,15 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
 
     ListTile(
       title: const Text('Hardware Revision'),
-      subtitle: Text(deviceInfo?.hardwareRevision ?? 'XIAO'),
+      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(deviceInfo?.modelNumber ?? 'Friend'),
+      subtitle: Text(device?.modelNumber ?? 'Friend'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),
-      subtitle: Text(deviceInfo?.manufacturerName ?? 'Based Hardware'),
+      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
     ),
   ];
 }
