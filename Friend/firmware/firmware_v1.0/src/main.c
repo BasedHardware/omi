@@ -152,7 +152,7 @@ int main(void)
     {
         LOG_ERR("Failed to initialize haptic pin: %d", err);
     }
-    
+    play_haptic_milli(500);
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
