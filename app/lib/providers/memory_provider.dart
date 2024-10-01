@@ -122,32 +122,48 @@ class MemoryProvider extends ChangeNotifier {
     return;
   }
 
-  Future onNewCapturingMemory(ServerProcessingMemory pm) async {
+  Future onNewCapturingMemory(ServerProcessingMemory processingMemory) async {
+    if (processingMemory.status != ServerProcessingMemoryStatus.capturing) {
+      debugPrint("Processing memory status is not capturing");
+      return;
+    }
+
     // Remove the memory from the main
-    if (pm.memoryId != null) {
-      int idx = memories.indexWhere((m) => m.id == pm.memoryId);
+    if (processingMemory.memoryId != null) {
+      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
       if (idx >= 0) {
         memories.removeAt(idx);
         filterGroupedMemories('');
       }
     }
 
-    // Tracking the processing status
-    if (pm.status == ServerProcessingMemoryStatus.capturing) {
-      processingMemories.insert(0, pm);
-      _setProcessingMemories(List.from(processingMemories));
+    // Upsert new processing memory
+    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
+      _updateProcessingMemories([processingMemory]);
+      return;
     }
+    processingMemories.insert(0, processingMemory);
+    _setProcessingMemories(List.from(processingMemories));
   }
 
   Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
-    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
-      // existed
-      debugPrint("Processing memory is existed");
+    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
+      debugPrint("Processing memory status is not processing");
       return;
     }
-    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
-      // track processing status only
-      debugPrint("Processing memory status is not processing");
+
+    // Remove the memory from the main
+    if (processingMemory.memoryId != null) {
+      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
+      if (idx >= 0) {
+        memories.removeAt(idx);
+        filterGroupedMemories('');
+      }
+    }
+
+    // Upsert new processing memory
+    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
+      _updateProcessingMemories([processingMemory]);
       return;
     }
     processingMemories.insert(0, processingMemory);
@@ -155,6 +171,10 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   Future onProcessingMemoryDone(ServerProcessingMemory pm) async {
+    // Update processing memories
+    _updateProcessingMemories([pm]);
+
+    // Upsert new memory
     if (pm.memoryId == null) {
       debugPrint("Processing Memory Id is not found ${pm.id}");
       return;
@@ -165,7 +185,7 @@ class MemoryProvider extends ChangeNotifier {
       return;
     }
 
-    // local labling
+    // Local labling
     memory.isNew = true;
 
     int idx = memories.indexWhere((m) => m.id == memory.id);
