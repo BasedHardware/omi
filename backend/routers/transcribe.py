@@ -86,7 +86,8 @@ async def _websocket_util(
     w_vad.set_mode(1)
     flush_new_memory_lock = threading.Lock()
 
-    min_seconds_limit = 120
+    # 2m threshold + 30s for speech profile initialization + 30s for connection establishment
+    min_seconds_limit = 180
     min_words_limit = 1
 
     # Processing memory
