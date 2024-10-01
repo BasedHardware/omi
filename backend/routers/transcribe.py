@@ -223,14 +223,18 @@ async def _websocket_util(
         # f = open("audio.raw", "ab")
         try:
             while websocket_active:
-                raw_data = await websocket.receive_bytes()
-                data = raw_data[:]
+                data = await websocket.receive_bytes()
 
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
                 if include_speech_profile:
-                    has_speech = w_vad.is_speech(data, sample_rate)
+                    # pick 320 bytes as a vad sample, cause frame_width 2?
+                    vad_sample_size = 320
+                    vad_sample = data[:vad_sample_size]
+                    if len(vad_sample) < vad_sample_size:
+                        vad_sample = vad_sample + bytes([0x00]*(vad_sample_size-len(vad_sample)))
+                    has_speech = w_vad.is_speech(vad_sample, sample_rate)
                     if not has_speech:
                         continue
 
