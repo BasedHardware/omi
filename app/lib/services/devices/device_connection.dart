@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/devices/frame_connection.dart';
 import 'package:friend_private/services/devices/friend_connection.dart';
@@ -12,7 +12,7 @@ import 'package:friend_private/services/notifications.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(
-    BTDeviceStruct device,
+    BtDevice device,
     BluetoothDevice bleDevice,
   ) {
     if (device.type == null) {
@@ -32,7 +32,7 @@ class DeviceConnectionFactory {
 }
 
 abstract class DeviceConnection {
-  BTDeviceStruct device;
+  BtDevice device;
   BluetoothDevice bleDevice;
   DateTime? _pongAt;
 
