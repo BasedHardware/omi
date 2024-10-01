@@ -152,7 +152,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
 
     // Left
     Widget? left;
-    if (isUsingPhoneMic || SharedPreferencesUtil().btDeviceStruct.id.isEmpty) {
+    if (isUsingPhoneMic || SharedPreferencesUtil().btDevice.id.isEmpty) {
       left = Center(
         child: getPhoneMicRecordingButton(
           context,
