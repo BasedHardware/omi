@@ -102,6 +102,8 @@ class NotificationService {
     return isAllowed;
   }
 
+  // Whereever this method is awaited, it will cause the app to not move forwared in execution due to it being a method call.
+  // This was also the culprit when we had the app freeze on splash screen.
   Future<void> register() async {
     try {
       await platform.invokeMethod(
