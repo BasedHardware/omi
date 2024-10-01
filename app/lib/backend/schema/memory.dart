@@ -24,7 +24,7 @@ class CreateMemoryResponse {
   }
 }
 
-enum MemorySource { friend, openglass, screenpipe }
+enum MemorySource { friend, openglass, screenpipe,sdcard }
 
 class MemoryExternalData {
   final String text;
@@ -270,6 +270,7 @@ class ServerMemory {
   String getTag() {
     if (source == MemorySource.screenpipe) return 'Screenpipe';
     if (source == MemorySource.openglass) return 'Openglass';
+    if (source == MemorySource.sdcard) return 'SD Card';
     if (failed) return 'Failed';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
