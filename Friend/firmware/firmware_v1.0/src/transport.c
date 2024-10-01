@@ -18,7 +18,6 @@
 #include "sdcard.h"
 #include "storage.h"
 #include "lib/battery/battery.h"
-#include "btutils.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 

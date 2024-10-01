@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define PI 3.14159265358979323846
 
+#define MAX_HAPTIC_DURATION 5000
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 2);
 
 struct device *audio_speaker;
@@ -208,7 +209,27 @@ int init_haptic_pin()
 		LOG_ERR("Error setting up Haptic Pin");
         return -1;
 	}
-    gpio_pin_set_dt(&haptic_gpio_pin, 1);
+    gpio_pin_set_dt(&haptic_gpio_pin, 0);
 
     return 0;
+}
+
+void haptic_timer_callback(struct k_timer *timer);
+
+K_TIMER_DEFINE(my_status_timer, haptic_timer_callback, NULL);
+
+void haptic_timer_callback(struct k_timer *timer)
+{
+    gpio_pin_set_dt(&haptic_gpio_pin, 0);
+}
+
+void play_haptic_milli(uint32_t duration)
+{
+    if (duration > MAX_HAPTIC_DURATION)
+    {
+        LOG_ERR("Duration is too long");
+        return;
+    }
+    gpio_pin_set_dt(&haptic_gpio_pin, 1);
+    k_timer_start(&my_status_timer, K_MSEC(duration), K_NO_WAIT);
 }
