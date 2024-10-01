@@ -285,10 +285,10 @@ Future<bool> setMemoryEventsState(
 }
 
 //this is expected to return complete memories
-Future<List<ServerMemory>> sendStorageToBackend(File file, String dateTimeStorageString) async {
+Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$dateTimeStorageString'),
+    Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString'),
   );
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));

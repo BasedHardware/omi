@@ -4,7 +4,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
-import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
