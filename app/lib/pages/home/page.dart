@@ -49,7 +49,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
       }
       if (SharedPreferencesUtil().notificationsEnabled) {
-        await NotificationService.instance.register();
+        NotificationService.instance.register();
       }
       if (SharedPreferencesUtil().locationEnabled != await Permission.location.isGranted) {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
