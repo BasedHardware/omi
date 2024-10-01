@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
@@ -27,8 +29,30 @@ class MemoryListItem extends StatefulWidget {
 }
 
 class _MemoryListItemState extends State<MemoryListItem> {
+  Timer? _memoryNewStatusResetTimer;
+  bool isNew = false;
+
+  @override
+  void dispose() {
+    _memoryNewStatusResetTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Is new memory
+    DateTime memorizedAt = widget.memory.createdAt;
+    int seconds = (DateTime.now().millisecondsSinceEpoch - memorizedAt.millisecondsSinceEpoch) ~/ 1000;
+    isNew = 0 < seconds && seconds < 60; // 1m
+    if (isNew) {
+      _memoryNewStatusResetTimer?.cancel();
+      _memoryNewStatusResetTimer = Timer(const Duration(seconds: 60), () async {
+        setState(() {
+          isNew = false;
+        });
+      });
+    }
+
     Structured structured = widget.memory.structured;
     return GestureDetector(
       onTap: () async {
@@ -47,18 +71,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
             width: double.maxFinite,
-            decoration: widget.memory.isNew
-                ? BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(16.0),
-                    border: Border.all(
-                      color: Colors.lightBlue,
-                      width: 1,
-                    ))
-                : BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade900,
+              borderRadius: BorderRadius.circular(16.0),
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
@@ -174,15 +190,57 @@ class _MemoryListItemState extends State<MemoryListItem> {
             width: 16,
           ),
           Expanded(
-            child: Text(
-              dateTimeFormat('MMM d, h:mm a', widget.memory.startedAt ?? widget.memory.createdAt),
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              maxLines: 1,
-              textAlign: TextAlign.end,
-            ),
+            child: isNew
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: MemoryNewStatusIndicator(text: "New 🚀"),
+                  )
+                : Text(
+                    dateTimeFormat('MMM d, h:mm a', widget.memory.startedAt ?? widget.memory.createdAt),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
+                  ),
           )
         ],
       ),
+    );
+  }
+}
+
+class MemoryNewStatusIndicator extends StatefulWidget {
+  String text;
+  MemoryNewStatusIndicator({super.key, required this.text});
+
+  @override
+  _MemoryNewStatusIndicatorState createState() => _MemoryNewStatusIndicatorState();
+}
+
+class _MemoryNewStatusIndicatorState extends State<MemoryNewStatusIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000), // Blink every half second
+      vsync: this,
+    )..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnim,
+      child: Text(widget.text),
     );
   }
 }
