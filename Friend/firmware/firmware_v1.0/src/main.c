@@ -10,7 +10,6 @@
 #include "sdcard.h"
 #include "storage.h"
 #include "speaker.h"
-
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -40,7 +39,7 @@ void bt_ctlr_assert_handle(char *name, int type)
 
 bool is_connected = false;
 bool is_charging = false;
-
+extern bool is_off;
 static void boot_led_sequence(void)
 {
     // Red blink
@@ -71,6 +70,13 @@ static void boot_led_sequence(void)
 void set_led_state()
 {
 	// Recording and connected state - BLUE
+    if(is_off)
+    {
+		set_led_red(false);
+		set_led_green(false);
+		set_led_blue(false);
+        return;
+    }
 	if (is_connected)
 	{
 		set_led_red(false);
@@ -152,7 +158,7 @@ int main(void)
     {
         LOG_ERR("Failed to initialize haptic pin: %d", err);
     }
-    
+    play_haptic_milli(500);
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
@@ -192,7 +198,6 @@ int main(void)
     }
     set_led_red(false);
     set_led_green(false);
-
     // // Initialize NFC first
     // LOG_INF("Initializing NFC...");
     // err = nfc_init();
