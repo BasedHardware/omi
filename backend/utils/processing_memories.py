@@ -2,7 +2,8 @@ import time
 from datetime import datetime, timezone
 
 import database.processing_memories as processing_memories_db
-from models.memory import CreateMemory
+from database.redis_db import get_cached_user_geolocation
+from models.memory import CreateMemory, Geolocation
 from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus, DetailProcessingMemory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
@@ -32,20 +33,13 @@ async def create_memory_by_processing_memory(uid: str, processing_memory_id: str
     )
 
     # Geolocation
-    geolocation = processing_memory.geolocation
-    if geolocation and not geolocation.google_place_id:
+    geolocation = get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
         new_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     language_code = new_memory.language
     memory = process_memory(uid, language_code, new_memory)
-
-    # if not memory.discarded:
-    #     memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
-    #     # TODO: thinh, check why we need populate postprocessing to client
-    #     memory.postprocessing = MemoryPostProcessing(
-    #         status=PostProcessingStatus.not_started, model=PostProcessingModel.fal_whisperx
-    #     )
-
     messages = trigger_external_integrations(uid, memory)
 
     # update

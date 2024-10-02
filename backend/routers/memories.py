@@ -41,8 +41,8 @@ def create_memory(
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
-    geolocation = create_memory.geolocation
-    if geolocation and not geolocation.google_place_id:
+
+    if geolocation := create_memory.geolocation:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     if not language_code:
