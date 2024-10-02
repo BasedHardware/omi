@@ -56,7 +56,7 @@ dependencies:
   ml_linalg: any
   objectbox: ^4.0.1
   objectbox_flutter_libs: any
-  flutter_foreground_task: ^8.2.0
+  flutter_foreground_task: ^8.10.0
   deepgram_speech_to_text: ^2.1.1
   upgrader: ^10.3.0
   crypto: ^3.0.3

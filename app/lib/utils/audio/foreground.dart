@@ -11,7 +11,7 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
-  void onStart(DateTime timestamp) async {
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     debugPrint("Starting foreground task");
   }
 
@@ -50,7 +50,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   @override
-  void onDestroy(DateTime timestamp) async {
+  Future<void> onDestroy(DateTime timestamp) async {
     debugPrint("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }

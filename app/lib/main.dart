@@ -24,8 +24,8 @@ import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/no_scroll_glow.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
-import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;import 'package:opus_dart/opus_dart.dart';
-
+import 'package:opus_dart/opus_dart.dart';
+import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
 Future<void> setupRemoteConfig() async {
   late RemoteConfigService remoteConfigService;
@@ -118,10 +118,12 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 }
 
 class _MyAppState extends State<MyApp> {
