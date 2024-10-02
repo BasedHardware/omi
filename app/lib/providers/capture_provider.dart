@@ -170,7 +170,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Notify capturing
     if (capturingProcessingMemory != null) {
-      //    memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
+      memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
     }
   }
 
@@ -181,6 +181,7 @@ class CaptureProvider extends ChangeNotifier
 
     var pm = capturingProcessingMemory!;
 
+    // Warn: should update the tracking whenever new segment come.
     var delayMs = pm.capturingTo != null
         ? pm.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
         : 2 * 60 * 1000; // 2m
@@ -708,6 +709,9 @@ class CaptureProvider extends ChangeNotifier
   streamRecording() async {
     await Permission.microphone.request();
 
+    // prepare
+    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
       if (_socket?.state == SocketServiceState.connected) {
@@ -722,8 +726,10 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  stopStreamRecording() {
+  stopStreamRecording() async {
+    _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
+    await _socket?.stop(reason: 'stop stream recording');
   }
 
   Future streamDeviceRecording({
