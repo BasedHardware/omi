@@ -93,7 +93,7 @@ class CaptureProvider extends ChangeNotifier
   bool sdCardIsDownloading = false;
   String btConnectedTime = "";
   Timer? sdCardReconnectionTimer;
-  
+
   void setSdCardIsDownloading(bool value) {
     sdCardIsDownloading = value;
     notifyListeners();
@@ -194,7 +194,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Notify capturing
     if (capturingProcessingMemory != null) {
-      //    memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
+      memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
     }
 
     // Update processing memory
@@ -208,6 +208,7 @@ class CaptureProvider extends ChangeNotifier
 
     var pm = capturingProcessingMemory!;
 
+    // Warn: should update the tracking whenever new segment come.
     var delayMs = pm.capturingTo != null
         ? pm.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
         : 2 * 60 * 1000; // 2m
@@ -685,7 +686,8 @@ class CaptureProvider extends ChangeNotifier
       totalBytesReceived = 0;
     }
     SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    sdCardSecondsTotal = ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
+    sdCardSecondsTotal =
+        ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
 
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
     debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
@@ -734,6 +736,9 @@ class CaptureProvider extends ChangeNotifier
   streamRecording() async {
     await Permission.microphone.request();
 
+    // prepare
+    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+
     // record
     await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
       if (_socket?.state == SocketServiceState.connected) {
@@ -748,9 +753,10 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  stopStreamRecording() {
+  stopStreamRecording() async {
     _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
+    await _socket?.stop(reason: 'stop stream recording');
   }
 
   Future streamDeviceRecording({
