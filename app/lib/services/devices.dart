@@ -68,6 +68,12 @@ class DeviceService implements IDeviceService {
       return;
     }
 
+    if (_connection?.status == DeviceConnectionState.connected) {
+      debugPrint("A device is already connected or is being connected. Skipping scan.");
+      stop();
+      return;
+    }
+
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = FlutterBluePlus.scanResults.listen(
       (results) async {
