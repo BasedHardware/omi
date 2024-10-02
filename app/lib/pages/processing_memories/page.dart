@@ -109,11 +109,10 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                         shrinkWrap: true,
                         children: [
                           widget.memory.transcriptSegments.isEmpty
-                              ? Column(
+                              ? const Column(
                                   children: [
-                                    const SizedBox(height: 80),
-                                    Center(
-                                        child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                    SizedBox(height: 80),
+                                    Center(child: Text("No Transcript")),
                                   ],
                                 )
                               : getTranscriptWidget(false, widget.memory.transcriptSegments, [], null)
