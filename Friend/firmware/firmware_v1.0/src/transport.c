@@ -17,6 +17,7 @@
 #include "button.h"
 #include "sdcard.h"
 #include "storage.h"
+#include "button.h"
 #include "lib/battery/battery.h"
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
@@ -600,7 +601,7 @@ bool write_to_storage(void)
 
 //     return true;
 // }
-
+extern bool is_off;
 static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
@@ -620,67 +621,70 @@ void pusher(void)
         //
         // Load current connection
         //
-        struct bt_conn *conn = current_connection;
-         //updating the most recent file size is expensive!
-        static bool file_size_updated = true;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) 
+        if(!is_off)
         {
-            k_msleep(100);
-            file_size_updated = false;
-            connection_was_true = true;
-        } 
-        else if (!conn) 
-        {
-            connection_was_true = false;
-        }
-        if (!file_size_updated) 
-        {
-            printk("updating file size\n");
-            update_file_size();
-            file_size_updated = true;
-        }
-        if (conn)
-        {
-            conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE)
-        {
-            valid = false;
-        }
-        else if (!conn)
-        {
-            valid = false;
-        }
-        else
-        {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-        }
+            struct bt_conn *conn = current_connection;
+            //updating the most recent file size is expensive!
+            static bool file_size_updated = true;
+            static bool connection_was_true = false;
+            if (conn && !connection_was_true) 
+            {
+                k_msleep(100);
+                file_size_updated = false;
+                connection_was_true = true;
+            } 
+            else if (!conn) 
+            {
+                connection_was_true = false;
+            }
+            if (!file_size_updated) 
+            {
+                printk("updating file size\n");
+                update_file_size();
+                file_size_updated = true;
+            }
+            if (conn)
+            {
+                conn = bt_conn_ref(conn);
+            }
+            bool valid = true;
+            if (current_mtu < MINIMAL_PACKET_SIZE)
+            {
+                valid = false;
+            }
+            else if (!conn)
+            {
+                valid = false;
+            }
+            else
+            {
+                valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            }
+            
+            if (!valid  && !storage_is_on) 
+            {
+                bool result = write_to_storage();
+                if (result)
+                {
+    
+                }
+                else 
+                {
         
-        if (!valid  && !storage_is_on) 
-        {
-            bool result = write_to_storage();
-            if (result)
+                }
+            }    
+            if (valid)
             {
-  
+                bool sent = push_to_gatt(conn);
+                if (!sent)
+                {
+                    // k_sleep(K_MSEC(50));
+                }
             }
-            else 
+            if (conn)
             {
-       
+                bt_conn_unref(conn);
             }
-        }    
-        if (valid)
-        {
-            bool sent = push_to_gatt(conn);
-            if (!sent)
-            {
-                // k_sleep(K_MSEC(50));
-            }
-        }
-        if (conn)
-        {
-            bt_conn_unref(conn);
         }
 
       k_yield();
