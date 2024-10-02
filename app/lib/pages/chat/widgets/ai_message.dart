@@ -149,7 +149,9 @@ class InitialMessageWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
+                    SizedBox(width: 4),
                     TypingIndicator(),
+                    Spacer(),
                   ],
                 )
               : AutoSizeText(
@@ -199,7 +201,9 @@ class DaySummaryWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
+                    SizedBox(width: 4),
                     TypingIndicator(),
+                    Spacer(),
                   ],
                 )
               : daySummaryMessagesList(messageText),
@@ -281,7 +285,9 @@ class NormalMessageWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
+                    SizedBox(width: 4),
                     TypingIndicator(),
+                    Spacer(),
                   ],
                 )
               : AutoSizeText(
@@ -332,7 +338,9 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
+                    SizedBox(width: 4),
                     TypingIndicator(),
+                    Spacer(),
                   ],
                 )
               : AutoSizeText(
