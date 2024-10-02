@@ -90,8 +90,8 @@ void main() async {
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          // invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
-          invocationEvents: [],
+          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          // invocationEvents: [],
         );
         if (isAuth) {
           Instabug.identifyUser(
