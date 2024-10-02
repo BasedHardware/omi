@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
@@ -383,9 +383,9 @@ class SharedPreferencesUtil {
 
   String get calendarId => getString('calendarId') ?? '';
 
-  set calendarType(String value) => saveString('calendarType', value); // auto, manual
+  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
-  String get calendarType => getString('calendarType') ?? 'auto';
+  String get calendarType => getString('calendarType2') ?? 'manual';
 
   bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
 
@@ -418,5 +418,4 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
-
 }
