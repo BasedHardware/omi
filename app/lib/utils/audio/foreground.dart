@@ -16,8 +16,11 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   Future locationInBackground() async {
+    print('locationInBackground');
     if (await Geolocator.isLocationServiceEnabled()) {
+      print('locationInBackground isLocationServiceEnabled');
       if (await Geolocator.checkPermission() == LocationPermission.always) {
+        print('locationInBackground always permission granted');
         var locationData = await Geolocator.getCurrentPosition();
         Object loc = {
           "latitude": locationData.latitude,
