@@ -37,7 +37,7 @@ class _PluginsTabPageState extends State<PluginsTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("PluginsTabPage -> ${plugins.length}");
+    debugPrint("cc -> ${plugins.length}");
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: ListView.builder(

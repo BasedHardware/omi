@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "662477620892",
+    "project_id": "ai-wearable",
+    "storage_bucket": "ai-wearable.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:662477620892:android:93aadba97860e50d548f59",
+        "android_client_info": {
+          "package_name": "com.ai.wearable"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "662477620892-s05g1o45a79b2agnd78phpqqoag9c5qv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ai.wearable",
+            "certificate_hash": "aa62b03c8af6d91aac2b640ec5f17b7c21cb2add"
+          }
+        },
+        {
+          "client_id": "662477620892-o5c5tuhdjo1mj8hcqeq7brb4855fvvrg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0gPjIpdkdugLYhe12BFrZQPXFutbA9Vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "662477620892-3qg730qlbkvltursp5jlansnhi7kcch2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "662477620892-3du2sfdhdjnofkfp9a7gdriame0ia9ds.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ai.wearable"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
