@@ -7,12 +7,13 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/processing_memories.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -21,7 +22,6 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/features/calendar.dart';
@@ -48,7 +48,6 @@ class CaptureProvider extends ChangeNotifier
 
   BtDevice? _recordingDevice;
   List<TranscriptSegment> segments = [];
-  Geolocation? geolocation;
 
   bool hasTranscripts = false;
   bool memoryCreating = false;
@@ -93,7 +92,7 @@ class CaptureProvider extends ChangeNotifier
   bool sdCardIsDownloading = false;
   String btConnectedTime = "";
   Timer? sdCardReconnectionTimer;
-  
+
   void setSdCardIsDownloading(bool value) {
     sdCardIsDownloading = value;
     notifyListeners();
@@ -110,15 +109,11 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setGeolocation(Geolocation? value) {
-    geolocation = value;
-
-    // Update processing memory on geolocation
-    if (processingMemoryId != null) {
-      _updateProcessingMemory();
-    }
-
-    notifyListeners();
+  void setGeolocation(Geolocation? value) async {
+    if (value == null) return;
+    debugPrint("update user geolocation $value");
+    bool updated = await updateUserGeolocation(geolocation: value);
+    debugPrint("update user geolocation $updated");
   }
 
   void setAudioBytesConnected(bool value) {
@@ -134,23 +129,6 @@ class CaptureProvider extends ChangeNotifier
 
   void _onMemoryCreating() {
     setMemoryCreating(true);
-  }
-
-  Future<void> _updateProcessingMemory() async {
-    if (processingMemoryId == null) {
-      return;
-    }
-
-    debugPrint("update processing memory");
-    // Update info likes geolocation
-    UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
-      id: processingMemoryId!,
-      geolocation: geolocation,
-      emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
-    );
-    if (result?.result == null) {
-      debugPrint("Can not update processing memory, result null");
-    }
   }
 
   Future<void> _onProcessingMemoryStatusChanged(String processingMemoryId, ServerProcessingMemoryStatus status) async {
@@ -178,9 +156,7 @@ class CaptureProvider extends ChangeNotifier
     this.processingMemoryId = processingMemoryId;
 
     // Fetch and watch capturing status
-    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(
-      id: processingMemoryId,
-    );
+    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: processingMemoryId);
     if (result?.result == null) {
       debugPrint("Can not fetch processing memory, result null");
     }
@@ -196,9 +172,6 @@ class CaptureProvider extends ChangeNotifier
     if (capturingProcessingMemory != null) {
       //    memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
     }
-
-    // Update processing memory
-    _updateProcessingMemory();
   }
 
   void _trackCapturingProcessingMemory() {
@@ -685,7 +658,8 @@ class CaptureProvider extends ChangeNotifier
       totalBytesReceived = 0;
     }
     SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    sdCardSecondsTotal = ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
+    sdCardSecondsTotal =
+        ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
 
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
     debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
