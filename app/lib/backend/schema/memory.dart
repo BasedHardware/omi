@@ -24,7 +24,7 @@ class CreateMemoryResponse {
   }
 }
 
-enum MemorySource { friend, openglass, screenpipe,sdcard }
+enum MemorySource { friend, workflow, openglass, screenpipe, sdcard }
 
 class MemoryExternalData {
   final String text;
@@ -66,6 +66,7 @@ enum ServerProcessingMemoryStatus {
   ;
 
   final String value;
+
   const ServerProcessingMemoryStatus(this.value);
 
   static ServerProcessingMemoryStatus valuesFromString(String value) {
@@ -172,6 +173,7 @@ class ServerMemory {
   final String? language; // applies to Friend only
 
   final MemoryExternalData? externalIntegration;
+
   // MemoryPostProcessing? postprocessing;
   String? processingMemoryId;
 
