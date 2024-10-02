@@ -42,6 +42,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
   Widget build(BuildContext context) {
     // Is new memory
     DateTime memorizedAt = widget.memory.createdAt;
+    if (widget.memory.finishedAt != null && widget.memory.finishedAt!.isAfter(memorizedAt)) {
+      memorizedAt = widget.memory.finishedAt!;
+    }
     int seconds = (DateTime.now().millisecondsSinceEpoch - memorizedAt.millisecondsSinceEpoch) ~/ 1000;
     isNew = 0 < seconds && seconds < 60; // 1m
     if (isNew) {
