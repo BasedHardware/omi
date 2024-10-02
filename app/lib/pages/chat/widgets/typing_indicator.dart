@@ -56,7 +56,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
       children: [
         _buildBubble(_animation1, 8.0),
         const SizedBox(width: 5),
-        _buildBubble(_animation2, 10.0),
+        _buildBubble(_animation2, 8.0),
         const SizedBox(width: 5),
         _buildBubble(_animation3, 8.0),
       ],
