@@ -134,6 +134,8 @@ class MixpanelManager {
     setUserProperty('Calendar Enabled', false);
   }
 
+  void calendarModePressed(String mode) => track('Calendar Mode $mode Pressed');
+
   void calendarTypeChanged(String type) => track('Calendar Type Changed', properties: {'type': type});
 
   void calendarSelected() => track('Calendar Selected');
