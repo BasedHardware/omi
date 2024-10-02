@@ -111,9 +111,7 @@ class CaptureProvider extends ChangeNotifier
 
   void setGeolocation(Geolocation? value) async {
     if (value == null) return;
-    debugPrint("update user geolocation $value");
-    bool updated = await updateUserGeolocation(geolocation: value);
-    debugPrint("update user geolocation $updated");
+    await updateUserGeolocation(geolocation: value);
   }
 
   void setAudioBytesConnected(bool value) {
@@ -848,7 +846,7 @@ class CaptureProvider extends ChangeNotifier
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
     }
-    TranscriptSegment.combineSegments(segments, newSegments);
+    // TranscriptSegment.combineSegments(segments, newSegments);
     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
       messageProvider?.addMessage(v);
     });

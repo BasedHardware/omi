@@ -118,7 +118,7 @@ class MemoryProvider extends ChangeNotifier {
       return;
     }
 
-    _trackprocessingMemories();
+    _trackProcessingMemories();
     return;
   }
 
@@ -208,7 +208,7 @@ class MemoryProvider extends ChangeNotifier {
     _setProcessingMemories(List.from(processingMemories));
   }
 
-  void _trackprocessingMemories() {
+  void _trackProcessingMemories() {
     if (_processingMemoryWatchTimer?.isActive ?? false) {
       return;
     }
@@ -388,6 +388,7 @@ class MemoryProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
   /////////////////////////////////////////////////////////////////
 
   void deleteMemory(ServerMemory memory, int index) {
