@@ -34,15 +34,18 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     print('_onReceiveTaskData $data');
     if (data is! Map<String, dynamic>) return;
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
-    context.read<CaptureProvider>().setGeolocation(
-          Geolocation(
-            latitude: data['latitude'],
-            longitude: data['longitude'],
-            accuracy: data['accuracy'],
-            altitude: data['altitude'],
-            time: DateTime.parse(data['time']),
-          ),
-        );
+    if (mounted) {
+      // TODO: why do we need this?
+      context.read<CaptureProvider>().setGeolocation(
+            Geolocation(
+              latitude: data['latitude'],
+              longitude: data['longitude'],
+              accuracy: data['accuracy'],
+              altitude: data['altitude'],
+              time: DateTime.parse(data['time']),
+            ),
+          );
+    }
   }
 
   @override
