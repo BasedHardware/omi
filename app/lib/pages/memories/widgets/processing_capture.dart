@@ -198,7 +198,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              'Waiting for reconnect...',
+              'Waiting for device...',
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
