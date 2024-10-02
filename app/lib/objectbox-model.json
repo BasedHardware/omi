@@ -1,0 +1,368 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:154809395178613299",
+      "lastPropertyId": "4:2193141893017448008",
+      "name": "ActionItem",
+      "properties": [
+        {
+          "id": "1:3427575631867403821",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1490264363337219330",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "3:8530220653823590821",
+          "name": "completed",
+          "type": 1
+        },
+        {
+          "id": "4:2193141893017448008",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "1:1411460883351377570",
+          "relationTarget": "Structured"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:5635348750711241314",
+      "lastPropertyId": "7:7757064046188775832",
+      "name": "Event",
+      "properties": [
+        {
+          "id": "1:2924995485235057535",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5189645758712683512",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:5531821282216074618",
+          "name": "startsAt",
+          "type": 10
+        },
+        {
+          "id": "4:4410734266360569342",
+          "name": "duration",
+          "type": 6
+        },
+        {
+          "id": "5:5204150285310150920",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "6:8684044754489285007",
+          "name": "created",
+          "type": 1
+        },
+        {
+          "id": "7:7757064046188775832",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "2:6960105925267447711",
+          "relationTarget": "Structured"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:608150132011150260",
+      "lastPropertyId": "9:2816670253018091002",
+      "name": "Geolocation",
+      "properties": [
+        {
+          "id": "1:286228358563697455",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1933427850929184105",
+          "name": "latitude",
+          "type": 8
+        },
+        {
+          "id": "3:6843030364282076867",
+          "name": "longitude",
+          "type": 8
+        },
+        {
+          "id": "4:8807902089550968787",
+          "name": "altitude",
+          "type": 8
+        },
+        {
+          "id": "5:8968587601058377630",
+          "name": "accuracy",
+          "type": 8
+        },
+        {
+          "id": "6:6525674282204418211",
+          "name": "time",
+          "type": 10
+        },
+        {
+          "id": "7:5655786601174148635",
+          "name": "googlePlaceId",
+          "type": 9
+        },
+        {
+          "id": "8:2955966055573167389",
+          "name": "address",
+          "type": 9
+        },
+        {
+          "id": "9:2816670253018091002",
+          "name": "locationType",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:3923250411867548692",
+      "lastPropertyId": "9:1684497006380728045",
+      "name": "Memory",
+      "properties": [
+        {
+          "id": "1:1251305220215605777",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:568759224421411782",
+          "name": "createdAt",
+          "type": 10,
+          "flags": 8,
+          "indexId": "3:3041515631737726907"
+        },
+        {
+          "id": "3:8787316935332990992",
+          "name": "startedAt",
+          "type": 10
+        },
+        {
+          "id": "4:1299417041958928321",
+          "name": "finishedAt",
+          "type": 10
+        },
+        {
+          "id": "5:5334450721752181777",
+          "name": "transcript",
+          "type": 9
+        },
+        {
+          "id": "6:2840703396015355227",
+          "name": "recordingFilePath",
+          "type": 9
+        },
+        {
+          "id": "7:858700973128060656",
+          "name": "structuredId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "4:9084547483565153652",
+          "relationTarget": "Structured"
+        },
+        {
+          "id": "8:307579287527519771",
+          "name": "discarded",
+          "type": 1,
+          "flags": 8,
+          "indexId": "5:586485901539866058"
+        },
+        {
+          "id": "9:1684497006380728045",
+          "name": "geolocationId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "6:4910741868958297101",
+          "relationTarget": "Geolocation"
+        }
+      ],
+      "relations": [
+        {
+          "id": "1:8808609852299990086",
+          "name": "transcriptSegments",
+          "targetId": "8:2790599834921264013"
+        },
+        {
+          "id": "2:4954046696287105776",
+          "name": "photos",
+          "targetId": "5:1757462388762531251"
+        }
+      ]
+    },
+    {
+      "id": "5:1757462388762531251",
+      "lastPropertyId": "4:9148932604687662256",
+      "name": "MemoryPhoto",
+      "properties": [
+        {
+          "id": "1:4266953631694283641",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8662977062842010130",
+          "name": "base64",
+          "type": 9
+        },
+        {
+          "id": "3:6228707119031575511",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "4:9148932604687662256",
+          "name": "memoryId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "7:5676722699689854058",
+          "relationTarget": "Memory"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "6:950449009652224602",
+      "lastPropertyId": "4:513580145247965061",
+      "name": "PluginResponse",
+      "properties": [
+        {
+          "id": "1:3812749128928121484",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6237366081929474081",
+          "name": "pluginId",
+          "type": 9
+        },
+        {
+          "id": "3:210770524710226628",
+          "name": "content",
+          "type": 9
+        },
+        {
+          "id": "4:513580145247965061",
+          "name": "memoryId",
+          "type": 11,
+          "flags": 520,
+          "indexId": "8:765029136259338813",
+          "relationTarget": "Memory"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "7:6516818346853953353",
+      "lastPropertyId": "5:4923407378401558511",
+      "name": "Structured",
+      "properties": [
+        {
+          "id": "1:8243884311743818760",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:633279196510901513",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:3109818249017626740",
+          "name": "overview",
+          "type": 9
+        },
+        {
+          "id": "4:2065657824908897551",
+          "name": "emoji",
+          "type": 9
+        },
+        {
+          "id": "5:4923407378401558511",
+          "name": "category",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:2790599834921264013",
+      "lastPropertyId": "7:5078365052433816015",
+      "name": "TranscriptSegment",
+      "properties": [
+        {
+          "id": "1:3048435253813539176",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7774123364206183415",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "3:7609359376831521661",
+          "name": "speaker",
+          "type": 9
+        },
+        {
+          "id": "4:6723559208621579373",
+          "name": "speakerId",
+          "type": 6
+        },
+        {
+          "id": "5:6298776685813887757",
+          "name": "isUser",
+          "type": 1
+        },
+        {
+          "id": "6:5656434785472293037",
+          "name": "start",
+          "type": 8
+        },
+        {
+          "id": "7:5078365052433816015",
+          "name": "end",
+          "type": 8
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "8:2790599834921264013",
+  "lastIndexId": "8:765029136259338813",
+  "lastRelationId": "2:4954046696287105776",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}
