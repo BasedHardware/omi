@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-from typing import List, Optional
 from enum import Enum
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -37,8 +37,10 @@ class ProcessingMemory(BaseModel):
     @staticmethod
     def predict_capturing_to(processing_memory, min_seconds_limit: int):
         timer_segment_start = processing_memory.timer_segment_start if processing_memory.timer_segment_start else processing_memory.timer_start
-        segment_end = processing_memory.transcript_segments[-1].end if len(processing_memory.transcript_segments) > 0 else 0
+        segment_end = processing_memory.transcript_segments[-1].end if len(
+            processing_memory.transcript_segments) > 0 else 0
         return datetime.fromtimestamp(timer_segment_start + segment_end + min_seconds_limit, timezone.utc)
+
 
 class BasicProcessingMemory(BaseModel):
     id: str
@@ -49,6 +51,7 @@ class BasicProcessingMemory(BaseModel):
     geolocation: Optional[Geolocation] = None
     emotional_feedback: Optional[bool] = False
     memory_id: Optional[str] = None
+
 
 class DetailProcessingMemory(BaseModel):
     id: str
@@ -71,6 +74,7 @@ class UpdateProcessingMemory(BaseModel):
 
 class UpdateProcessingMemoryResponse(BaseModel):
     result: BasicProcessingMemory
+
 
 class DetailProcessingMemoryResponse(BaseModel):
     result: DetailProcessingMemory
