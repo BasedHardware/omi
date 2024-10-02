@@ -22,6 +22,8 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
+
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});
@@ -200,8 +202,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
                               _controller!.index == _controller!.length - 1
-                                  ? 'Your personal growth journey with AI that listens to your every word.'
-                                  : 'Your personal growth journey with AI that listens to your every word.',
+                                  ? TranslationService.translate('Your personal growth journey with AI that listens to your every word.')
+                                  : TranslationService.translate('Your personal growth journey with AI that listens to your every word.'),
                               style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                               textAlign: TextAlign.center,
                             ),

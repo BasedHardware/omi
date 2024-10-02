@@ -4,6 +4,7 @@ import 'package:friend_private/providers/user_speech_samples_provider.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class UserSpeechSamples extends StatelessWidget {
   const UserSpeechSamples({super.key});
@@ -40,7 +41,7 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
       builder: (context, provider, child) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Speech Samples'),
+            title:  Text(TranslationService.translate( 'Speech Samples')),
             backgroundColor: Theme.of(context).colorScheme.primary,
             // actions: [
             //   IconButton(
@@ -103,15 +104,15 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                             ),
                             onPressed: () => provider.playPause(index),
                           ),
-                          title: Text(index == 0 ? 'Speech Profile' : 'Additional Sample $index'),
+                          title: Text(index == 0 ? TranslationService.translate( 'Speech Profile') : TranslationService.translate( 'Additional Sample $index')),
                           // _getFileNameFromUrl(samplesUrl[index])
                           subtitle: FutureBuilder<Duration?>(
                             future: AudioPlayer().setUrl(provider.samplesUrl[index]),
                             builder: (context, snapshot) {
                               if (snapshot.hasData) {
-                                return Text('Duration: ${snapshot.data!.inSeconds} seconds');
+                                return Text(TranslationService.translate( 'Duration: ${snapshot.data!.inSeconds} seconds'));
                               } else {
-                                return const Text('Loading duration...');
+                                return  Text(TranslationService.translate( 'Loading duration...'));
                               }
                             },
                           ),
@@ -124,9 +125,9 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                                     var parts = name.split('_segment_');
                                     deleteProfileSample(parts[0], int.tryParse(parts[1])!);
                                     provider.samplesUrl.removeAt(index);
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    ScaffoldMessenger.of(context).showSnackBar( SnackBar(
                                         content: Text(
-                                      'Additional Speech Sample Removed',
+                                            TranslationService.translate( 'Additional Speech Sample Removed'),
                                     )));
                                     setState(() {});
                                   },

@@ -7,6 +7,7 @@ import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/services/translation_service.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -268,11 +269,11 @@ class ServerMemory {
   }
 
   String getTag() {
-    if (source == MemorySource.screenpipe) return 'Screenpipe';
-    if (source == MemorySource.openglass) return 'Openglass';
-    if (source == MemorySource.sdcard) return 'SD Card';
-    if (failed) return 'Failed';
-    if (discarded) return 'Discarded';
+    if (source == MemorySource.screenpipe) return TranslationService.translate('Screenpipe');
+    if (source == MemorySource.openglass) return TranslationService.translate('Openglass');
+    if (source == MemorySource.sdcard) return TranslationService.translate('SD Card');
+    if (failed) return TranslationService.translate('Failed');
+    if (discarded) return TranslationService.translate('Discarded');
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class ExpandableTextWidget extends StatefulWidget {
   final String text;
@@ -6,8 +7,6 @@ class ExpandableTextWidget extends StatefulWidget {
   final Function toggleExpand;
   final TextStyle style;
   final int maxLines;
-  final String expandText;
-  final String collapseText;
   final Color linkColor;
 
   const ExpandableTextWidget({
@@ -15,11 +14,9 @@ class ExpandableTextWidget extends StatefulWidget {
     required this.text,
     required this.style,
     this.maxLines = 3,
-    this.expandText = 'show more ↓',
-    this.collapseText = 'show less ↑',
     this.linkColor = Colors.deepPurple,
     required this.isExpanded,
-    required this.toggleExpand,
+    required this.toggleExpand
   });
 
   @override
@@ -54,7 +51,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
-                  widget.isExpanded ? widget.collapseText : widget.expandText,
+                  widget.isExpanded ? '${TranslationService.translate('show less')} ↑' : '${TranslationService.translate('show more')} ↓',
                   style: TextStyle(
                     color: Colors.deepPurple,
                     fontWeight: FontWeight.w500,

@@ -9,6 +9,7 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -203,8 +204,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
-        title: 'Friend Device Disconnected',
-        body: 'Please reconnect to continue using your Friend.',
+        title: TranslationService.translate( 'Friend Device Disconnected'),
+        body: TranslationService.translate( 'Please reconnect to continue using your Friend.'),
       );
     });
     MixpanelManager().deviceDisconnected();

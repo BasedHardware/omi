@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/widgets/transcript.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class CompareTranscriptsPage extends StatefulWidget {
   final ServerMemory memory;
@@ -31,7 +32,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Compare Transcripts'),
+        title:  Text(TranslationService.translate( 'Compare Transcripts')),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: DefaultTabController(

@@ -15,6 +15,7 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
   final ServerProcessingMemory? memory;
@@ -41,7 +42,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
 
       if (provider.sdCardReady) {
-        var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
+        var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining.';
         Future.delayed(Duration.zero, () {
           ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
           ScaffoldMessenger.of(context).showMaterialBanner(
@@ -54,7 +55,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
                     ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
                     routeToPage(context, const SdCardCapturePage());
                   },
-                  child: const Text('Click here'),
+                  child: Text(TranslationService.translate('Open')),
                 ),
               ],
               onVisible: () => Future.delayed(const Duration(seconds: 15), () {
@@ -129,9 +130,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();
           },
-          'Limited Capabilities',
-          'Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.',
-          okButtonText: 'Ok, I understand',
+        TranslationService.translate('Limited Capabilities'),
+    TranslationService.translate('Recording with your phone microphone has a few limitations, including but not limited to: speaker profiles, background reliability.'),
+          okButtonText: TranslationService.translate('Ok'),
         ),
       );
     }
@@ -175,7 +176,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
+              captureProvider.segments.isNotEmpty ? TranslationService.translate('In progress...') : TranslationService.translate('Say something...'),
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -198,7 +199,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              'Waiting for reconnect...',
+    TranslationService.translate('Waiting for reconnect...'),
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -215,11 +216,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     // Right
     var stateText = "";
     if (deviceServiceStateOk && transcriptServiceStateOk) {
-      stateText = "Listening";
+      stateText = TranslationService.translate("Listening");
     } else if (!internetConnectionStateOk) {
-      stateText = "No connection";
+      stateText = TranslationService.translate("No connection");
     } else if (captureProvider.memoryCreating) {
-      stateText = "Processing";
+      stateText = TranslationService.translate("Processing");
     }
     Widget right = stateText.isNotEmpty
         ? Expanded(
@@ -312,11 +313,11 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
             : (state == RecordingState.record
                 ? const Icon(Icons.stop, color: Colors.red, size: 12)
                 : const Icon(Icons.mic, size: 18)),
-        const SizedBox(width: 4),
+        SizedBox(width: 4),
         Text(
           state == RecordingState.initialising
-              ? 'Initialising Recorder'
-              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+              ? TranslationService.translate('Initialising Recorder')
+              : (state == RecordingState.record ? TranslationService.translate('Stop Recording') : TranslationService.translate('Try With Phone Mic')),
           style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 4),

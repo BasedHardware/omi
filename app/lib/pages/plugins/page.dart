@@ -5,6 +5,8 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/translation_service.dart';
+
 class PluginsPage extends StatefulWidget {
   final bool filterChatOnly;
 
@@ -53,14 +55,14 @@ class _PluginsPageState extends State<PluginsPage> {
                     indicatorPadding: EdgeInsets.zero,
                     labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                     indicatorColor: Colors.transparent,
-                    tabs: const [Tab(text: 'Memories'), Tab(text: 'Chat')],
+                    tabs: [Tab(text: TranslationService.translate('Memories')), Tab(text: 'Chat')],
                   ),
                   Expanded(
                     child: TabBarView(children: [
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle(context, provider, 'External Apps', '🚀'),
+                          _getSectionTitle(context, provider, TranslationService.translate('External Apps'), '🚀'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -94,7 +96,7 @@ class _PluginsPageState extends State<PluginsPage> {
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle(context, provider, 'Personalities', '🤖'),
+                          _getSectionTitle(context, provider, TranslationService.translate('Personalities'), '🤖'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -162,7 +164,7 @@ class _PluginsPageState extends State<PluginsPage> {
               child: Center(
                 child: Text(
                   context.read<ConnectivityProvider>().isConnected
-                      ? 'No plugins found'
+                      ? TranslationService.translate('No plugins found')
                       : 'Unable to fetch plugins :(\n\nPlease check your internet connection and try again.',
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   textAlign: TextAlign.center,

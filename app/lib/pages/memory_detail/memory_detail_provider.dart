@@ -11,6 +11,7 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   PluginProvider? pluginProvider;

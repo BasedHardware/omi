@@ -32,6 +32,7 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class HomePageWrapper extends StatefulWidget {
   const HomePageWrapper({super.key});
@@ -184,14 +185,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               if (mounted) {
                 ScaffoldMessenger.of(ctx).showMaterialBanner(
                   MaterialBanner(
-                    content: const Text('No internet connection. Please check your connection.'),
+                    content:  Text(TranslationService.translate( 'No internet connection. Please check your connection.')),
                     backgroundColor: Colors.red,
                     actions: [
                       TextButton(
                         onPressed: () {
                           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                         },
-                        child: const Text('Dismiss'),
+                        child:  Text(TranslationService.translate( 'Dismiss')),
                       ),
                     ],
                   ),
@@ -204,7 +205,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                 ScaffoldMessenger.of(ctx).showMaterialBanner(
                   MaterialBanner(
-                    content: const Text('Internet connection is restored.'),
+                    content: Text(TranslationService.translate( 'Internet connection is restored.')),
                     backgroundColor: Colors.green,
                     actions: [
                       TextButton(
@@ -213,7 +214,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
                           }
                         },
-                        child: const Text('Dismiss'),
+                        child: Text(TranslationService.translate( 'Dismiss')),
                       ),
                     ],
                     onVisible: () => Future.delayed(const Duration(seconds: 3), () {
@@ -295,7 +296,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             tabs: [
                               Tab(
                                 child: Text(
-                                  'Memories',
+                          TranslationService.translate( 'Memories'),
                                   style: TextStyle(
                                     color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                     fontSize: 16,
@@ -304,7 +305,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               ),
                               Tab(
                                 child: Text(
-                                  'Chat',
+                              TranslationService.translate( 'Chat'),
                                   style: TextStyle(
                                     color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
                                     fontSize: 16,
@@ -327,18 +328,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: Colors.white, width: 2),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Center(
                                 child: Text(
-                              'Running migration, please wait! 🚨',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
+                                    TranslationService.translate( 'Running migration, please wait! 🚨'),
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
                               textAlign: TextAlign.center,
                             )),
                           ],
@@ -451,12 +452,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                             deviceProvider.isConnecting && isMemoriesPage
                                 ? Text(
-                                    "Connecting",
+                              TranslationService.translate( "Connecting"),
                                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                                   )
                                 : isMemoriesPage
                                     ? Text(
-                                        "No device found",
+                                TranslationService.translate( "No device found"),
                                         style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                                       )
                                     : const SizedBox.shrink(),
@@ -481,13 +482,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 MixpanelManager().pageOpened('Chat Plugins');
                                 routeToPage(context, const PluginsPage(filterChatOnly: true));
                               },
-                              child: const Row(
+                              child:  Row(
                                 children: [
-                                  Icon(size: 20, Icons.chat, color: Colors.white),
-                                  SizedBox(width: 10),
+                                  const Icon(size: 20, Icons.chat, color: Colors.white),
+                                  const SizedBox(width: 10),
                                   Text(
-                                    'Enable Plugins',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                                    TranslationService.translate( 'Enable Plugins'),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                                   ),
                                 ],
                               ),
@@ -581,7 +582,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  provider.plugins.where((p) => p.enabled).isEmpty ? TranslationService.translate( 'Enable Plugins   ') : TranslationService.translate( 'Select a plugin'),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
@@ -632,7 +633,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           );
         }).toList();
     if (provider.plugins.where((p) => p.enabled).isNotEmpty) {
-      items.add(const DropdownMenuItem<String>(
+      items.add(DropdownMenuItem<String>(
         value: 'enable',
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -643,7 +644,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: Icon(Icons.star, color: Colors.purpleAccent),
             ),
             SizedBox(width: 8),
-            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+            Text(TranslationService.translate('Enable Plugins'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
           ],
         ),
       ));

@@ -20,6 +20,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -109,9 +110,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     width: double.infinity,
                     height: 10,
                     color: Colors.green,
-                    child: const Center(
+                    child: Center(
                       child: Text(
-                        'Syncing messages with server...',
+                        TranslationService.translate('Syncing messages with server...'),
                         style: TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ),
@@ -141,13 +142,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   });
                                   context.read<MessageProvider>().clearChat();
                                   Navigator.of(context).pop();
-                                }, "Clear Chat?",
-                                    "Are you sure you want to clear the chat? This action cannot be undone.");
+                                }, TranslationService.translate("Clear Chat?"),
+                                TranslationService.translate("Are you sure you want to clear the chat? This action cannot be undone."));
                               },
                             );
                           },
-                          child: const Text(
-                            "Clear Chat  \u{1F5D1}",
+                          child: Text(
+                            TranslationService.translate("Clear Chat  \u{1F5D1}"),
                             style: TextStyle(color: Colors.white, fontSize: 14),
                           ),
                         ),
@@ -175,16 +176,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         ],
                       )
                     : provider.isClearingChat
-                        ? const Column(
+                        ?  Column(
                             children: [
-                              SizedBox(height: 100),
-                              CircularProgressIndicator(
+                              const SizedBox(height: 100),
+                              const CircularProgressIndicator(
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
-                                "Deleting your messages from Omi's memory...",
-                                style: TextStyle(color: Colors.white),
+                                TranslationService.translate("Deleting your messages from Omi's memory..."),
+                                style: const TextStyle(color: Colors.white),
                               ),
                             ],
                           )
@@ -194,8 +195,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   padding: const EdgeInsets.only(bottom: 32.0),
                                   child: Text(
                                       connectivityProvider.isConnected
-                                          ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                          : 'Please check your internet connection and try again',
+                                          ? TranslationService.translate('No messages yet!\nWhy don\'t you start a conversation?')
+                                          : TranslationService.translate('Please check your internet connection and try again'),
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(color: Colors.white)),
                                 ),
@@ -265,7 +266,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       textAlign: TextAlign.start,
                       textAlignVertical: TextAlignVertical.center,
                       decoration: InputDecoration(
-                        hintText: 'Ask your Friend anything',
+                        hintText: TranslationService.translate('Ask your Friend anything'),
                         hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
                         focusedBorder: InputBorder.none,
                         enabledBorder: InputBorder.none,
@@ -281,9 +282,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     _sendMessageUtil(message);
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Please check your internet connection and try again'),
-                                        duration: Duration(seconds: 2),
+                                      SnackBar(
+                                        content: Text(TranslationService.translate('Please check your internet connection and try again')),
+                                        duration: const Duration(seconds: 2),
                                       ),
                                     );
                                   }

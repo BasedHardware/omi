@@ -9,6 +9,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class FactsPage extends StatelessWidget {
   const FactsPage({super.key});
@@ -53,10 +54,10 @@ class _FactsPageState extends State<_FactsPage> {
             appBar: AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
               title: Text(provider.selectedCategory == null
-                  ? 'About you'
+                  ? TranslationService.translate('About you')
                   : provider.selectedCategory == FactCategory.other
-                      ? 'Other things'
-                      : 'About your ${provider.selectedCategory.toString().split('.').last}'),
+                      ? TranslationService.translate('Other things')
+                      : '${TranslationService.translate('About your')} ${provider.selectedCategory.toString().split('.').last}'),
               leading: provider.selectedCategory != null
                   ? IconButton(
                       icon: Platform.isIOS ? const Icon(Icons.arrow_back_ios_new) : const Icon(Icons.arrow_back),
@@ -159,25 +160,25 @@ class _FactsPageState extends State<_FactsPage> {
           Platform.isIOS
               ? CupertinoTextFormFieldRow(
                   controller: contentController,
-                  placeholder: 'I love Omi ...',
+                  placeholder: TranslationService.translate('I love Omi ...'),
                   keyboardType: TextInputType.text,
                   textCapitalization: TextCapitalization.sentences,
                   textAlign: TextAlign.start,
                   placeholderStyle: const TextStyle(color: Colors.white54),
                   style: const TextStyle(color: Colors.white),
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
+                  validator: (value) => value!.isEmpty ? TranslationService.translate('Can\'t be empty') : null,
                   maxLines: 1,
                 )
               : TextFormField(
                   controller: contentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Fact Content',
-                    hintText: 'I love Omi ...',
+                  decoration: InputDecoration(
+                    labelText: TranslationService.translate('Fact Content'),
+                    hintText: TranslationService.translate('I love Omi ...'),
                     border: InputBorder.none,
                   ),
                   keyboardType: TextInputType.text,
                   textCapitalization: TextCapitalization.sentences,
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
+                  validator: (value) => value!.isEmpty ? TranslationService.translate('Can\'t be empty') : null,
                   maxLines: 1,
                   style: const TextStyle(color: Colors.white),
                 ),
@@ -192,7 +193,7 @@ class _FactsPageState extends State<_FactsPage> {
                     showCupertinoModalPopup(
                       context: context,
                       builder: (BuildContext context) => CupertinoActionSheet(
-                        title: const Text('Select Category'),
+                        title:  Text(TranslationService.translate('Select Category')),
                         actions: FactCategory.values.map((category) {
                           return CupertinoActionSheetAction(
                             child: Text(
@@ -206,8 +207,8 @@ class _FactsPageState extends State<_FactsPage> {
                           );
                         }).toList(),
                         cancelButton: CupertinoActionSheetAction(
-                          child: const Text(
-                            'Cancel',
+                          child:  Text(
+                            TranslationService.translate('Cancel'),
                             style: TextStyle(color: Colors.white),
                           ),
                           onPressed: () {
@@ -220,8 +221,8 @@ class _FactsPageState extends State<_FactsPage> {
                 )
               : DropdownButtonFormField<FactCategory>(
                   value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
+                  decoration: InputDecoration(
+                    labelText: TranslationService.translate('Category'),
                   ),
                   dropdownColor: Colors.grey.shade800,
                   style: const TextStyle(color: Colors.white),
@@ -269,21 +270,21 @@ class _FactsPageState extends State<_FactsPage> {
         ? [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+              child:  Text(TranslationService.translate('Cancel'), style: TextStyle(color: Colors.white)),
             ),
             CupertinoDialogAction(
               onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
+              child: Text(isEditing ? TranslationService.translate('Update') : TranslationService.translate('Add'), style: const TextStyle(color: Colors.white)),
             ),
           ]
         : [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child:  Text(TranslationService.translate('Cancel')),
             ),
             TextButton(
               onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
+              child: Text(isEditing ? TranslationService.translate('Update') : TranslationService.translate('Add'), style: const TextStyle(color: Colors.white)),
             ),
           ];
   }
@@ -361,21 +362,21 @@ class _FactsPageState extends State<_FactsPage> {
   Widget _buildFactsList(FactsProvider provider) {
     final filteredFacts = provider.filteredFacts;
     return filteredFacts.isEmpty
-        ? const Center(
+        ?  Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(Icons.notes, size: 40),
-                SizedBox(height: 24),
+                const Icon(Icons.notes, size: 40),
+                const SizedBox(height: 24),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
                   child: Text(
-                      'Omi doesn\'t know anything about you in this realm yet. Tell it a few things to get started.',
-                      style: TextStyle(color: Colors.white, fontSize: 24),
+                    TranslationService.translate('Omi doesn\'t know anything about you in this realm yet. Tell it a few things to get started.'),
+                      style: const TextStyle(color: Colors.white, fontSize: 24),
                       textAlign: TextAlign.center),
                 ),
-                SizedBox(height: 64),
+                const SizedBox(height: 64),
               ],
             ),
           )

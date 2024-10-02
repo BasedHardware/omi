@@ -5,6 +5,7 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class ProcessingMemoryPage extends StatefulWidget {
   final ServerProcessingMemory memory;
@@ -73,7 +74,7 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                 const SizedBox(width: 4),
                 const Text("🎙️"),
                 const SizedBox(width: 4),
-                const Expanded(child: Text("In progress")),
+                Expanded(child: Text(TranslationService.translate( "In progress"))),
               ],
             ),
           ),
@@ -89,12 +90,12 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                 tabs: [
                   Tab(
                     text: memorySource == MemorySource.openglass
-                        ? 'Photos'
+                        ? TranslationService.translate( 'Photos')
                         : memorySource == MemorySource.screenpipe
-                            ? 'Raw Data'
-                            : 'Transcript',
+                            ? TranslationService.translate( 'Raw Data')
+                            : TranslationService.translate( 'Transcript'),
                   ),
-                  const Tab(text: 'Summary')
+                   Tab(text: TranslationService.translate( 'Summary'))
                 ],
                 indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
               ),
@@ -113,7 +114,7 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                                   children: [
                                     const SizedBox(height: 80),
                                     Center(
-                                        child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                        child: Text(memorySource == MemorySource.friend ? TranslationService.translate( "No transcript") : TranslationService.translate( "Empty"))),
                                   ],
                                 )
                               : getTranscriptWidget(false, widget.memory.transcriptSegments, [], null)
@@ -127,7 +128,7 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
-                                widget.memory.transcriptSegments.isEmpty ? "No summary" : "Processing",
+                                widget.memory.transcriptSegments.isEmpty ? TranslationService.translate( "No summary") : TranslationService.translate( "Processing"),
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16),
                               ),

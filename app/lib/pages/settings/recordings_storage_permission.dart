@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class RecordingsStoragePermission extends StatefulWidget {
   const RecordingsStoragePermission({super.key});
@@ -40,7 +41,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: const Text('Authorize Saving Recordings'),
+        title:  Text(TranslationService.translate( 'Authorize Saving Recordings')),
       ),
       body: loading || _hasPermission == null
           ? const Center(
@@ -54,40 +55,40 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _hasPermission! ? "Thanks for authorizing!" : "We need your permission",
+                      _hasPermission! ? TranslationService.translate( "Thanks for authorizing!") :TranslationService.translate(  "We need your permission"),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       _hasPermission!
-                          ? "You've already given us permission to save your recordings. Here's a reminder of why we need it:"
-                          : "We'd like your permission to save your voice recordings. Here's why:",
+                          ? TranslationService.translate( "You've already given us permission to save your recordings. Here's a reminder of why we need it:")
+                          : TranslationService.translate( "We'd like your permission to save your voice recordings. Here's why:"),
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 32),
                     _buildReasonTile(
                       icon: Icons.person,
-                      title: "Improve Your Speech Profile",
-                      description: "We use recordings to further train and enhance your personal speech profile.",
+                      title: TranslationService.translate( "Improve Your Speech Profile"),
+                      description: TranslationService.translate( "We use recordings to further train and enhance your personal speech profile."),
                     ),
                     SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.group,
-                      title: "Train Profiles for Friends and Family",
-                      description: "Your recordings help us recognize and create profiles for your friends and family.",
+                      title: TranslationService.translate( "Train Profiles for Friends and Family"),
+                      description: TranslationService.translate( "Your recordings help us recognize and create profiles for your friends and family."),
                     ),
                     SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.trending_up,
-                      title: "Enhance Transcript Accuracy",
+                      title: TranslationService.translate( "Enhance Transcript Accuracy"),
                       description:
-                          "As our model improves, we can provide better transcription results for your recordings.",
+                      TranslationService.translate( "As our model improves, we can provide better transcription results for your recordings."),
                     ),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       child: Text(
-                        "Legal Notice: The legality of recording and storing voice data may vary depending on your location and how you use this feature. It's your responsibility to ensure compliance with local laws and regulations.",
+                        TranslationService.translate( "Legal Notice: The legality of recording and storing voice data may vary depending on your location and how you use this feature. It's your responsibility to ensure compliance with local laws and regulations."),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
@@ -98,7 +99,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       child: MaterialButton(
                         onPressed: _hasPermission! ? null : _authorize,
                         child: Text(
-                          _hasPermission! ? "Already Authorized" : "Authorize",
+                          _hasPermission! ? TranslationService.translate( "Already Authorized") : TranslationService.translate( "Authorize"),
                           style: const TextStyle(
                             color: Colors.white,
                             decoration: TextDecoration.underline,
@@ -110,8 +111,8 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                       Center(
                         child: TextButton(
                           onPressed: _revokeAuthorization,
-                          child: const Text(
-                            "Revoke Authorization",
+                          child:  Text(
+                            TranslationService.translate( "Revoke Authorization"),
                             style: TextStyle(color: Colors.white),
                           ),
                         ),
@@ -153,10 +154,10 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
     if (success) {
       SharedPreferencesUtil().permissionStoreRecordingsEnabled = true;
       setState(() => _hasPermission = true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Authorization successful!")));
+      ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(TranslationService.translate( "Authorization successful!"))));
     } else {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Failed to authorize. Please try again.")));
+          .showSnackBar( SnackBar(content: Text(TranslationService.translate( "Failed to authorize. Please try again."))));
     }
   }
 
@@ -165,7 +166,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
     final success = await setRecordingPermission(false);
     changeLoadingState();
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Authorization revoked.")));
+      ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(TranslationService.translate( "Authorization revoked."))));
       setState(() {
         _hasPermission = false;
       });
@@ -177,17 +178,17 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
           () => Navigator.pop(context),
           () {
             deletePermissionAndRecordings();
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Recordings deleted.")));
+            ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(TranslationService.translate( "Recordings deleted."))));
             Navigator.pop(context);
           },
-          'Permission Revoked',
-          'Do you want us to remove all your existing recordings too?',
-          okButtonText: 'Yes',
+        TranslationService.translate( 'Permission Revoked'),
+        TranslationService.translate( 'Do you want us to remove all your existing recordings too?'),
+          okButtonText: TranslationService.translate( 'Yes'),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to revoke authorization. Please try again.")),
+        SnackBar(content: Text(TranslationService.translate( "Failed to revoke authorization. Please try again."))),
       );
     }
   }

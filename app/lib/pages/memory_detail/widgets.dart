@@ -23,7 +23,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-
+import 'package:friend_private/services/translation_service.dart';
 import 'maps_util.dart';
 
 class GetSummaryWidgets extends StatelessWidget {
@@ -52,12 +52,12 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title,
+              memory.discarded ? TranslationService.translate( 'Discarded Memory') : memory.structured.title,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
             Text(
-              memory.source == MemorySource.sdcard ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}' : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
+              memory.source == MemorySource.sdcard ? TranslationService.translate( 'Imported at')+' ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}' : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? TranslationService.translate( 'at') : TranslationService.translate( 'from')} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),
@@ -80,7 +80,7 @@ class GetSummaryWidgets extends StatelessWidget {
             const SizedBox(height: 40),
             memory.discarded
                 ? const SizedBox.shrink()
-                : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
+                : Text(TranslationService.translate( 'Overview'), style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
             memory.discarded
                 ? const SizedBox.shrink()
                 : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
@@ -98,15 +98,15 @@ class GetSummaryWidgets extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Action Items',
+                        TranslationService.translate( 'Action Items'),
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       ),
                       IconButton(
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
                               text: '- ${memory.structured.actionItems.map((e) => e.description).join('\n- ')}'));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Action items copied to clipboard'),
+                          ScaffoldMessenger.of(context).showSnackBar( SnackBar(
+                            content: Text(TranslationService.translate( 'Action items copied to clipboard')),
                             duration: Duration(seconds: 2),
                           ));
                           // MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
@@ -181,7 +181,7 @@ class EventsListWidget extends StatelessWidget {
                       Icon(Icons.event, color: Colors.grey.shade300),
                       const SizedBox(width: 8),
                       Text(
-                        'Events',
+                        TranslationService.translate( 'Events'),
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       )
                     ],
@@ -219,8 +219,8 @@ class EventsListWidget extends StatelessWidget {
                               routeToPage(context, const CalendarPage());
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                 content: Text(!calEnabled
-                                    ? 'Enable calendar integration to add events'
-                                    : 'Select a calendar to add events to'),
+                                    ? TranslationService.translate( 'Enable calendar integration to add events')
+                                    : TranslationService.translate( 'Select a calendar to add events to')),
                               ));
                               return;
                             }
@@ -233,8 +233,8 @@ class EventsListWidget extends StatelessWidget {
                               description: event.description,
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Event added to calendar'),
+                               SnackBar(
+                                content: Text(TranslationService.translate( 'Event added to calendar')),
                               ),
                             );
                           },
@@ -252,11 +252,11 @@ class EventsListWidget extends StatelessWidget {
 
 String minutesConversion(int minutes) {
   if (minutes < 60) {
-    return '$minutes minutes';
+    return '$minutes'+TranslationService.translate('minutes');
   } else if (minutes < 1440) {
-    return '${minutes / 60} hours';
+    return '${minutes / 60} '+TranslationService.translate( 'hours');
   } else {
-    return '${minutes / 1440} days';
+    return '${minutes / 1440}'+TranslationService.translate( 'days');
   }
 }
 
@@ -308,7 +308,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
       if (provider.loadingReprocessMemory && provider.reprocessMemoryId == provider.memory.id) {
-        return const Center(
+        return  Center(
           child: Padding(
             padding: EdgeInsets.only(top: 18.0),
             child: Row(
@@ -320,7 +320,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 SizedBox(width: 16),
                 Text(
-                  'Re-summarizing memory...\nThis may take a few seconds',
+                  TranslationService.translate( 'Re-summarizing memory...\nThis may take a few seconds'),
                   style: TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
@@ -333,7 +333,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'Nothing interesting found,\nwant to retry?',
+          TranslationService.translate( 'Nothing interesting found,\nwant to retry?'),
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -359,9 +359,9 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                     await provider.reprocessMemory();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
+                  child:  Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Re-summarise', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text(TranslationService.translate( 'Re-summarise'), style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -462,8 +462,8 @@ class GetPluginsWidgets extends StatelessWidget {
                                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                                         onPressed: () {
                                           Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text('Plugin response copied to clipboard'),
+                                          ScaffoldMessenger.of(context).showSnackBar( SnackBar(
+                                            content: Text(TranslationService.translate( 'Plugin response copied to clipboard')),
                                           ));
                                           MixpanelManager()
                                               .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
@@ -503,7 +503,7 @@ class GetPluginsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No plugins were triggered\nfor this memory.',
+            TranslationService.translate( 'No plugins were triggered\nfor this memory.'),
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -530,9 +530,9 @@ class GetPluginsWidgets extends StatelessWidget {
                     MixpanelManager().pageOpened('Memory Detail Plugins');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
+                  child:  Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text(TranslationService.translate( 'Enable Plugins'), style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -559,7 +559,7 @@ class GetGeolocationWidgets extends StatelessWidget {
             ? []
             : [
                 Text(
-                  'Taken at',
+        TranslationService.translate( 'Taken at'),
                   style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
                 ),
                 const SizedBox(height: 8),
@@ -596,9 +596,9 @@ class GetGeolocationWidgets extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(16),
                                 color: Colors.grey.shade800,
                               ),
-                              child: const Center(
+                              child:  Center(
                                 child: Text(
-                                  'Could not load Maps. Please check your internet connection.',
+                            TranslationService.translate( 'Could not load Maps. Please check your internet connection.'),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
@@ -632,7 +632,7 @@ class GetSheetTitle extends StatelessWidget {
         children: [
           ListTile(
             title: Text(
-              provider.memory.discarded ? 'Discarded Memory' : provider.memory.structured.title,
+              provider.memory.discarded ? TranslationService.translate( 'Discarded Memory') : provider.memory.structured.title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             leading: const Icon(Icons.description),
@@ -677,7 +677,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Trigger Memory Created Integration'),
+          title:  Text(TranslationService.translate( 'Trigger Memory Created Integration')),
           leading: loadingPluginIntegrationTest
               ? const SizedBox(
                   height: 24,
@@ -712,7 +712,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Test a Memory Prompt'),
+          title:  Text(TranslationService.translate( 'Test a Memory Prompt')),
           leading: const Icon(Icons.chat),
           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
           onTap: () {
@@ -741,7 +741,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
 _copyContent(BuildContext context, String content) {
   Clipboard.setData(ClipboardData(text: content));
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Transcript copied to clipboard')),
+    SnackBar(content: Text(TranslationService.translate( 'Transcript copied to clipboard'))),
   );
   HapticFeedback.lightImpact();
   Navigator.pop(context);
@@ -798,7 +798,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
         Card(
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
           child: ListTile(
-            title: const Text('Send web url'),
+            title:  Text(TranslationService.translate( 'Send web url')),
             leading: loadingShareMemoryViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
               if (loadingShareMemoryViaURL) return;
@@ -806,7 +806,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               bool shared = await setMemoryVisibility(widget.memory.id);
               if (!shared) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Memory URL could not be shared.')),
+                   SnackBar(content: Text(TranslationService.translate( 'Memory URL could not be shared.'))),
                 );
                 return;
               }
@@ -831,7 +831,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Send Transcript'),
+                title:  Text(TranslationService.translate( 'Send Transcript')),
                 leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
                 onTap: () async {
                   if (loadingShareTranscript) return;
@@ -856,7 +856,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               widget.memory.discarded
                   ? const SizedBox()
                   : ListTile(
-                      title: const Text('Send Summary'),
+                      title:  Text(TranslationService.translate( 'Send Summary')),
                       leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
                       onTap: () async {
                         if (loadingShareSummary) return;
@@ -883,14 +883,14 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Copy Transcript'),
+                title:  Text(TranslationService.translate( 'Copy Transcript')),
                 leading: const Icon(Icons.copy),
                 onTap: () => _copyContent(context, widget.memory.getTranscript(generate: true)),
               ),
               widget.memory.discarded
                   ? const SizedBox()
                   : ListTile(
-                      title: const Text('Copy Summary'),
+                      title:  Text(TranslationService.translate( 'Copy Summary')),
                       leading: const Icon(Icons.file_copy),
                       onTap: () => _copyContent(
                         context,
@@ -920,7 +920,7 @@ class GetSheetMainOptions extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('Share'),
+                  title:  Text(TranslationService.translate( 'Share')),
                   leading: const Icon(Icons.share),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 20),
                   onTap: () {
@@ -939,7 +939,7 @@ class GetSheetMainOptions extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('Re-summarize'),
+                  title:  Text(TranslationService.translate( 'Re-summarize')),
                   leading: provider.loadingReprocessMemory
                       ? const SizedBox(
                           width: 24,
@@ -964,8 +964,8 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
-                                'Unable to Re-summarize Memory',
-                                'Please check your internet connection and try again.',
+                              TranslationService.translate( 'Unable to Re-summarize Memory'),
+                              TranslationService.translate( 'Please check your internet connection and try again.'),
                                 singleButton: true,
                                 okButtonText: 'OK',
                               ),
@@ -975,7 +975,7 @@ class GetSheetMainOptions extends StatelessWidget {
                         },
                 ),
                 ListTile(
-                  title: const Text('Delete'),
+                  title:  Text(TranslationService.translate( 'Delete')),
                   leading: const Icon(
                     Icons.delete,
                   ),
@@ -995,8 +995,8 @@ class GetSheetMainOptions extends StatelessWidget {
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
                                 },
-                                'Delete Memory?',
-                                'Are you sure you want to delete this memory? This action cannot be undone.',
+                              TranslationService.translate( 'Delete Memory?'),
+                              TranslationService.translate( 'Are you sure you want to delete this memory? This action cannot be undone.'),
                                 okButtonText: 'Confirm',
                               ),
                             );
@@ -1006,8 +1006,8 @@ class GetSheetMainOptions extends StatelessWidget {
                                   context,
                                   () => Navigator.pop(context),
                                   () => Navigator.pop(context),
-                                  'Unable to Delete Memory',
-                                  'Please check your internet connection and try again.',
+                              TranslationService.translate( 'Unable to Delete Memory'),
+                              TranslationService.translate( 'Please check your internet connection and try again.'),
                                   singleButton: true,
                                   okButtonText: 'OK'),
                               context: context,
@@ -1027,7 +1027,7 @@ class GetSheetMainOptions extends StatelessWidget {
                   onTap: () {
                     provider.toggleDevToolsInSheet(!provider.displayDevToolsInSheet);
                   },
-                  title: const Text('Developer Tools'),
+                  title:  Text(TranslationService.translate( 'Developer Tools')),
                   leading: const Icon(
                     Icons.developer_mode,
                     color: Colors.white,

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/services/translation_service.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:intl/intl.dart';
 
 final Map<String, String> availableLanguages = {
   'Bulgarian': 'bg',
@@ -37,18 +40,30 @@ final Map<String, String> availableLanguages = {
   'Vietnamese': 'vi',
 };
 
+
+String selectedLanguage = 'en'; // Default language code
+
+void initLanguageTranslation() {
+  //Called in main file - Load translation & set translation on inital open
+  if(SharedPreferencesUtil().recordingsLanguage == null){
+    TranslationService.changeLanguage(Intl.getCurrentLocale().split('_')[0]);
+  }else{
+    TranslationService.changeLanguage(SharedPreferencesUtil().recordingsLanguage);
+  }
+}
+
 getLanguageName(String code) {
   return availableLanguages.entries.firstWhere((element) => element.value == code).key;
 }
 
 getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguage) {
   return [
-    const Padding(
+     Padding(
       padding: EdgeInsets.symmetric(horizontal: 4),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'SPEECH LANGUAGE',
+          TranslationService.translate('LANGUAGE'),
           style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
         ),
       ),
@@ -56,35 +71,41 @@ getRecordingSettings(Function(String?) onLanguageChanged, String selectedLanguag
     const SizedBox(height: 12),
     Center(
         child: Container(
-      height: 60,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-      child: DropdownButton<String>(
-        menuMaxHeight: 350,
-        value: selectedLanguage,
-        onChanged: onLanguageChanged,
-        dropdownColor: Colors.black,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        underline: Container(
-          height: 0,
-          color: Colors.white,
-        ),
-        isExpanded: true,
-        itemHeight: 48,
-        items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
-          return DropdownMenuItem<String>(
-            value: availableLanguages[key],
-            child: Text(
-              '$key (${availableLanguages[key]})',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+          height: 60,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
+          child: DropdownButton<String>(
+            menuMaxHeight: 350,
+            value: selectedLanguage,
+            onChanged: (String? newLanguage) {
+              if (newLanguage != null) {
+                selectedLanguage = newLanguage; // Update the selected language
+                TranslationService.changeLanguage(newLanguage); // Call the translation service
+                onLanguageChanged(newLanguage); // Call the provided callback
+              }
+            },
+            dropdownColor: Colors.black,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            underline: Container(
+              height: 0,
+              color: Colors.white,
             ),
-          );
-        }).toList(),
-      ),
-    )),
+            isExpanded: true,
+            itemHeight: 48,
+            items: availableLanguages.keys.map<DropdownMenuItem<String>>((String key) {
+              return DropdownMenuItem<String>(
+                value: availableLanguages[key],
+                child: Text(
+                  '$key (${availableLanguages[key]})',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                ),
+              );
+            }).toList(),
+          ),
+        )),
     const SizedBox(height: 32.0),
   ];
 }
@@ -137,7 +158,7 @@ getItemAddOn(String title, VoidCallback onTap, {required IconData icon, bool vis
 
 getItemAddOn2(String title, VoidCallback onTap, {required IconData icon}) {
   return GestureDetector(
-    onTap: (){
+    onTap: () {
       MixpanelManager().pageOpened('Settings $title');
       onTap();
     },

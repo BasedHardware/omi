@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/openai.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerMemory memory;
@@ -20,7 +21,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Test Memory Prompt'),
+        title:  Text(TranslationService.translate( 'Test Memory Prompt')),
         backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           IconButton(
@@ -52,10 +53,10 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
           ),
           result == ''
               ? const SizedBox.shrink()
-              : const Padding(
+              :  Padding(
                   padding: EdgeInsets.all(16),
                   child: Text(
-                    'Result',
+                  TranslationService.translate( 'Result'),
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),

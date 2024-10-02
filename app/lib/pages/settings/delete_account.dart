@@ -7,6 +7,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class DeleteAccount extends StatefulWidget {
   const DeleteAccount({super.key});
@@ -48,7 +49,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          title: const Text('Delete Account'),
+          title:  Text(TranslationService.translate( 'Delete Account')),
         ),
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -57,10 +58,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
               const SizedBox(
                 height: 10,
               ),
-              const Padding(
+               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 50),
                 child: Text(
-                  "Are you sure you want to delete your account?",
+                  TranslationService.translate( "Are you sure you want to delete your account?"),
                   style: TextStyle(
                     fontSize: 24,
                   ),
@@ -70,25 +71,25 @@ class _DeleteAccountState extends State<DeleteAccount> {
               const SizedBox(
                 height: 10,
               ),
-              const Text(
-                "This cannot be undone.",
+               Text(
+                TranslationService.translate( "This cannot be undone."),
                 style: TextStyle(fontSize: 18),
               ),
               const SizedBox(
                 height: 30,
               ),
-              const ListTile(
+               ListTile(
                 leading: Icon(Icons.message_rounded),
-                title: Text("All of your memories and conversations will be permanently erased."),
+                title: Text(TranslationService.translate( "All of your memories and conversations will be permanently erased.")),
               ),
-              const ListTile(
+               ListTile(
                 leading: Icon(Icons.person_pin_outlined),
-                title: Text("Your plugins and integrations will be disconnected effectively immediately."),
+                title: Text(TranslationService.translate( "Your plugins and integrations will be disconnected effectively immediately.")),
               ),
-              const ListTile(
+               ListTile(
                 leading: Icon(Icons.upload_file_outlined),
                 title: Text(
-                    "You can export your data before deleting your account, but once deleted, it cannot be recovered."),
+    TranslationService.translate( "You can export your data before deleting your account, but once deleted, it cannot be recovered.")),
               ),
               const Spacer(),
               Row(
@@ -103,8 +104,8 @@ class _DeleteAccountState extends State<DeleteAccount> {
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.80,
-                    child: const Text(
-                        "I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered. "),
+                    child: Text(
+                      TranslationService.translate( "I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered.")),
                   ),
                 ],
               ),
@@ -140,15 +141,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
                                   }, () {
                                     deleteAccountNow();
                                     Navigator.of(context).pop();
-                                  }, "Are you sure?\n",
-                                      "This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?",
-                                      okButtonText: 'Delete Now', cancelButtonText: 'Go Back');
+                                  }, TranslationService.translate( "Are you sure?\n"),
+                                  TranslationService.translate(  "This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?"),
+                                      okButtonText: TranslationService.translate( 'Delete Now'), cancelButtonText: TranslationService.translate( 'Go Back'));
                                 });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                               SnackBar(
                                 content: Text(
-                                    'Check the box to confirm you understand that deleting your account is permanent and irreversible.'),
+                                  TranslationService.translate( 'Check the box to confirm you understand that deleting your account is permanent and irreversible.')),
                               ),
                             );
                           }
@@ -164,8 +165,8 @@ class _DeleteAccountState extends State<DeleteAccount> {
                           width: double.infinity,
                           height: 45,
                           alignment: Alignment.center,
-                          child: const Text(
-                            'Delete Account',
+                          child: Text(
+                            TranslationService.translate('Delete Account'),
                             style: TextStyle(
                               fontWeight: FontWeight.w400,
                               fontSize: 18,

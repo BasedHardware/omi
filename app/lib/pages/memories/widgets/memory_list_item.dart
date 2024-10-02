@@ -9,6 +9,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class MemoryListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -93,10 +94,10 @@ class _MemoryListItemState extends State<MemoryListItem> {
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
                         SnackBar(
-                          content: const Text('Memory deleted successfully 🗑️'),
+                          content: Text(TranslationService.translate('Memory deleted successfully')+' 🗑️'),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                           action: SnackBarAction(
-                            label: 'Undo',
+                            label: TranslationService.translate('Undo'),
                             textColor: Colors.white,
                             onPressed: () {
                               provider.undoDeleteMemory(memory.id, memoryIdx);

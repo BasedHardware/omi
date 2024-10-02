@@ -14,6 +14,7 @@ import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class SpeechProfileCardWidget extends StatelessWidget {
   const SpeechProfileCardWidget({super.key});
@@ -51,22 +52,22 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         ),
                         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                         padding: const EdgeInsets.all(16),
-                        child: const Row(
+                        child:  Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Row(
                                 children: [
-                                  Icon(Icons.multitrack_audio),
-                                  SizedBox(width: 16),
+                                  const Icon(Icons.multitrack_audio),
+                                  const SizedBox(width: 16),
                                   Text(
-                                    'Teach Omi your voice',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    TranslationService.translate( 'Teach Omi your voice'),
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios)
+                            const Icon(Icons.arrow_forward_ios)
                           ],
                         ),
                       ),
@@ -113,22 +114,22 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                           ),
                           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                           padding: const EdgeInsets.all(16),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
                                 child: Row(
                                   children: [
-                                    Icon(Icons.upload),
-                                    SizedBox(width: 16),
+                                    const Icon(Icons.upload),
+                                    const SizedBox(width: 16),
                                     Text(
-                                      'Update your Firmware',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                      TranslationService.translate( 'Update your Firmware'),
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                   ],
                                 ),
                               ),
-                              Icon(Icons.arrow_forward_ios)
+                              const Icon(Icons.arrow_forward_ios)
                             ],
                           ),
                         ),
@@ -222,8 +223,8 @@ getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) 
                 const SizedBox(width: 8),
                 Text(
                   state == RecordingState.initialising
-                      ? 'Initialising Recorder'
-                      : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
+                      ? TranslationService.translate( 'Initialising Recorder')
+                      : (state == RecordingState.record ? TranslationService.translate( 'Stop Recording') : TranslationService.translate( 'Try With Phone Mic')),
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(width: 4),

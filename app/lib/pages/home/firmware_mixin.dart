@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:version/version.dart';
 import 'package:http/http.dart' as http;
+import 'package:friend_private/services/translation_service.dart';
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   Map latestFirmwareDetails = {};
@@ -95,13 +96,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   Future<(String, bool)> shouldUpdateFirmware({required String currentFirmware, required String deviceName}) async {
     Version currentVersion = Version.parse(currentFirmware);
     if (latestFirmwareDetails.isEmpty) {
-      return ('Latest Version Not Available', false);
+      return (TranslationService.translate( 'Latest Version Not Available'), false);
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
-      return ('Latest Version Not Available', false);
+      return (TranslationService.translate( 'Latest Version Not Available'), false);
     }
     if (latestFirmwareDetails['version'] == null || latestFirmwareDetails['draft']) {
-      return ('Latest Version Not Available', false);
+      return (TranslationService.translate( 'Latest Version Not Available'), false);
     }
     Version latestVersion = Version.parse(latestFirmwareDetails['version']);
     Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
@@ -113,14 +114,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         if (Version.parse(packageInfo.version) <= Version.parse(latestFirmwareDetails['min_app_version']) &&
             int.parse(packageInfo.buildNumber) < int.parse(latestFirmwareDetails['min_app_version_code'])) {
           return (
-            'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
+              '${TranslationService.translate( 'The latest version of firmware is not compatible with this version of App')}(${packageInfo.version}+${packageInfo.buildNumber}). ${TranslationService.translate( 'Please update the app from')} ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
             false
           );
         } else {
-          return ('A new version is available! Update your Friend now.', true);
+          return (TranslationService.translate( 'A new version is available! Update your Friend now.'), true);
         }
       } else {
-        return ('You are already on the latest version', false);
+        return (TranslationService.translate( 'You are already on the latest version'), false);
       }
     }
   }

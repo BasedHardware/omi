@@ -6,6 +6,7 @@ import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
@@ -74,16 +75,16 @@ class _FoundDevicesState extends State<FoundDevices> {
             !provider.isConnected
                 ? Text(
                     provider.deviceList.isEmpty
-                        ? 'Searching for devices...'
-                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                        ? TranslationService.translate('Searching for devices...')
+                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? TranslationService.translate("DEVICE") : TranslationService.translate("DEVICES")} ${TranslationService.translate('FOUND NEARBY')}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                       color: Color(0x66FFFFFF),
                     ),
                   )
-                : const Text(
-                    'PAIRING SUCCESSFUL',
+                :  Text(
+                TranslationService.translate('PAIRING SUCCESSFUL'),
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,

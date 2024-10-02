@@ -15,6 +15,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
@@ -114,8 +115,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Invalid recording detected',
-                  'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.',
+                  TranslationService.translate( 'Invalid recording detected'),
+                  TranslationService.translate( 'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.'),
                   okButtonText: 'Try Again',
                   singleButton: true,
                 ),
@@ -131,8 +132,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Invalid recording detected',
-                  'There is not enough speech detected. Please speak more and try again.',
+                  TranslationService.translate( 'Invalid recording detected'),
+                    TranslationService.translate( 'There is not enough speech detected. Please speak more and try again.'),
                   okButtonText: 'Ok',
                   singleButton: true,
                 ),
@@ -149,8 +150,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                   },
                   () {},
                   // TODO: improve this
-                  'Invalid recording detected',
-                  'Please make sure you speak for at least 5 seconds and not more than 90.',
+                TranslationService.translate( 'Invalid recording detected'),
+                TranslationService.translate( 'Please make sure you speak for at least 5 seconds and not more than 90.'),
                   okButtonText: 'Ok',
                   singleButton: true,
                 ),
@@ -177,8 +178,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                               context,
                               () => Navigator.pop(context),
                               () => Navigator.pop(context),
-                              'How to take a good sample?',
-                              '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in it\'s natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.',
+                            TranslationService.translate( 'How to take a good sample?'),
+                            TranslationService.translate( '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in it\'s natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.'),
                               singleButton: true,
                             ),
                           );
@@ -191,8 +192,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                         onPressed: () {
                           routeToPage(context, const HomePageWrapper(), replace: true);
                         },
-                        child: const Text(
-                          'Skip',
+                        child:  Text(
+                        TranslationService.translate( 'Skip'),
                           style: TextStyle(color: Colors.white, decoration: TextDecoration.underline),
                         ),
                       ),
@@ -217,8 +218,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                         const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
                         !provider.startedRecording
                             ? const SizedBox(height: 0)
-                            : const Text(
-                                'Tell your Friend\nabout yourself',
+                            :  Text(
+                          TranslationService.translate(  'Tell your Friend\nabout yourself'),
                                 style: TextStyle(
                                     color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
                                 textAlign: TextAlign.center,
@@ -232,8 +233,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(40, 0, 40, 48),
                     child: !provider.startedRecording
-                        ? const Text(
-                            'Now, Omi needs to learn your voice to be able to recognise you.',
+                        ?  Text(
+                      TranslationService.translate( 'Now, Omi needs to learn your voice to be able to recognise you.'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
@@ -315,8 +316,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                                 Navigator.of(context).pop();
                                               },
                                               () => {},
-                                              'Device Disconnected',
-                                              'Please make sure your device is turned on and nearby, and try again.',
+                                              TranslationService.translate( 'Device Disconnected'),
+                                                TranslationService.translate( 'Please make sure your device is turned on and nearby, and try again.'),
                                               singleButton: true,
                                             ),
                                           );
@@ -333,8 +334,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                                 await Intercom.instance.displayArticle(
                                                     '9918118-updating-the-firmware-on-your-friend-device');
                                               },
-                                              'Device Update Required',
-                                              'Your current device has an old firmware version (1.0.2). Please check our guide on how to update it.',
+                                              TranslationService.translate( 'Device Update Required'),
+                                                TranslationService.translate( 'Your current device has an old firmware version (1.0.2). Please check our guide on how to update it.'),
                                               okButtonText: 'View Guide',
                                             ),
                                             barrierDismissible: false,
@@ -355,7 +356,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                       child: Text(
-                                        SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                        SharedPreferencesUtil().hasSpeakerProfile ? TranslationService.translate( 'Do it again') : TranslationService.translate( 'Get Started'),
                                         style: const TextStyle(color: Colors.black),
                                       ),
                                     ),
@@ -365,8 +366,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       onPressed: () {
                                         routeToPage(context, const UserSpeechSamples());
                                       },
-                                      child: const Text(
-                                        'Listen to my speech profile ➡️',
+                                      child:  Text(
+                                          '${TranslationService.translate( 'Listen to my speech profile')} ➡️',
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
@@ -399,8 +400,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                   onPressed: () {
                                     Navigator.pop(context);
                                   },
-                                  child: const Text(
-                                    "All done!",
+                                  child:  Text(
+                                    TranslationService.translate(  "All done!"),
                                     style: TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ),

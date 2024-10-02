@@ -10,6 +10,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class UserPeoplePage extends StatelessWidget {
   const UserPeoplePage({super.key});
@@ -85,10 +86,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
 
   String? _nameValidator(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Please enter a name';
+      return TranslationService.translate( 'Please enter a name');
     }
     if (value.length < 2 || value.length > 40) {
-      return 'Name must be between 2 and 40 characters';
+      return TranslationService.translate( 'Name must be between 2 and 40 characters');
     }
     return null;
   }
@@ -111,21 +112,21 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         ? [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+              child:  Text(TranslationService.translate( 'Cancel'), style: TextStyle(color: Colors.white)),
             ),
             CupertinoDialogAction(
               onPressed: onPressed,
-              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+              child: Text(person == null ? TranslationService.translate( 'Add') : TranslationService.translate( 'Update'), style: const TextStyle(color: Colors.white)),
             ),
           ]
         : [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child:  Text(TranslationService.translate( 'Cancel')),
             ),
             TextButton(
               onPressed: onPressed,
-              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+              child: Text(person == null ? TranslationService.translate( 'Add') : TranslationService.translate( 'Update'), style: const TextStyle(color: Colors.white)),
             ),
           ];
   }
@@ -144,12 +145,12 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
       context: context,
       builder: (BuildContext context) => Platform.isIOS
           ? CupertinoAlertDialog(
-              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              title: Text(person == null ? TranslationService.translate( 'Add New Person') : TranslationService.translate( 'Edit Person')),
               content: _showPersonDialogForm(formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             )
           : AlertDialog(
-              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              title: Text(person == null ? TranslationService.translate( 'Add New Person') : TranslationService.translate( 'Edit Person')),
               content: _showPersonDialogForm(formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             ),
@@ -168,9 +169,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         context,
         () => Navigator.pop(context, false),
         () => Navigator.pop(context, true),
-        'Delete Sample?',
-        'Are you sure you want to delete ${person.name}\'s sample?',
-        okButtonText: 'Confirm',
+        TranslationService.translate( 'Delete Sample?'),
+          TranslationService.translate( 'Are you sure you want to delete ${person.name}\'s sample?'),
+        okButtonText: TranslationService.translate( 'Confirm'),
       ),
     );
 
@@ -186,9 +187,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         context,
         () => Navigator.pop(context, false),
         () => Navigator.pop(context, true),
-        'Confirm Deletion',
-        'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.',
-        okButtonText: 'Confirm',
+        TranslationService.translate( 'Confirm Deletion'),
+          TranslationService.translate( 'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.'),
+        okButtonText: TranslationService.translate( 'Confirm'),
       ),
     );
 
@@ -202,7 +203,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
-            title: const Text('People'),
+            title:  Text(TranslationService.translate( 'People')),
             backgroundColor: Theme.of(context).colorScheme.primary,
             centerTitle: true,
             actions: [
@@ -221,9 +222,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             () => Navigator.pop(context),
                             () => Navigator.pop(context),
                             singleButton: true,
-                            'How it works?',
-                            'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
-                            okButtonText: 'Got it',
+                          TranslationService.translate( 'How it works?'),
+                          TranslationService.translate( 'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!'),
+                            okButtonText: TranslationService.translate( 'Got it'),
                           ),
                         );
                       })
@@ -237,7 +238,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   ),
                 )
               : provider.people.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -246,7 +247,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                           SizedBox(height: 24),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 32),
-                            child: Text('Create a new person and train Omi to recognize their speech too!',
+                            child: Text(TranslationService.translate( 'Create a new person and train Omi to recognize their speech too!'),
                                 style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
                           ),
                           SizedBox(height: 64),
@@ -292,15 +293,15 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                             ),
                                             onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                                          title: Text(index == 0 ? TranslationService.translate( 'Speech Profile') : TranslationService.translate( 'Sample $index')),
                                           onTap: () => _confirmDeleteSample(index, person, sample, provider),
                                           subtitle: FutureBuilder<Duration?>(
                                             future: AudioPlayer().setUrl(sample),
                                             builder: (context, snapshot) {
                                               if (snapshot.hasData) {
-                                                return Text('${snapshot.data!.inSeconds} seconds');
+                                                return Text('${snapshot.data!.inSeconds} '+TranslationService.translate('seconds'));
                                               } else {
-                                                return const Text('Loading duration...');
+                                                return  Text(TranslationService.translate( 'Loading duration...'));
                                               }
                                             },
                                           ),

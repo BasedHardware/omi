@@ -8,6 +8,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class ConnectedDevice extends StatefulWidget {
   // TODO: retrieve this from here instead of params
@@ -41,7 +42,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
-            title: Text(deviceConnected ? 'Connected Device' : 'Paired Device'),
+            title: Text(deviceConnected ? TranslationService.translate('Connected Device') : TranslationService.translate('Paired Device')),
             backgroundColor: Theme.of(context).colorScheme.primary,
           ),
           body: Column(
@@ -78,7 +79,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'by ${snapshot.data?.manufacturerName}',
+                          '${TranslationService.translate("by")} ${snapshot.data?.manufacturerName}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10.0,
@@ -113,7 +114,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                               ),
                               const SizedBox(width: 8.0),
                               Text(
-                                '${widget.batteryLevel.toString()}% Battery',
+                                '${widget.batteryLevel.toString()}% ${TranslationService.translate("Battery")}',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
@@ -154,7 +155,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     MixpanelManager().disconnectFriendClicked();
                   },
                   child: Text(
-                    widget.device == null ? "Unpair" : "Disconnect",
+                    widget.device == null ? TranslationService.translate("Unpair") : TranslationService.translate("Disconnect"),
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
@@ -164,9 +165,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 onPressed: () async {
                   await IntercomManager.instance.displayChargingArticle();
                 },
-                child: const Text(
-                  'Issues charging?',
-                  style: TextStyle(
+                child: Text(
+                  TranslationService.translate('Issues charging?'),
+                  style: const TextStyle(
                     color: Colors.white,
                     decoration: TextDecoration.underline,
                   ),

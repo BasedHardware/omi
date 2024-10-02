@@ -18,6 +18,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 import 'memory_detail_provider.dart';
 
@@ -74,13 +75,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
           showError: (error) {
             if (error == 'REPROCESS_FAILED') {
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error while processing memory. Please try again later.')));
+                   SnackBar(content: Text(TranslationService.translate( 'Error while processing memory. Please try again later.'))));
             }
           },
           showInfo: (info) {
             if (info == 'REPROCESS_SUCCESS') {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
+                 SnackBar(content: Text(TranslationService.translate( 'Memory processed! 🚀'), style: TextStyle(color: Colors.white))),
               );
             }
           },
@@ -120,8 +121,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                               context,
                               () => Navigator.pop(context),
                               () => Navigator.pop(context),
-                              'Options not available',
-                              'This memory failed when processing. Options are not available yet, please try again later.',
+                            TranslationService.translate( 'Options not available'),
+                            TranslationService.translate( 'This memory failed when processing. Options are not available yet, please try again later.'),
                               singleButton: true,
                               okButtonText: 'Ok',
                             ),
@@ -164,8 +165,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                           onPressed: () {
                             var provider = Provider.of<MemoryDetailProvider>(context, listen: false);
                             Clipboard.setData(ClipboardData(text: provider.memory.getTranscript(generate: true)));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Transcript copied to clipboard'),
+                            ScaffoldMessenger.of(context).showSnackBar( SnackBar(
+                              content: Text(TranslationService.translate( 'Transcript copied to clipboard')),
                               duration: Duration(seconds: 1),
                             ));
                             MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Transcript');
@@ -191,13 +192,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                         builder: (context, memorySource, child) {
                           return Tab(
                             text: memorySource == MemorySource.openglass
-                                ? 'Photos'
+                                ? TranslationService.translate( 'Photos')
                                 : memorySource == MemorySource.screenpipe
-                                    ? 'Raw Data'
-                                    : 'Transcript',
+                                    ? TranslationService.translate( 'Raw Data')
+                                    : TranslationService.translate( 'Transcript'),
                           );
                         }),
-                    const Tab(text: 'Summary')
+                     Tab(text: TranslationService.translate( 'Summary'))
                   ],
                   indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 ),
@@ -361,7 +362,7 @@ class EditSegmentWidget extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Row(
                       children: [
-                        Text('Who\'s segment is this?', style: Theme.of(context).textTheme.titleLarge),
+                        Text(TranslationService.translate( 'Who\'s segment is this?'), style: Theme.of(context).textTheme.titleLarge),
                         const Spacer(),
                         TextButton(
                           onPressed: () {
@@ -374,8 +375,8 @@ class EditSegmentWidget extends StatelessWidget {
                             // setState(() {});
                             Navigator.pop(context);
                           },
-                          child: const Text(
-                            'Un-assign',
+                          child:  Text(
+                            TranslationService.translate( 'Un-assign'),
                             style: TextStyle(
                               color: Colors.grey,
                               decoration: TextDecoration.underline,
@@ -398,9 +399,9 @@ class EditSegmentWidget extends StatelessWidget {
                                   Navigator.pop(context);
                                   routeToPage(context, const RecordingsStoragePermission());
                                 },
-                                'Can\'t be used for speech training',
-                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View',
+                              TranslationService.translate( 'Can\'t be used for speech training'),
+                            TranslationService.translate( 'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.'),
+                                okButtonText: TranslationService.translate( 'View'),
                               ),
                             );
                           },
@@ -410,7 +411,7 @@ class EditSegmentWidget extends StatelessWidget {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Text('Can\'t be used for speech training',
+                                Text(TranslationService.translate( 'Can\'t be used for speech training'),
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium!
@@ -426,7 +427,7 @@ class EditSegmentWidget extends StatelessWidget {
                       : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
-                    title: const Text('Yours'),
+                    title:  Text(TranslationService.translate( 'Yours')),
                     value: provider.memory.transcriptSegments[segmentIdx].isUser,
                     checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                     onChanged: (bool? value) async {
@@ -449,8 +450,8 @@ class EditSegmentWidget extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(result
-                                  ? 'Segment assigned, and speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ? TranslationService.translate( 'Segment assigned, and speech profile updated!')
+                                  : TranslationService.translate( 'Segment assigned, but speech profile failed to update. Please try again later.')),
                             ),
                           );
                         }
@@ -477,15 +478,15 @@ class EditSegmentWidget extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(result
-                                  ? 'Segment assigned, and ${person.name}\'s speech profile updated!'
-                                  : 'Segment assigned, but speech profile failed to update. Please try again later.'),
+                                  ? TranslationService.translate( 'Segment assigned, and ${person.name}\'s speech profile updated!')
+                                  : TranslationService.translate( 'Segment assigned, but speech profile failed to update. Please try again later.')),
                             ),
                           );
                         } catch (e) {}
                       },
                     ),
                   ListTile(
-                    title: const Text('Someone else\'s'),
+                    title:  Text(TranslationService.translate( 'Someone else\'s')),
                     trailing: const Padding(
                       padding: EdgeInsets.only(right: 8),
                       child: Icon(Icons.add),

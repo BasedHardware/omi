@@ -3,6 +3,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -24,7 +25,7 @@ class _CalendarPageState extends State<CalendarPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calendar'),
+        title:  Text(TranslationService.translate('Calendar')),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
       ),
@@ -46,12 +47,12 @@ class _CalendarPageState extends State<CalendarPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
+                     Row(
                       children: [
                         Icon(Icons.edit_calendar),
                         SizedBox(width: 16),
                         Text(
-                          'Enable integration',
+          TranslationService.translate('Enable integration'),
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -68,10 +69,10 @@ class _CalendarPageState extends State<CalendarPage> {
                   ],
                 ),
               ),
-              const Padding(
+               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                 child: Text(
-                  'Omi can automatically schedule events from your conversations, or ask for your confirmation first.',
+                  TranslationService.translate('Omi can automatically schedule events from your conversations, or ask for your confirmation first.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey,
@@ -88,15 +89,15 @@ class _CalendarPageState extends State<CalendarPage> {
                   : const SizedBox(),
               if (provider.calendarEnabled) ...[
                 RadioListTile(
-                  title: const Text('Automatic'),
-                  subtitle: const Text('Omi Will automatically scheduled your events.'),
+                  title:  Text(TranslationService.translate('Automatic')),
+                  subtitle:  Text(TranslationService.translate('Omi Will automatically scheduled your events.')),
                   value: 'auto',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,
                 ),
                 RadioListTile(
-                  title: const Text('Manual'),
-                  subtitle: const Text('Your events will be drafted, but you will have to confirm their creation.'),
+                  title:  Text(TranslationService.translate('Manual')),
+                  subtitle:  Text(TranslationService.translate('Your events will be drafted, but you will have to confirm their creation.')),
                   value: 'manual',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,
@@ -124,12 +125,12 @@ class _CalendarPageState extends State<CalendarPage> {
       Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: const Text('Select a calendar', style: TextStyle(fontSize: 18)),
+        child: Text(TranslationService.translate('Select a calendar'), style: TextStyle(fontSize: 18)),
       ),
-      const Padding(
+       Padding(
         padding: EdgeInsets.symmetric(horizontal: 32),
         child: Text(
-          'Which calendar Omi will schedule to?',
+          TranslationService.translate('Which calendar Omi will schedule to?'),
           style: TextStyle(color: Colors.grey),
         ),
       ),

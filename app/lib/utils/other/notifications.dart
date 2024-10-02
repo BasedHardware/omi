@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class NotifyOnKill {
   static const platform = MethodChannel('com.friend.ios/notifyOnKill');
@@ -16,8 +17,8 @@ class NotifyOnKill {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
+          'title': TranslationService.translate("Friend Device Disconnected"),
+          'description': TranslationService.translate("Please keep your app opened to continue using your Friend."),
         },
       );
     } catch (e) {

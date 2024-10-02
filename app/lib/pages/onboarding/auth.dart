@@ -6,6 +6,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -56,15 +57,15 @@ class _AuthComponentState extends State<AuthComponent> {
                 text: TextSpan(
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                   children: [
-                    const TextSpan(text: 'By Signing in, you agree to our\n'),
+                    TextSpan(text: TranslationService.translate('By Signing in, you agree to our\n')),
                     TextSpan(
-                      text: 'Terms of service',
+                      text: TranslationService.translate('Terms of service'),
                       style: const TextStyle(decoration: TextDecoration.underline),
                       recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
                     ),
-                    const TextSpan(text: ' and '),
+                     TextSpan(text: TranslationService.translate(' and ')),
                     TextSpan(
-                      text: 'Privacy Policy',
+                      text: TranslationService.translate('Privacy Policy'),
                       style: const TextStyle(decoration: TextDecoration.underline),
                       recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
                     ),

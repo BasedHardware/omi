@@ -7,6 +7,7 @@ import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 import 'delete_account.dart';
 
@@ -23,7 +24,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Profile'),
+        title:  Text(TranslationService.translate( 'Profile')),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: Padding(
@@ -37,20 +38,20 @@ class _ProfilePageState extends State<ProfilePage> {
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
               title: Text(
                   SharedPreferencesUtil().givenName.isEmpty
-                      ? 'About YOU'
-                      : 'About ${SharedPreferencesUtil().givenName.toUpperCase()}',
+                      ? TranslationService.translate( 'About YOU')
+                      : TranslationService.translate( 'About')+' '+SharedPreferencesUtil().givenName.toUpperCase(),
                   style: const TextStyle(color: Colors.white)),
-              subtitle: const Text('What Omi has learned about you 👀'),
+              subtitle:  Text(TranslationService.translate( 'What Omi has learned about you 👀')),
               trailing: const Icon(Icons.self_improvement, size: 20),
               onTap: () {
                 routeToPage(context, const FactsPage());
-                MixpanelManager().pageOpened('Profile Facts');
+                MixpanelManager().pageOpened(TranslationService.translate( 'Profile Facts'));
               },
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Speech Profile', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Teach Omi your voice'),
+              title:  Text(TranslationService.translate( 'Speech Profile'), style: TextStyle(color: Colors.white)),
+              subtitle:  Text(TranslationService.translate( 'Teach Omi your voice')),
               trailing: const Icon(Icons.multitrack_audio, size: 20),
               onTap: () {
                 routeToPage(context, const SpeechProfilePage());
@@ -60,10 +61,10 @@ class _ProfilePageState extends State<ProfilePage> {
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
               title: Text(
-                SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
+                SharedPreferencesUtil().givenName.isEmpty ? TranslationService.translate( 'Set Your Name') : TranslationService.translate( 'Change Your Name'),
                 style: const TextStyle(color: Colors.white),
               ),
-              subtitle: Text(SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName),
+              subtitle: Text(SharedPreferencesUtil().givenName.isEmpty ? TranslationService.translate( 'Not set') : SharedPreferencesUtil().givenName),
               trailing: const Icon(Icons.person, size: 20),
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
@@ -78,10 +79,10 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 24),
             // Divider(color: Colors.grey.shade300, height: 1),
             const SizedBox(height: 32),
-            const Align(
+             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'PREFERENCES',
+                TranslationService.translate( 'PREFERENCES'),
                 style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.start,
               ),
@@ -108,8 +109,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             routeToPage(context, const PrivacyInfoPage());
                             MixpanelManager().pageOpened('Share Analytics Data Details');
                           },
-                          child: const Text(
-                            'Help improve Friend by sharing anonymized analytics data',
+                          child:  Text(
+                            TranslationService.translate( 'Help improve Friend by sharing anonymized analytics data'),
                             style: TextStyle(
                               color: Colors.grey,
                               fontSize: 16,
@@ -150,28 +151,28 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 32),
             // Divider(color: Colors.grey.shade300, height: 1),
             const SizedBox(height: 24),
-            const Align(
+             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'OTHER',
+                TranslationService.translate( 'OTHER'),
                 style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.start,
               ),
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Your User ID', style: TextStyle(color: Colors.white)),
+              title:  Text(TranslationService.translate( 'Your User ID'), style: TextStyle(color: Colors.white)),
               subtitle: Text(SharedPreferencesUtil().uid),
               trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text(TranslationService.translate( 'User ID copied to clipboard'))));
               },
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              title: const Text('Delete Account', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Delete your account and all data'),
+              title:  Text(TranslationService.translate( 'Delete Account'), style: TextStyle(color: Colors.white)),
+              subtitle:  Text(TranslationService.translate( 'Delete your account and all data')),
               trailing: const Icon(
                 Icons.warning,
                 size: 20,

@@ -14,6 +14,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 import 'device_settings.dart';
 
@@ -57,7 +58,7 @@ class _SettingsPageState extends State<SettingsPage> {
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
             automaticallyImplyLeading: true,
-            title: const Text('Settings'),
+            title:  Text(TranslationService.translate( 'Settings')),
             centerTitle: false,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new),
@@ -75,26 +76,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 ...getRecordingSettings((String? newValue) {
                   if (newValue == null) return;
                   if (newValue == _selectedLanguage) return;
-                  if (newValue != 'en') {
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.of(context).pop(),
-                        () => {},
-                        'Language Limitations',
-                        'Speech profiles are only available for English language. We are working on adding support for other languages.',
-                        singleButton: true,
-                      ),
-                    );
-                  }
                   setState(() => _selectedLanguage = newValue);
                   SharedPreferencesUtil().recordingsLanguage = _selectedLanguage;
                   MixpanelManager().recordingLanguageChanged(_selectedLanguage);
                 }, _selectedLanguage),
                 getItemAddOn2(
-                  'Need Help? Chat with us',
+                  TranslationService.translate( 'Need Help? Chat with us'),
                   () async {
                     await Intercom.instance.displayMessenger();
                   },
@@ -102,13 +89,13 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'Profile',
+                  TranslationService.translate( 'Profile'),
                   () => routeToPage(context, const ProfilePage()),
                   icon: Icons.person,
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'Device Settings',
+                  TranslationService.translate( 'Device Settings'),
                   () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -120,7 +107,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 getItemAddOn2(
-                  'Guides & Tutorials',
+                  TranslationService.translate( 'Guides & Tutorials'),
                   () async {
                     await Intercom.instance.displayHelpCenter();
                   },
@@ -128,29 +115,29 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'Plugins',
+                  TranslationService.translate( 'Plugins'),
                   () => routeToPage(context, const PluginsPage()),
                   icon: Icons.integration_instructions,
                 ),
                 const SizedBox(height: 8),
                 getItemAddOn2(
-                  'Calendar Integration',
+                  TranslationService.translate( 'Calendar Integration'),
                   () => routeToPage(context, const CalendarPage()),
                   icon: Icons.calendar_month,
                 ),
                 const SizedBox(height: 20),
                 getItemAddOn2(
-                  'About Omi',
+                  TranslationService.translate( 'About Omi'),
                   () => routeToPage(context, const AboutOmiPage()),
                   icon: Icons.workspace_premium_sharp,
                 ),
                 const SizedBox(height: 8),
-                getItemAddOn2('Developer Mode', () async {
+                getItemAddOn2(TranslationService.translate( 'Developer Mode'), () async {
                   await routeToPage(context, const DeveloperSettingsPage());
                   setState(() {});
                 }, icon: Icons.code),
                 const SizedBox(height: 32),
-                getItemAddOn2('Sign Out', () async {
+                getItemAddOn2(TranslationService.translate( 'Sign Out'), () async {
                   await showDialog(
                     context: context,
                     builder: (ctx) {
@@ -160,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         signOut();
                         Navigator.of(context).pop();
                         routeToPage(context, const DeciderWidget(), replace: true);
-                      }, "Sign Out?", "Are you sure you want to sign out?");
+                      }, TranslationService.translate( "Sign Out?"), TranslationService.translate( "Are you sure you want to sign out?"));
                     },
                   );
                 }, icon: Icons.logout),

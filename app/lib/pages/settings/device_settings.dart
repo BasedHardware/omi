@@ -14,6 +14,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -46,7 +47,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: const Text('Device Settings'),
+          title:  Text(TranslationService.translate( 'Device Settings')),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
         body: Padding(
@@ -79,9 +80,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                               ),
                             ],
                           ),
-                          child: const Center(
+                          child:  Center(
                             child: Text(
-                              'Connect your device to\naccess these settings',
+                              TranslationService.translate( 'Connect your device to\naccess these settings'),
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -100,9 +101,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 onTap: () async {
                   await IntercomManager().displayChargingArticle();
                 },
-                child: const ListTile(
-                  title: Text('Issues charging the device?'),
-                  subtitle: Text('Tap to see the guide'),
+                child:  ListTile(
+                  title: Text(TranslationService.translate( 'Issues charging the device?')),
+                  subtitle: Text(TranslationService.translate( 'Tap to see the guide')),
                 ),
               ),
             ],
@@ -140,12 +141,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                         content: Text(
-                            'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                          TranslationService.translate( 'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔')),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
                     child: Text(
-                      provider.connectedDevice == null ? "Unpair" : "Disconnect",
+                      provider.connectedDevice == null ? TranslationService.translate( "Unpair") : TranslationService.translate( "Disconnect"),
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
@@ -160,11 +161,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
   return [
     ListTile(
-      title: const Text('Device Name'),
+      title:  Text(TranslationService.translate( 'Device Name')),
       subtitle: Text(device?.name ?? 'Friend'),
     ),
     ListTile(
-      title: const Text('Device ID'),
+      title:  Text(TranslationService.translate( 'Device ID')),
       subtitle: Text(device?.id ?? '12AB34CD:56EF78GH'),
     ),
     GestureDetector(
@@ -172,8 +173,8 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
         routeToPage(context, FirmwareUpdate(deviceInfo: deviceInfo!, device: device));
       },
       child: ListTile(
-        title: const Text('Update Latest Version'),
-        subtitle: Text('Current: ${deviceInfo?.firmwareRevision ?? '1.0.2'}'),
+        title: Text(TranslationService.translate( 'Update Latest Version')),
+        subtitle: Text('${TranslationService.translate( 'Current:')} ${deviceInfo?.firmwareRevision ?? '1.0.2'}'),
         trailing: const Icon(
           Icons.arrow_forward_ios,
           size: 16,
@@ -189,8 +190,8 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
             context,
             () => Navigator.of(context).pop(),
             () => {},
-            'V2 undetected',
-            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+          TranslationService.translate( 'V2 undetected'),
+          TranslationService.translate( 'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.'),
               singleButton: true,
             ),
           );
@@ -200,10 +201,10 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
             routeToPage(context, page);
       }
   },
-    child: ListTile(
-    title: const Text('SD Card Import'),
+    child: const ListTile(
+    title: Text('SD Card Import'),
     subtitle: Text(''),
-    trailing: const Icon(
+    trailing: Icon(
       Icons.arrow_forward_ios,
       size: 16,
     ),
@@ -211,15 +212,15 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
   ),
 
     ListTile(
-      title: const Text('Hardware Revision'),
+      title:  Text(TranslationService.translate( 'Hardware Revision')),
       subtitle: Text(deviceInfo?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
-      title: const Text('Model Number'),
+      title:  Text(TranslationService.translate( 'Model Number')),
       subtitle: Text(deviceInfo?.modelNumber ?? 'Friend'),
     ),
     ListTile(
-      title: const Text('Manufacturer Name'),
+      title:  Text(TranslationService.translate( 'Manufacturer Name')),
       subtitle: Text(deviceInfo?.manufacturerName ?? 'Based Hardware'),
     ),
   ];

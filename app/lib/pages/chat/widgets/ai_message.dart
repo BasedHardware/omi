@@ -18,6 +18,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -160,11 +161,11 @@ class InitialMessageWidget extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: TranslationService.translate( 'What did I do yesterday?'), sendMessage: sendMessage),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'What could I do differently today?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: TranslationService.translate( 'What could I do differently today?'), sendMessage: sendMessage),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'Can you teach me something new?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: TranslationService.translate( 'Can you teach me something new?'), sendMessage: sendMessage),
       ],
     );
   }
@@ -183,7 +184,7 @@ class DaySummaryWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', date)}',
+          '📅  ${TranslationService.translate("Day Summary")} ~ ${dateTimeFormat('MMM, dd', date)}',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w500,
@@ -401,9 +402,9 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please check your internet connection and try again'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(TranslationService.translate( 'Please check your internet connection and try again')),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -469,15 +470,15 @@ class CopyButton extends StatelessWidget {
         onTap: () async {
           await Clipboard.setData(ClipboardData(text: messageText));
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+             SnackBar(
               content: Text(
-                'Response copied to clipboard.',
-                style: TextStyle(
+                TranslationService.translate( 'Response copied to clipboard.'),
+                style: const TextStyle(
                   color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 12.0,
                 ),
               ),
-              duration: Duration(milliseconds: 2000),
+              duration: const Duration(milliseconds: 2000),
             ),
           );
         },
@@ -493,7 +494,7 @@ class CopyButton extends StatelessWidget {
               ),
             ),
             Text(
-              'Copy response',
+              TranslationService.translate( 'Copy response'),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

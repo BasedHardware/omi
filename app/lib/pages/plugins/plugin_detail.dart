@@ -10,6 +10,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -135,8 +136,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                       onPressed: () {
                         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                         if (!connectivityProvider.isConnected) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text("Can't enable plugin without internet connection."),
+                          ScaffoldMessenger.of(context).showSnackBar( SnackBar(
+                            content: Text(TranslationService.translate("Can't enable plugin without internet connection.")),
                           ));
                           return;
                         }
@@ -150,9 +151,9 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                                 Navigator.pop(context);
                                 _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
                               },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                              okButtonText: 'Confirm',
+                            TranslationService.translate('Authorize External Plugin'),
+                        TranslationService.translate('Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.'),
+                              okButtonText: TranslationService.translate('Confirm'),
                             ),
                           );
                         } else {
@@ -213,15 +214,15 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                       padding: EdgeInsets.only(right: 12.0),
                       child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
                     ),
-                    title: const Text(
-                      'Integration Instructions',
+                    title: Text(
+                      TranslationService.translate('Integration Instructions'),
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                     ),
                   )
                 : const SizedBox.shrink(),
             isIntegration && widget.plugin.externalIntegration?.setupCompletedUrl != null
                 ? CheckboxListTile(
-                    title: const Text('Setup Completed ?'),
+                    title: Text(TranslationService.translate('Setup Completed ?')),
                     contentPadding: const EdgeInsets.only(left: 16, right: 18),
                     value: setupCompleted,
                     checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -238,7 +239,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    widget.plugin.userReview?.score == null ? 'Rate it:' : 'Your rating:',
+                    widget.plugin.userReview?.score == null ? TranslationService.translate(TranslationService.translate('Rate it')+':') : TranslationService.translate('Your rating:'),
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                   ),
                 ),
@@ -275,8 +276,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         // TODO: refresh ratings on plugin
                         setState(() {});
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text("Can't rate plugin without internet connection."),
+                        ScaffoldMessenger.of(context).showSnackBar( SnackBar(
+                          content: Text(TranslationService.translate("Can't rate plugin without internet connection.")),
                         ));
                       }
                     },
@@ -289,8 +290,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0),
               child: RichText(
-                  text: TextSpan(children: [
-                const TextSpan(text: 'By: ', style: TextStyle(fontSize: 16)),
+                  text: TextSpan(children: [TextSpan(text: TranslationService.translate('By')+': ', style: TextStyle(fontSize: 16)),
                 TextSpan(
                   text: '${widget.plugin.author}.',
                   style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
@@ -312,8 +312,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                             color: Colors.grey,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text(
-                            'Memories',
+                          child: Text(
+                            TranslationService.translate('Memories'),
                             style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         )
@@ -367,8 +367,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the plugin',
-              'If this is an integration plugin, make sure the setup is completed.',
+              TranslationService.translate('Error activating the plugin'),
+                TranslationService.translate('If this is an integration plugin, make sure the setup is completed.'),
               singleButton: true,
             ),
           );

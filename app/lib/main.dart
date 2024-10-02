@@ -36,6 +36,7 @@ import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
+import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
@@ -74,6 +75,7 @@ Future<bool> _init() async {
   return isAuth;
 }
 
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (F.env == Environment.prod) {
@@ -81,7 +83,9 @@ void main() async {
   } else {
     Env.init(DevEnv());
   }
+
   FlutterForegroundTask.initCommunicationPort();
+
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
@@ -119,10 +123,13 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
+
   static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
@@ -131,6 +138,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+
+    initLanguageTranslation();
 
     super.initState();
   }
@@ -147,6 +156,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _deinit();
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +214,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              supportedLocales: const [Locale('en')],
+              //supportedLocales: const [Locale('en')],
               theme: ThemeData(
                   useMaterial3: false,
                   colorScheme: const ColorScheme.dark(

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -116,8 +117,8 @@ class ForegroundUtil {
       return FlutterForegroundTask.restartService();
     } else {
       return await FlutterForegroundTask.startService(
-        notificationTitle: 'Your Friend Device is connected.',
-        notificationText: 'Transcription service is running in the background.',
+        notificationTitle: TranslationService.translate( 'Your Friend Device is connected.'),
+        notificationText: TranslationService.translate( 'Transcription service is running in the background.'),
         callback: _startForegroundCallback,
       );
     }

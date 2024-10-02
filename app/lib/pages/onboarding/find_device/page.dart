@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
@@ -84,8 +85,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   width: double.infinity,
                   height: 45,
                   alignment: Alignment.center,
-                  child: const Text(
-                    'Contact Support?',
+                  child: Text(
+                    TranslationService.translate('Contact Support?'),
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 16,

@@ -8,6 +8,7 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
   final String? topMemoryId;
@@ -82,7 +83,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                 const SizedBox(width: 4),
                 const Text("🎙️"),
                 const SizedBox(width: 4),
-                const Expanded(child: Text("In progress")),
+                 Expanded(child: Text(TranslationService.translate( "In progress"))),
               ],
             ),
           ),
@@ -98,12 +99,12 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                 tabs: [
                   Tab(
                     text: memorySource == MemorySource.openglass
-                        ? 'Photos'
+                        ? TranslationService.translate( 'Photos')
                         : memorySource == MemorySource.screenpipe
-                            ? 'Raw Data'
-                            : 'Transcript',
+                            ? TranslationService.translate( 'Raw Data')
+                            : TranslationService.translate( 'Transcript'),
                   ),
-                  const Tab(text: 'Summary')
+                   Tab(text: TranslationService.translate( 'Summary'))
                 ],
                 indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
               ),
@@ -122,7 +123,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                   children: [
                                     const SizedBox(height: 80),
                                     Center(
-                                        child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                        child: Text(memorySource == MemorySource.friend ? TranslationService.translate( "No transcript") : TranslationService.translate( "Empty"))),
                                   ],
                                 )
                               : getTranscriptWidget(
@@ -144,8 +145,8 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                 padding: const EdgeInsets.symmetric(horizontal: 32.0),
                                 child: Text(
                                   provider.segments.isEmpty
-                                      ? "No summary"
-                                      : "We summarize conversations 2 minutes after they end\n\nWant to end it now?",
+                                      ? TranslationService.translate( "No summary")
+                                      : TranslationService.translate( "We summarize conversations 2 minutes after they end\n\nWant to end it now?"),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16),
                                 ),
@@ -182,9 +183,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                             builder: (context) {
                                               return StatefulBuilder(builder: (context, setState) {
                                                 return ConfirmationDialog(
-                                                  title: "Stop Recording?",
+                                                  title: TranslationService.translate( "Stop Recording?"),
                                                   description:
-                                                      "Are you sure you want to stop recording and summarise the conversation now?",
+                                                TranslationService.translate( "Are you sure you want to stop recording and summarise the conversation now?"),
                                                   checkboxValue: !showSummarizeConfirmation,
                                                   checkboxText: "Don't ask me again",
                                                   updateCheckboxValue: (value) {

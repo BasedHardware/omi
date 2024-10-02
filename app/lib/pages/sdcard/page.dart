@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/translation_service.dart';
 
 class SdCardCapturePage extends StatefulWidget {
   const SdCardCapturePage({super.key});
@@ -19,9 +20,9 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
           ? '0.0'
           : (provider.totalBytesReceived / provider.totalStorageFileBytes * 100).toStringAsFixed(2);
 
-      String displayText = 'about $sdCardSecondsRemaining seconds remaining\n$percentageRemaining% there';
+      String displayText = TranslationService.translate( 'about')+' $sdCardSecondsRemaining '+TranslationService.translate('seconds remaining')+'\n$percentageRemaining%';
       if (provider.sdCardDownloadDone) {
-        displayText = 'Done! Check back later for your memories.';
+        displayText = TranslationService.translate( 'Done! Check back later for your memories.');
       }
 
       return Scaffold(
@@ -60,20 +61,20 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
                 ),
                 onPressed: () {
                   setState(() {
-                    displayText = 'about $sdCardSecondsRemaining seconds remaining, about $percentageRemaining% there';
+                    displayText = TranslationService.translate( 'about')+' $sdCardSecondsRemaining '+TranslationService.translate('seconds remaining')+'\n$percentageRemaining%';
                   });
                   if (!provider.sdCardIsDownloading) {
                     provider.sendStorage(deviceProvider.connectedDevice!.id);
                     provider.setSdCardIsDownloading(true);
                   }
                 },
-                child: const Text('Click to starting Importing Memories'),
+                child: Text(TranslationService.translate( 'Click to starting Importing Memories')),
               ),
               const SizedBox(height: 20),
-              const Text(
-                  'This download may take a while. Exiting this while the download is in progress will halt all progress and some memories may be lost.'),
+               Text(
+                TranslationService.translate( 'This download may take a while. Exiting this while the download is in progress will halt all progress and some memories may be lost.')),
               const SizedBox(height: 20),
-              const Text('Please ensure that you have good internet connection.'),
+               Text(TranslationService.translate( 'Please ensure that you have good internet connection.')),
             ],
           ),
         ),
