@@ -8,11 +8,11 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/processing_memories.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -46,7 +46,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  BTDeviceStruct? _recordingDevice;
+  BtDevice? _recordingDevice;
   List<TranscriptSegment> segments = [];
   Geolocation? geolocation;
 
@@ -126,7 +126,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _updateRecordingDevice(BTDeviceStruct? device) {
+  void _updateRecordingDevice(BtDevice? device) {
     debugPrint('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
     notifyListeners();
@@ -194,7 +194,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Notify capturing
     if (capturingProcessingMemory != null) {
-      memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
+      //    memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
     }
 
     // Update processing memory
@@ -753,7 +753,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future streamDeviceRecording({
-    BTDeviceStruct? device,
+    BtDevice? device,
     bool restartBytesProcessing = true,
   }) async {
     debugPrint("streamDeviceRecording $device $restartBytesProcessing");

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -27,9 +27,9 @@ class SpeechProfileCardWidget extends StatelessWidget {
         return provider.hasSpeakerProfile
             ? const SizedBox()
             : Consumer<DeviceProvider>(builder: (context, device, child) {
-                if (device.deviceInfo == null ||
+                if (device.pairedDevice == null ||
                     !device.isConnected ||
-                    device.deviceInfo?.firmwareRevision == '1.0.2') {
+                    device.pairedDevice?.firmwareRevision == '1.0.2') {
                   return const SizedBox();
                 }
                 return Stack(
@@ -96,9 +96,9 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (provider.deviceInfo == null || !provider.isConnected)
+        return (provider.pairedDevice == null || !provider.isConnected)
             ? const SizedBox()
-            : (provider.deviceInfo?.firmwareRevision != '1.0.2')
+            : (provider.pairedDevice?.firmwareRevision != '1.0.2')
                 ? const SizedBox()
                 : Stack(
                     children: [
@@ -154,7 +154,7 @@ getTranscriptWidget(
   bool memoryCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
+  BtDevice? btDevice,
 ) {
   if (memoryCreating) {
     return const Padding(
@@ -174,7 +174,7 @@ getTranscriptWidget(
 getLiteTranscriptWidget(
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
-  BTDeviceStruct? btDevice,
+  BtDevice? btDevice,
 ) {
   return Column(
     children: [
@@ -189,7 +189,7 @@ getLiteTranscriptWidget(
 }
 
 getPhoneMicRecordingButton(VoidCallback recordingToggled, RecordingState state) {
-  if (SharedPreferencesUtil().btDeviceStruct.id.isNotEmpty) return const SizedBox.shrink();
+  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
   return Visibility(
     visible: true,
     child: Padding(

@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_mixin.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
-import 'package:friend_private/services/translation_service.dart';
 
 class FirmwareUpdate extends StatefulWidget {
-  final DeviceInfo deviceInfo;
-  final BTDeviceStruct? device;
+  final BtDevice? device;
 
-  const FirmwareUpdate({super.key, required this.deviceInfo, this.device});
+  const FirmwareUpdate({super.key, this.device});
 
   @override
   State<FirmwareUpdate> createState() => _FirmwareUpdateState();
@@ -29,8 +27,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         isLoading = true;
       });
       await getLatestVersion(deviceName: widget.device!.name);
-      var (a, b) = await shouldUpdateFirmware(
-          currentFirmware: widget.deviceInfo.firmwareRevision, deviceName: widget.device!.name);
+      var (a, b) =
+          await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
       if (mounted) {
         setState(() {
           shouldUpdate = b;
@@ -49,7 +47,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title:  Text(TranslationService.translate( 'Firmware Update')),
+          title: const Text('Firmware Update'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
         body: Center(
@@ -66,8 +64,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(isDownloading
-                                  ? TranslationService.translate( 'Downloading Firmware $downloadProgress%')
-                                  : TranslationService.translate( 'Installing Firmware $installProgress%')),
+                                  ? 'Downloading Firmware $downloadProgress%'
+                                  : 'Installing Firmware $installProgress%'),
                               const SizedBox(height: 10),
                               LinearProgressIndicator(
                                 value: (isInstalling ? installProgress : downloadProgress) / 100,
@@ -75,16 +73,16 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                 backgroundColor: Colors.grey[800],
                               ),
                               const SizedBox(height: 18),
-                               Row(
+                              const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.warning, color: Colors.yellow),
-                                  const SizedBox(width: 10),
+                                  Icon(Icons.warning, color: Colors.yellow),
+                                  SizedBox(width: 10),
                                   Text(
-                                    TranslationService.translate( 'Please do not close the app or turn off the device.\nIt could result in a corrupted device.'),
+                                    'Please do not close the app or turn off the device.\nIt could result in a corrupted device.',
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(color: Colors.white),
                                   ),
                                 ],
                               ),
@@ -95,10 +93,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                           ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                 Text(TranslationService.translate( 'Firmware Updated Successfully')),
+                                const Text('Firmware Updated Successfully'),
                                 const SizedBox(height: 10),
-                                 Text(
-                                  TranslationService.translate( 'Please restart the Friend device to complete the update'),
+                                const Text(
+                                  'Please restart the Friend device to complete the update',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 20),
@@ -120,8 +118,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                     onPressed: () async {
                                       routeToPage(context, const HomePageWrapper(), replace: true);
                                     },
-                                    child:  Text(
-                                      TranslationService.translate( "Finalize"),
+                                    child: const Text(
+                                      "Finalize",
                                       style: TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                   ),
@@ -132,12 +130,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                    '${TranslationService.translate( 'Current Version:')} ${widget.deviceInfo.firmwareRevision}',
+                                  'Current Version: ${widget.device!.firmwareRevision}',
                                   style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                    '${TranslationService.translate( 'Latest Version Available:')} ${latestFirmwareDetails['version']}',
+                                  'Latest Version Available: ${latestFirmwareDetails['version']}',
                                   style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                                 const SizedBox(height: 16),
@@ -147,9 +145,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                       await Intercom.instance
                                           .displayArticle('9918118-updating-the-firmware-on-your-friend-device');
                                     },
-                                    child:  Text(
-                                      TranslationService.translate( 'Open Update Guide'),
-                                      style: const TextStyle(
+                                    child: const Text(
+                                      'Open Update Guide',
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,
                                         decoration: TextDecoration.underline,
@@ -183,9 +181,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                             await downloadFirmware();
                                             await startDfu(widget.device!);
                                           },
-                                          child:  Text(
-                                            TranslationService.translate( "Download Firmware"),
-                                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                                          child: const Text(
+                                            "Download Firmware",
+                                            style: TextStyle(color: Colors.white, fontSize: 16),
                                           ),
                                         ),
                                       )

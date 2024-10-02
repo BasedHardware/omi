@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
 import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -14,7 +14,6 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
-import 'package:friend_private/services/translation_service.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -25,7 +24,7 @@ class DeviceSettings extends StatefulWidget {
 
 class _DeviceSettingsState extends State<DeviceSettings> {
   // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BTDeviceStruct btDevice) async {
+  Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);
@@ -36,7 +35,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DeviceProvider>().getDeviceInfo();
+      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
+        context.read<DeviceProvider>().getDeviceInfo();
+      }
     });
     super.initState();
   }
@@ -47,7 +48,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title:  Text(TranslationService.translate( 'Device Settings')),
+          title: const Text('Device Settings'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
         body: Padding(
@@ -57,7 +58,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.deviceInfo, provider.connectedDevice, context),
+                    children: deviceSettingsWidgets(provider.pairedDevice, context),
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -80,9 +81,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                               ),
                             ],
                           ),
-                          child:  Center(
+                          child: const Center(
                             child: Text(
-                              TranslationService.translate( 'Connect your device to\naccess these settings'),
+                              'Connect your device to\naccess these settings',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -101,9 +102,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 onTap: () async {
                   await IntercomManager().displayChargingArticle();
                 },
-                child:  ListTile(
-                  title: Text(TranslationService.translate( 'Issues charging the device?')),
-                  subtitle: Text(TranslationService.translate( 'Tap to see the guide')),
+                child: const ListTile(
+                  title: Text('Issues charging the device?'),
+                  subtitle: Text('Tap to see the guide'),
                 ),
               ),
             ],
@@ -128,7 +129,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   ),
                   child: TextButton(
                     onPressed: () async {
-                      await SharedPreferencesUtil().btDeviceStructSet(BTDeviceStruct(id: '', name: ''));
+                      await SharedPreferencesUtil()
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.friend, rssi: 0));
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleDisconnectDevice(provider.connectedDevice!);
@@ -141,12 +143,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                         content: Text(
-                          TranslationService.translate( 'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔')),
+                            'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
                     child: Text(
-                      provider.connectedDevice == null ? TranslationService.translate( "Unpair") : TranslationService.translate( "Disconnect"),
+                      provider.connectedDevice == null ? "Unpair" : "Disconnect",
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
@@ -158,23 +160,23 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 }
 
-List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   return [
     ListTile(
-      title:  Text(TranslationService.translate( 'Device Name')),
+      title: const Text('Device Name'),
       subtitle: Text(device?.name ?? 'Friend'),
     ),
     ListTile(
-      title:  Text(TranslationService.translate( 'Device ID')),
+      title: const Text('Device ID'),
       subtitle: Text(device?.id ?? '12AB34CD:56EF78GH'),
     ),
     GestureDetector(
       onTap: () {
-        routeToPage(context, FirmwareUpdate(deviceInfo: deviceInfo!, device: device));
+        routeToPage(context, FirmwareUpdate(device: device));
       },
       child: ListTile(
-        title: Text(TranslationService.translate( 'Update Latest Version')),
-        subtitle: Text('${TranslationService.translate( 'Current:')} ${deviceInfo?.firmwareRevision ?? '1.0.2'}'),
+        title: const Text('Update Latest Version'),
+        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
         trailing: const Icon(
           Icons.arrow_forward_ios,
           size: 16,
@@ -190,8 +192,8 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
             context,
             () => Navigator.of(context).pop(),
             () => {},
-          TranslationService.translate( 'V2 undetected'),
-          TranslationService.translate( 'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.'),
+            'V2 undetected',
+            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
               singleButton: true,
             ),
           );
@@ -201,10 +203,10 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
             routeToPage(context, page);
       }
   },
-    child: const ListTile(
-    title: Text('SD Card Import'),
+    child: ListTile(
+    title: const Text('SD Card Import'),
     subtitle: Text(''),
-    trailing: Icon(
+    trailing: const Icon(
       Icons.arrow_forward_ios,
       size: 16,
     ),
@@ -212,16 +214,16 @@ List<Widget> deviceSettingsWidgets(DeviceInfo? deviceInfo, BTDeviceStruct? devic
   ),
 
     ListTile(
-      title:  Text(TranslationService.translate( 'Hardware Revision')),
-      subtitle: Text(deviceInfo?.hardwareRevision ?? 'XIAO'),
+      title: const Text('Hardware Revision'),
+      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
     ),
     ListTile(
-      title:  Text(TranslationService.translate( 'Model Number')),
-      subtitle: Text(deviceInfo?.modelNumber ?? 'Friend'),
+      title: const Text('Model Number'),
+      subtitle: Text(device?.modelNumber ?? 'Friend'),
     ),
     ListTile(
-      title:  Text(TranslationService.translate( 'Manufacturer Name')),
-      subtitle: Text(deviceInfo?.manufacturerName ?? 'Based Hardware'),
+      title: const Text('Manufacturer Name'),
+      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
     ),
   ];
 }
