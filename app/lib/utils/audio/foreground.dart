@@ -101,6 +101,7 @@ class ForegroundUtil {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
+        // TODO: should we do this less frequently?
         interval: 30000,
         isOnceEvent: false,
         autoRunOnBoot: false,

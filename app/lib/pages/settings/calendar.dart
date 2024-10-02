@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 
@@ -87,16 +88,23 @@ class _CalendarPageState extends State<CalendarPage> {
                     )
                   : const SizedBox(),
               if (provider.calendarEnabled) ...[
+                // TODO: make this not clickable, so when it clicks opens rather a dialog explaining not available
                 RadioListTile(
                   title: const Text('Automatic'),
-                  subtitle: const Text('Omi Will automatically scheduled your events.'),
+                  subtitle: const Text('Your events will be created automatically.'),
                   value: 'auto',
-                  groupValue: SharedPreferencesUtil().calendarType,
-                  onChanged: provider.onCalendarTypeChanged,
+                  groupValue: null,
+                  onChanged: (value) {
+                    MixpanelManager().calendarModePressed('auto');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('This option is not available yet.')),
+                    );
+                  },
                 ),
+
                 RadioListTile(
                   title: const Text('Manual'),
-                  subtitle: const Text('Your events will be drafted, but you will have to confirm their creation.'),
+                  subtitle: const Text('Your memories will contain the discussed events, and you can decide to schedule them.'),
                   value: 'manual',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,
