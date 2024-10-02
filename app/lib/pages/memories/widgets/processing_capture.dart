@@ -111,8 +111,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     var recordingState = provider.recordingState;
     if (recordingState == RecordingState.record) {
       await provider.stopStreamRecording();
-      context.read<CaptureProvider>().cancelMemoryCreationTimer();
-      await context.read<CaptureProvider>().createMemory();
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       debugPrint('initialising, have to wait');
@@ -125,7 +123,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () async {
             Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
-            await provider.changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();
           },
