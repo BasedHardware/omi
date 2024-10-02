@@ -123,7 +123,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           () async {
             Navigator.pop(context);
             provider.updateRecordingState(RecordingState.initialising);
-            await provider.changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
             await provider.streamRecording();
             MixpanelManager().phoneMicRecordingStarted();
           },
