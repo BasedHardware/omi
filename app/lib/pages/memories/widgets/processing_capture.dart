@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
@@ -29,6 +30,27 @@ class MemoryCaptureWidget extends StatefulWidget {
 }
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
+  bool _isReady = false;
+  Timer? _readyStateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Warn: Should ensure every deps has started before set ready
+    _readyStateTimer = Timer(const Duration(seconds: 3), () {
+      setState(() {
+        _isReady = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _readyStateTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -64,6 +86,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           );
         });
         provider.setsdCardReady(false);
+      }
+
+      // Waiting ready state, 3s for now
+      if (!_isReady) {
+        return const SizedBox.shrink();
       }
 
       var header = _getMemoryHeader(context);
@@ -179,6 +206,28 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
+    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
     } else if (isHavingCapturingMemory &&
         (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
       left = Row(
@@ -210,23 +259,37 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     }
 
     // Right
+    Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
     if (deviceServiceStateOk && transcriptServiceStateOk) {
       stateText = "Listening";
+      statusIndicator = const RecordingStatusIndicator();
     } else if (!internetConnectionStateOk) {
       stateText = "No connection";
+      statusIndicator = const CircularProgressIndicator(
+        strokeWidth: 2.0,
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      );
+    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
+      stateText = "Reconnecting";
+      statusIndicator = const CircularProgressIndicator(
+        strokeWidth: 2.0,
+        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      );
     } else if (captureProvider.memoryCreating) {
       stateText = "Processing";
+      statusIndicator = const RecordingStatusIndicator();
     }
+
     Widget right = stateText.isNotEmpty
         ? Expanded(
             child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 16,
                 height: 16,
-                child: RecordingStatusIndicator(),
+                child: statusIndicator,
               ),
               const SizedBox(width: 8),
               Text(
