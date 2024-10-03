@@ -4,37 +4,40 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import utils.processing_memories as processing_memory_utils
 from models.processing_memory import DetailProcessingMemoryResponse, \
-    DetailProcessingMemoriesResponse, UpdateProcessingMemory
+    DetailProcessingMemoriesResponse, UpdateProcessingMemory, UpdateProcessingMemoryResponse, BasicProcessingMemory
 from database.redis_db import cache_user_geolocation
 from utils.other import endpoints as auth
-from models.shared import EmptyResponse
 
 router = APIRouter()
 
 # Deprecated
-@router.patch("/v1/processing-memories/{processing_memory_id}", response_model=EmptyResponse,
+@router.patch("/v1/processing-memories/{processing_memory_id}", response_model=UpdateProcessingMemoryResponse,
               tags=['processing_memories'])
 def update_processing_memory(
-    processing_memory_id: str,
-    updates_processing_memory: UpdateProcessingMemory,
-    uid: str = Depends(auth.get_current_user_uid)
+        processing_memory_id: str,
+        updates_processing_memory: UpdateProcessingMemory,
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """
-        @Deprecated
-        Update ProcessingMemory endpoint.
-        :param processing_memory_id:
-        :param updates_processing_memory: data to update processing_memory
-        :param uid: user id.
-        :return: The new processing_memory updated.
-        """
+    Update ProcessingMemory endpoint.
+    :param processing_memory_id:
+    :param updates_processing_memory: data to update processing_memory
+    :param uid: user id.
+    :return: The new processing_memory updated.
+    """
 
     print(f"Update processing memory {processing_memory_id}")
 
+    # Keep up-to-date with the new logic
     geolocation = updates_processing_memory.geolocation
     if geolocation:
         cache_user_geolocation(uid, geolocation.dict())
 
-    raise HTTPException(status_code=405, detail="Deprecated")
+    processing_memory = processing_memory_utils.get_processing_memory(uid, updates_processing_memory.id)
+    if not processing_memory:
+        raise HTTPException(status_code=404, detail="Processing memory not found")
+
+    return UpdateProcessingMemoryResponse(result=BasicProcessingMemory(**processing_memory.dict()))
 
 
 @router.get(

@@ -31,16 +31,9 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
   }
 
-  @Deprecated("Unused")
-  void _onReceiveTaskData(dynamic data) async {
-    print('_onReceiveTaskData $data');
-  }
-
   @override
   void initState() {
     WavBytesUtil.clearTempWavFiles();
-
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (context.read<DeviceProvider>().connectedDevice != null) {

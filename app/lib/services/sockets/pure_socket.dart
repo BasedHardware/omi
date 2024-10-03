@@ -218,14 +218,14 @@ class PureSocket implements IPureSocket {
     }
 
     // retry
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
-    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
-    if (_retries >= maxRetries) {
+    if (_retries > maxRetries) {
       debugPrint("[Socket] Reach max retries $maxRetries");
       _listener?.onMaxRetriesReach();
       return;
     }
+    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
+    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _reconnect();
   }
 
