@@ -109,11 +109,6 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setGeolocation(Geolocation? value) async {
-    if (value == null) return;
-    await updateUserGeolocation(geolocation: value);
-  }
-
   void setAudioBytesConnected(bool value) {
     audioBytesConnected = value;
     notifyListeners();
