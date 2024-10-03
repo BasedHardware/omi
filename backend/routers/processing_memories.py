@@ -33,7 +33,7 @@ def update_processing_memory(
     if geolocation:
         cache_user_geolocation(uid, geolocation.dict())
 
-    processing_memory = processing_memory_utils.get_processing_memory(uid, updates_processing_memory.id)
+    processing_memory = processing_memory_utils.get_processing_memory(uid, processing_memory_id)
     if not processing_memory:
         raise HTTPException(status_code=404, detail="Processing memory not found")
 
