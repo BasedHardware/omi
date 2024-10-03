@@ -151,7 +151,7 @@ async def _websocket_util(
         memories_db.update_memory_finished_at(uid, memory.id, datetime.now(timezone.utc))
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
-        threading.Thread(target=process_segments, args=(uid, segments)).start()
+        # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
     soniox_socket = None
     speechmatics_socket = None

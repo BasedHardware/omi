@@ -10,6 +10,12 @@ Future<ServerMemory?> processMemoryContent({
   Function(ServerMessage)? sendMessageToChat,
 }) async {
   debugPrint('processTranscriptContent');
+  for (var message in messages) {
+    String pluginId = message.pluginId ?? '';
+    NotificationService.instance
+        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
+    if (sendMessageToChat != null) sendMessageToChat(message);
+  }
   webhookOnMemoryCreatedCall(memory).then((s) {
     if (s.isNotEmpty) {
       NotificationService.instance.createNotification(
@@ -20,11 +26,5 @@ Future<ServerMemory?> processMemoryContent({
     }
   });
 
-  for (var message in messages) {
-    String pluginId = message.pluginId ?? '';
-    NotificationService.instance
-        .createNotification(title: '$pluginId says', body: message.text, notificationId: pluginId.hashCode);
-    if (sendMessageToChat != null) sendMessageToChat(message);
-  }
   return memory;
 }
