@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
@@ -124,6 +127,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
   bool? previousConnection;
 
+  void _onReceiveTaskData(dynamic data) async {
+    debugPrint('_onReceiveTaskData $data');
+    if (data is! Map<String, dynamic>) return;
+    if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
+    await updateUserGeolocation(
+      geolocation: Geolocation(
+        latitude: data['latitude'],
+        longitude: data['longitude'],
+        accuracy: data['accuracy'],
+        altitude: data['altitude'],
+        time: DateTime.parse(data['time']).toUtc(),
+      ),
+    );
+  }
+
   @override
   void initState() {
     SharedPreferencesUtil().pageToShowFromNotification = 0; // TODO: whatisit
@@ -160,6 +178,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       SharedPreferencesUtil().subPageToShowFromNotification = '';
     }
     super.initState();
+
+    // After init
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   void _listenToMessagesFromNotification() {
