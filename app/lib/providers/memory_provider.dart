@@ -18,8 +18,10 @@ class MemoryProvider extends ChangeNotifier {
 
   String previousQuery = '';
 
-  List<ServerProcessingMemory> processingMemories = [];
   Timer? _processingMemoryWatchTimer;
+
+  ServerMemory? inProgressMemory;
+  ServerMemory? processingMemory;
 
   void onMemoryTap(int idx) {
     if (idx < 0 || idx > memories.length - 1) {
@@ -49,16 +51,16 @@ class MemoryProvider extends ChangeNotifier {
 
   Future getInitialMemories() async {
     memories = await getMemoriesFromServer();
+
+    inProgressMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.in_progress);
+    processingMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.processing);
+
     if (memories.isEmpty) {
       memories = SharedPreferencesUtil().cachedMemories;
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
     _groupMemoriesByDateWithoutNotify();
-
-    // Processing memories
-    var pms = await getProcessingMemories();
-    await _setProcessingMemories(pms);
 
     notifyListeners();
   }
@@ -109,130 +111,6 @@ class MemoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future _setProcessingMemories(List<ServerProcessingMemory> pms) async {
-    processingMemories = pms;
-    notifyListeners();
-
-    if (processingMemories.isEmpty) {
-      _processingMemoryWatchTimer?.cancel();
-      return;
-    }
-
-    _trackProcessingMemories();
-    return;
-  }
-
-  Future onNewCapturingMemory(ServerProcessingMemory processingMemory) async {
-    if (processingMemory.status != ServerProcessingMemoryStatus.capturing) {
-      debugPrint("Processing memory status is not capturing");
-      return;
-    }
-
-    // Remove the memory from the main
-    if (processingMemory.memoryId != null) {
-      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
-      if (idx >= 0) {
-        memories.removeAt(idx);
-        filterGroupedMemories('');
-      }
-    }
-
-    // Upsert new processing memory
-    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
-      _updateProcessingMemories([processingMemory]);
-      return;
-    }
-    processingMemories.insert(0, processingMemory);
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
-    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
-      debugPrint("Processing memory status is not processing");
-      return;
-    }
-
-    // Remove the memory from the main
-    if (processingMemory.memoryId != null) {
-      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
-      if (idx >= 0) {
-        memories.removeAt(idx);
-        filterGroupedMemories('');
-      }
-    }
-
-    // Upsert new processing memory
-    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
-      _updateProcessingMemories([processingMemory]);
-      return;
-    }
-    processingMemories.insert(0, processingMemory);
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  Future onProcessingMemoryDone(ServerProcessingMemory pm) async {
-    // Update processing memories
-    _updateProcessingMemories([pm]);
-
-    // Upsert new memory
-    if (pm.memoryId == null) {
-      debugPrint("Processing Memory Id is not found ${pm.id}");
-      return;
-    }
-    var memory = await getMemoryById(pm.memoryId!);
-    if (memory == null) {
-      debugPrint("Memory is not found ${pm.memoryId}");
-      return;
-    }
-
-    // Local labling
-    memory.isNew = true;
-
-    int idx = memories.indexWhere((m) => m.id == memory.id);
-    if (idx < 0) {
-      memories.insert(0, memory);
-    } else {
-      memories[idx] = memory;
-    }
-
-    filterGroupedMemories('');
-  }
-
-  Future _updateProcessingMemories(List<ServerProcessingMemory> pms) async {
-    for (var i = 0; i < processingMemories.length; i++) {
-      var pm = pms.firstWhereOrNull((m) => m.id == processingMemories[i].id);
-      if (pm != null) {
-        processingMemories[i] = pm;
-      }
-    }
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  void _trackProcessingMemories() {
-    if (_processingMemoryWatchTimer?.isActive ?? false) {
-      return;
-    }
-    _processingMemoryWatchTimer?.cancel();
-    _processingMemoryWatchTimer = Timer(const Duration(seconds: 7), () async {
-      var filterIds = processingMemories
-          .where((m) =>
-              m.status == ServerProcessingMemoryStatus.processing || m.status == ServerProcessingMemoryStatus.capturing)
-          .map((m) => m.id)
-          .toList();
-      if (filterIds.isEmpty) {
-        return;
-      }
-
-      var pms = await getProcessingMemories(filterIds: filterIds);
-      for (var i = 0; i < pms.length; i++) {
-        if (pms[i].status == ServerProcessingMemoryStatus.done) {
-          onProcessingMemoryDone(pms[i]);
-        }
-      }
-      _updateProcessingMemories(pms);
-    });
-  }
-
   Future getMemoriesFromServer() async {
     setLoadingMemories(true);
     var mem = await getMemories();
@@ -265,6 +143,8 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(false);
     notifyListeners();
   }
+
+  // Future<Memory> getInProgressMemory(){}
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);

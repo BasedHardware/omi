@@ -7,7 +7,7 @@ import 'package:friend_private/providers/memory_provider.dart';
 import 'package:provider/provider.dart';
 
 class ProcessingMemoryPage extends StatefulWidget {
-  final ServerProcessingMemory memory;
+  final ServerMemory memory;
 
   const ProcessingMemoryPage({
     super.key,
@@ -42,11 +42,11 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoryProvider>(builder: (context, provider, child) {
-      // Track memory
-      if (widget.memory.status == ServerProcessingMemoryStatus.done &&
-          provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
-        _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
-      }
+      // Track memory // FIXME
+      // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
+      //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
+      //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
+      // }
 
       // Memory source
       var memorySource = MemorySource.friend;
