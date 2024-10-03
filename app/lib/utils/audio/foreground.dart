@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:geolocator/geolocator.dart';
 
 @pragma('vm:entry-point')
@@ -17,6 +15,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onStart(DateTime timestamp) async {
     debugPrint("Starting foreground task");
+    _locationInBackground();
   }
 
   Future _locationInBackground() async {
@@ -25,15 +24,14 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
         var locationData = await Geolocator.getCurrentPosition();
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
-          await updateUserGeolocation(
-            geolocation: Geolocation(
-              latitude: locationData.latitude,
-              longitude: locationData.longitude,
-              accuracy: locationData.accuracy,
-              altitude: locationData.altitude,
-              time: locationData.timestamp.toUtc(),
-            ),
-          );
+          Object loc = {
+            "latitude": locationData.latitude,
+            "longitude": locationData.longitude,
+            'altitude': locationData.altitude,
+            'accuracy': locationData.accuracy,
+            'time': locationData.timestamp.toUtc().toIso8601String(),
+          };
+          FlutterForegroundTask.sendDataToMain(loc);
           _locationUpdatedAt = DateTime.now();
         }
       } else {
@@ -110,8 +108,9 @@ class ForegroundUtil {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
-        // TODO: should we do this less frequently?
-        interval: 30000,
+        // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
+        // such as 1m + self-validation in each service.
+        interval: 60 * 1000 * 5,
         isOnceEvent: false,
         autoRunOnBoot: false,
         allowWakeLock: true,
