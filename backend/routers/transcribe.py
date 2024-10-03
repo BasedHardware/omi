@@ -1,6 +1,6 @@
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 import opuslib
@@ -11,13 +11,10 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
-import database.processing_memories as processing_memories_db
-from models.memory import Memory, TranscriptSegment
-from models.message_event import NewMemoryCreated, MessageEvent, NewProcessingMemoryCreated, \
-    ProcessingMemoryStatusChanged
-from models.processing_memory import ProcessingMemory, ProcessingMemoryStatus
+from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
+from models.message_event import NewMemoryCreated, MessageEvent
 from utils.memories.process_memory import process_memory
-from utils.processing_memories import create_memory_by_processing_memory
+from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 
 router = APIRouter()
@@ -86,103 +83,97 @@ async def _websocket_util(
     w_vad.set_mode(1)
     flush_new_memory_lock = threading.Lock()
 
-    # 2m threshold + 30s for speech profile initialization + 30s for connection establishment
-    min_seconds_limit = 180
-    min_words_limit = 1
-
-    # Processing memory
-    memory_watching = new_memory_watch
-    processing_memory: ProcessingMemory = None
-    processing_memory_synced: int = 0
-
     # Stream transcript
-    memory_stream_id = 1
-    memory_transcript_segements: List[TranscriptSegment] = []
-    speech_profile_stream_id = 2
     loop = asyncio.get_event_loop()
 
     # Soft timeout, should < MODAL_TIME_OUT - 3m
     timeout_seconds = 420  # 7m
     started_at = time.time()
 
-    def stream_transcript(segments, stream_id):
+    def _get_in_progress_memory(segments: List[dict] = []):
+        existing = memories_db.get_in_progress_memory(uid)
+        if existing:
+            print('_get_in_progress_memory existing', existing)
+            memory = Memory(**existing)
+            memory.transcript_segments = TranscriptSegment.combine_segments(
+                memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
+            )
+            return memory
+        started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
+        memory = Memory(
+            id=str(uuid.uuid4()),
+            uid=uid,
+            structured=Structured(),
+            language=language,
+            created_at=started_at,
+            started_at=started_at,
+            finished_at=datetime.now(timezone.utc),
+            transcript_segments=[TranscriptSegment(**segment) for segment in segments],
+            status=MemoryStatus.in_progress,
+        )
+        print('_get_in_progress_memory new', memory)
+        memories_db.upsert_memory(uid, memory_data=memory.dict())
+        return memory
+
+    async def memory_creation_timer():
+        try:
+            await asyncio.sleep(120)
+            await _create_memory()
+        except asyncio.CancelledError:
+            pass
+
+    memory_creation_task = None
+    segment_start = None
+
+    def stream_transcript(segments, _):
         nonlocal websocket
-        nonlocal processing_memory
-        nonlocal processing_memory_synced
-        nonlocal memory_transcript_segements
         nonlocal segment_start
-        nonlocal segment_end
+        nonlocal memory_creation_task
 
         if not segments or len(segments) == 0:
             return
 
         # Align the start, end segment
         if not segment_start:
-            start = segments[0]["start"]
-            segment_start = start
+            segment_start = segments[0]["start"]
 
-        # end
-        end = segments[-1]["end"]
-        if not segment_end or segment_end < end:
-            segment_end = end
+        if memory_creation_task is not None:
+            memory_creation_task.cancel()
+        memory_creation_task = asyncio.create_task(memory_creation_timer())
 
         for i, segment in enumerate(segments):
             segment["start"] -= segment_start
             segment["end"] -= segment_start
             segments[i] = segment
+        # TODO: what when transcript is large!
+        memory = _get_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
+        memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
+        memories_db.update_memory_finished_at(uid, memory.id, datetime.now(timezone.utc))
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         threading.Thread(target=process_segments, args=(uid, segments)).start()
-
-        # memory segments
-        # Warn: need double check should we still seperate the memory and speech profile stream or not?
-        if (stream_id == memory_stream_id or stream_id == speech_profile_stream_id) and new_memory_watch:
-            delta_seconds = 0
-            if processing_memory and processing_memory.timer_start > 0:
-                delta_seconds = timer_start - processing_memory.timer_start
-            memory_transcript_segements = TranscriptSegment.combine_segments(
-                memory_transcript_segements, list(map(lambda m: TranscriptSegment(**m), segments)), delta_seconds
-            )
-
-            # Sync the processing transcript
-            if processing_memory:
-                processing_memory_synced = len(memory_transcript_segements)
-                processing_memory.transcript_segments = memory_transcript_segements
-                processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
-
-                processing_memories_db.update_processing_memory_segments(
-                    uid, processing_memory.id,
-                    list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
-                    processing_memory.capturing_to,
-                )
 
     soniox_socket = None
     speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
 
-    websocket_active = True
-    websocket_close_code = 1001  # Going Away, don't close with good from backend
-    timer_start = None
-    segment_start = None
-    segment_end = None
-    # audio_buffer = None
-    duration = 0
+    speech_profile_duration = 0
     try:
-        file_path, duration = None, 0
+        file_path, speech_profile_duration = None, 0
         # TODO: how bee does for recognizing other languages speech profile
         if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
             file_path = get_profile_audio_if_exists(uid)
-            duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+            speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
         # DEEPGRAM
         if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, memory_stream_id, language, sample_rate, channels, preseconds=duration
+                stream_transcript, 1, language, sample_rate, channels, preseconds=speech_profile_duration
             )
-            if duration:
+            if speech_profile_duration:
                 deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, speech_profile_stream_id, language, sample_rate, channels
+                    stream_transcript, 2, language, sample_rate, channels
                 )
 
                 async def deepgram_socket_send(data):
@@ -192,17 +183,17 @@ async def _websocket_util(
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, speech_profile_stream_id, sample_rate, language,
+                stream_transcript, 1, sample_rate, language,
                 uid if include_speech_profile else None
             )
         # SPEECHMATICS
         elif stt_service == STTService.speechmatics:
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, speech_profile_stream_id, sample_rate, language, preseconds=duration
+                stream_transcript, 1, sample_rate, language, preseconds=speech_profile_duration
             )
-            if duration:
+            if speech_profile_duration:
                 await send_initial_file_path(file_path, speechmatics_socket.send)
-                print('speech_profile speechmatics duration', duration)
+                print('speech_profile speechmatics duration', speech_profile_duration)
 
     except Exception as e:
         print(f"Initial processing error: {e}")
@@ -210,16 +201,15 @@ async def _websocket_util(
         await websocket.close(code=websocket_close_code)
         return
 
-    window_size_samples = 256 if sample_rate == 8000 else 512
-
     decoder = opuslib.Decoder(sample_rate, channels)
+    websocket_active = True
+    websocket_close_code = 1001  # Going Away, don't close with good from backend
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
-        nonlocal timer_start
-        timer_start = time.time()
 
+        timer_start = time.time()
         # f = open("audio.raw", "ab")
         try:
             while websocket_active:
@@ -233,7 +223,7 @@ async def _websocket_util(
                     vad_sample_size = 320
                     vad_sample = data[:vad_sample_size]
                     if len(vad_sample) < vad_sample_size:
-                        vad_sample = vad_sample + bytes([0x00]*(vad_sample_size-len(vad_sample)))
+                        vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
                     has_speech = w_vad.is_speech(vad_sample, sample_rate)
                     if not has_speech:
                         continue
@@ -252,7 +242,7 @@ async def _websocket_util(
 
                 if deepgram_socket is not None:
                     elapsed_seconds = time.time() - timer_start
-                    if elapsed_seconds > duration or not dg_socket2:
+                    if elapsed_seconds > speech_profile_duration or not dg_socket2:
                         dg_socket1.send(data)
                         if dg_socket2:
                             print('Killing socket2')
@@ -317,245 +307,33 @@ async def _websocket_util(
         return False
 
     # Create proccesing memory
-    async def _prepare_processing_memory(should_new: bool = False):
-        nonlocal processing_memory
-        nonlocal memory_transcript_segements
-        nonlocal processing_memory_synced
-
-        # Check the last processing memory
-        last_processing_memory_data = processing_memories_db.get_last(uid)
-        if last_processing_memory_data:
-            last_processing_memory = ProcessingMemory(**last_processing_memory_data)
-            if last_processing_memory.capturing_to and last_processing_memory.capturing_to.timestamp() > time.time():
-                processing_memory = last_processing_memory
-
-        # Or create new
-        if not processing_memory and should_new:
-            processing_memory = ProcessingMemory(
-                id=str(uuid.uuid4()),
-                created_at=datetime.now(timezone.utc),
-                timer_start=timer_start,
-                timer_segment_start=timer_start + segment_start,
-                language=language,
-            )
-
-        if not processing_memory:
-            return
-
-        # Track session changes
-        processing_memory.session_id = session_id
-        processing_memory.session_ids.append(session_id)
-
-        # Track timer start
-        processing_memory.timer_starts.append(timer_start)
-
-        # Transcript with delta
-        memory_transcript_segements = TranscriptSegment.combine_segments(
-            processing_memory.transcript_segments, memory_transcript_segements,
-            timer_start - processing_memory.timer_start
-        )
-        processing_memory_synced = len(memory_transcript_segements)
-        processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
-
-        # Status, capturing to
-        processing_memory.status = ProcessingMemoryStatus.Capturing
-        processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
-
-        processing_memories_db.upsert_processing_memory(uid, processing_memory.dict())
-
-        # Message: New processing memory created
-        ok = await _send_message_event(NewProcessingMemoryCreated(
-            event_type="new_processing_memory_created",
-            processing_memory_id=processing_memory.id,
-            memory_id=processing_memory.memory_id,
-        ),
-        )
-        if not ok:
-            print("Can not send message event new_processing_memory_created")
 
     # Create memory
     async def _create_memory():
-        print("create memory")
-        nonlocal processing_memory
-        nonlocal processing_memory_synced
-        nonlocal memory_transcript_segements
+        print("_create_memory")
 
-        if not processing_memory:
-            await _prepare_processing_memory(should_new=True)
-        else:
-            # or ensure synced processing transcript
-            processing_memory_data = processing_memories_db.get_processing_memory_by_id(uid, processing_memory.id)
-            if not processing_memory_data:
-                print("processing memory is not found")
-                return
-            processing_memory = ProcessingMemory(**processing_memory_data)
+        memory = _get_in_progress_memory()
+        if not memory or not memory.transcript_segments:
+            raise Exception('FAILED')
 
-            processing_memory_synced = len(memory_transcript_segements)
-            processing_memory.transcript_segments = memory_transcript_segements[:processing_memory_synced]
-            processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
+        await _send_message_event(MessageEvent(event_type="memory_processing_started"))
 
-            processing_memories_db.update_processing_memory_segments(
-                uid, processing_memory.id,
-                list(map(lambda m: m.dict(), processing_memory.transcript_segments)),
-                processing_memory.capturing_to,
+        memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
+        memory = process_memory(uid, language, memory)
+        memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
+        messages = trigger_external_integrations(uid, memory)
+
+        await _send_message_event(MessageEvent(event_type="memory_processing_completed"))
+        ok = await _send_message_event(
+            NewMemoryCreated(
+                event_type="memory_created",
+                memory_id=memory.id,
+                memory=memory,
+                messages=messages,
             )
-
-        # Update processing memory status
-        processing_memory.status = ProcessingMemoryStatus.Processing
-        processing_memories_db.update_processing_memory_status(
-            uid, processing_memory.id,
-            processing_memory.status,
-        )
-        # Message: processing memory status changed
-        ok = await _send_message_event(ProcessingMemoryStatusChanged(
-            event_type="processing_memory_status_changed",
-            processing_memory_id=processing_memory.id,
-            processing_memory_status=processing_memory.status),
         )
         if not ok:
-            print("Can not send message event processing_memory_status_changed")
-
-        # Message: creating
-        ok = await _send_message_event(MessageEvent(event_type="new_memory_creating"))
-        if not ok:
-            print("Can not send message event new_memory_creating")
-
-        # Memory
-        messages = []
-        memory = None
-        if processing_memory.memory_id:
-            memory_data = memories_db.get_memory(uid, processing_memory.memory_id)
-            if memory_data is None:
-                print(f"Memory is not found. Uid: {uid}. Memory: {processing_memory.memory_id}")
-            else:
-                memory = Memory(**memory_data)
-
-        # Not existed memory then create new one
-        if not memory:
-            new_memory, new_messages, updated_processing_memory = await create_memory_by_processing_memory(
-                uid, processing_memory.id
-            )
-            if not new_memory:
-                print("Can not create new memory")
-
-                # Message: failed
-                ok = await _send_message_event(MessageEvent(event_type="new_memory_create_failed"))
-                if not ok:
-                    print("Can not send message event new_memory_create_failed")
-                return
-
-            memory = new_memory
-            messages = new_messages
-            processing_memory = updated_processing_memory
-        else:
-            # Update transcripts
-            memory.transcript_segments = processing_memory.transcript_segments
-            memories_db.update_memory_segments(
-                uid, memory.id, [segment.dict() for segment in memory.transcript_segments]
-            )
-
-            # Update finished at
-            memory.finished_at = datetime.fromtimestamp(
-                memory.started_at.timestamp() + processing_memory.transcript_segments[-1].end, timezone.utc
-            )
-            memories_db.update_memory_finished_at(uid, memory.id, memory.finished_at)
-
-            # Process
-            memory = process_memory(uid, memory.language, memory, force_process=True)
-
-        # Update processing memory status
-        processing_memory.status = ProcessingMemoryStatus.Done
-        processing_memories_db.update_processing_memory_status(
-            uid, processing_memory.id,
-            processing_memory.status,
-        )
-        # Message: processing memory status changed
-        ok = await _send_message_event(ProcessingMemoryStatusChanged(
-            event_type="processing_memory_status_changed",
-            processing_memory_id=processing_memory.id,
-            memory_id=processing_memory.memory_id,
-            processing_memory_status=processing_memory.status),
-        )
-        if not ok:
-            print("Can not send message event processing_memory_status_changed")
-
-        # Message: completed
-        msg = NewMemoryCreated(
-            event_type="new_memory_created", processing_memory_id=processing_memory.id, memory_id=memory.id,
-            memory=memory, messages=messages,
-        )
-        ok = await _send_message_event(msg)
-        if not ok:
-            print("Can not send message event new_memory_created")
-
-        return memory
-
-    # New memory watch
-    async def memory_transcript_segements_watch():
-        nonlocal memory_watching
-        nonlocal websocket_active
-        while memory_watching and websocket_active:
-            await asyncio.sleep(5)
-            await _flush_new_memory_with_lock()
-
-    async def _flush_new_memory_with_lock(time_validate: bool = True):
-        with flush_new_memory_lock:
-            if not processing_memory:
-                await _prepare_processing_memory()
-            return await _flush_new_memory(time_validate=time_validate)
-
-    async def _flush_new_memory(time_validate: bool = True):
-        nonlocal memory_transcript_segements
-        nonlocal timer_start
-        nonlocal segment_start
-        nonlocal segment_end
-        nonlocal processing_memory
-        nonlocal processing_memory_synced
-
-        if not timer_start:
-            print("not timer start")
-            return
-
-        # Validate last segment
-        if not segment_end:
-            return
-
-        # First chunk, create processing memory
-        should_create_processing_memory = len(memory_transcript_segements) > 0
-        if not processing_memory and should_create_processing_memory:
-            await _prepare_processing_memory(should_new=True)
-
-        # Validate transcript
-        # Longer 120s
-        now = time.time()
-        should_create_memory_time = True
-        if time_validate:
-            should_create_memory_time = timer_start + segment_end + min_seconds_limit < now
-
-        # 1 words at least
-        should_create_memory_time_words = min_words_limit == 0
-        if min_words_limit > 0 and should_create_memory_time:
-            wc = 0
-            for segment in memory_transcript_segements:
-                wc = wc + len(segment.text.split(" "))
-                if wc >= min_words_limit:
-                    should_create_memory_time_words = True
-                    break
-
-        should_create_memory = should_create_memory_time and should_create_memory_time_words
-        print(
-            f"Should create memory {should_create_memory} - {timer_start} {segment_end} {min_seconds_limit} {now} - {time_validate}, session {session_id}")
-        if should_create_memory:
-            memory = await _create_memory()
-            if not memory:
-                print(
-                    f"Can not create new memory uid: ${uid}, processing memory: {processing_memory.id if processing_memory else 0}")
-                return
-
-            # Clean
-            memory_transcript_segements = memory_transcript_segements[processing_memory_synced:]
-            processing_memory_synced = 0
-            processing_memory = None
+            print("Failed to send memory created message")
 
     try:
         receive_task = asyncio.create_task(
@@ -563,11 +341,11 @@ async def _websocket_util(
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
         # Run task
-        if new_memory_watch:
-            new_memory_task = asyncio.create_task(memory_transcript_segements_watch())
-            await asyncio.gather(receive_task, new_memory_task, heartbeat_task)
-        else:
-            await asyncio.gather(receive_task, heartbeat_task)
+        # if new_memory_watch:
+        #     # new_memory_task = asyncio.create_task(memory_transcript_segements_watch())
+        #     await asyncio.gather(receive_task, new_memory_task, heartbeat_task)
+        # else:
+        await asyncio.gather(receive_task, heartbeat_task)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
@@ -576,8 +354,8 @@ async def _websocket_util(
         memory_watching = False
 
         # Flush new memory watch
-        if new_memory_watch:
-            await _flush_new_memory_with_lock(time_validate=False)
+        # if new_memory_watch:
+        #     await _flush_new_memory_with_lock(time_validate=False)
 
         # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
