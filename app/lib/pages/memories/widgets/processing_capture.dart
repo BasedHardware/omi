@@ -18,7 +18,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
-  final ServerProcessingMemory? memory;
+  final ServerMemory? memory;
 
   const MemoryCaptureWidget({
     super.key,
@@ -169,7 +169,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    bool isHavingCapturingMemory = provider.capturingProcessingMemory != null;
+    // bool isHavingCapturingMemory = provider.capturingProcessingMemory != null;
+    bool isHavingCapturingMemory = false; // FIXME
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
@@ -385,11 +386,8 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
   );
 }
 
-Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
-  return MemoryCaptureWidget(memory: memory);
-}
-
-Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
+Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
+  // FIXME, this has to be a single one always, and also a memory obj
   if (memories.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
@@ -417,7 +415,7 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
 // PROCESSING MEMORY
 
 class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerProcessingMemory memory;
+  final ServerMemory memory;
 
   const ProcessingMemoryWidget({
     super.key,
