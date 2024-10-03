@@ -14,6 +14,10 @@ from models.transcript_segment import TranscriptSegment
 from ._client import db
 
 
+# *****************************
+# ********** CRUD *************
+# *****************************
+
 def upsert_memory(uid: str, memory_data: dict):
     if 'audio_base64_url' in memory_data:
         del memory_data['audio_base64_url']
@@ -56,7 +60,6 @@ def delete_memory(uid, memory_id):
 
 
 def filter_memories_by_date(uid, start_date, end_date):
-    # TODO: check utc comparison or not?
     user_ref = db.collection('users').document(uid)
     query = (
         user_ref.collection('memories')
@@ -67,14 +70,6 @@ def filter_memories_by_date(uid, start_date, end_date):
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     return [doc.to_dict() for doc in query.stream()]
-
-
-# data = [
-#     datetime(2024, 8, 18, 0, 0, ),  # tzinfo=TzInfo(UTC)
-#     datetime(2024, 8, 24, 23, 59, 59, )  # tzinfo=TzInfo(UTC)
-# ]
-# result = filter_memories_by_date('viUv7GtdoHXbK1UBCDlPuTDuPgJ2', data[0], data[1])
-# print(len(result))
 
 
 def get_memories_by_id(uid, memory_ids):
@@ -94,49 +89,33 @@ def get_memories_by_id(uid, memory_ids):
     return memories
 
 
-# Open Glass
+# **************************************
+# ********** CREATE STATES *************
+# **************************************
 
-def store_memory_photos(uid: str, memory_id: str, photos: List[MemoryPhoto]):
+def get_in_progress_memory(uid: str):
     user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    photos_ref = memory_ref.collection('photos')
-    batch = db.batch()
-    for photo in photos:
-        photo_id = str(uuid.uuid4())
-        photo_ref = photos_ref.document(str(uuid.uuid4()))
-        data = photo.dict()
-        data['id'] = photo_id
-        batch.set(photo_ref, data)
-    batch.commit()
+    memories_ref = (
+        user_ref.collection('memories')
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+    )
+    docs = [doc.to_dict() for doc in memories_ref.stream()]
+    return docs[0] if docs else None
 
 
-def get_memory_photos(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    photos_ref = memory_ref.collection('photos')
-    return [doc.to_dict() for doc in photos_ref.stream()]
-
-
-def get_memory_transcripts_by_model(uid: str, memory_id: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    deepgram_ref = memory_ref.collection('deepgram_streaming')
-    soniox_ref = memory_ref.collection('soniox_streaming')
-    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
-    whisperx_ref = memory_ref.collection('fal_whisperx')
-
-    return {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
-        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
-    }
-
+# *********************************
+# ********** CALENDAR *************
+# *********************************
 
 def update_memory_events(uid: str, memory_id: str, events: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'structured.events': events})
+
+
+# ******************************
+# ********** OTHER *************
+# ******************************
 
 def update_memory_finished_at(uid: str, memory_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
@@ -144,15 +123,26 @@ def update_memory_finished_at(uid: str, memory_id: str, finished_at: datetime):
     memory_ref.update({'finished_at': finished_at})
 
 
-# VISBILITY
+def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'transcript_segments': segments})
+
+
+def update_memory_status(uid: str, memory_id: str, status: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'status': status})
+
+
+# ***********************************
+# ********** VISIBILITY *************
+# ***********************************
 
 def set_memory_visibility(uid: str, memory_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'visibility': visibility})
-
-
-# claude outputs
 
 
 async def _get_public_memory(db: AsyncClient, uid: str, memory_id: str):
@@ -176,7 +166,9 @@ def run_get_public_memories(data: List[Tuple[str, str]]):
     return asyncio.run(_get_public_memories(data))
 
 
-# POST PROCESSING
+# ****************************************
+# ********** POSTPROCESSING **************
+# ****************************************
 
 def set_postprocessing_status(
         uid: str, memory_id: str, status: PostProcessingStatus, fail_reason: str = None,
@@ -206,13 +198,6 @@ def store_model_segments_result(uid: str, memory_id: str, model_name: str, segme
     batch.commit()
 
 
-def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'transcript_segments': segments})
-    # TODO: update also fal_whisperx? nah..?
-
-
 def store_model_emotion_predictions_result(
         uid: str, memory_id: str, model_name: str,
         predictions: List[hume.HumeJobModelPredictionResponseModel]
@@ -238,3 +223,44 @@ def store_model_emotion_predictions_result(
             batch = db.batch()
             count = 0
     batch.commit()
+
+
+def get_memory_transcripts_by_model(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    deepgram_ref = memory_ref.collection('deepgram_streaming')
+    soniox_ref = memory_ref.collection('soniox_streaming')
+    speechmatics_ref = memory_ref.collection('speechmatics_streaming')
+    whisperx_ref = memory_ref.collection('fal_whisperx')
+
+    return {
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
+    }
+
+
+# ***********************************
+# ********** OPENGLASS **************
+# ***********************************
+
+def store_memory_photos(uid: str, memory_id: str, photos: List[MemoryPhoto]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    photos_ref = memory_ref.collection('photos')
+    batch = db.batch()
+    for photo in photos:
+        photo_id = str(uuid.uuid4())
+        photo_ref = photos_ref.document(str(uuid.uuid4()))
+        data = photo.dict()
+        data['id'] = photo_id
+        batch.set(photo_ref, data)
+    batch.commit()
+
+
+def get_memory_photos(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    photos_ref = memory_ref.collection('photos')
+    return [doc.to_dict() for doc in photos_ref.stream()]
