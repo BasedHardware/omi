@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:friend_private/backend/http/api/users.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:geolocator/geolocator.dart';
 
 @pragma('vm:entry-point')
@@ -10,23 +12,30 @@ void _startForegroundCallback() {
 }
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
+  DateTime? _locationUpdatedAt;
+
   @override
   void onStart(DateTime timestamp) async {
     debugPrint("Starting foreground task");
   }
 
-  Future locationInBackground() async {
+  Future _locationInBackground() async {
     if (await Geolocator.isLocationServiceEnabled()) {
       if (await Geolocator.checkPermission() == LocationPermission.always) {
         var locationData = await Geolocator.getCurrentPosition();
-        Object loc = {
-          "latitude": locationData.latitude,
-          "longitude": locationData.longitude,
-          'altitude': locationData.altitude,
-          'accuracy': locationData.accuracy,
-          'time': locationData.timestamp.toUtc().toIso8601String(),
-        };
-        FlutterForegroundTask.sendDataToMain(loc);
+        if (_locationUpdatedAt == null ||
+            _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
+          await updateUserGeolocation(
+            geolocation: Geolocation(
+              latitude: locationData.latitude,
+              longitude: locationData.longitude,
+              accuracy: locationData.accuracy,
+              altitude: locationData.altitude,
+              time: locationData.timestamp.toUtc(),
+            ),
+          );
+          _locationUpdatedAt = DateTime.now();
+        }
       } else {
         Object loc = {'error': 'Always location permission is not granted'};
         FlutterForegroundTask.sendDataToMain(loc);
@@ -40,13 +49,13 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onReceiveData(Object data) async {
     debugPrint('onReceiveData: $data');
-    await locationInBackground();
+    await _locationInBackground();
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
     print("Foreground repeat event triggered");
-    await locationInBackground();
+    await _locationInBackground();
   }
 
   @override
