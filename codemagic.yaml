@@ -109,9 +109,14 @@ workflows:
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
+
           # Build
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build ipa \
             --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
 
@@ -295,8 +300,12 @@ workflows:
           echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
           # Should use bump version automatically by CI
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build appbundle \
             --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
             --flavor prod
 
 
