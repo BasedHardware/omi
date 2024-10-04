@@ -33,7 +33,7 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
@@ -380,9 +380,9 @@ class CaptureProvider extends ChangeNotifier
 
     // Wait reconnect
     _clean();
-    setMemoryCreating(false);
-    setHasTranscripts(false);
     // if (capturingProcessingMemory == null) {
+    setMemoryCreating(false); // TODO: is this correct?
+    setHasTranscripts(false);
     // }
     notifyListeners();
 
@@ -484,6 +484,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Clean to force close socket to create new memory
     _cleanNew();
+    // TODO: restore this
 
     // Notify
     setMemoryCreating(false);
