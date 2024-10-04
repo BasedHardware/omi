@@ -64,6 +64,7 @@ def get_processing_memories(uid: str, filter_ids: [str] = [], limit: int = 3) ->
     processing_memories = []
     tracking_status = False
     if len(filter_ids) > 0:
+        filter_ids = list(set(filter_ids))  # prevent duplicated wastes
         processing_memories = processing_memories_db.get_processing_memories(uid, filter_ids=filter_ids, limit=limit)
     else:
         processing_memories = processing_memories_db.get_processing_memories(uid, statuses=[
