@@ -122,11 +122,14 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                     children: [
                                       const SizedBox(height: 80),
                                       Center(
-                                          child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                        child: Text(
+                                          memorySource == MemorySource.friend ? "No transcript" : "Empty",
+                                        ),
+                                      ),
                                     ],
                                   )
                                 : getTranscriptWidget(
-                                    provider.memoryCreating,
+                                    false,
                                     provider.segments,
                                     [],
                                     deviceProvider.connectedDevice,
