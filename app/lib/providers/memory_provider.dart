@@ -21,7 +21,7 @@ class MemoryProvider extends ChangeNotifier {
   Timer? _processingMemoryWatchTimer;
 
   ServerMemory? inProgressMemory;
-  ServerMemory? processingMemory;
+  List<ServerMemory> processingMemories = [];
 
   void onMemoryTap(int idx) {
     if (idx < 0 || idx > memories.length - 1) {
@@ -53,7 +53,9 @@ class MemoryProvider extends ChangeNotifier {
     memories = await getMemoriesFromServer();
 
     inProgressMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.in_progress);
-    processingMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.processing);
+    processingMemories = memories.where((m) => m.status == MemoryStatus.processing).toList();
+
+    memories = memories.where((m) => m.status == MemoryStatus.completed).toList();
 
     if (memories.isEmpty) {
       memories = SharedPreferencesUtil().cachedMemories;
@@ -61,7 +63,6 @@ class MemoryProvider extends ChangeNotifier {
       SharedPreferencesUtil().cachedMemories = memories;
     }
     _groupMemoriesByDateWithoutNotify();
-
     notifyListeners();
   }
 
