@@ -108,6 +108,7 @@ async def _websocket_util(
             )
             redis_db.set_in_progress_memory_id(uid, memory.id)
             return memory
+
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
         memory = Memory(
             id=str(uuid.uuid4()),
@@ -127,38 +128,37 @@ async def _websocket_util(
 
     async def memory_creation_timer():
         try:
-            await asyncio.sleep(120)
+            await asyncio.sleep(15)
             await _create_memory()
         except asyncio.CancelledError:
             pass
 
     memory_creation_task = None
-    segment_start = None
+    seconds_to_trim = None
 
     def stream_transcript(segments, _):
         nonlocal websocket
-        nonlocal segment_start
+        nonlocal seconds_to_trim
         nonlocal memory_creation_task
 
         if not segments or len(segments) == 0:
             return
 
         # Align the start, end segment
-        if not segment_start:
-            segment_start = segments[0]["start"]
+        if not seconds_to_trim:
+            seconds_to_trim = segments[0]["start"]
 
         if memory_creation_task is not None:
             memory_creation_task.cancel()
         memory_creation_task = asyncio.create_task(memory_creation_timer())
 
         for i, segment in enumerate(segments):
-            segment["start"] -= segment_start
-            segment["end"] -= segment_start
+            segment["start"] -= seconds_to_trim
+            segment["end"] -= seconds_to_trim
             segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
 
-        # TODO: what when transcript is large!
         memory = _get_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, datetime.now(timezone.utc))
@@ -323,6 +323,8 @@ async def _websocket_util(
     # Create memory
     async def _create_memory():
         print("_create_memory")
+        nonlocal seconds_to_trim
+        seconds_to_trim = None
 
         memory = _get_in_progress_memory([])
         if not memory or not memory.transcript_segments:
