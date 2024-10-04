@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
 abstract class IPureSocketListener {
+  void onConnected();
   void onMessage(dynamic message);
   void onClosed();
   void onError(Object err, StackTrace trace);
@@ -29,6 +30,7 @@ abstract class IPureSocket {
   void onInternetSatusChanged(InternetStatus status);
 
   void onMessage(dynamic message);
+  void onConnected();
   void onClosed();
   void onError(Object err, StackTrace trace);
 }
@@ -131,6 +133,7 @@ class PureSocket implements IPureSocket {
     }
     _status = PureSocketStatus.connected;
     _retries = 0;
+    onConnected();
 
     final that = this;
 
@@ -192,6 +195,11 @@ class PureSocket implements IPureSocket {
   void onMessage(dynamic message) {
     debugPrint("[Socket] Message $message");
     _listener?.onMessage(message);
+  }
+
+  @override
+  void onConnected() {
+    _listener?.onConnected();
   }
 
   @override
