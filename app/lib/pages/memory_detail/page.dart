@@ -385,45 +385,45 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  !provider.hasAudioRecording
-                      ? GestureDetector(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  Navigator.pop(context);
-                                  routeToPage(context, const RecordingsStoragePermission());
-                                },
-                                'Can\'t be used for speech training',
-                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View',
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text('Can\'t be used for speech training',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .copyWith(decoration: TextDecoration.underline)),
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 12),
-                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox(),
+                  // !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  // !provider.hasAudioRecording
+                  //     ? GestureDetector(
+                  //         onTap: () {
+                  //           showDialog(
+                  //             context: context,
+                  //             builder: (c) => getDialog(
+                  //               context,
+                  //               () => Navigator.pop(context),
+                  //               () {
+                  //                 Navigator.pop(context);
+                  //                 routeToPage(context, const RecordingsStoragePermission());
+                  //               },
+                  //               'Can\'t be used for speech training',
+                  //               'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                  //               okButtonText: 'View',
+                  //             ),
+                  //           );
+                  //         },
+                  //         child: Padding(
+                  //           padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  //           child: Row(
+                  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //             crossAxisAlignment: CrossAxisAlignment.center,
+                  //             children: [
+                  //               Text('Can\'t be used for speech training',
+                  //                   style: Theme.of(context)
+                  //                       .textTheme
+                  //                       .bodyMedium!
+                  //                       .copyWith(decoration: TextDecoration.underline)),
+                  //               const Padding(
+                  //                 padding: EdgeInsets.only(right: 12),
+                  //                 child: Icon(Icons.info, color: Colors.grey, size: 20),
+                  //               ),
+                  //             ],
+                  //           ),
+                  //         ),
+                  //       )
+                  //     : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),

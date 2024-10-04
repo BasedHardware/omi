@@ -40,6 +40,14 @@ class CaptureProvider extends ChangeNotifier
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
     messageProvider = p;
+
+    memoryProvider!.addListener(() {
+      if (segments.isEmpty && memoryProvider!.inProgressMemory != null) {
+        segments = memoryProvider!.inProgressMemory!.transcriptSegments;
+        setHasTranscripts(segments.isNotEmpty);
+      }
+    });
+
     notifyListeners();
   }
 
@@ -71,26 +79,6 @@ class CaptureProvider extends ChangeNotifier
   String conversationId = const Uuid().v4();
   int elapsedSeconds = 0;
 
-  // -----------------------
-
-  List<int> currentStorageFiles = <int>[];
-  int sdCardFileNum = 1;
-
-  int totalStorageFileBytes = 0; // how much in storage
-  int totalBytesReceived = 0; // how much already received
-  double sdCardSecondsTotal = 0.0; // time to send the next chunk
-  double sdCardSecondsReceived = 0.0;
-  bool sdCardDownloadDone = false;
-  bool sdCardReady = false;
-  bool sdCardIsDownloading = false;
-  String btConnectedTime = "";
-  Timer? sdCardReconnectionTimer;
-
-  void setSdCardIsDownloading(bool value) {
-    sdCardIsDownloading = value;
-    notifyListeners();
-  }
-
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
     notifyListeners();
@@ -113,64 +101,6 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _onMemoryCreating() {
-    setMemoryCreating(true);
-  }
-
-  Future<void> _onMemoryCreated(ServerMessageEvent event) async {
-    if (event.memory == null) {
-      debugPrint("Memory is not found, processing memory ${event.processingMemoryId}");
-      return;
-    }
-    _processOnMemoryCreated(event.memory, event.messages ?? []);
-  }
-
-  void _onMemoryCreateFailed() {
-    _processOnMemoryCreated(null, []); // force failed
-  }
-
-  Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
-    if (memory == null) return;
-
-    processMemoryContent(
-      // no need to await
-      memory: memory,
-      messages: messages,
-      sendMessageToChat: (v) {
-        messageProvider?.addMessage(v);
-      },
-    );
-
-    // use memory provider to add memory
-    MixpanelManager().memoryCreated(memory);
-    memoryProvider?.upsertMemory(memory);
-    if (memoryProvider?.memories.isEmpty ?? false) {
-      memoryProvider?.getMoreMemoriesFromServer();
-    }
-
-    _cleanNew();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    _handleCalendarCreation(memory);
-    notifyListeners();
-    return;
-  }
-
-  Future<void> createMemory() async {
-    setMemoryCreating(true);
-
-    // Clean to force close socket to create new memory
-    _cleanNew();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    notifyListeners();
-    return;
-  }
-
   Future _clean() async {
     segments = [];
     elapsedSeconds = 0;
@@ -181,9 +111,9 @@ class CaptureProvider extends ChangeNotifier
     _clean();
 
     // Create new socket session
-    // Warn: should have a better solution to keep the socket alived
+    // Warn: should have a better solution to keep the socket alive
     debugPrint("_cleanNew");
-    await _initiateWebsocket(force: true);
+    await _initiateWebsocket(force: true); // TODO: don't like at all, should be a better way
   }
 
   _handleCalendarCreation(ServerMemory memory) {
@@ -317,22 +247,6 @@ class CaptureProvider extends ChangeNotifier
       return Future.value(null);
     }
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
-  }
-
-  Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(false);
-    }
-    return connection.writeToStorage(numFile, command, offset);
-  }
-
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
-    }
-    return connection.getStorageList();
   }
 
   Future<bool> _recheckCodecChange() async {
@@ -508,13 +422,24 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
-    if (event.type == MessageEventType.newMemoryCreating) {
-      _onMemoryCreating();
+    if (event.type == MessageEventType.memoryProcessingStarted) {
+      setMemoryCreating(true);
+      if (event.memory == null) {
+        debugPrint("Memory data not received in event. Content is: $event");
+        return;
+      }
+      memoryProvider!.inProgressMemory = null;
+      memoryProvider!.processingMemories = memoryProvider!.processingMemories + [event.memory!];
       return;
     }
 
-    if (event.type == MessageEventType.newMemoryCreated) {
-      _onMemoryCreated(event);
+    if (event.type == MessageEventType.memoryCreated) {
+      if (event.memory == null) {
+        debugPrint("Memory data not received in event. Content is: $event");
+        return;
+      }
+      event.memory!.isNew = true;
+      _processOnMemoryCreated(event.memory, event.messages ?? []);
       return;
     }
 
@@ -522,24 +447,49 @@ class CaptureProvider extends ChangeNotifier
       _onMemoryCreateFailed();
       return;
     }
+  }
 
-    if (event.type == MessageEventType.newProcessingMemoryCreated) {
-      if (event.processingMemoryId == null) {
-        debugPrint("New processing memory created message event is invalid");
-        return;
-      }
-      // _onProcessingMemoryCreated(event.processingMemoryId!);
-      return;
+  void _onMemoryCreateFailed() {
+    _processOnMemoryCreated(null, []); // force failed
+  }
+
+  Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory == null) return;
+
+    processMemoryContent(
+      // no need to await
+      memory: memory,
+      messages: messages,
+      sendMessageToChat: (v) {
+        messageProvider?.addMessage(v);
+      },
+    );
+
+    // use memory provider to add memory
+    MixpanelManager().memoryCreated(memory);
+    memoryProvider?.upsertMemory(memory);
+    if (memoryProvider?.memories.isEmpty ?? false) {
+      memoryProvider?.getMoreMemoriesFromServer();
     }
 
-    if (event.type == MessageEventType.processingMemoryStatusChanged) {
-      if (event.processingMemoryId == null || event.processingMemoryStatus == null) {
-        debugPrint("Processing memory message event is invalid");
-        return;
-      }
-      // _onProcessingMemoryStatusChanged(event.processingMemoryId!, event.processingMemoryStatus!);
-      return;
-    }
+    // Notify
+    _cleanNew();
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+  }
+
+  Future<void> createMemory() async {
+    setMemoryCreating(true);
+
+    // Clean to force close socket to create new memory
+    _cleanNew();
+
+    // Notify
+    setMemoryCreating(false);
+    setHasTranscripts(false);
+    notifyListeners();
+    return;
   }
 
   @override
@@ -565,6 +515,24 @@ class CaptureProvider extends ChangeNotifier
   *
   *
   * */
+
+  List<int> currentStorageFiles = <int>[];
+  int sdCardFileNum = 1;
+
+  int totalStorageFileBytes = 0; // how much in storage
+  int totalBytesReceived = 0; // how much already received
+  double sdCardSecondsTotal = 0.0; // time to send the next chunk
+  double sdCardSecondsReceived = 0.0;
+  bool sdCardDownloadDone = false;
+  bool sdCardReady = false;
+  bool sdCardIsDownloading = false;
+  String btConnectedTime = "";
+  Timer? sdCardReconnectionTimer;
+
+  void setSdCardIsDownloading(bool value) {
+    sdCardIsDownloading = value;
+    notifyListeners();
+  }
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
@@ -744,6 +712,22 @@ class CaptureProvider extends ChangeNotifier
       title: 'Sd Card Processing Complete',
       body: 'Your Sd Card data is now processed! Enter the app to see.',
     );
+  }
+
+  Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(false);
+    }
+    return connection.writeToStorage(numFile, command, offset);
+  }
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
   }
 
   void setsdCardReady(bool value) {

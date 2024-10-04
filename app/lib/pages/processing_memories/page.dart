@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
