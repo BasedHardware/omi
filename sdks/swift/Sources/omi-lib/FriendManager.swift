@@ -33,7 +33,8 @@ class FriendManager {
     var audioFileTimer: Timer?
 
     init() {
-        let modelURL = bundleForMyTarget.url(forResource: "ggml-tiny.en", withExtension: "bin")!
+        let myBundle = BundleAccessor.bundle
+        let modelURL = myBundle.url(forResource: "ggml-tiny.en", withExtension: "bin")!
         whisper = Whisper(fromFileURL: modelURL)
         
         bluetoothScanner = BluetoothScanner()
