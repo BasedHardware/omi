@@ -12,8 +12,6 @@ import AVFoundation
 import SwiftWhisper
 import AudioKit
 
-public let bundleForMyTarget = Bundle.module
-
 class FriendManager {
     
     static var singleton = FriendManager()
