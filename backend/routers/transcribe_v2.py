@@ -1,4 +1,3 @@
-import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from enum import Enum
@@ -77,12 +76,9 @@ async def _websocket_util(
         print(e)
         return
 
-    session_id = str(uuid.uuid4())
-
     # Initiate a separate vad for each websocket
     w_vad = webrtcvad.Vad()
     w_vad.set_mode(1)
-    flush_new_memory_lock = threading.Lock()
 
     # Stream transcript
     loop = asyncio.get_event_loop()
@@ -160,12 +156,13 @@ async def _websocket_util(
             segment["end"] -= segment_start
             segments[i] = segment
 
+        asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
+
         # TODO: what when transcript is large!
         memory = _get_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, datetime.now(timezone.utc))
 
-        asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
         # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
     soniox_socket = None
@@ -298,7 +295,7 @@ async def _websocket_util(
 
                 # timeout
                 if time.time() - started_at >= timeout_seconds:
-                    print(f"Session timeout is hit by soft timeout {timeout_seconds}, session {session_id}")
+                    print(f"Session timeout is hit by soft timeout {timeout_seconds}")
                     websocket_close_code = 1001
                     websocket_active = False
         except WebSocketDisconnect:
@@ -347,24 +344,12 @@ async def _websocket_util(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket))
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
-        # Run task
-        # if new_memory_watch:
-        #     # new_memory_task = asyncio.create_task(memory_transcript_segements_watch())
-        #     await asyncio.gather(receive_task, new_memory_task, heartbeat_task)
-        # else:
         await asyncio.gather(receive_task, heartbeat_task)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
     finally:
         websocket_active = False
-        memory_watching = False
-
-        # Flush new memory watch
-        # if new_memory_watch:
-        #     await _flush_new_memory_with_lock(time_validate=False)
-
-        # Close socket
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
                 await websocket.close(code=websocket_close_code)
