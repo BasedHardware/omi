@@ -12,7 +12,7 @@ from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
-from models.message_event import NewMemoryCreated, MessageEvent
+from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
@@ -111,6 +111,7 @@ async def _websocket_util(
             transcript_segments=[TranscriptSegment(**segment) for segment in segments],
             status=MemoryStatus.in_progress,
         )
+        # asyncio.create_task(_send_message_event(MessageEvent(event_type="memory_in_progress")))
         print('_get_in_progress_memory new', memory)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         return memory
@@ -316,22 +317,14 @@ async def _websocket_util(
         if not memory or not memory.transcript_segments:
             raise Exception('FAILED')
 
-        await _send_message_event(MessageEvent(event_type="memory_processing_started"))
+        ok = await _send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory))
 
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
         memory = process_memory(uid, language, memory)
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
         messages = trigger_external_integrations(uid, memory)
 
-        await _send_message_event(MessageEvent(event_type="memory_processing_completed"))
-        ok = await _send_message_event(
-            NewMemoryCreated(
-                event_type="memory_created",
-                memory_id=memory.id,
-                memory=memory,
-                messages=messages,
-            )
-        )
+        ok = await _send_message_event(MemoryEvent(event_type="memory_created", memory=memory, messages=messages))
         if not ok:
             print("Failed to send memory created message")
 
