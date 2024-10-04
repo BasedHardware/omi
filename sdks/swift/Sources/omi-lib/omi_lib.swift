@@ -4,12 +4,9 @@ import AVFoundation
 
 
 public struct Device {
-    public var id: String
+    var id: String
 }
 
-public struct BundleAccessor {
-    public static let bundle: Bundle = Bundle.module
-}
 public class OmiManager {
     public init() {}
     
