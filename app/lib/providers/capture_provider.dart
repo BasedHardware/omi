@@ -1,17 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -21,7 +18,6 @@ import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
@@ -42,6 +38,7 @@ class CaptureProvider extends ChangeNotifier
     messageProvider = p;
 
     memoryProvider!.addListener(() {
+      // TODO: do this differently!
       if (segments.isEmpty && memoryProvider!.inProgressMemory != null) {
         segments = memoryProvider!.inProgressMemory!.transcriptSegments;
         setHasTranscripts(segments.isNotEmpty);
@@ -55,7 +52,8 @@ class CaptureProvider extends ChangeNotifier
   List<TranscriptSegment> segments = [];
 
   bool hasTranscripts = false;
-  bool memoryCreating = false;
+
+  // bool memoryCreating = false;
   bool audioBytesConnected = false;
 
   StreamSubscription? _bleBytesStream;
@@ -86,7 +84,7 @@ class CaptureProvider extends ChangeNotifier
 
   void setMemoryCreating(bool value) {
     debugPrint('set memory creating $value');
-    memoryCreating = value;
+    // memoryCreating = value;
     notifyListeners();
   }
 
@@ -101,40 +99,13 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future _clean() async {
+  Future _resetVariables() async {
     segments = [];
     elapsedSeconds = 0;
     conversationId = const Uuid().v4();
-  }
-
-  Future _cleanNew() async {
-    _clean();
-
-    // Create new socket session
-    // Warn: should have a better solution to keep the socket alive
-    debugPrint("_cleanNew");
-    await _initiateWebsocket(force: true); // TODO: don't like at all, should be a better way
-  }
-
-  _handleCalendarCreation(ServerMemory memory) {
-    if (!SharedPreferencesUtil().calendarEnabled) return;
-    if (SharedPreferencesUtil().calendarType != 'auto') return;
-
-    List<Event> events = memory.structured.events;
-    if (events.isEmpty) return;
-
-    List<int> indexes = events.mapIndexed((index, e) => index).toList();
-    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-    for (var i = 0; i < events.length; i++) {
-      if (events[i].created) continue;
-      events[i].created = true;
-      CalendarUtil().createEvent(
-        events[i].title,
-        events[i].startsAt,
-        events[i].duration,
-        description: events[i].description,
-      );
-    }
+    // memoryCreating = false;
+    hasTranscripts = false;
+    notifyListeners();
   }
 
   Future<void> onRecordProfileSettingChanged() async {
@@ -207,8 +178,7 @@ class CaptureProvider extends ChangeNotifier
     await _recheckCodecChange();
     await _ensureSocketConnection(force: true);
     await _initiateFriendAudioStreaming();
-    // TODO: Commenting this for now as DevKit 2 is not yet used in production
-    await initiateStorageBytesStreaming();
+    await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
 
@@ -368,7 +338,6 @@ class CaptureProvider extends ChangeNotifier
     }
     _cleanupCurrentState();
     await _socket?.stop(reason: 'stop stream device recording');
-    // await _handleMemoryCreation(false);
   }
 
   // Socket handling
@@ -377,16 +346,8 @@ class CaptureProvider extends ChangeNotifier
   void onClosed() {
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
-
-    // Wait reconnect
-    _clean();
-    // if (capturingProcessingMemory == null) {
-    setMemoryCreating(false); // TODO: is this correct?
-    setHasTranscripts(false);
-    // }
+    _resetVariables();
     notifyListeners();
-
-    // Keep alive
     _startKeepAliveServices();
   }
 
@@ -430,8 +391,8 @@ class CaptureProvider extends ChangeNotifier
       memoryProvider!.removeInProgressMemory();
       memoryProvider!.addProcessingMemory(event.memory!);
       segments = [];
-      setHasTranscripts(false);
-      setMemoryCreating(true);
+      hasTranscripts = true;
+      // memoryCreating = true;
       notifyListeners();
       return;
     }
@@ -473,23 +434,13 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // Notify
-    _cleanNew();
-    setMemoryCreating(false);
-    setHasTranscripts(false);
+    _resetVariables();
     notifyListeners();
   }
 
   Future<void> createMemory() async {
-    setMemoryCreating(true);
-
-    // Clean to force close socket to create new memory
-    _cleanNew();
-    // TODO: restore this
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    notifyListeners();
+    // _resetVariables();
+    // FIXME: force memory creation on backend properly.
     return;
   }
 
@@ -505,7 +456,7 @@ class CaptureProvider extends ChangeNotifier
     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
       messageProvider?.addMessage(v);
     });
-    setHasTranscripts(true);
+    hasTranscripts = true;
     notifyListeners();
   }
 
