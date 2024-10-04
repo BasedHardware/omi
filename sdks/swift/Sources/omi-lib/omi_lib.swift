@@ -8,7 +8,6 @@ public struct Device {
 }
 
 public class OmiManager {
-    public var foo = "bar"
     public init() {}
     
     private static var singleton = OmiManager()
