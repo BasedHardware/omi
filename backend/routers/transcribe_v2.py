@@ -11,6 +11,7 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
+from database import redis_db
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
 from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.process_memory import process_memory
@@ -90,14 +91,26 @@ async def _websocket_util(
     timeout_seconds = 420  # 7m
     started_at = time.time()
 
-    def _get_in_progress_memory(segments: List[dict] = []):
-        existing = memories_db.get_in_progress_memory(uid)
+    def _get_in_progress_memory(segments: List[dict]):
+
+        memory_id = redis_db.get_in_progress_memory_id(uid)
+        existing = None
+
+        if memory_id:
+            existing = memories_db.get_memory(uid, memory_id)
+            if existing and existing['status'] != 'in_progress':
+                existing = None
+
+        if not existing:
+            existing = memories_db.get_in_progress_memory(uid)
+
         if existing:
-            print('_get_in_progress_memory existing', existing.id)
+            print('_get_in_progress_memory existing', existing['id'])
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
+            redis_db.set_in_progress_memory_id(uid, memory.id)
             return memory
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
         memory = Memory(
@@ -111,14 +124,14 @@ async def _websocket_util(
             transcript_segments=[TranscriptSegment(**segment) for segment in segments],
             status=MemoryStatus.in_progress,
         )
-        # asyncio.create_task(_send_message_event(MessageEvent(event_type="memory_in_progress")))
         print('_get_in_progress_memory new', memory)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
+        redis_db.set_in_progress_memory_id(uid, memory.id)
         return memory
 
     async def memory_creation_timer():
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(120)
             await _create_memory()
         except asyncio.CancelledError:
             pass
@@ -314,7 +327,7 @@ async def _websocket_util(
     async def _create_memory():
         print("_create_memory")
 
-        memory = _get_in_progress_memory()
+        memory = _get_in_progress_memory([])
         if not memory or not memory.transcript_segments:
             raise Exception('FAILED')
 
