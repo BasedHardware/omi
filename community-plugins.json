@@ -706,4 +706,16 @@
     },
     "deleted": false
   }
+  {
+    "id": "mun-assistant",
+    "name": "MUN Assistant",
+    "author": "AbeNaws",
+    "description": "An assistant to help summarize countries' positions at Model United Nations events",
+    "image": "/plugins/logos/mun-assistant.jpg",
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "You will be given a transcript of a delegate's position. Your job is to accurately identify and extract these three key points of information. 1: An outline of what their country does and doesn't want in simple bullet points. 2: A list of what they want added or removed from a resolution, be sure to get the name of the resolution, mark if these are essential or not for their support. These also need to be in simple bullet points 3: Any other important items mentioned that do not fit into the above categories. Label these sections, 'Overall Position', 'Requirements', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading. The title should be the country or the official name of the country.",
+    "deleted": false
+  }
 ]
