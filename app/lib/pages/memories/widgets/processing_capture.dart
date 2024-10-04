@@ -395,17 +395,10 @@ Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
     delegate: SliverChildBuilderDelegate(
       (context, index) {
         var pm = memories[index];
-        if (pm.status == ServerProcessingMemoryStatus.processing) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-            child: ProcessingMemoryWidget(memory: pm),
-          );
-        }
-        if (pm.status == ServerProcessingMemoryStatus.done) {
-          return const SizedBox.shrink();
-        }
-
-        return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
+          child: ProcessingMemoryWidget(memory: pm),
+        );
       },
       childCount: memories.length,
     ),

@@ -93,7 +93,7 @@ async def _websocket_util(
     def _get_in_progress_memory(segments: List[dict] = []):
         existing = memories_db.get_in_progress_memory(uid)
         if existing:
-            print('_get_in_progress_memory existing', existing)
+            print('_get_in_progress_memory existing', existing.id)
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
@@ -118,7 +118,7 @@ async def _websocket_util(
 
     async def memory_creation_timer():
         try:
-            await asyncio.sleep(120)
+            await asyncio.sleep(15)
             await _create_memory()
         except asyncio.CancelledError:
             pass
@@ -318,7 +318,10 @@ async def _websocket_util(
             raise Exception('FAILED')
 
         ok = await _send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory))
+        if not ok:
+            print("Failed to send memory processing started message")
 
+        await asyncio.sleep(5) # just for testing on front the processing ui
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
         memory = process_memory(uid, language, memory)
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
