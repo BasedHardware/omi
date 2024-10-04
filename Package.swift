@@ -30,7 +30,7 @@ let package = Package(
             ],
             path: "sdks/swift",  // Correct the path to your source files
             resources: [
-                .process("Resources")  // Make sure this resource is in the correct directory
+                .process("Sources/omi-lib/Resources")  // Make sure this resource is in the correct directory
             ]
         ),
     ]
