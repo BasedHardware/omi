@@ -42,7 +42,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 - [Build the device](https://docs.omi.me/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/assembly/Install_firmware/)
 - [3rd Party Integrations](https://docs.omi.me/developer/plugins/Introduction/).
-– [SDKs](sdks/README.md/)
+- [SDKs](sdks/README.md/).
 ## Contributions
 
 * Check out our [contributions guide](https://docs.omi.me/developer/Contribution/).
