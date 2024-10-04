@@ -30,7 +30,7 @@ let package = Package(
             ],
             path: "sdks/swift",  // Correct the path to your source files
             resources: [
-                .process("ggml-tiny.en.bin")  // Make sure this resource is in the correct directory
+                .process("Sources/omi-lib/helpers/ggml-tiny.en.bin")  // Make sure this resource is in the correct directory
             ]
         ),
     ]
