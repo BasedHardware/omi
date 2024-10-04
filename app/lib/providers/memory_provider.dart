@@ -23,6 +23,20 @@ class MemoryProvider extends ChangeNotifier {
   ServerMemory? inProgressMemory;
   List<ServerMemory> processingMemories = [];
 
+  void removeInProgressMemory() {
+    inProgressMemory = null;
+  }
+
+  void addProcessingMemory(ServerMemory memory) {
+    processingMemories.add(memory);
+    notifyListeners();
+  }
+
+  void removeProcessingMemory(String memoryId) {
+    processingMemories.removeWhere((m) => m.id == memoryId);
+    notifyListeners();
+  }
+
   void onMemoryTap(int idx) {
     if (idx < 0 || idx > memories.length - 1) {
       return;
