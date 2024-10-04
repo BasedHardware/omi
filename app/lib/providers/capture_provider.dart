@@ -337,10 +337,12 @@ class CaptureProvider extends ChangeNotifier
 
     debugPrint('is ws null: ${_socket == null}');
 
-    // Get memory socket
+    // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
     if (_socket == null) {
-      throw Exception("Can not create new memory socket");
+      _startKeepAliveServices();
+      debugPrint("Can not create new memory socket");
+      return;
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
