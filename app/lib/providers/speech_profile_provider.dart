@@ -33,7 +33,7 @@ class SpeechProfileProvider extends ChangeNotifier
   WavBytesUtil audioStorage = WavBytesUtil(codec: BleAudioCodec.opus);
   StreamSubscription? _bleBytesStream;
 
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
   double percentageCompleted = 0;

@@ -20,7 +20,7 @@ def get_current_user_uid(authorization: str = Header(None)):
     try:
         token = authorization.split(' ')[1]
         decoded_token = auth.verify_id_token(token)
-        print('get_current_user_uid', decoded_token['uid'])
+        # print('get_current_user_uid', decoded_token['uid'])
         return decoded_token['uid']
     except InvalidIdTokenError as e:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true':

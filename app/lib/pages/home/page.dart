@@ -110,18 +110,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     InstabugLog.logInfo(event);
   }
 
-  _migrationScripts() async {
-    if (mounted) {
-      setState(() => scriptsInProgress = true);
-    }
-    // await scriptMigrateMemoriesToBack();
-    if (mounted) {
-      await context.read<mp.MemoryProvider>().getInitialMemories();
-    }
-    if (mounted) {
-      setState(() => scriptsInProgress = false);
-    }
-  }
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
