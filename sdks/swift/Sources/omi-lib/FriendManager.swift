@@ -12,6 +12,8 @@ import AVFoundation
 import SwiftWhisper
 import AudioKit
 
+public let bundleForMyTarget = Bundle.module
+
 class FriendManager {
     
     static var singleton = FriendManager()
@@ -33,7 +35,7 @@ class FriendManager {
     var audioFileTimer: Timer?
 
     init() {
-        let modelURL = Bundle.module.url(forResource: "ggml-tiny.en", withExtension: "bin")!
+        let modelURL = bundleForMyTarget.url(forResource: "ggml-tiny.en", withExtension: "bin")!
         whisper = Whisper(fromFileURL: modelURL)
         
         bluetoothScanner = BluetoothScanner()
