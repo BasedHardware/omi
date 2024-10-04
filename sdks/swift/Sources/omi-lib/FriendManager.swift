@@ -167,15 +167,6 @@ class FriendManager {
             print("Failed to play audio: \(error.localizedDescription)")
         }
     }
-    
-//    func getFriendDeviceOnConnection(completion: @escaping(Friend?, Error?) -> Void) {
-//        if friendDevice != nil {
-//            completion(self.friendDevice, nil)
-//        }
-//        else {
-//            self.deviceCompletion = completion
-//        }
-//    }
 
     func connectionStatus(completion: @escaping(Bool) -> Void) {
         self.connectionCompletion = completion
@@ -191,8 +182,6 @@ class FriendManager {
                 let uuidString = UUID().uuidString
                 let recording = Recording(filename: "\(uuidString).wav")  // Your custom recording handler
                 self.friendDevice!.start(recording: recording)
-            
-//                startRealTimeTranscription(from: recording.fileURL)
             case .error(_):
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: {
                     self.startRecordingWhenReady()
