@@ -146,6 +146,7 @@ async def _websocket_util(
             segment["start"] -= segment_start
             segment["end"] -= segment_start
             segments[i] = segment
+
         # TODO: what when transcript is large!
         memory = _get_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
@@ -317,19 +318,16 @@ async def _websocket_util(
         if not memory or not memory.transcript_segments:
             raise Exception('FAILED')
 
-        ok = await _send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory))
-        if not ok:
-            print("Failed to send memory processing started message")
+        asyncio.create_task(_send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory)))
 
-        await asyncio.sleep(5) # just for testing on front the processing ui
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
         memory = process_memory(uid, language, memory)
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
         messages = trigger_external_integrations(uid, memory)
 
-        ok = await _send_message_event(MemoryEvent(event_type="memory_created", memory=memory, messages=messages))
-        if not ok:
-            print("Failed to send memory created message")
+        asyncio.create_task(
+            _send_message_event(MemoryEvent(event_type="memory_created", memory=memory, messages=messages))
+        )
 
     try:
         receive_task = asyncio.create_task(
