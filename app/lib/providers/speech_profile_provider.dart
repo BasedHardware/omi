@@ -26,7 +26,7 @@ class SpeechProfileProvider extends ChangeNotifier
   BtDevice? device;
 
   final targetWordsCount = 70;
-  final maxDuration = 90;
+  final maxDuration = 150;
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
@@ -145,8 +145,8 @@ class SpeechProfileProvider extends ChangeNotifier
       if (uploadingProfile || profileCompleted) return;
 
       int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-      if (duration < 5 || duration > 120) {
-        notifyError('INVALID_RECORDING');
+      if (duration < 10 || duration > 155) {
+        notifyError('No_SPEECH');
       }
 
       String text = segments.map((e) => e.text).join(' ').trim();

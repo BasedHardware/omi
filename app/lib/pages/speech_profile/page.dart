@@ -16,6 +16,8 @@ import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'percentage_bar_progress.dart';
+
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
 
@@ -114,7 +116,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Invalid recording detected',
+                  'Multiple speakers detected',
                   'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.',
                   okButtonText: 'Try Again',
                   singleButton: true,
@@ -290,7 +292,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 48),
+                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 48),
                     child: !provider.startedRecording
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.end,
@@ -419,23 +421,24 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       ),
                                       const SizedBox(height: 24),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                                        padding: const EdgeInsets.symmetric(horizontal: 0),
                                         child: Stack(
                                           children: [
                                             // LinearProgressIndicator(
                                             //   backgroundColor: Colors.grey[300],
                                             //   valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.withOpacity(0.3)),
                                             // ),
-                                            LinearProgressIndicator(
-                                              value: provider.percentageCompleted,
-                                              backgroundColor:
-                                                  Colors.grey.shade300, // Make sure background is transparent
-                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                            ),
+                                            // LinearProgressIndicator(
+                                            //   value: provider.percentageCompleted,
+                                            //   backgroundColor:
+                                            //       Colors.grey.shade300, // Make sure background is transparent
+                                            //   valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                                            // ),
+                                            ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
                                           ],
                                         ),
                                       ),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 18),
                                       Text('${(provider.percentageCompleted * 100).toInt()}%',
                                           style: const TextStyle(color: Colors.white)),
                                     ],

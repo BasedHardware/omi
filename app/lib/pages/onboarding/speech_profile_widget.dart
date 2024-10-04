@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -138,6 +139,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   ),
                   barrierDismissible: false,
                 );
+              } else if (error == "NO_SPEECH") {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                      //  Navigator.pop(context);
+                    },
+                    () {},
+                    'Are you there?',
+                    'We could not detect any speech. Please make sure to speak for at least 10 seconds and not more than 3 minutes.',
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
               }
             },
             child: Container(
@@ -148,10 +166,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     height: 10,
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(40, 20, 40, 20),
+                    padding: EdgeInsets.fromLTRB(40, !provider.startedRecording ? 20 : 0, 40, 20),
                     child: !provider.startedRecording
                         ? const Text(
-                            'Now, Omi needs to learn your voice to be able to recognise you.',
+                            'Omi needs to learn your voice to recognize you',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,
@@ -210,6 +228,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             : Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
+                                  const Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
                                   const SizedBox(height: 20),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
@@ -295,29 +314,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                 : Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const SizedBox(height: 30),
+                                      const SizedBox(height: 20),
+                                      provider.percentageCompleted > 0
+                                          ? const SizedBox()
+                                          : const Text(
+                                              "Introduce\nyourself",
+                                              style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                      // const SizedBox(height: 30),
+
+                                      // const SizedBox(height: 18),
+                                      ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
+                                      const SizedBox(height: 12),
                                       Text(
                                         provider.message,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
                                         textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 18),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                                        child: Stack(
-                                          children: [
-                                            LinearProgressIndicator(
-                                              value: provider.percentageCompleted,
-                                              backgroundColor: Colors.grey.shade300,
-                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        '${(provider.percentageCompleted * 100).toInt()}%',
-                                        style: const TextStyle(color: Colors.white),
                                       ),
                                     ],
                                   ),
