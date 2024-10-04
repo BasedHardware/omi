@@ -77,10 +77,6 @@ func listenToLiveAudio(device: Device) {
 }
 ```
 
-## TODO
-
-- [] get live transcription working on this package; it's currently running into a bundle reference issue due to the monorepo nature of the repository
-
 ## Licensing
 
 Omi's Swift SDK is available under MIT License
