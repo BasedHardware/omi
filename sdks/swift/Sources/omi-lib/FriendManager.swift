@@ -12,7 +12,7 @@ import AVFoundation
 import SwiftWhisper
 import AudioKit
 
-private class FriendManager {
+class FriendManager {
     
     static var singleton = FriendManager()
    
