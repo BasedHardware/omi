@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/schema.json",
-  "name": "Starter Kit",
+  "name": "Omi Docs",
   "logo": {
     "dark": "/logo/dark.svg",
     "light": "/logo/light.svg"
@@ -18,7 +18,7 @@
   "topbarLinks": [
     {
       "name": "Support",
-      "url": "mailto:hi@mintlify.com"
+      "url": "mailto:support@omi.me"
     }
   ],
   "topbarCtaButton": {
@@ -33,28 +33,16 @@
   ],
   "anchors": [
     {
-      "name": "Documentation",
-      "icon": "book-open-cover",
-      "url": "https://mintlify.com/docs"
-    },
-    {
-      "name": "Community",
-      "icon": "slack",
-      "url": "https://mintlify.com/community"
-    },
-    {
-      "name": "Blog",
-      "icon": "newspaper",
-      "url": "https://mintlify.com/blog"
+      "name": "Discord",
+      "icon": "discord",
+      "url": "https://discord.gg/basedhardware"
     }
   ],
   "navigation": [
     {
       "group": "Get Started",
       "pages": [
-        "introduction",
-        "quickstart",
-        "development"
+        "_get_started/Setup"
       ]
     },
     {
@@ -84,8 +72,10 @@
     }
   ],
   "footerSocials": {
-    "x": "https://x.com/mintlify",
-    "github": "https://github.com/mintlify",
-    "linkedin": "https://www.linkedin.com/company/mintsearch"
+    "x": "https://x.com/omedotme",
+    "github": "https://github.com/BasedHardware/Omi",
+    "linkedin": "https://www.linkedin.com/company/omi-ai/",
+    "discord": "https://discord.gg/ZutWMTJnwA",
+    "instagram": "https://www.instagram.com/based_hardware/"
   }
 }
