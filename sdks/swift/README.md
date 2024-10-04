@@ -19,15 +19,15 @@ iOS requires you to include Bluetooth permissions in the info.plist. This can be
 ## Usage
 The core interface for interacting with the Omi device is the **OmiManager.swift**. The OmiManager abstracts things like scanning, connecting, and reading bluetooth data into a few simple function calls.
 
-The RootVC shows off an example of how to use OmiManager to connect to the Omi Friend Device.
-
 **Looking for a device**
 ```swift
+import omi_lib
+
 func lookForDevice() {
     OmiManager.startScan { device, error in
         // connect to first found omi device
         if let device = device {
-            print("got device ", device.id.uuidString)
+            print("got device ", device)
             self.connectToOmiDevice(device: device)
             OmiManager.endScan()
         }
@@ -36,9 +36,11 @@ func lookForDevice() {
 
 func lookForSpecificDevice(device_id: String) {
     OmiManager.startScan { device, error in
-        // connect to an omi device with a specific id
-        if let device = device, device.id.uuidString == device_id {
+        // connect to first found omi device
+        if let device = device, device.id == "some_device_id" {
+            print("got device ", device)
             self.connectToOmiDevice(device: device)
+            OmiManager.endScan()
         }
     }
 }
@@ -46,7 +48,7 @@ func lookForSpecificDevice(device_id: String) {
 
 **Connecting / Reconnecting to a device**
 ```swift
-func connectToOmiDevice(device: Friend) {
+func connectToOmiDevice(device: Device) {
     OmiManager.connectToDevice(device: device)
     self.reconnectIfDisconnects()
 }
@@ -62,24 +64,13 @@ func reconnectIfDisconnects() {
 
 **Getting Live Data**
 ```swift
-func listenToLiveTranscript(device: Friend) {
+func listenToLiveTranscript(device: Device) {
     OmiManager.getLiveTranscription(device: device) { transcription in
-
-        self.full_transcript = self.full_transcript + "\(self.getFormattedTimestamp(for: Date())): " + (transcription ?? "" ) + "\n\n"
-
-        DispatchQueue.main.async {
-            self.textView.text = self.full_transcript
-            if self.textView.text.count > 0 {
-                Defaults.singleton.setDetailsForScribe(details: self.full_transcript)
-            }
-            
-            let range = NSMakeRange(self.textView.text.count - 1, 1)
-            self.textView.scrollRangeToVisible(range)
-        }
+        print("transcription:", transcription ?? "no transcription")
     }
 }
 
-func listenToLiveAudio(device: Friend) {
+func listenToLiveAudio(device: Device) {
     OmiManager.getLiveAudio(device: device) { file_url in
         print("file_url: ", file_url?.absoluteString ?? "no url")
     }
