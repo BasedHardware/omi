@@ -4,7 +4,7 @@ import AVFoundation
 
 
 public struct Device {
-    var id: String
+    public var id: String
 }
 
 public class OmiManager {
