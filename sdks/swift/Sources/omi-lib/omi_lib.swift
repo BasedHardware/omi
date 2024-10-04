@@ -7,8 +7,9 @@ public struct Device {
     public var id: String
 }
 
-public let bundleForMyTarget = Bundle.module
-
+public struct BundleAccessor {
+    public static let bundle: Bundle = Bundle.module
+}
 public class OmiManager {
     public init() {}
     
