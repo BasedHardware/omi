@@ -423,13 +423,16 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.memoryProcessingStarted) {
-      setMemoryCreating(true);
       if (event.memory == null) {
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      memoryProvider!.inProgressMemory = null;
-      memoryProvider!.processingMemories = memoryProvider!.processingMemories + [event.memory!];
+      memoryProvider!.removeInProgressMemory();
+      memoryProvider!.addProcessingMemory(event.memory!);
+      segments = [];
+      setHasTranscripts(false);
+      setMemoryCreating(true);
+      notifyListeners();
       return;
     }
 
@@ -439,18 +442,15 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       event.memory!.isNew = true;
+      memoryProvider!.removeProcessingMemory(event.memory!.id);
       _processOnMemoryCreated(event.memory, event.messages ?? []);
       return;
     }
 
     if (event.type == MessageEventType.newMemoryCreateFailed) {
-      _onMemoryCreateFailed();
+      // TODO: what to do here?
       return;
     }
-  }
-
-  void _onMemoryCreateFailed() {
-    _processOnMemoryCreated(null, []); // force failed
   }
 
   Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
