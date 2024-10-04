@@ -49,7 +49,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            SliverToBoxAdapter(child: getMemoryCaptureWidget()),
+            const SliverToBoxAdapter(child: MemoryCaptureWidget()),
             getProcessingMemoriesWidget(memoryProvider.processingMemories),
             if (memoryProvider.groupedMemories.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(

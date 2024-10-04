@@ -6,7 +6,6 @@ import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
@@ -123,11 +122,14 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                     children: [
                                       const SizedBox(height: 80),
                                       Center(
-                                          child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                        child: Text(
+                                          memorySource == MemorySource.friend ? "No transcript" : "Empty",
+                                        ),
+                                      ),
                                     ],
                                   )
                                 : getTranscriptWidget(
-                                    provider.memoryCreating,
+                                    false,
                                     provider.segments,
                                     [],
                                     deviceProvider.connectedDevice,
