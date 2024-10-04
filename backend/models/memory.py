@@ -122,6 +122,13 @@ class PostProcessingStatus(str, Enum):
     failed = 'failed'
 
 
+class MemoryStatus(str, Enum):
+    in_progress = 'in_progress'
+    processing = 'processing'
+    completed = 'completed'
+    failed = 'failed'
+
+
 class PostProcessingModel(str, Enum):
     fal_whisperx = 'fal_whisperx'
 
@@ -155,6 +162,7 @@ class Memory(BaseModel):
     visibility: MemoryVisibility = MemoryVisibility.private
 
     processing_memory_id: Optional[str] = None
+    status: Optional[MemoryStatus] = MemoryStatus.completed
 
     @staticmethod
     def memories_to_string(memories: List['Memory']) -> str:
