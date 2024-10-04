@@ -18,12 +18,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
-  final ServerMemory? memory;
-
-  const MemoryCaptureWidget({
-    super.key,
-    required this.memory,
-  });
+  const MemoryCaptureWidget({super.key});
 
   @override
   State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
@@ -162,15 +157,14 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   }
 
   Widget? _getMemoryHeader(BuildContext context) {
-    var provider = context.read<CaptureProvider>();
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
 
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    // bool isHavingCapturingMemory = provider.capturingProcessingMemory != null;
-    bool isHavingCapturingMemory = false; // FIXME
+    bool isMemoryInProgress = captureProvider.segments.isNotEmpty; // is this correct? // FIXME?
+
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
@@ -229,7 +223,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    } else if (isHavingCapturingMemory &&
+    } else if (isMemoryInProgress &&
         (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
       left = Row(
         children: [
@@ -277,10 +271,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         strokeWidth: 2.0,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
       );
-    } else if (captureProvider.memoryCreating) {
-      stateText = "Processing";
-      statusIndicator = const RecordingStatusIndicator();
     }
+    // else if (captureProvider.memoryCreating) {
+    //   stateText = "Processing";
+    //   statusIndicator = const RecordingStatusIndicator();
+    // }
 
     Widget right = stateText.isNotEmpty
         ? Expanded(
