@@ -22,3 +22,37 @@ class MemoryEvent(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         return j
+
+
+class NewMemoryCreated(MessageEvent):
+    processing_memory_id: Optional[str] = None
+    memory_id: Optional[str] = None
+    message_ids: Optional[List[str]] = []
+    memory: Memory
+    messages: Optional[List[Message]] = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
+
+
+class NewProcessingMemoryCreated(MessageEvent):
+    processing_memory_id: Optional[str] = None
+    memory_id: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
+
+
+class ProcessingMemoryStatusChanged(MessageEvent):
+    processing_memory_id: Optional[str] = None
+    processing_memory_status: Optional[str] = None
+    memory_id: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
