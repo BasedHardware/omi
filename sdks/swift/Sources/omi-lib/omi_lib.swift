@@ -45,18 +45,18 @@ public class OmiManager {
     public static func connectionUpdated(completion: @escaping(Bool) -> Void) {
         self.friend_singleton.connectionStatus(completion: completion)
     }
-    
-    public static func getLiveTranscription(device: Device, completion: @escaping (String?) -> Void) {
-        if let device = self.singleton.seen_devices.first(where: {$0.id.uuidString == device.id}) {
-            self.friend_singleton.getLiveTranscription(device: device, completion: completion)
-        }
-    }
-    
+
     public static func getLiveAudio(device: Device, completion: @escaping (URL?) -> Void) {
         if let device = self.singleton.seen_devices.first(where: {$0.id.uuidString == device.id}) {
             self.friend_singleton.getRawAudio(device: device, completion: completion)
         }
     }
     
+    // TODO: fix referencing error to be able to reference local whisper file    
+    // public static func getLiveTranscription(device: Device, completion: @escaping (String?) -> Void) {
+    //     if let device = self.singleton.seen_devices.first(where: {$0.id.uuidString == device.id}) {
+    //         self.friend_singleton.getLiveTranscription(device: device, completion: completion)
+    //     }
+    // }
 }
 
