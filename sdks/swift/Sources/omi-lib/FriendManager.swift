@@ -27,15 +27,15 @@ class FriendManager {
     var connectionCompletion: ((Bool) -> Void)?
     let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
 
-    let whisper: Whisper
+    let whisper: Whisper?
     
     var transcriptTimer: Timer?
     var audioFileTimer: Timer?
 
     init() {
-        let modelURL = Bundle.module.url(forResource: "ggml-tiny.en", withExtension: "bin")!
-        whisper = Whisper(fromFileURL: modelURL)
-        
+        // let modelURL = Bundle.module.url(forResource: "ggml-tiny.en", withExtension: "bin")!
+        // whisper = Whisper(fromFileURL: modelURL)
+        whisper = nil
         bluetoothScanner = BluetoothScanner()
         bluetoothScanner.delegate = self
     }
@@ -60,11 +60,15 @@ class FriendManager {
         close(nullDevice)
         
         convertAudioFileToPCMArray(fileURL: audioURL) { result in
+            guard let whisper = self.whisper else {
+                completionHandler(nil, nil)
+                return
+            }
             switch result {
                 case .success(let success):
                     Task {
                         do {
-                            let segments = try await self.whisper.transcribe(audioFrames: success)
+                            let segments = try await whisper.transcribe(audioFrames: success)
                             completionHandler(segments.map(\.text).joined(), nil)
                         } catch {
                             completionHandler(nil, error)
