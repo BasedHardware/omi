@@ -4,7 +4,7 @@ import time
 from typing import List
 
 import websockets
-from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, ListenWebSocketClient
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
 import database.notifications as notification_db
@@ -94,8 +94,7 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int,
-        preseconds: int = 0,
+        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int, preseconds: int = 0,
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -342,7 +341,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         raise  # Re-raise the exception to be handled by the caller
 
 
-async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str, preseconds: int = 0):
+async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str,
+                                     preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
 
