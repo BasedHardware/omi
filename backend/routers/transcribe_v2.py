@@ -119,7 +119,11 @@ async def _websocket_util(
 
         if existing:
             if time.time() - existing['finished_at'].timestamp() > memory_creation_timeout:
-                memories_db.update_memory_status(uid, existing['id'], MemoryStatus.failed)
+                memory = Memory(**existing)
+                memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
+                memory = process_memory(uid, memory.language, memory)
+                memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
+                memory = None
                 existing = None
 
         if existing:
