@@ -18,7 +18,7 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) 
                 "audio_url": audio_url,
                 'task': 'transcribe',
                 'diarize': True,
-                'language': 'en',  # TODO: use language as a parameter
+                # 'language': 'en',  # TODO: use language as a parameter
                 'chunk_level': 'word',
                 'version': '3',
                 'batch_size': 64,
@@ -26,6 +26,7 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) 
             },
         )
         result = handler.get()
+        print(result)
         words = result.get('chunks', [])
         if not words:
             raise Exception('No chunks found')
