@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
 import database.redis_db as redis_db
+import utils.memories.memory as memories_util
 from database.vector_db import delete_vector
 from models.memory import *
 from routers.speech_profile import expand_speech_profile
@@ -115,8 +116,8 @@ def reprocess_memory(
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
 def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset, statuses)
-    return memories_db.get_memories(uid, limit, offset, include_discarded=True,
-                                    statuses=statuses.split(",") if len(statuses) > 0 else [])
+    return memories_util.get_memories(uid, limit, offset, include_discarded=True,
+                                      statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])

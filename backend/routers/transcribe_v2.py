@@ -14,6 +14,7 @@ from database import redis_db
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
 from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.process_memory import process_memory
+from utils.memories.memory import MEMORY_CREATION_TIMEOUT
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 
@@ -99,7 +100,6 @@ async def _websocket_util(
     # Soft timeout, should < MODAL_TIME_OUT - 3m
     timeout_seconds = 420  # 7m
     started_at = time.time()
-    memory_creation_timeout = 15
 
     def _get_in_progress_memory(segments: List[dict] = None):
 
@@ -118,7 +118,7 @@ async def _websocket_util(
             return existing
 
         if existing:
-            if time.time() - existing['finished_at'].timestamp() > memory_creation_timeout:
+            if time.time() - existing['finished_at'].timestamp() > MEMORY_CREATION_TIMEOUT:
                 memory = Memory(**existing)
                 memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
                 memory = process_memory(uid, memory.language, memory)
@@ -163,7 +163,7 @@ async def _websocket_util(
 
     async def memory_creation_timer():
         try:
-            await asyncio.sleep(memory_creation_timeout)
+            await asyncio.sleep(MEMORY_CREATION_TIMEOUT)
             await _create_memory()
         except asyncio.CancelledError:
             pass
