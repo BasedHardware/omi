@@ -383,7 +383,7 @@ class CaptureProvider extends ChangeNotifier
       }
       event.memory!.isNew = true;
       memoryProvider!.removeProcessingMemory(event.memory!.id);
-      _processOnMemoryCreated(event.memory, event.messages ?? []);
+      _processMemoryCreated(event.memory, event.messages ?? []);
       return;
     }
 
@@ -393,36 +393,24 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
-    if (memory == null) return;
-
-    processMemoryContent(
-      // no need to await
-      memory: memory,
-      messages: messages,
-      sendMessageToChat: (v) {
-        messageProvider?.addMessage(v);
-      },
-    );
-
-    // use memory provider to add memory
-    MixpanelManager().memoryCreated(memory);
-    memoryProvider?.upsertMemory(memory);
-    if (memoryProvider?.memories.isEmpty ?? false) {
-      memoryProvider?.getMoreMemoriesFromServer();
-    }
-  }
-
   Future<void> forceProcessingCurrentMemory() async {
     _resetStateVariables();
     processInProgressMemory().then((result) {
       if (result == null || result.memory == null) return;
       result.memory!.isNew = true;
-      _processOnMemoryCreated(result.memory, result.messages);
+      _processMemoryCreated(result.memory, result.messages);
     });
 
     _initiateWebsocket();
     return;
+  }
+
+  Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory == null) return;
+
+    processMemoryContent(memory: memory, messages: messages, sendMessageToChat: messageProvider?.addMessage);
+    memoryProvider?.upsertMemory(memory);
+    MixpanelManager().memoryCreated(memory);
   }
 
   @override
