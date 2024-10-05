@@ -32,7 +32,7 @@ class OnboardingWrapper extends StatefulWidget {
 
 class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
   TabController? _controller;
-  bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
+  bool hasSpeechProfile = !SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {
@@ -121,7 +121,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
         goNext: () async {
           var provider = context.read<OnboardingProvider>();
-          if (context.read<HomeProvider>().hasSpeakerProfile) {
+          if (hasSpeechProfile) {
             // previous users
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
@@ -146,11 +146,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       pages.addAll([
         SpeechProfileWidget(
           goNext: () {
-            if (context.read<SpeechProfileProvider>().memory == null) {
-              routeToPage(context, const HomePageWrapper(), replace: true);
-            } else {
-              _goNext();
-            }
+            routeToPage(context, const HomePageWrapper(), replace: true);
+            // if (context.read<SpeechProfileProvider>().memory == null) {
+            // } else {
+            //   _goNext();
+            // }
             MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
