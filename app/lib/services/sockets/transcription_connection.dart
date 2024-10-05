@@ -12,20 +12,23 @@ import 'package:friend_private/services/sockets/pure_socket.dart';
 
 abstract interface class ITransctipSegmentSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);
+
   void onSegmentReceived(List<TranscriptSegment> segments);
+
   void onError(Object err);
+
   void onConnected();
+
   void onClosed();
 }
 
-class SpeechProfileTranscriptSegmentSocketService extends TranscripSegmentSocketService {
+class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
-      : super.create(includeSpeechProfile: false, newMemoryWatch: false);
+      : super.create(includeSpeechProfile: false);
 }
 
-class MemoryTranscripSegmentSocketService extends TranscripSegmentSocketService {
-  MemoryTranscripSegmentSocketService.create(super.sampleRate, super.codec)
-      : super.create(includeSpeechProfile: true, newMemoryWatch: true);
+class MemoryTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
+  MemoryTranscriptSegmentSocketService.create(super.sampleRate, super.codec) : super.create(includeSpeechProfile: true);
 }
 
 enum SocketServiceState {
@@ -33,7 +36,7 @@ enum SocketServiceState {
   disconnected,
 }
 
-class TranscripSegmentSocketService implements IPureSocketListener {
+class TranscriptSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
   final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
 
@@ -43,18 +46,16 @@ class TranscripSegmentSocketService implements IPureSocketListener {
   int sampleRate;
   BleAudioCodec codec;
   bool includeSpeechProfile;
-  bool newMemoryWatch;
 
-  TranscripSegmentSocketService.create(
+  TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec, {
     this.includeSpeechProfile = false,
-    this.newMemoryWatch = true,
   }) {
     final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
     var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-        '&include_speech_profile=$includeSpeechProfile&new_memory_watch=$newMemoryWatch&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}listen$params';
+        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
+    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v2/listen$params';
 
     _socket = PureSocket(url);
     _socket.setListener(this);
