@@ -86,7 +86,7 @@ async def _websocket_util(
     started_at = time.time()
     memory_creation_timeout = 15
 
-    def _get_in_progress_memory(segments: List[dict]):
+    def _get_in_progress_memory(segments: List[dict] = None):
 
         memory_id = redis_db.get_in_progress_memory_id(uid)
         existing = None
@@ -99,6 +99,9 @@ async def _websocket_util(
         if not existing:
             existing = memories_db.get_in_progress_memory(uid)
 
+        if not segments:  # memory_created event, just return in progress, withouc considering follow-up checks
+            return existing
+
         if existing:
             if time.time() - existing['finished_at'].timestamp() > memory_creation_timeout:
                 memories_db.update_memory_status(uid, existing['id'], MemoryStatus.failed)
@@ -107,12 +110,12 @@ async def _websocket_util(
         if existing:
             print('_get_in_progress_memory existing', existing['id'])
             memory = Memory(**existing)
-            latest_segment = memory.transcript_segments[-1]
-
-            if segments and segments[-1]['start'] < latest_segment.end:
-                for segment in segments:
-                    segment['start'] += latest_segment.end
-                    segment['end'] += latest_segment.end
+            # latest_segment = memory.transcript_segments[-1]
+            #
+            # if segments and segments[-1]['start'] < latest_segment.end:
+            #     for segment in segments:
+            #         segment['start'] += latest_segment.end
+            #         segment['end'] += latest_segment.end
 
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
@@ -348,7 +351,7 @@ async def _websocket_util(
         nonlocal seconds_to_trim
         seconds_to_trim = None
 
-        memory = _get_in_progress_memory([])
+        memory = _get_in_progress_memory()
         if not memory or not memory.transcript_segments:
             raise Exception('FAILED')
 
