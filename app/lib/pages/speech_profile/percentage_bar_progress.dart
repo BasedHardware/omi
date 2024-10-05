@@ -13,7 +13,6 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 60,
-      width: 400,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.end,
@@ -24,7 +23,7 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
             child: Stack(
               children: [
                 Positioned(
-                  left: widget.progressValue * (400 - 122),
+                  left: widget.progressValue * (300 - 10),
                   child: ProgressBubble(
                     content: '${(widget.progressValue * 100).toInt()}%',
                   ),
@@ -102,7 +101,6 @@ class ProgressBubble extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          // margin: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -113,7 +111,7 @@ class ProgressBubble extends StatelessWidget {
               content,
               style: const TextStyle(
                 fontSize: 14,
-                color: Colors.grey,
+                color: Colors.black,
               ),
             ),
           ),
