@@ -40,6 +40,21 @@ router = APIRouter()
 #         wav_file.setframerate(sample_rate)  # Set sample rate to 16000 Hz
 #         wav_file.writeframes(raw_audio_data)  # Write raw audio data to WAV
 
+
+# Edge case for the future:
+# ```
+# I think the logic has to be through the websocket,
+#
+# What happens if I start speaking, so on,
+#
+# Then I go out, open back in 115 seconds, and I reopen the ws, but don’t say something,
+#
+# we should start the processing timer in 120-115 seconds = 5 seconds
+#
+# If I say something between 5 seconds, then timer it’s restarted, if not, it should be triggered and created.
+# ```
+
+
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"

@@ -11,6 +11,7 @@ import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
+import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -37,6 +38,7 @@ class CaptureProvider extends ChangeNotifier
 
   // In progress memory
   ServerMemory? _inProgressMemory;
+
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
@@ -330,7 +332,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Wait for in process memory or reset
     if (inProgressMemory == null) {
-	   _resetStateVariables();
+      _resetStateVariables();
     }
 
     notifyListeners();
@@ -405,13 +407,21 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> forceProcessingCurrentMemory() async {
     _resetStateVariables();
+    memoryProvider!.addProcessingMemory(
+      ServerMemory(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
+    );
     processInProgressMemory().then((result) {
-      if (result == null || result.memory == null) return;
+      if (result == null || result.memory == null) {
+        _initiateWebsocket();
+        memoryProvider!.removeProcessingMemory('0');
+        return;
+      }
+      memoryProvider!.removeProcessingMemory('0');
       result.memory!.isNew = true;
       _processMemoryCreated(result.memory, result.messages);
+      _initiateWebsocket();
     });
 
-    _initiateWebsocket();
     return;
   }
 

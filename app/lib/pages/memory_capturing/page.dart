@@ -193,6 +193,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                             if (provider.segments.isNotEmpty) {
                               if (!showSummarizeConfirmation) {
                                 context.read<CaptureProvider>().forceProcessingCurrentMemory();
+                                Navigator.of(context).pop();
                                 return;
                               }
                               showDialog(
