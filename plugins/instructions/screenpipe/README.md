@@ -8,8 +8,8 @@ Screenpipe is an OSS library for building personalized AI. It captures screen an
 
 This plugin integrates screenpipe with Friend, allowing you to:
 
-1. Stream your desktop memories captured by Screenpipe to your Friend device.
-2. Stream memories from your Friend device back to Screenpipe.
+1. Stream your desktop memories captured by Screenpipe to your Omi device.
+2. Stream memories from your Omi device back to Screenpipe.
 
 ## Get started:
 

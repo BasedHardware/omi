@@ -142,7 +142,7 @@ Remember to handle errors gracefully and consider performance, especially for le
 
 Time to put your plugin through its paces! Follow these steps to test both types of integrations:
 
-1. Open the FRIEND app on your device.
+1. Open the OMI app on your device.
 2. Go to Settings and enable Developer Mode.
 3. Navigate to Developer Settings.
 

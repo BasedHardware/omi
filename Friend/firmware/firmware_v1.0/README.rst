@@ -1,10 +1,10 @@
 # Friend Hardware Firmware
 
-This repository contains the firmware for the Friend AI wearable device.
+This repository contains the firmware for the Omi AI wearable device.
 
 ## Overview
 
-The Friend firmware is built on the Zephyr RTOS and provides functionality for audio capture, processing, and battery. It includes Bluetooth connectivity for streaming audio data. Given the complex nature of this firmware its not buildable in Arduino IDE and requires a more advanced toolchain.
+The Omi firmware is built on the Zephyr RTOS and provides functionality for audio capture, processing, and battery. It includes Bluetooth connectivity for streaming audio data. Given the complex nature of this firmware its not buildable in Arduino IDE and requires a more advanced toolchain.
 
 ## Directory Structure
 

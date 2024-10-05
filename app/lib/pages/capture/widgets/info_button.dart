@@ -26,7 +26,7 @@ class _InfoButtonState extends State<InfoButton> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'How Friend Works?',
+                          'How Omi Works?',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -41,7 +41,7 @@ class _InfoButtonState extends State<InfoButton> {
                     ),
                     content: const Text(
                       "Ready to chat? Your transcripts will pop up here as you start talking. "
-                      "If Friend notices you’ve been quiet for 2 minutes, it’ll wrap up "
+                      "If Omi notices you’ve been quiet for 2 minutes, it’ll wrap up "
                       "the conversation and start crafting your memory. You can find all your "
                       "treasured moments in the Memories tab!",
                       style: TextStyle(
@@ -72,7 +72,7 @@ class _InfoButtonState extends State<InfoButton> {
                   ));
         },
         child: const Text(
-          'How Friend works?',
+          'How Omi works?',
           style: TextStyle(decoration: TextDecoration.underline, color: Colors.white, fontSize: 15),
         ));
   }

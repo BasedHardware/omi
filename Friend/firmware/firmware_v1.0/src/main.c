@@ -114,7 +114,7 @@ int main(void)
 {
 	int err;
 
-    LOG_INF("Friend device firmware starting...");
+    LOG_INF("Omi device firmware starting...");
     err = led_start();
     if (err) 
     {

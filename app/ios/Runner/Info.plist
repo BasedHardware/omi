@@ -55,9 +55,9 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSBluetoothAlwaysUsageDescription</key>
-		<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
+		<string>Bluetooth permission is required to connect with your Omi Wearable.</string>
 		<key>NSBluetoothPeripheralUsageDescription</key>
-		<string>Bluetooth permission is required to connect with your Friend Wearable.</string>
+		<string>Bluetooth permission is required to connect with your Omi Wearable.</string>
 		<key>NSCalendarsFullAccessUsageDescription</key>
 		<string>Access most functions for calendar viewing and editing.</string>
 		<key>NSCalendarsUsageDescription</key>

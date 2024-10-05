@@ -218,7 +218,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                         !provider.startedRecording
                             ? const SizedBox(height: 0)
                             : const Text(
-                                'Tell your Friend\nabout yourself',
+                                'Tell your Omi\nabout yourself',
                                 style: TextStyle(
                                     color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
                                 textAlign: TextAlign.center,

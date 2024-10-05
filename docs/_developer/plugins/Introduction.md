@@ -7,7 +7,7 @@ nav_order: 1
 
 # FRIEND Plugin Development: Expanding AI Capabilities
 
-As a developer, you can create plugin for Friend app, letting other people to use your plugins and earn in the future.
+As a developer, you can create plugin for Omi app, letting other people to use your plugins and earn in the future.
 
 ## What Are FRIEND Plugins?
 
@@ -58,7 +58,7 @@ These plugins allow FRIEND to interact with external services and process data i
 
 ## Potential Applications
 
-The FRIEND plugin system opens up a wide range of possibilities:
+The OMI plugin system opens up a wide range of possibilities:
 
 - A productivity plugin that extracts action items from meetings and adds them to a task management system
 - A research assistant that provides real-time fact-checking and source citation
@@ -69,7 +69,7 @@ The FRIEND plugin system opens up a wide range of possibilities:
 
 ## Getting Started
 
-To contribute your plugin to the FRIEND community, follow these steps based on the type of plugin you want to create:
+To contribute your plugin to the OMI community, follow these steps based on the type of plugin you want to create:
 
 1. Read our [Prompt-Based Plugin Guide](https://docs.omi.me/developer/plugins/PromptBased/) or check
    our [Integration Plugin Guide](https://docs.omi.me/developer/plugins/Integrations/) to

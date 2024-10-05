@@ -14,7 +14,7 @@
 // Uncomment to switch the codec
 // Opus is still under development
 // Mulaw is used with the web app
-// PCM is used with the Friend app
+// PCM is used with the Omi app
 
 // To use with the web app, comment CODEC_PCM and
 // uncomment CODEC_MULAW

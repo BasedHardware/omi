@@ -18,7 +18,7 @@ from [Friend firmware releases](https://github.com/BasedHardware/Omi/releases)
 Put the board in bootloader mode by double pressing the reset button. The board should appear as a USB drive.
 
 Copy the new firmware file in the root directory of the board. The board will automatically update the firmware and reset back to application mode.
-You can check the firmware version from the Friend companion app.
+You can check the firmware version from the Omi companion app.
 
 ### Upgrade bootloader using UF2 file
 

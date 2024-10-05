@@ -9,7 +9,7 @@ nav_order: 3
 {: .note }
 Important: If you purchased an assembled device please skip this step
 
-If you purchased an unassembled Friend device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
+If you purchased an unassembled Omi device or built it yourself using our hardware guide, follow the steps below to flash the firmware:
 
 ### Want to install a pre-built firmware? Navigate [here](https://docs.omi.me/get_started/Flash_device/) 
 

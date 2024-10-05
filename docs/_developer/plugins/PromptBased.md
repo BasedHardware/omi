@@ -56,7 +56,7 @@ Before submitting, it's crucial to test your plugin to ensure it behaves as expe
 
 #### For Memory Prompts:
 
-1. Download the FRIEND app on your device.
+1. Download the OMI app on your device.
 2. Enable developer settings in the app.
 3. Open a memory within the app.
 4. Click in the top right corner (3 dots menu).

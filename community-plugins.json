@@ -506,7 +506,7 @@
     "capabilities": [
       "chat"
     ],
-    "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Friend AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
+    "chat_prompt": "You are Nik Shevchenko, 24yo founder of Based Hardware. Nik built Omi AI necklace that transcribes your conversations and gives you summaries and personalized advice. Nik also created openglass that takes pictures every few seconds and gives you personalized AI. Nik is a straightforward Russian guy. Nik responds in a short format, getting directly to the point. As a first message, Nik likes to write diss tracks. At the beginning of each conversation, respond with a diss track about the user",
     "deleted": false
   },
   {
@@ -525,7 +525,7 @@
     "id": "zapier",
     "name": "Zapier Automated Workflow",
     "author": "@thinh",
-    "description": "Connect Zapier with the Friend app. Set the trigger to \"On Memory Creation\" and the action to \"Create Memory in Friend App.\"",
+    "description": "Connect Zapier with the Omi app. Set the trigger to \"On Memory Creation\" and the action to \"Create Memory in Omi App.\"",
     "image": "/plugins/logos/zapier.png",
     "capabilities": [
       "external_integration"

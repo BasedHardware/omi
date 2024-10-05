@@ -109,7 +109,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             MixpanelManager().pageOpened('Share Analytics Data Details');
                           },
                           child: const Text(
-                            'Help improve Friend by sharing anonymized analytics data',
+                            'Help improve Omi by sharing anonymized analytics data',
                             style: TextStyle(
                               color: Colors.grey,
                               fontSize: 16,

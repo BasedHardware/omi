@@ -96,7 +96,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                                 const Text('Firmware Updated Successfully'),
                                 const SizedBox(height: 10),
                                 const Text(
-                                  'Please restart the Friend device to complete the update',
+                                  'Please restart the Omi device to complete the update',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 20),

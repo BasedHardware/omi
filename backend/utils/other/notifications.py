@@ -81,8 +81,8 @@ async def _send_bulk_summary_notification(users: list):
 
 async def send_daily_notification():
     try:
-        morning_alert_title = "Don\'t forget to wear Friend today"
-        morning_alert_body = "Wear your friend and capture your memories today."
+        morning_alert_title = "Don\'t forget to wear Omi today"
+        morning_alert_body = "Wear your Omi and capture your memories today."
         morning_target_time = "08:00"
 
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)

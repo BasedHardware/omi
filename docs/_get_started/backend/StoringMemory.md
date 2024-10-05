@@ -7,7 +7,7 @@ nav_order: 3
 
 # 📚 Memory Storage Process
 
-This document outlines the process of storing memory objects in the Friend AI system.
+This document outlines the process of storing memory objects in the Omi AI system.
 
 ## 🔄 Overview of the Process
 

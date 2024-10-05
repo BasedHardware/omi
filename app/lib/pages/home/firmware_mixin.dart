@@ -117,7 +117,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
             false
           );
         } else {
-          return ('A new version is available! Update your Friend now.', true);
+          return ('A new version is available! Update your Omi now.', true);
         }
       } else {
         return ('You are already on the latest version', false);

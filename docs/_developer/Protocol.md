@@ -12,7 +12,7 @@ The official app discovers the device by scanning for BLE devices with the name 
 
 ## BLE Services and Characteristics
 
-The Friend wearable device implements several services:
+The Omi wearable device implements several services:
 
 ### the standard BLE [Battery Service](https://www.bluetooth.com/specifications/specs/battery-service)
 

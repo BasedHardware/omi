@@ -173,7 +173,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                             await file.writeAsString(json);
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
