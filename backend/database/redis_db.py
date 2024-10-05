@@ -159,3 +159,20 @@ def get_public_memories() -> List[str]:
     if not val:
         return []
     return [x.decode() for x in val]
+
+
+def set_in_progress_memory_id(uid: str, memory_id: str, ttl: int = 150):
+    r.set(f'users:{uid}:in_progress_memory_id', memory_id)
+    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+
+
+def remove_in_progress_memory_id(uid: str):
+    r.delete(f'users:{uid}:in_progress_memory_id')
+
+
+def get_in_progress_memory_id(uid: str) -> str:
+    memory_id = r.get(f'users:{uid}:in_progress_memory_id')
+    if not memory_id:
+        return ''
+    return memory_id.decode()
+

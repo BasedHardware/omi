@@ -40,6 +40,8 @@ enum MemoryPostProcessingStatus { not_started, in_progress, completed, canceled,
 
 enum MemoryPostProcessingModel { fal_whisperx, custom_whisperx }
 
+enum MemoryStatus { in_progress, processing, completed, failed }
+
 class MemoryPostProcessing {
   final MemoryPostProcessingStatus status;
   final MemoryPostProcessingModel? model;
@@ -75,88 +77,6 @@ enum ServerProcessingMemoryStatus {
   }
 }
 
-class ServerProcessingMemory {
-  final String id;
-  final DateTime createdAt;
-  final DateTime? startedAt;
-  final DateTime? capturingTo;
-  final ServerProcessingMemoryStatus? status;
-  final List<TranscriptSegment> transcriptSegments;
-  final String? memoryId;
-
-  ServerProcessingMemory({
-    required this.id,
-    required this.createdAt,
-    this.startedAt,
-    this.capturingTo,
-    this.status,
-    this.transcriptSegments = const [],
-    this.memoryId,
-  });
-
-  factory ServerProcessingMemory.fromJson(Map<String, dynamic> json) {
-    return ServerProcessingMemory(
-      id: json['id'],
-      createdAt: DateTime.parse(json['created_at']).toLocal(),
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
-      capturingTo: json['capturing_to'] != null ? DateTime.parse(json['capturing_to']).toLocal() : null,
-      status: json['status'] != null ? ServerProcessingMemoryStatus.valuesFromString(json['status']) : null,
-      transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
-      memoryId: json['memory_id'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'created_at': createdAt.toUtc().toIso8601String(),
-      'started_at': startedAt?.toUtc().toIso8601String(),
-      'capturing_to': capturingTo?.toUtc().toIso8601String(),
-      'status': status.toString(),
-      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'memory_id': memoryId,
-    };
-  }
-
-  String getTag() {
-    return 'Processing';
-  }
-
-  Color getTagTextColor() {
-    return Colors.white;
-  }
-
-  Color getTagColor() {
-    return Colors.grey.shade800;
-  }
-}
-
-class ProcessingMemoryResponse {
-  final ServerProcessingMemory? result;
-
-  ProcessingMemoryResponse({required this.result});
-
-  factory ProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
-    return ProcessingMemoryResponse(
-      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
-    );
-  }
-}
-
-class UpdateProcessingMemoryResponse {
-  final ServerProcessingMemory? result;
-
-  UpdateProcessingMemoryResponse({required this.result});
-
-  factory UpdateProcessingMemoryResponse.fromJson(Map<String, dynamic> json) {
-    return UpdateProcessingMemoryResponse(
-      result: json['result'] != null ? ServerProcessingMemory.fromJson(json['result']) : null,
-    );
-  }
-}
-
 class ServerMemory {
   final String id;
   final DateTime createdAt;
@@ -186,6 +106,7 @@ class ServerMemory {
 
   // local label
   bool isNew = false;
+  MemoryStatus status;
 
   ServerMemory({
     required this.id,
@@ -206,6 +127,7 @@ class ServerMemory {
     this.externalIntegration,
     // this.postprocessing,
     this.processingMemoryId,
+    this.status = MemoryStatus.completed,
   });
 
   factory ServerMemory.fromJson(Map<String, dynamic> json) {
@@ -231,20 +153,11 @@ class ServerMemory {
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
       // postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
       processingMemoryId: json['processing_memory_id'],
+      status: json['status'] != null
+          ? MemoryStatus.values.asNameMap()[json['status']] ?? MemoryStatus.completed
+          : MemoryStatus.completed,
     );
   }
-
-  // bool isPostprocessing() {
-  //   int createdSecondsAgo = DateTime.now().difference(createdAt).inSeconds;
-  //   return (postprocessing?.status == MemoryPostProcessingStatus.not_started ||
-  //           postprocessing?.status == MemoryPostProcessingStatus.in_progress) &&
-  //       createdSecondsAgo < 120;
-  // }
-
-  // bool isReadyForTranscriptAssignment() {
-  //   // TODO: only thing matters here, is if !isPostProcessing() and if we have audio file.
-  //   return !discarded && !deleted && !failed && postprocessing?.status == MemoryPostProcessingStatus.completed;
-  // }
 
   Map<String, dynamic> toJson() {
     return {
@@ -266,6 +179,7 @@ class ServerMemory {
       'external_data': externalIntegration?.toJson(),
       // 'postprocessing': postprocessing?.toJson(),
       'processing_memory_id': processingMemoryId,
+      'status': status.toString().split('.').last,
     };
   }
 
