@@ -19,6 +19,7 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
@@ -40,6 +41,8 @@ class CaptureProvider extends ChangeNotifier
   ServerMemory? _inProgressMemory;
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
+
+  IWalService get wal => ServiceManager.instance().wal;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -146,19 +149,16 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
-    if (_bleBytesStream != null) {
-      _bleBytesStream?.cancel();
-    }
-    _bleBytesStream = await _getBleAudioBytesListener(
-      id,
-      onAudioBytesReceived: (List<int> value) {
-        if (value.isEmpty) return;
-        if (_socket?.state == SocketServiceState.connected) {
-          final trimmedValue = value.sublist(3);
-          _socket?.send(trimmedValue);
-        }
-      },
-    );
+    _bleBytesStream?.cancel();
+    _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
+      if (value.isEmpty) return;
+      wal.onByteStream(value);
+      if (_socket?.state == SocketServiceState.connected) {
+        final trimmedValue = value.sublist(3);
+        _socket?.send(trimmedValue);
+        wal.onBytesSync(value);
+      }
+    });
     setAudioBytesConnected(true);
     notifyListeners();
   }
