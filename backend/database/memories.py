@@ -35,13 +35,15 @@ def get_memory(uid, memory_id):
     return memory_ref.get().to_dict()
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False, statuses: List[str] = []):
     memories_ref = (
         db.collection('users').document(uid).collection('memories')
         .where(filter=FieldFilter('deleted', '==', False))
     )
     if not include_discarded:
         memories_ref = memories_ref.where(filter=FieldFilter('discarded', '==', False))
+    if len(statuses) > 0:
+        memories_ref = memories_ref.where(filter=FieldFilter('status', 'in', statuses))
     memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     memories_ref = memories_ref.limit(limit).offset(offset)
     return [doc.to_dict() for doc in memories_ref.stream()]

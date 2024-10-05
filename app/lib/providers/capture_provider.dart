@@ -369,11 +369,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  // TODO: optimize it, load an in progress memory only
   void _loadInProgressMemory() async {
-    debugPrint("load in progress memory");
-    var memories = await getMemories();
-    _inProgressMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.in_progress);
+    var memories = await getMemories(statuses: [MemoryStatus.in_progress], limit: 1);
+    _inProgressMemory = memories.isNotEmpty ? memories.first : null;
     if (segments.isEmpty && _inProgressMemory != null) {
       segments = _inProgressMemory!.transcriptSegments;
       setHasTranscripts(segments.isNotEmpty);
