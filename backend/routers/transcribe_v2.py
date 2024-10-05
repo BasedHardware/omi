@@ -59,9 +59,7 @@ class STTService(str, Enum):
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        include_speech_profile: bool = True,
-        # stt_service: STTService = STTService.deepgram,
-):
+        channels: int = 1, include_speech_profile: bool = True):
     print('websocket_endpoint', uid, language, sample_rate, codec, include_speech_profile)
 
     # Not when comes from the phone, and only Friend's with 1.0.4
@@ -381,6 +379,5 @@ async def _websocket_util(
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True,
-        # stt_service: STTService = STTService.deepgram
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, include_speech_profile)
