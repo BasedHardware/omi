@@ -40,21 +40,6 @@ router = APIRouter()
 #         wav_file.setframerate(sample_rate)  # Set sample rate to 16000 Hz
 #         wav_file.writeframes(raw_audio_data)  # Write raw audio data to WAV
 
-
-# Edge case for the future:
-# ```
-# I think the logic has to be through the websocket,
-#
-# What happens if I start speaking, so on,
-#
-# Then I go out, open back in 115 seconds, and I reopen the ws, but don’t say something,
-#
-# we should start the processing timer in 120-115 seconds = 5 seconds
-#
-# If I say something between 5 seconds, then timer it’s restarted, if not, it should be triggered and created.
-# ```
-
-
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
@@ -189,9 +174,11 @@ async def _websocket_util(
 
     # Determine previous disconnected socket seconds to add + start processing timer if a memory in progress
     if existing_memory := retrieve_in_progress_memory(uid):
+        # segments seconds alignment
         started_at = datetime.fromisoformat(existing_memory['started_at'].isoformat())
         seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
 
+        # processing if needed logic
         finished_at = datetime.fromisoformat(existing_memory['finished_at'].isoformat())
         seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
         if seconds_since_last_segment >= memory_creation_timeout:
