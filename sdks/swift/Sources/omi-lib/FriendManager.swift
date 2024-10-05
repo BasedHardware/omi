@@ -263,7 +263,7 @@ class FriendManager {
 
 extension FriendManager: BluetoothScannerDelegate {
     func deviceFound(device: CBPeripheral) {
-        if device.name == "Friend" || name == "Friend DevKit 2" {
+        if device.name == "Friend" || device.name == "Friend DevKit 2" {
             print("found friend device")
             WearableDeviceRegistry.shared.registerDevice(wearable: Friend.self)
             self.bleManager = BLEManager(deviceRegistry: WearableDeviceRegistry.shared)
