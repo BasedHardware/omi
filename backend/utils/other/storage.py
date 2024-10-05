@@ -150,17 +150,13 @@ def delete_postprocessing_audio(file_path: str):
     blob.delete()
 
 
-def create_signed_postprocessing_audio_url(file_path: str):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
+def test_file_url(file_path: str):
+    bucket_name = 'test-bucket-10026'
+    bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(file_path)
-    return _get_signed_url(blob, 15)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{bucket_name}/{file_path}'
 
-
-def upload_postprocessing_audio_bytes(file_path: str, audio_buffer: bytes):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
-    blob.upload_from_string(audio_buffer)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
 
 
 def upload_sdcard_audio(file_path: str):
