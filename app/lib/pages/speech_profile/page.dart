@@ -210,21 +210,13 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
             ),
             body: Stack(
               children: [
-                Align(
+                const Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
                     child: Column(
                       children: [
-                        const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
-                        !provider.startedRecording
-                            ? const SizedBox(height: 0)
-                            : const Text(
-                                'Tell your Friend\nabout yourself',
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
-                                textAlign: TextAlign.center,
-                              ),
+                        DeviceAnimationWidget(animatedBackground: true),
                       ],
                     ),
                   ),
@@ -232,60 +224,76 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 Align(
                   alignment: Alignment.center,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(40, 0, 40, 48),
+                    padding: const EdgeInsets.fromLTRB(40, 40, 40, 48),
                     child: !provider.startedRecording
-                        ? const Text(
-                            'Now, Omi needs to learn your voice to be able to recognise you.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              height: 1.4,
-                              fontWeight: FontWeight.w400,
-                            ),
+                        ? const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(height: 10),
+                              Text(
+                                'Omi needs to learn your voice to be able to recognise you.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              Text("Note: This only works in English",
+                                  style: TextStyle(color: Colors.white, fontSize: 16)),
+                            ],
                           )
                         : provider.text.isEmpty
-                            ? const DeviceAnimationWidget(
-                                sizeMultiplier: 0.7,
-                              )
-                            : LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return ShaderMask(
-                                    shaderCallback: (bounds) {
-                                      if (provider.text.split(' ').length < 10) {
-                                        return const LinearGradient(colors: [Colors.white, Colors.white])
-                                            .createShader(bounds);
-                                      }
-                                      return const LinearGradient(
-                                        colors: [Colors.transparent, Colors.white],
-                                        stops: [0.0, 0.5],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                      ).createShader(bounds);
-                                    },
-                                    blendMode: BlendMode.dstIn,
-                                    child: SizedBox(
-                                      height: 120,
-                                      child: ListView(
-                                        controller: _scrollController,
-                                        shrinkWrap: true,
-                                        physics: const NeverScrollableScrollPhysics(),
-                                        children: [
-                                          Text(
-                                            provider.text,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w400,
-                                              height: 1.5,
+                            ? (provider.percentageCompleted > 0
+                                ? const SizedBox()
+                                : const Text(
+                                    "Introduce\nyourself",
+                                    style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
+                                    textAlign: TextAlign.center,
+                                  ))
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 80.0),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return ShaderMask(
+                                      shaderCallback: (bounds) {
+                                        if (provider.text.split(' ').length < 10) {
+                                          return const LinearGradient(colors: [Colors.white, Colors.white])
+                                              .createShader(bounds);
+                                        }
+                                        return const LinearGradient(
+                                          colors: [Colors.transparent, Colors.white],
+                                          stops: [0.0, 0.5],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                        ).createShader(bounds);
+                                      },
+                                      blendMode: BlendMode.dstIn,
+                                      child: SizedBox(
+                                        height: 130,
+                                        child: ListView(
+                                          controller: _scrollController,
+                                          shrinkWrap: true,
+                                          physics: const NeverScrollableScrollPhysics(),
+                                          children: [
+                                            Text(
+                                              provider.text,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w400,
+                                                height: 1.5,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
                   ),
                 ),
@@ -298,7 +306,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               provider.isInitialising
-                                  ? CircularProgressIndicator(
+                                  ? const CircularProgressIndicator(
                                       color: Colors.white,
                                     )
                                   : MaterialButton(
@@ -425,6 +433,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
                                         textAlign: TextAlign.center,
                                       ),
+                                      const SizedBox(height: 30),
                                     ],
                                   ),
                   ),
