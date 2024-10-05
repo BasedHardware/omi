@@ -268,7 +268,7 @@ class CaptureProvider extends ChangeNotifier
 
   void clearTranscripts() {
     segments = [];
-    setHasTranscripts(false);
+    hasTranscripts = false;
     notifyListeners();
   }
 
