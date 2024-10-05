@@ -18,12 +18,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
-  final ServerProcessingMemory? memory;
-
-  const MemoryCaptureWidget({
-    super.key,
-    required this.memory,
-  });
+  const MemoryCaptureWidget({super.key});
 
   @override
   State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
@@ -162,17 +157,20 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   }
 
   Widget? _getMemoryHeader(BuildContext context) {
-    var provider = context.read<CaptureProvider>();
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
 
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    bool isHavingCapturingMemory = provider.capturingProcessingMemory != null;
+    bool isMemoryInProgress = captureProvider.inProgressMemory != null;
+
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
+
+    // print(
+    //     'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
 
     // Left
     Widget? left;
@@ -206,29 +204,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
-      left = Row(
-        children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      );
-    } else if (isHavingCapturingMemory &&
+    } else if (isMemoryInProgress &&
         (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
       left = Row(
         children: [
@@ -245,6 +221,28 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               'Waiting for device...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -276,10 +274,11 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         strokeWidth: 2.0,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
       );
-    } else if (captureProvider.memoryCreating) {
-      stateText = "Processing";
-      statusIndicator = const RecordingStatusIndicator();
     }
+    // else if (captureProvider.memoryCreating) {
+    //   stateText = "Processing";
+    //   statusIndicator = const RecordingStatusIndicator();
+    // }
 
     Widget right = stateText.isNotEmpty
         ? Expanded(
@@ -385,11 +384,8 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
   );
 }
 
-Widget getMemoryCaptureWidget({ServerProcessingMemory? memory}) {
-  return MemoryCaptureWidget(memory: memory);
-}
-
-Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
+Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
+  // FIXME, this has to be a single one always, and also a memory obj
   if (memories.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
@@ -397,17 +393,10 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
     delegate: SliverChildBuilderDelegate(
       (context, index) {
         var pm = memories[index];
-        if (pm.status == ServerProcessingMemoryStatus.processing) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-            child: ProcessingMemoryWidget(memory: pm),
-          );
-        }
-        if (pm.status == ServerProcessingMemoryStatus.done) {
-          return const SizedBox.shrink();
-        }
-
-        return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
+          child: ProcessingMemoryWidget(memory: pm),
+        );
       },
       childCount: memories.length,
     ),
@@ -417,7 +406,7 @@ Widget getProcessingMemoriesWidget(List<ServerProcessingMemory> memories) {
 // PROCESSING MEMORY
 
 class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerProcessingMemory memory;
+  final ServerMemory memory;
 
   const ProcessingMemoryWidget({
     super.key,

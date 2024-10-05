@@ -345,7 +345,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         }
 
                                         await stopDeviceRecording();
-                                        await provider.initialise(false, finalizedCallback: restartDeviceRecording);
+                                        await provider.initialise(finalizedCallback: restartDeviceRecording);
                                         // 1.5 minutes seems reasonable
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {

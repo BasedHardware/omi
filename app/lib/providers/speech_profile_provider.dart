@@ -7,9 +7,9 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
@@ -25,15 +25,16 @@ class SpeechProfileProvider extends ChangeNotifier
   bool loading = false;
   BtDevice? device;
 
-  final targetWordsCount = 70;
+  final targetWordsCount = 15; //TODO: 70 or 15?
   final maxDuration = 150;
+
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
   WavBytesUtil audioStorage = WavBytesUtil(codec: BleAudioCodec.opus);
   StreamSubscription? _bleBytesStream;
 
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
   double percentageCompleted = 0;
@@ -47,7 +48,6 @@ class SpeechProfileProvider extends ChangeNotifier
   String text = '';
   String message = '';
 
-  late bool _isFromOnboarding;
   late Function? _finalizedCallback;
 
   /// only used during onboarding /////
@@ -84,8 +84,7 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> initialise(bool isFromOnboarding, {Function? finalizedCallback}) async {
-    _isFromOnboarding = isFromOnboarding;
+  Future<void> initialise({Function? finalizedCallback}) async {
     _finalizedCallback = finalizedCallback;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
@@ -169,9 +168,9 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingText('Personalizing your experience...');
       SharedPreferencesUtil().hasSpeakerProfile = true;
-      if (_isFromOnboarding) {
-        await createMemory();
-      }
+      // if (_isFromOnboarding) {
+      //   await createMemory();
+      // }
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -271,21 +270,6 @@ class SpeechProfileProvider extends ChangeNotifier
     profileCompleted = false;
     await _socket?.stop(reason: 'closing');
     notifyListeners();
-  }
-
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
-
-    CreateMemoryResponse? result = await createMemoryServer(
-      startedAt: DateTime.now().subtract(Duration(seconds: segments.last.end.toInt())),
-      finishedAt: DateTime.now(),
-      transcriptSegments: segments,
-      geolocation: null, // TODO: include geolocation
-    );
-    if (result == null || result.memory == null) return false;
-    memory = result.memory;
-    notifyListeners();
-    return true;
   }
 
   @override

@@ -148,7 +148,8 @@ async def _websocket_util(
             if processing_memory:
                 processing_memory_synced = len(memory_transcript_segements)
                 processing_memory.transcript_segments = memory_transcript_segements
-                processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory, min_seconds_limit)
+                processing_memory.capturing_to = ProcessingMemory.predict_capturing_to(processing_memory,
+                                                                                       min_seconds_limit)
 
                 processing_memories_db.update_processing_memory_segments(
                     uid, processing_memory.id,
@@ -233,7 +234,7 @@ async def _websocket_util(
                     vad_sample_size = 320
                     vad_sample = data[:vad_sample_size]
                     if len(vad_sample) < vad_sample_size:
-                        vad_sample = vad_sample + bytes([0x00]*(vad_sample_size-len(vad_sample)))
+                        vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
                     has_speech = w_vad.is_speech(vad_sample, sample_rate)
                     if not has_speech:
                         continue
