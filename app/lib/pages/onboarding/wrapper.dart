@@ -32,7 +32,7 @@ class OnboardingWrapper extends StatefulWidget {
 
 class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProviderStateMixin {
   TabController? _controller;
-  bool hasSpeechProfile = !SharedPreferencesUtil().hasSpeakerProfile;
+  bool hasSpeechProfile = SharedPreferencesUtil().hasSpeakerProfile;
 
   @override
   void initState() {
@@ -121,7 +121,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
         goNext: () async {
           var provider = context.read<OnboardingProvider>();
-          if (hasSpeechProfile) {
+          if (context.read<HomeProvider>().hasSpeakerProfile) {
             // previous users
             routeToPage(context, const HomePageWrapper(), replace: true);
           } else {

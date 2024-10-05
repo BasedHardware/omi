@@ -25,7 +25,7 @@ class SpeechProfileProvider extends ChangeNotifier
   bool loading = false;
   BtDevice? device;
 
-  final targetWordsCount = 70;
+  final targetWordsCount = 15;
   final maxDuration = 90;
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
@@ -269,15 +269,6 @@ class SpeechProfileProvider extends ChangeNotifier
     profileCompleted = false;
     await _socket?.stop(reason: 'closing');
     notifyListeners();
-  }
-
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
-    CreateMemoryResponse? result = await processInProgressMemory();
-    if (result == null || result.memory == null) return false;
-    memory = result.memory;
-    notifyListeners();
-    return true;
   }
 
   @override

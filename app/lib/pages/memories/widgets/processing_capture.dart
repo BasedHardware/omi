@@ -169,8 +169,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    print(
-        'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
+    // print(
+    //     'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
 
     // Left
     Widget? left;

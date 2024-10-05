@@ -192,7 +192,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                           onTap: () {
                             if (provider.segments.isNotEmpty) {
                               if (!showSummarizeConfirmation) {
-                                context.read<CaptureProvider>().createMemory();
+                                context.read<CaptureProvider>().forceProcessingCurrentMemory();
                                 return;
                               }
                               showDialog(
@@ -219,7 +219,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                           onConfirm: () {
                                             SharedPreferencesUtil().showSummarizeConfirmation =
                                                 showSummarizeConfirmation;
-                                            context.read<CaptureProvider>().createMemory();
+                                            context.read<CaptureProvider>().forceProcessingCurrentMemory();
                                             Navigator.of(context).pop();
                                             Navigator.of(context).pop();
                                           },
