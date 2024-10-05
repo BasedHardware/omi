@@ -166,8 +166,24 @@ def set_in_progress_memory_id(uid: str, memory_id: str, ttl: int = 150):
     r.expire(f'users:{uid}:in_progress_memory_id', ttl)
 
 
+def remove_in_progress_memory_id(uid: str):
+    r.delete(f'users:{uid}:in_progress_memory_id')
+
+
 def get_in_progress_memory_id(uid: str) -> str:
     memory_id = r.get(f'users:{uid}:in_progress_memory_id')
     if not memory_id:
         return ''
     return memory_id.decode()
+
+
+def set_in_progress_memory_id_last_segment_seconds(uid: str, seconds: str, ttl: int = 150):
+    r.set(f'users:{uid}:in_progress_memory_id_last_segment_seconds', seconds)
+    r.expire(f'users:{uid}:in_progress_memory_id_last_segment_seconds', ttl)
+
+
+def get_in_progress_memory_id_last_segment_seconds(uid: str) -> float:
+    memory_id = r.get(f'users:{uid}:in_progress_memory_id_last_segment_seconds')
+    if not memory_id:
+        return 0
+    return float(memory_id.decode())

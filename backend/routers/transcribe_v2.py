@@ -103,10 +103,18 @@ async def _websocket_util(
         if existing:
             print('_get_in_progress_memory existing', existing['id'])
             memory = Memory(**existing)
+            latest_segment = memory.transcript_segments[-1]
+
+            if segments and segments[-1]['start'] < latest_segment.end:
+                for segment in segments:
+                    segment['start'] += latest_segment.end
+                    segment['end'] += latest_segment.end
+
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
             redis_db.set_in_progress_memory_id(uid, memory.id)
+            redis_db.set_in_progress_memory_id_last_segment_seconds(uid, memory.transcript_segments[-1].end)
             return memory
 
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
@@ -124,6 +132,7 @@ async def _websocket_util(
         print('_get_in_progress_memory new', memory)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         redis_db.set_in_progress_memory_id(uid, memory.id)
+        redis_db.set_in_progress_memory_id_last_segment_seconds(uid, segments[-1]['end'])
         return memory
 
     async def memory_creation_timer():
@@ -145,13 +154,22 @@ async def _websocket_util(
             return
 
         # Align the start, end segment
-        if not seconds_to_trim:
+        if seconds_to_trim is None:
             seconds_to_trim = segments[0]["start"]
 
         if memory_creation_task is not None:
             memory_creation_task.cancel()
         memory_creation_task = asyncio.create_task(memory_creation_timer())
 
+        # Segments aligning duration seconds.
+        # last_segment_seconds = redis_db.get_in_progress_memory_id_last_segment_seconds(uid)
+        # if segments[0]['start'] < last_segment_seconds:
+        #     seconds_to_trim = 0
+        #     for i, segment in enumerate(segments):
+        #         segment["start"] += last_segment_seconds
+        #         segment["end"] += last_segment_seconds
+        #         segments[i] = segment
+        # else:
         for i, segment in enumerate(segments):
             segment["start"] -= seconds_to_trim
             segment["end"] -= seconds_to_trim
@@ -365,6 +383,4 @@ async def websocket_endpoint(
         channels: int = 1, include_speech_profile: bool = True,
         # stt_service: STTService = STTService.deepgram
 ):
-    await _websocket_util(
-        websocket, uid, language, sample_rate, codec, channels, include_speech_profile,  # stt_service
-    )
+    await _websocket_util(websocket, uid, language, sample_rate, codec, include_speech_profile)
