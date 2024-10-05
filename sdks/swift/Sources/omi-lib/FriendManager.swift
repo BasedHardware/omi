@@ -263,7 +263,7 @@ class FriendManager {
 
 extension FriendManager: BluetoothScannerDelegate {
     func deviceFound(device: CBPeripheral) {
-        if device.name == "Friend" {
+        if device.name == "Friend" || name == "Friend DevKit 2" {
             print("found friend device")
             WearableDeviceRegistry.shared.registerDevice(wearable: Friend.self)
             self.bleManager = BLEManager(deviceRegistry: WearableDeviceRegistry.shared)
@@ -354,7 +354,7 @@ class BluetoothScanner: NSObject, CBCentralManagerDelegate {
 
     // This is called when a new peripheral (device) is discovered during scanning
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        if let name = peripheral.name, name == "Friend" {
+        if let name = peripheral.name, name == "Friend" || name == "Friend DevKit 2" {
             self.delegate?.deviceFound(device: peripheral)
         }
     }
