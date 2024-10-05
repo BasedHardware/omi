@@ -53,7 +53,7 @@ class SocketServicePool extends ISocketService {
       // new socket
       await _socket?.stop();
 
-      _socket = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
+      _socket = MemoryTranscriptSegmentSocketService.create(sampleRate, codec);
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
         return null;
