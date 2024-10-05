@@ -99,6 +99,11 @@ async def _websocket_util(
             existing = memories_db.get_in_progress_memory(uid)
 
         if existing:
+            if time.time() - existing['finished_at'].timestamp() > 120:
+                memories_db.update_memory_status(uid, existing['id'], MemoryStatus.failed)
+                existing = None
+
+        if existing:
             print('_get_in_progress_memory existing', existing['id'])
             memory = Memory(**existing)
             latest_segment = memory.transcript_segments[-1]
