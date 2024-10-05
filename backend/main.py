@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, Cron
 from routers import workflow, chat, firmware, plugins, memories, transcribe, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard
+    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -35,6 +35,7 @@ app.include_router(trends.router)
 
 app.include_router(firmware.router)
 app.include_router(sdcard.router)
+app.include_router(sync.router)
 
 modal_app = App(
     name='backend',

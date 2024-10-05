@@ -154,6 +154,7 @@ async def _websocket_util(
 
         memory = retrieve_in_progress_memory(uid)
         if not memory or not memory['transcript_segments']:
+            # this edge can happen? when
             raise Exception('FAILED')
         memory = Memory(**memory)
 
@@ -289,15 +290,15 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                if include_speech_profile:
-                    # pick 320 bytes as a vad sample, cause frame_width 2?
-                    vad_sample_size = 320
-                    vad_sample = data[:vad_sample_size]
-                    if len(vad_sample) < vad_sample_size:
-                        vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
-                    has_speech = w_vad.is_speech(vad_sample, sample_rate)
-                    if not has_speech:
-                        continue
+                # if include_speech_profile:
+                #     # pick 320 bytes as a vad sample, cause frame_width 2?
+                #     vad_sample_size = 320
+                #     vad_sample = data[:vad_sample_size]
+                #     if len(vad_sample) < vad_sample_size:
+                #         vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
+                #     has_speech = w_vad.is_speech(vad_sample, sample_rate)
+                #     if not has_speech:
+                #         continue
 
                 # TODO: is the VAD slowing down the STT service? specially soniox?
                 # - but from write data, it feels faster, but the processing is having issues
