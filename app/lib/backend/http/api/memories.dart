@@ -36,9 +36,13 @@ Future<CreateMemoryResponse?> processInProgressMemory() async {
   return null;
 }
 
-Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
+Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0, List<MemoryStatus> statuses = const []}) async {
   var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');
+      url:
+          '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+      headers: {},
+      method: 'GET',
+      body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
@@ -46,6 +50,8 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
     var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
+  } else {
+    debugPrint('getMemories error ${response.statusCode}');
   }
   return [];
 }
