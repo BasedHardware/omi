@@ -1,8 +1,8 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime
-from typing import List, Tuple
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -35,7 +35,8 @@ def get_memory(uid, memory_id):
     return memory_ref.get().to_dict()
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False, statuses: List[str] = []):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
+                 statuses: List[str] = []):
     memories_ref = (
         db.collection('users').document(uid).collection('memories')
         .where(filter=FieldFilter('deleted', '==', False))
@@ -92,7 +93,7 @@ def get_memories_by_id(uid, memory_ids):
 
 
 # **************************************
-# ********** CREATE STATES *************
+# ********** STATUS *************
 # **************************************
 
 def get_in_progress_memory(uid: str):
@@ -103,6 +104,12 @@ def get_in_progress_memory(uid: str):
     )
     docs = [doc.to_dict() for doc in memories_ref.stream()]
     return docs[0] if docs else None
+
+
+def update_memory_status(uid: str, memory_id: str, status: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'status': status})
 
 
 # *********************************
@@ -129,12 +136,6 @@ def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'transcript_segments': segments})
-
-
-def update_memory_status(uid: str, memory_id: str, status: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'status': status})
 
 
 # ***********************************
@@ -266,3 +267,44 @@ def get_memory_photos(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     photos_ref = memory_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
+
+
+# ********************************
+# ********** SYNCING *************
+# ********************************
+
+def get_closest_memory_to_timestamps(
+        uid: str, start_timestamp: int, end_timestamp: int, max_seconds: int
+) -> Optional[dict]:
+    # TODO: how to filter utc from timestamp?
+
+    user_ref = db.collection('users').document(uid)
+    started_at = datetime.utcfromtimestamp(start_timestamp)
+    finished_at = datetime.utcfromtimestamp(end_timestamp)
+
+    # memories that started between start_timestamp -= 120 and end_timestamp += 120
+    # memories that finished between start_timestamp -= 120 and end_timestamp += 120
+
+    query = (
+        user_ref.collection('memories')
+        .where(filter=FieldFilter('started_at', '>=', started_at - timedelta(seconds=max_seconds)))
+        .where(filter=FieldFilter('started_at', '<=', finished_at + timedelta(seconds=max_seconds)))
+        .where(filter=FieldFilter('deleted', '==', False))
+        .order_by('started_at', direction=firestore.Query.DESCENDING)
+    )
+    memories = [doc.to_dict() for doc in query.stream()]
+
+    query = (
+        user_ref.collection('memories')
+        .where(filter=FieldFilter('finished_at', '>=', started_at - timedelta(seconds=max_seconds)))
+        .where(filter=FieldFilter('finished_at', '<=', finished_at + timedelta(seconds=max_seconds)))
+        .where(filter=FieldFilter('deleted', '==', False))
+        .order_by('finished_at', direction=firestore.Query.DESCENDING)
+    )
+    memories += [doc.to_dict() for doc in query.stream()]
+
+    if not memories:
+        return None
+
+    # TODO: order by memories that have the most overlapped seconds with the given timestamps
+    return memories[0]

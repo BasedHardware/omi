@@ -8,6 +8,9 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from opuslib import Decoder
 from pydub import AudioSegment
 
+from database.memories import get_closest_memory_to_timestamps
+from models.memory import CreateMemory
+from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
 from utils.other.storage import test_file_url
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
@@ -112,21 +115,28 @@ async def upload_files(files: List[UploadFile] = File(...), uid: str = Depends(a
     paths = decode_files_to_wav(paths)
 
     segmented_paths = set()
+
     # - TODO: record 5 to 10 samples, with different types for testing
+    # - some heavy ones too
 
     def single(path):
         start_timestamp = get_timestamp_from_path(path)
-        segments = vad_is_empty(path, return_segments=True)
+        voice_segments = vad_is_empty(path, return_segments=True)
+        segments = []
+        for i, segment in enumerate(voice_segments):
+            if segments and (segment['start'] - segments[-1]['end']) < 1:
+                segments[-1]['end'] = segment['end']
+            else:
+                segments.append(segment)
         print(path, segments)
-        combined_segments = []
-        # TODO: combine them when appropiate, if distance < 1s (similar to speech profile) | skip < 1s isolated parts
-
+        # any other segments combine to do here?
         aseg = AudioSegment.from_wav(path)
         os.remove(path)
         for i, segment in enumerate(segments):
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{segment_timestamp}.wav'
-            if segment['end'] - segment['start'] < 1:
+            print(segment['end'] - segment['start'])
+            if (segment['end'] - segment['start']) < 1:
                 continue
             segment_aseg = aseg[segment['start'] * 1000:segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
@@ -146,14 +156,28 @@ async def upload_files(files: List[UploadFile] = File(...), uid: str = Depends(a
     def single(path: str):
         url = test_file_url(path)  # TODO: use signed, and/or remove file after
         words = fal_whisperx(url, 3, 2)
+        # TODO: get language `inferred_languages`
         fal_segments = fal_postprocessing(words, 0)
         if not fal_segments:
             print('failed to get fal segments')
             return
         timestamp = get_timestamp_from_path(path)
-        # TODO: find nearest memory to start_timestamp (< 120 seconds) either after, before, or between
-        #   if found -> insert to the memory (if between, caution with the order)
-        #   if not found -> create a new memory with the segments received.
+        closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + fal_segments[-1]['end'], 120)
+        if not closest_memory:
+            create_memory = CreateMemory(
+                started_at=datetime.fromtimestamp(timestamp),
+                finished_at=datetime.fromtimestamp(timestamp + fal_segments[-1]['end']),
+                transcript_segments=fal_segments
+            )
+            created = process_memory(uid, 'en', create_memory)
+            response['new_memories'].add(created.id)
+        else:
+            # TODO: take transcript segments from closest memory, and set timestamp to each segment
+            #  - take this ones and set timestamp
+            #  - sort by timestamp
+            #  - update the memory transcript segments
+            pass
+
         print(timestamp, fal_segments)
 
     threads = []
