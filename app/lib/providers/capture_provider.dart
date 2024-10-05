@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -75,7 +76,6 @@ class CaptureProvider extends ChangeNotifier
   // -----------------------
   // Memory creation variables
   String conversationId = const Uuid().v4();
-  int elapsedSeconds = 0;
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -99,17 +99,15 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future _resetVariables() async {
+  Future _resetStateVariables() async {
     segments = [];
-    elapsedSeconds = 0;
     conversationId = const Uuid().v4();
-    // memoryCreating = false;
     hasTranscripts = false;
     notifyListeners();
   }
 
   Future<void> onRecordProfileSettingChanged() async {
-    await _resetState(restartBytesProcessing: true);
+    await _resetState();
   }
 
   Future<void> changeAudioRecordProfile([
@@ -117,7 +115,7 @@ class CaptureProvider extends ChangeNotifier
     int? sampleRate,
   ]) async {
     debugPrint("changeAudioRecordProfile");
-    await _resetState(restartBytesProcessing: true);
+    await _resetState();
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
@@ -164,18 +162,8 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future resetForSpeechProfile() async {
-    closeBleStream();
-    await _socket?.stop(reason: 'reset for speech profile');
-    setAudioBytesConnected(false);
-    notifyListeners();
-  }
-
-  Future<void> _resetState({
-    bool restartBytesProcessing = true,
-  }) async {
-    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing');
-
+  Future<void> _resetState() async {
+    debugPrint('resetState');
     _cleanupCurrentState();
     await _recheckCodecChange();
     await _ensureSocketConnection(force: true);
@@ -320,18 +308,10 @@ class CaptureProvider extends ChangeNotifier
     await _socket?.stop(reason: 'stop stream recording');
   }
 
-  Future streamDeviceRecording({
-    BtDevice? device,
-    bool restartBytesProcessing = true,
-  }) async {
-    debugPrint("streamDeviceRecording $device $restartBytesProcessing");
-    if (device != null) {
-      _updateRecordingDevice(device);
-    }
-
-    await _resetState(
-      restartBytesProcessing: restartBytesProcessing,
-    );
+  Future streamDeviceRecording({BtDevice? device}) async {
+    debugPrint("streamDeviceRecording $device");
+    if (device != null) _updateRecordingDevice(device);
+    await _resetState();
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
@@ -348,7 +328,7 @@ class CaptureProvider extends ChangeNotifier
   void onClosed() {
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
-    _resetVariables();
+    _resetStateVariables();
     notifyListeners();
     _startKeepAliveServices();
   }
@@ -392,10 +372,7 @@ class CaptureProvider extends ChangeNotifier
       }
       memoryProvider!.removeInProgressMemory();
       memoryProvider!.addProcessingMemory(event.memory!);
-      segments = [];
-      hasTranscripts = true;
-      // memoryCreating = true;
-      notifyListeners();
+      _resetStateVariables();
       return;
     }
 
@@ -434,15 +411,17 @@ class CaptureProvider extends ChangeNotifier
     if (memoryProvider?.memories.isEmpty ?? false) {
       memoryProvider?.getMoreMemoriesFromServer();
     }
-
-    // Notify
-    _resetVariables();
-    notifyListeners();
   }
 
-  Future<void> createMemory() async {
-    // _resetVariables();
-    // FIXME: force memory creation on backend properly.
+  Future<void> forceProcessingCurrentMemory() async {
+    _resetStateVariables();
+    processInProgressMemory().then((result) {
+      if (result == null || result.memory == null) return;
+      result.memory!.isNew = true;
+      _processOnMemoryCreated(result.memory, result.messages);
+    });
+
+    _initiateWebsocket();
     return;
   }
 
