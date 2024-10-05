@@ -16,6 +16,7 @@ from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
+import struct
 
 router = APIRouter()
 
@@ -282,23 +283,27 @@ async def _websocket_util(
         nonlocal websocket_close_code
 
         timer_start = time.time()
-        # f = open("audio.raw", "ab")
+        # f = open("audio.bin", "ab")
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
+                # save the data to a file
+                # data_length = len(data)
+                # f.write(struct.pack('I', data_length))  # Write length as 4 bytes
+                # f.write(data)
 
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                if include_speech_profile:
-                    # pick 320 bytes as a vad sample, cause frame_width 2?
-                    vad_sample_size = 320
-                    vad_sample = data[:vad_sample_size]
-                    if len(vad_sample) < vad_sample_size:
-                        vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
-                    has_speech = w_vad.is_speech(vad_sample, sample_rate)
-                    if not has_speech:
-                        continue
+                # if include_speech_profile:
+                #     # pick 320 bytes as a vad sample, cause frame_width 2?
+                #     vad_sample_size = 320
+                #     vad_sample = data[:vad_sample_size]
+                #     if len(vad_sample) < vad_sample_size:
+                #         vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
+                #     has_speech = w_vad.is_speech(vad_sample, sample_rate)
+                #     if not has_speech:
+                #         continue
 
                 # TODO: is the VAD slowing down the STT service? specially soniox?
                 # - but from write data, it feels faster, but the processing is having issues
