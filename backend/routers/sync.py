@@ -36,6 +36,7 @@ async def upload_files(files: List[UploadFile] = File(...), uid: str = Depends(a
     def single(path):
         start_timestamp = int(path.split('/')[-1].split('_')[-1].split('.')[0])
         segments = vad_is_empty(path, return_segments=True)
+        print(path, segments)
         # combine them when appropiate, if distance < 1s (similar to speech profile) | skip < 1s isolated parts
         # export each segment to a file
 
