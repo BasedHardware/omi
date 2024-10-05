@@ -14,7 +14,7 @@ You can see the new device [announcement on X](https://twitter.com/kodjima33/sta
 
 ### Assembled Device
 
-You can order assembled [Friend DevKit 2](https://basedhardware.com/products/friend-dev-kit-2) from the Based Hardware website.
+You can order assembled [Omi DevKit 2](https://basedhardware.com/products/friend-dev-kit-2) from the Based Hardware website.
 
 ### Parts
 
