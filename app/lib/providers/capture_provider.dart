@@ -438,6 +438,7 @@ class CaptureProvider extends ChangeNotifier
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      _loadInProgressMemory();
     }
     TranscriptSegment.combineSegments(segments, newSegments);
     triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
