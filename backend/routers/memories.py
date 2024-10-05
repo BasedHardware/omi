@@ -41,7 +41,6 @@ def create_memory(
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
-
     if geolocation := create_memory.geolocation:
         create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
@@ -64,6 +63,33 @@ def create_memory(
                                                      model=PostProcessingModel.fal_whisperx)
 
     messages = trigger_external_integrations(uid, memory)
+    return CreateMemoryResponse(memory=memory, messages=messages)
+
+
+@router.post("/v2/memories", response_model=CreateMemoryResponse, tags=['memories'])
+def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
+    memory_id = redis_db.get_in_progress_memory_id(uid)
+    memory = None
+
+    if memory_id:
+        memory = memories_db.get_memory(uid, memory_id)
+        if memory and memory['status'] != 'in_progress':
+            memory = None
+
+    if not memory:
+        memory = memories_db.get_in_progress_memory(uid)
+
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory in progress not found")
+
+    redis_db.remove_in_progress_memory_id(uid)
+
+    memory = Memory(**memory)
+    memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
+    memory = process_memory(uid, memory.language, memory)
+    memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
+    messages = trigger_external_integrations(uid, memory)
+
     return CreateMemoryResponse(memory=memory, messages=messages)
 
 
