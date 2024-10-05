@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
@@ -34,18 +35,13 @@ class CaptureProvider extends ChangeNotifier
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
+  // In progress memory
+  ServerMemory? _inProgressMemory;
+  ServerMemory? get inProgressMemory => _inProgressMemory;
+
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
     messageProvider = p;
-
-    memoryProvider!.addListener(() {
-      // TODO: do this differently!
-      if (segments.isEmpty && memoryProvider!.inProgressMemory != null) {
-        segments = memoryProvider!.inProgressMemory!.transcriptSegments;
-        setHasTranscripts(segments.isNotEmpty);
-      }
-    });
-
     notifyListeners();
   }
 
@@ -140,6 +136,9 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+
+    _loadInProgressMemory();
+
     notifyListeners();
   }
 
@@ -328,7 +327,12 @@ class CaptureProvider extends ChangeNotifier
   void onClosed() {
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
-    _resetStateVariables();
+
+    // Wait for in process memory or reset
+    if (inProgressMemory == null) {
+	   _resetStateVariables();
+    }
+
     notifyListeners();
     _startKeepAliveServices();
   }
@@ -363,6 +367,18 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  // TODO: optimize it, load an in progress memory only
+  void _loadInProgressMemory() async {
+    debugPrint("load in progress memory");
+    var memories = await getMemories();
+    _inProgressMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.in_progress);
+    if (segments.isEmpty && _inProgressMemory != null) {
+      segments = _inProgressMemory!.transcriptSegments;
+      setHasTranscripts(segments.isNotEmpty);
+    }
+    notifyListeners();
+  }
+
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
     if (event.type == MessageEventType.memoryProcessingStarted) {
@@ -370,7 +386,6 @@ class CaptureProvider extends ChangeNotifier
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      memoryProvider!.removeInProgressMemory();
       memoryProvider!.addProcessingMemory(event.memory!);
       _resetStateVariables();
       return;
@@ -384,11 +399,6 @@ class CaptureProvider extends ChangeNotifier
       event.memory!.isNew = true;
       memoryProvider!.removeProcessingMemory(event.memory!.id);
       _processMemoryCreated(event.memory, event.messages ?? []);
-      return;
-    }
-
-    if (event.type == MessageEventType.newMemoryCreateFailed) {
-      // TODO: what to do here?
       return;
     }
   }

@@ -163,7 +163,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    bool isMemoryInProgress = captureProvider.segments.isNotEmpty; // is this correct? // FIXME?
+    bool isMemoryInProgress = captureProvider.inProgressMemory != null;
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -204,28 +204,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
-      left = Row(
-        children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      );
     } else if (isMemoryInProgress &&
         (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
       left = Row(
@@ -243,6 +221,28 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               'Waiting for device...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
+    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),

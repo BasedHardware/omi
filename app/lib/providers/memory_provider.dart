@@ -20,12 +20,7 @@ class MemoryProvider extends ChangeNotifier {
 
   Timer? _processingMemoryWatchTimer;
 
-  ServerMemory? inProgressMemory;
   List<ServerMemory> processingMemories = [];
-
-  void removeInProgressMemory() {
-    inProgressMemory = null;
-  }
 
   void addProcessingMemory(ServerMemory memory) {
     processingMemories.add(memory);
@@ -66,7 +61,6 @@ class MemoryProvider extends ChangeNotifier {
   Future getInitialMemories() async {
     memories = await getMemoriesFromServer();
 
-    inProgressMemory = memories.firstWhereOrNull((m) => m.status == MemoryStatus.in_progress);
     processingMemories = memories.where((m) => m.status == MemoryStatus.processing).toList();
 
     memories = memories.where((m) => m.status == MemoryStatus.completed).toList();
@@ -158,8 +152,6 @@ class MemoryProvider extends ChangeNotifier {
     setLoadingMemories(false);
     notifyListeners();
   }
-
-  // Future<Memory> getInProgressMemory(){}
 
   void addMemory(ServerMemory memory) {
     memories.insert(0, memory);
