@@ -109,8 +109,8 @@ class NotificationService {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
+          'title': "Omi Device Disconnected",
+          'description': "Please keep your app opened to continue using your Omi.",
         },
       );
     } catch (e) {
