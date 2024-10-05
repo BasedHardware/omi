@@ -6,10 +6,12 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 
-class MemoryProvider extends ChangeNotifier {
+class MemoryProvider extends ChangeNotifier implements IWalServiceListener {
   List<ServerMemory> memories = [];
   Map<DateTime, List<ServerMemory>> groupedMemories = {};
 
@@ -21,6 +23,20 @@ class MemoryProvider extends ChangeNotifier {
   Timer? _processingMemoryWatchTimer;
 
   List<ServerMemory> processingMemories = [];
+
+  IWalService get _wal => ServiceManager.instance().wal;
+  List<Wal> _missingWals = [];
+  List<Wal> get missingWals => _missingWals;
+
+  MemoryProvider() {
+    _wal.subscribe(this, this);
+    _preload();
+  }
+
+  _preload() async {
+    _missingWals = await _wal.getMissingWals();
+    notifyListeners();
+  }
 
   void addProcessingMemory(ServerMemory memory) {
     processingMemories.add(memory);
@@ -288,6 +304,22 @@ class MemoryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
+    _wal.unsubscribe(this);
     super.dispose();
   }
+
+  @override
+  void onNewMissingWal(Wal wal) async {
+    _missingWals = await _wal.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onWalSynced(Wal wal, ServerMemory memory) async {
+    _missingWals = await _wal.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onStatusChanged(WalServiceStatus status) {}
 }
