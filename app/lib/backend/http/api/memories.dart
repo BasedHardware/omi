@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
@@ -11,35 +10,13 @@ import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
-import 'package:tuple/tuple.dart';
 
-Future<CreateMemoryResponse?> createMemoryServer({
-  required DateTime startedAt,
-  required DateTime finishedAt,
-  required List<TranscriptSegment> transcriptSegments,
-  Geolocation? geolocation,
-  List<Tuple2<String, String>> photos = const [],
-  bool triggerIntegrations = true,
-  String? language,
-  File? audioFile,
-  String? source,
-  String? processingMemoryId,
-}) async {
+Future<CreateMemoryResponse?> processInProgressMemory() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
+    url: '${Env.apiBaseUrl}v2/memories',
     headers: {},
     method: 'POST',
-    body: jsonEncode({
-      'started_at': startedAt.toUtc().toIso8601String(),
-      'finished_at': finishedAt.toUtc().toIso8601String(),
-      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'geolocation': geolocation?.toJson(),
-      'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
-      'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
-      'language': language, // maybe determine auto?
-      'processing_memory_id': processingMemoryId,
-      // 'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
-    }),
+    body: jsonEncode({}),
   );
   if (response == null) return null;
   debugPrint('createMemoryServer: ${response.body}');
@@ -53,7 +30,6 @@ Future<CreateMemoryResponse?> createMemoryServer({
       level: NonFatalExceptionLevel.info,
       userAttributes: {
         'response': response.body,
-        'transcriptSegments': TranscriptSegment.segmentsAsString(transcriptSegments),
       },
     );
   }
