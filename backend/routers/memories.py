@@ -5,6 +5,7 @@ import database.redis_db as redis_db
 from database.vector_db import delete_vector
 from models.memory import *
 from routers.speech_profile import expand_speech_profile
+from routers.transcribe_v2 import retrieve_in_progress_memory
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
@@ -68,17 +69,7 @@ def create_memory(
 
 @router.post("/v2/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
-    memory_id = redis_db.get_in_progress_memory_id(uid)
-    memory = None
-
-    if memory_id:
-        memory = memories_db.get_memory(uid, memory_id)
-        if memory and memory['status'] != 'in_progress':
-            memory = None
-
-    if not memory:
-        memory = memories_db.get_in_progress_memory(uid)
-
+    memory = retrieve_in_progress_memory(uid)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory in progress not found")
 
