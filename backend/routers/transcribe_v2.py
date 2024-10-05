@@ -59,10 +59,10 @@ class STTService(str, Enum):
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
+        include_speech_profile: bool = True,
         # stt_service: STTService = STTService.deepgram,
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch)
+    print('websocket_endpoint', uid, language, sample_rate, codec, include_speech_profile)
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     if language == 'en' and sample_rate == 16000 and codec == 'opus':
@@ -181,11 +181,11 @@ async def _websocket_util(
         # DEEPGRAM
         if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, 1, language, sample_rate, channels, preseconds=speech_profile_duration
+                stream_transcript, 1, language, sample_rate, 1, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
                 deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, 2, language, sample_rate, channels
+                    stream_transcript, 2, language, sample_rate, 1
                 )
 
                 async def deepgram_socket_send(data):
@@ -213,7 +213,7 @@ async def _websocket_util(
         await websocket.close(code=websocket_close_code)
         return
 
-    decoder = opuslib.Decoder(sample_rate, channels)
+    decoder = opuslib.Decoder(sample_rate, 1)
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
@@ -362,9 +362,9 @@ async def _websocket_util(
 @router.websocket("/v2/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, new_memory_watch: bool = False,
+        channels: int = 1, include_speech_profile: bool = True,
         # stt_service: STTService = STTService.deepgram
 ):
     await _websocket_util(
-        websocket, uid, language, sample_rate, codec, channels, include_speech_profile, new_memory_watch,  # stt_service
+        websocket, uid, language, sample_rate, codec, channels, include_speech_profile,  # stt_service
     )
