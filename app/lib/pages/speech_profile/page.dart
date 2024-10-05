@@ -213,7 +213,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
                     child: Column(
                       children: [
                         const DeviceAnimationWidget(sizeMultiplier: 0.2, animatedBackground: false),
@@ -414,33 +414,17 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 : Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
+                                      const SizedBox(height: 24),
+                                      SizedBox(
+                                        width: 336,
+                                        child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
+                                      ),
+                                      const SizedBox(height: 18),
                                       Text(
                                         provider.message,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
                                         textAlign: TextAlign.center,
                                       ),
-                                      const SizedBox(height: 24),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 0),
-                                        child: Stack(
-                                          children: [
-                                            // LinearProgressIndicator(
-                                            //   backgroundColor: Colors.grey[300],
-                                            //   valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.withOpacity(0.3)),
-                                            // ),
-                                            // LinearProgressIndicator(
-                                            //   value: provider.percentageCompleted,
-                                            //   backgroundColor:
-                                            //       Colors.grey.shade300, // Make sure background is transparent
-                                            //   valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                                            // ),
-                                            ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 18),
-                                      Text('${(provider.percentageCompleted * 100).toInt()}%',
-                                          style: const TextStyle(color: Colors.white)),
                                     ],
                                   ),
                   ),
