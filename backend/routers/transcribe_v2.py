@@ -84,6 +84,7 @@ async def _websocket_util(
     # Soft timeout, should < MODAL_TIME_OUT - 3m
     timeout_seconds = 420  # 7m
     started_at = time.time()
+    memory_creation_timeout = 15
 
     def _get_in_progress_memory(segments: List[dict]):
 
@@ -99,7 +100,7 @@ async def _websocket_util(
             existing = memories_db.get_in_progress_memory(uid)
 
         if existing:
-            if time.time() - existing['finished_at'].timestamp() > 120:
+            if time.time() - existing['finished_at'].timestamp() > memory_creation_timeout:
                 memories_db.update_memory_status(uid, existing['id'], MemoryStatus.failed)
                 existing = None
 
@@ -140,7 +141,7 @@ async def _websocket_util(
 
     async def memory_creation_timer():
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(memory_creation_timeout)
             await _create_memory()
         except asyncio.CancelledError:
             pass
