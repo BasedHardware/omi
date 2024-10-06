@@ -57,10 +57,10 @@ class ServiceManager {
     _wal.start();
   }
 
-  void deinit() {
+  void deinit() async {
+    await _wal.stop();
     _mic.stop();
     _device.stop();
-    _wal.stop();
   }
 }
 
