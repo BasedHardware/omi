@@ -10,6 +10,7 @@
 #include "sdcard.h"
 #include "storage.h"
 #include "speaker.h"
+#include "usb.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -40,6 +41,7 @@ void bt_ctlr_assert_handle(char *name, int type)
 bool is_connected = false;
 bool is_charging = false;
 extern bool is_off;
+extern bool usb_charge;
 static void boot_led_sequence(void)
 {
     // Red blink
@@ -70,18 +72,29 @@ static void boot_led_sequence(void)
 void set_led_state()
 {
 	// Recording and connected state - BLUE
+
+    if(usb_charge)
+    {
+        is_charging = !is_charging;
+        if(is_charging)
+        {
+            set_led_green(true);
+        }
+        else
+        {
+            set_led_green(false);
+        }
+    }
     if(is_off)
     {
 		set_led_red(false);
-		set_led_green(false);
 		set_led_blue(false);
         return;
     }
 	if (is_connected)
 	{
-		set_led_red(false);
-		set_led_green(false);
 		set_led_blue(true);
+		set_led_red(false);
 		return;
 	}
 
@@ -89,24 +102,10 @@ void set_led_state()
 	if (!is_connected)
 	{
 		set_led_red(true);
-		set_led_green(false);
 		set_led_blue(false);
 		return;
 	}
 
-	// Not recording, but charging - WHITE
-	if (is_charging)
-	{
-		set_led_red(true);
-		set_led_green(true);
-		set_led_blue(true);
-		return;
-	}
-
-	// Not recording - OFF
-	set_led_red(false);
-	set_led_green(false);
-	set_led_blue(false);
 }
 
 // Main loop
@@ -209,6 +208,11 @@ int main(void)
     // }
 
     // Indicate successful initialization
+    err = init_usb();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize power supply: %d", err);
+    }
     LOG_INF("Omi firmware initialized successfully\n");
     set_led_blue(true);
     k_msleep(1000);
