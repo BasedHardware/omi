@@ -163,7 +163,6 @@ async def _websocket_util(
 
         memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
         memory = process_memory(uid, language, memory)
-        memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
         messages = trigger_external_integrations(uid, memory)
 
         asyncio.create_task(

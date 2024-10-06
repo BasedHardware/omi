@@ -274,37 +274,43 @@ def get_memory_photos(uid: str, memory_id: str):
 # ********************************
 
 def get_closest_memory_to_timestamps(
-        uid: str, start_timestamp: int, end_timestamp: int, max_seconds: int
+        uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
-    # TODO: how to filter utc from timestamp?
-
-    user_ref = db.collection('users').document(uid)
-    started_at = datetime.utcfromtimestamp(start_timestamp)
-    finished_at = datetime.utcfromtimestamp(end_timestamp)
-
-    # memories that started between start_timestamp -= 120 and end_timestamp += 120
-    # memories that finished between start_timestamp -= 120 and end_timestamp += 120
+    print('get_closest_memory_to_timestamps', start_timestamp, end_timestamp)
+    print(
+        'get_closest_memory_to_timestamps',
+        datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2),
+        datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
+    )
 
     query = (
-        user_ref.collection('memories')
-        .where(filter=FieldFilter('started_at', '>=', started_at - timedelta(seconds=max_seconds)))
-        .where(filter=FieldFilter('started_at', '<=', finished_at + timedelta(seconds=max_seconds)))
+        db.collection('users').document(uid).collection('memories')
+        .where(
+            filter=FieldFilter('finished_at', '>=', datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2))
+        )
+        .where(filter=FieldFilter('started_at', '<=', datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)))
         .where(filter=FieldFilter('deleted', '==', False))
-        .order_by('started_at', direction=firestore.Query.DESCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
+
     memories = [doc.to_dict() for doc in query.stream()]
-
-    query = (
-        user_ref.collection('memories')
-        .where(filter=FieldFilter('finished_at', '>=', started_at - timedelta(seconds=max_seconds)))
-        .where(filter=FieldFilter('finished_at', '<=', finished_at + timedelta(seconds=max_seconds)))
-        .where(filter=FieldFilter('deleted', '==', False))
-        .order_by('finished_at', direction=firestore.Query.DESCENDING)
-    )
-    memories += [doc.to_dict() for doc in query.stream()]
-
     if not memories:
         return None
 
-    # TODO: order by memories that have the most overlapped seconds with the given timestamps
-    return memories[0]
+    print('get_closest_memory_to_timestamps found:')
+    for memory in memories:
+        print('-', memory['id'], memory['started_at'], memory['finished_at'])
+
+    # get the memory that has the closest start timestamp or end timestamp
+    closest_memory = None
+    min_diff = float('inf')
+    for memory in memories:
+        memory_start_timestamp = memory['started_at'].timestamp()
+        memory_end_timestamp = memory['finished_at'].timestamp()
+        diff1 = abs(memory_start_timestamp - start_timestamp)
+        diff2 = abs(memory_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_memory = memory
+
+    return closest_memory
