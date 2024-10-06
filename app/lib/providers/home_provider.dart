@@ -12,6 +12,7 @@ class HomeProvider extends ChangeNotifier {
   bool isChatFieldFocused = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
+  String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
 
   HomeProvider() {
     memoryFieldFocusNode.addListener(_onFocusChange);
@@ -47,6 +48,12 @@ class HomeProvider extends ChangeNotifier {
     debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
     setIsLoading(false);
+    notifyListeners();
+  }
+
+  void setRecordingLanguage(String language) {
+    recordingLanguage = language;
+    SharedPreferencesUtil().recordingsLanguage = language;
     notifyListeners();
   }
 
