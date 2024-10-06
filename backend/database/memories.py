@@ -277,23 +277,20 @@ def get_closest_memory_to_timestamps(
         uid: str, start_timestamp: int, end_timestamp: int
 ) -> Optional[dict]:
     print('get_closest_memory_to_timestamps', start_timestamp, end_timestamp)
-    print(
-        'get_closest_memory_to_timestamps',
-        datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2),
-        datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
-    )
+    start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
+    end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
+    print('get_closest_memory_to_timestamps', start_threshold, end_threshold)
 
     query = (
         db.collection('users').document(uid).collection('memories')
-        .where(
-            filter=FieldFilter('finished_at', '>=', datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2))
-        )
-        .where(filter=FieldFilter('started_at', '<=', datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)))
+        .where(filter=FieldFilter('finished_at', '>=', start_threshold))
+        .where(filter=FieldFilter('started_at', '<=', end_threshold))
         .where(filter=FieldFilter('deleted', '==', False))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
     memories = [doc.to_dict() for doc in query.stream()]
+    print('get_closest_memory_to_timestamps len(memories)', len(memories))
     if not memories:
         return None
 
@@ -313,4 +310,7 @@ def get_closest_memory_to_timestamps(
             min_diff = min(diff1, diff2)
             closest_memory = memory
 
+    print('get_closest_memory_to_timestamps closest_memory:', closest_memory['id'])
     return closest_memory
+
+# get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)
