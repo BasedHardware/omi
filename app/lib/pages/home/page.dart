@@ -371,6 +371,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const BatteryInfoWidget(),
+                Consumer<HomeProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.selectedIndex != 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Flexible(
+                      child: Row(
+                        children: [
+                          const Spacer(),
+                          SpeechLanguageSheet(
+                            recordingLanguage: provider.recordingLanguage,
+                            setRecordingLanguage: provider.setRecordingLanguage,
+                            availableLanguages: provider.availableLanguages,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 const ChatPluginsDropdownWidget(),
                 Row(
                   children: [
