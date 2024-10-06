@@ -46,6 +46,22 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
+            // TODO: FIXME
+            SliverToBoxAdapter(
+                child: memoryProvider.missingWals.isNotEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              memoryProvider.syncWals();
+                            },
+                            child: Text(
+                                "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?"),
+                          ),
+                        ),
+                      )
+                    : SizedBox.shrink()),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
