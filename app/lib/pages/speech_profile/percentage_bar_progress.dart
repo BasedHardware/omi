@@ -18,26 +18,30 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
         mainAxisAlignment: MainAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: 46,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: widget.progressValue * (300 - 10),
-                  child: ProgressBubble(
-                    content: '${(widget.progressValue * 100).toInt()}%',
+          Padding(
+            padding: EdgeInsets.only(left: widget.progressValue > 0.05 ? 15.0 : 20.0),
+            child: SizedBox(
+              height: 46,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: ((MediaQuery.sizeOf(context).width * 0.72) *
+                        (double.parse(widget.progressValue.toStringAsFixed(2)))),
+                    child: ProgressBubble(
+                      content: '${(widget.progressValue * 100).toInt()}%',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           SizedBox(
-            width: 300,
+            width: MediaQuery.sizeOf(context).width * 0.72,
             height: 8,
             child: ClipRRect(
               borderRadius: const BorderRadius.all(Radius.circular(10)),
               child: LinearProgressIndicator(
-                value: widget.progressValue,
+                value: double.parse(widget.progressValue.toStringAsFixed(2)),
                 backgroundColor: Colors.grey.shade300,
                 valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
               ),
