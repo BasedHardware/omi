@@ -180,6 +180,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
+                              SizedBox(height: 14),
                               Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
                             ],
                           )
@@ -223,122 +224,119 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             },
                           ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
-                    child: !provider.startedRecording
-                        ? (provider.isInitialising
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  const SizedBox(height: 20),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                                    decoration: BoxDecoration(
-                                      border: const GradientBoxBorder(
-                                        gradient: LinearGradient(colors: [
-                                          Color.fromARGB(127, 208, 208, 208),
-                                          Color.fromARGB(127, 188, 99, 121),
-                                          Color.fromARGB(127, 86, 101, 182),
-                                          Color.fromARGB(127, 126, 190, 236)
-                                        ]),
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
+                  !provider.startedRecording
+                      ? (provider.isInitialising
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                                  decoration: BoxDecoration(
+                                    border: const GradientBoxBorder(
+                                      gradient: LinearGradient(colors: [
+                                        Color.fromARGB(127, 208, 208, 208),
+                                        Color.fromARGB(127, 188, 99, 121),
+                                        Color.fromARGB(127, 86, 101, 182),
+                                        Color.fromARGB(127, 126, 190, 236)
+                                      ]),
+                                      width: 2,
                                     ),
-                                    child: TextButton(
-                                      onPressed: () async {
-                                        await stopDeviceRecording();
-                                        await provider.initialise(finalizedCallback: restartDeviceRecording);
-                                        provider.forceCompletionTimer =
-                                            Timer(Duration(seconds: provider.maxDuration), () async {
-                                          provider.finalize();
-                                        });
-                                        provider.updateStartedRecording(true);
-                                      },
-                                      child: const Text(
-                                        'Get Started',
-                                        style: TextStyle(color: Colors.white, fontSize: 16),
-                                      ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: TextButton(
+                                    onPressed: () async {
+                                      await stopDeviceRecording();
+                                      await provider.initialise(finalizedCallback: restartDeviceRecording);
+                                      provider.forceCompletionTimer =
+                                          Timer(Duration(seconds: provider.maxDuration), () async {
+                                        provider.finalize();
+                                      });
+                                      provider.updateStartedRecording(true);
+                                    },
+                                    child: const Text(
+                                      'Get Started',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                   ),
-                                  const SizedBox(height: 10),
-                                ],
-                              ))
-                        : provider.profileCompleted
-                            ? Container(
-                                margin: const EdgeInsets.only(top: 40),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                decoration: BoxDecoration(
-                                  border: const GradientBoxBorder(
-                                    gradient: LinearGradient(colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236)
-                                    ]),
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: TextButton(
-                                  onPressed: () {
-                                    provider.close();
-                                    widget.goNext();
-                                  },
-                                  child: const Text(
-                                    "All done!",
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                  ),
+                                const SizedBox(height: 10),
+                              ],
+                            ))
+                      : provider.profileCompleted
+                          ? Container(
+                              margin: const EdgeInsets.only(top: 40),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                              decoration: BoxDecoration(
+                                border: const GradientBoxBorder(
+                                  gradient: LinearGradient(colors: [
+                                    Color.fromARGB(127, 208, 208, 208),
+                                    Color.fromARGB(127, 188, 99, 121),
+                                    Color.fromARGB(127, 86, 101, 182),
+                                    Color.fromARGB(127, 126, 190, 236)
+                                  ]),
+                                  width: 2,
                                 ),
-                              )
-                            : provider.uploadingProfile
-                                ? Padding(
-                                    padding: const EdgeInsets.only(top: 40.0),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: Center(
-                                            child: CircularProgressIndicator(
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                            ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: TextButton(
+                                onPressed: () {
+                                  provider.close();
+                                  widget.goNext();
+                                },
+                                child: const Text(
+                                  "All done!",
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                              ),
+                            )
+                          : provider.uploadingProfile
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 40.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: Center(
+                                          child: CircularProgressIndicator(
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                           ),
                                         ),
-                                        const SizedBox(width: 24),
-                                        Text(provider.loadingText,
-                                            style: const TextStyle(color: Colors.white, fontSize: 18)),
-                                      ],
-                                    ),
-                                  )
-                                : Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const SizedBox(height: 20),
-                                      provider.percentageCompleted > 0
-                                          ? const SizedBox()
-                                          : const Text(
-                                              "Introduce\nyourself",
-                                              style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                      // const SizedBox(height: 30),
-
-                                      // const SizedBox(height: 18),
-                                      ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        provider.message,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
-                                        textAlign: TextAlign.center,
                                       ),
+                                      const SizedBox(width: 24),
+                                      Text(provider.loadingText,
+                                          style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),
-                  ),
+                                )
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(height: 20),
+                                    provider.percentageCompleted > 0
+                                        ? const SizedBox()
+                                        : const Text(
+                                            "Introduce\nyourself",
+                                            style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                        width: MediaQuery.sizeOf(context).width * 0.9,
+                                        child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted)),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      provider.message,
+                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
                   (!provider.startedRecording)
                       ? TextButton(
                           onPressed: () {
