@@ -322,4 +322,8 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener {
 
   @override
   void onStatusChanged(WalServiceStatus status) {}
+
+  void syncWals() {
+    _wal.syncAll();
+  }
 }

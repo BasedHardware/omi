@@ -50,12 +50,17 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             SliverToBoxAdapter(
                 child: memoryProvider.missingWals.isNotEmpty
                     ? Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Center(
-                        child: Text(
-                            "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?"),
-                      ),
-                    )
+                        padding: const EdgeInsets.all(32.0),
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              memoryProvider.syncWals();
+                            },
+                            child: Text(
+                                "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?"),
+                          ),
+                        ),
+                      )
                     : SizedBox.shrink()),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
