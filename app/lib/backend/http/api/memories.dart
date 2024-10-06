@@ -251,3 +251,30 @@ Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTime
     return [];
   }
 }
+
+Future<bool> syncLocalFiles(List<File> files) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),
+  );
+  for (var file in files) {
+    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('syncLocalFile Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadSample: $e');
+    throw Exception('An error occurred uploadSample: $e');
+  }
+}
