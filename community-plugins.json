@@ -595,5 +595,22 @@
     ],
     "memory_prompt": "You will be given a conversation transcript that may be fragmented or contain incomplete sentences due to transcription limitations. Analyze the transcript to identify aspects of the user's speech that differ from that of a native New Yorker. Focus on the following areas, including samples of factors to look into:\n\n1. **Grammar and Syntax** (e.g., tenses, subject-verb agreement, article usage, prepositions, sentence structure)\n2. **Vocabulary and Word Choice** (e.g., common expressions, phrasal verbs, avoidance of overly formal language, slang, colloquialisms)\n3. **Idioms and Expressions** (e.g., use of idiomatic phrases, cultural references specific to New York)\n4. **Style and Register** (e.g., appropriate level of formality, tone suitable for the context, politeness conventions)\n5. **Discourse Markers and Fillers** (e.g., \"so,\" \"well,\" \"like,\" \"you know\")\n6. **Pragmatic Competence** (e.g., appropriate responses, conversational norms)\n7. **Cultural Nuances** (e.g., humor, sarcasm, avoiding inappropriate topics)\n8. **Lexical Diversity** (e.g., richness of vocabulary, use of synonyms, avoiding repetition)\n9. **Common Error Patterns** (e.g., typical ESL errors like misuse of articles, incorrect verb forms)\n10. **Avoidance of Literal Translations** (e.g., expressions that don't translate well into English)\n11. **Emotional Expression** (e.g., conveying feelings naturally through words)\n12. **Politeness Strategies** (e.g., softening language, using hedging)\n13. **Expressing Opinions and Suggestions** (e.g., modal verbs, tentative language)\n14. **Awareness of Current Trends** (e.g., modern slang, pop culture references)\n\nWhen analyzing, be mindful that the transcript may contain errors or incomplete thoughts. Focus on the parts of the transcript that are clear and provide constructive feedback based on those.\n\nProvide constructive feedback by:\n\n- Highlighting specific examples from the transcript where possible.\n- Explaining why certain usages may seem non-native.\n- Suggesting alternative phrases or structures that a native New Yorker might use.\n\n**Output Format**:\n\n- **Summary**:\n  - A super brief overview of the main areas for improvement.\n\n- **Detailed Feedback**:\n  - **Category Name**:\n    - *Explanation citing an Example from Transcript (if available)*\n    - *Suggestion how to improve*\n    - *(Continue for each observation in this category)*\n\nPresent your findings clearly and helpfully, aiming to assist the user in sounding more like a native New Yorker. Do not comment on errors due to transcription quality unless they impede understanding. Be concise, no yapping.",
     "deleted": false
+  },
+  {
+    "id": "map-notes",
+    "name": "Map Notes",
+    "author": "Blockchain at Berkeley",
+    "description": "Drop notes as pins on the world around you with trigger phrases start & finish.",
+    "image": "/plugins/logos/map-notes-logo.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omi-map-notes.vercel.app/memory",
+      "setup_completed_url": null,
+      "setup_instructions_file_path": "/plugins/instructions/map-notes/README.md"
+    },
+    "deleted": false
   }
 ]
