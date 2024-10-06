@@ -424,7 +424,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                     children: [
                                       const SizedBox(height: 24),
                                       SizedBox(
-                                        width: 336,
+                                        width: MediaQuery.sizeOf(context).width * 0.9,
                                         child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
                                       ),
                                       const SizedBox(height: 18),

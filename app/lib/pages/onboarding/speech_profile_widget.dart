@@ -168,15 +168,20 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   Padding(
                     padding: EdgeInsets.fromLTRB(40, !provider.startedRecording ? 20 : 0, 40, 20),
                     child: !provider.startedRecording
-                        ? const Text(
-                            'Omi needs to learn your voice to recognize you',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              height: 1.4,
-                              fontWeight: FontWeight.w400,
-                            ),
+                        ? const Column(
+                            children: [
+                              Text(
+                                'Omi needs to learn your voice to recognize you',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
+                            ],
                           )
                         : LayoutBuilder(
                             builder: (context, constraints) {
@@ -228,7 +233,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             : Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  const Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
                                   const SizedBox(height: 20),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
