@@ -10,6 +10,7 @@ enum MessageEventType {
   memoryProcessingStarted('memory_processing_started'),
   processingMemoryStatusChanged('processing_memory_status_changed'),
   ping('ping'),
+  memoyBackwardSynced('memory_backward_synced'),
   unknown('unknown'),
   ;
 
@@ -28,6 +29,7 @@ class ServerMessageEvent {
   ServerMemory? memory;
   List<ServerMessage>? messages;
   // ServerProcessingMemoryStatus? processingMemoryStatus;
+  String? name;
 
   ServerMessageEvent(
     this.type,
@@ -36,6 +38,7 @@ class ServerMessageEvent {
     this.memory,
     this.messages,
     // this.processingMemoryStatus,
+    this.name,
   );
 
   static ServerMessageEvent fromJson(Map<String, dynamic> json) {
@@ -48,6 +51,8 @@ class ServerMessageEvent {
       // json['processing_memory_status'] != null
       //     ? ServerProcessingMemoryStatus.valuesFromString(json['processing_memory_status'])
       //     : null,
+
+      json['name'],
     );
   }
 }

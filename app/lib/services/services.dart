@@ -7,11 +7,13 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/sockets.dart';
+import 'package:friend_private/services/wals.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
   late IDeviceService _device;
   late ISocketService _socket;
+  late IWalService _wal;
 
   static ServiceManager? _instance;
 
@@ -22,6 +24,7 @@ class ServiceManager {
     );
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
+    sm._wal = WalService();
 
     return sm;
   }
@@ -40,6 +43,8 @@ class ServiceManager {
 
   ISocketService get socket => _socket;
 
+  IWalService get wal => _wal;
+
   static void init() {
     if (_instance != null) {
       throw Exception("Service manager is initiated");
@@ -49,9 +54,11 @@ class ServiceManager {
 
   Future<void> start() async {
     _device.start();
+    _wal.start();
   }
 
-  void deinit() {
+  void deinit() async {
+    await _wal.stop();
     _mic.stop();
     _device.stop();
   }
