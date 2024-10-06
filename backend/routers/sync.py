@@ -183,6 +183,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             [t.join() for t in threads[i:i + chunk_size]]
 
     segmented_paths = set()
+    # TODO: should the processing have certain order? should we actually merge VAD?
     threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
     chunk_threads(threads)
 

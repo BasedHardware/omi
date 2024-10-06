@@ -143,9 +143,9 @@ def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMem
         _trigger_plugins(uid, memory)
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
+    memory.status = MemoryStatus.completed
     memories_db.upsert_memory(uid, memory.dict())
-    print('process_memory memory.id=', memory.id)
-
+    print('process_memory completed memory.id=', memory.id)
     return memory
 
 
