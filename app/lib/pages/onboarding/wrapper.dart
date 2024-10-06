@@ -8,7 +8,6 @@ import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
-import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
 import 'package:friend_private/pages/onboarding/name/name_widget.dart';
 import 'package:friend_private/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
@@ -36,7 +35,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 5 : 7, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
@@ -156,12 +155,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             routeToPage(context, const HomePageWrapper(), replace: true);
           },
         ),
-        MemoryCreatedWidget(
-          goNext: () {
-            // _goNext();
-            MixpanelManager().onboardingStepCompleted('Memory Created');
-          },
-        ),
+        // MemoryCreatedWidget(
+        //   goNext: () {
+        //     // _goNext();
+        //     MixpanelManager().onboardingStepCompleted('Memory Created');
+        //   },
+        // ),
       ]);
     }
 
