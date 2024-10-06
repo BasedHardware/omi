@@ -41,13 +41,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   late List<Plugin> plugins;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  bool loading = false;
-
-  changeLoadingState() {
-    setState(() {
-      loading = !loading;
-    });
-  }
 
   @override
   bool get wantKeepAlive => true;
@@ -272,7 +265,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         suffixIcon: IconButton(
                           splashColor: Colors.transparent,
                           splashRadius: 1,
-                          onPressed: loading
+                          onPressed: provider.sendingMessage
                               ? null
                               : () async {
                                   String message = textController.text;
@@ -288,7 +281,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     );
                                   }
                                 },
-                          icon: loading
+                          icon: provider.sendingMessage
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
@@ -319,7 +312,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   }
 
   _sendMessageUtil(String message) async {
-    changeLoadingState();
+    context.read<MessageProvider>().setSendingMessage(true);
     String? pluginId = SharedPreferencesUtil().selectedChatPluginId == 'no_selected'
         ? null
         : SharedPreferencesUtil().selectedChatPluginId;
@@ -331,18 +324,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     await context.read<MessageProvider>().sendMessageToServer(message, pluginId);
     // TODO: restore streaming capabilities, with initial empty message
     scrollToBottom();
-    changeLoadingState();
+    context.read<MessageProvider>().setSendingMessage(false);
   }
 
   sendInitialPluginMessage(Plugin? plugin) async {
-    changeLoadingState();
+    context.read<MessageProvider>().setSendingMessage(true);
     scrollToBottom();
     ServerMessage message = await getInitialPluginMessage(plugin?.id);
     if (mounted) {
       context.read<MessageProvider>().addMessage(message);
     }
     scrollToBottom();
-    changeLoadingState();
+    context.read<MessageProvider>().setSendingMessage(false);
   }
 
   void _moveListToBottom() {
