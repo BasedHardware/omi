@@ -96,7 +96,7 @@ async def _websocket_util(
 
     # Stream transcript
     loop = asyncio.get_event_loop()
-    memory_creation_timeout = 15
+    memory_creation_timeout = 120
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
         if existing := retrieve_in_progress_memory(uid):
