@@ -12,7 +12,7 @@ from starlette.websockets import WebSocketState
 import database.memories as memories_db
 from database import redis_db
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
-from models.message_event import MemoryEvent, MessageEvent
+from models.message_event import MemoryEvent, MessageEvent, MemoryBackwardSycnedEvent
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
@@ -392,3 +392,82 @@ async def websocket_endpoint(
         channels: int = 1, include_speech_profile: bool = True,
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, include_speech_profile)
+
+
+#
+# Listen backward
+#
+
+
+async def _websocket_util_backward(
+        websocket: WebSocket, uid: str, language: str = 'en', file_names: List[str] = [],
+):
+    print('websocket_endpoint_backward', uid, language, file_names)
+
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(e)
+        return
+
+    async def _send_message_event(msg: MessageEvent):
+        print(f"Message: type ${msg.event_type}")
+        try:
+            await websocket.send_json(msg.to_json())
+            return True
+        except WebSocketDisconnect:
+            print("WebSocket disconnected")
+        except RuntimeError as e:
+            print(f"Can not send message event, error: {e}")
+
+        return False
+
+    websocket_close_code = 1011
+    websocket_active = True
+    try:
+        while websocket_active:
+            try:
+                data = await websocket.receive_bytes()
+                head = int.from_bytes(data[:4])
+                if head == 0:  # 0000, end
+                    print(f"Sync end {len(file_names)}")
+                    websocket_active = False
+                    break
+                if head != 1:  # 0001, new file
+                    print(f"Not new file head {head}")
+                    continue
+
+                # file name
+                file_idx = int.from_bytes(data[4:8])  # index
+                if file_idx < 0 or file_idx > len(file_names):
+                    print(f"File index is invalid {file_idx}, file names: {len(file_names)}")
+                    continue
+                file_name = file_names[file_idx]
+                content_length = int.from_bytes(data[8:12])  # length
+                print(f"sync backward head: {head} index: {file_idx} file_name: {file_name} length: {content_length}")
+
+                content = data[12:]  # format: frames, [4 first bytes is the length then frame bytes]
+                # print(list(content[:100]))
+
+                # TODO: FIXME, sync to file or do transcribe
+
+                asyncio.create_task(_send_message_event(MemoryBackwardSycnedEvent(event_type="memory_backward_synced", name=file_name)))
+
+            except Exception as e:
+                print(e)
+                websocket_active = False
+                return
+    finally:
+        websocket_active = False
+        if websocket.client_state == WebSocketState.CONNECTED:
+            try:
+                await websocket.close(code=websocket_close_code)
+            except Exception as e:
+                print(f"Error closing WebSocket: {e}")
+
+
+@ router.websocket("/v2/listen/backward")
+async def websocket_endpoint_backward(
+        websocket: WebSocket, uid: str, language: str = 'en', file_names: str = '',
+):
+    await _websocket_util_backward(websocket, uid, language, file_names.split(",") if len(file_names) > 0 else [])
