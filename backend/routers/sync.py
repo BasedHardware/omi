@@ -9,7 +9,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from opuslib import Decoder
 from pydub import AudioSegment
 
-from database.memories import get_closest_memory_to_timestamps
+from database.memories import get_closest_memory_to_timestamps, update_memory_segments
 from models.memory import CreateMemory
 from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
@@ -76,7 +76,7 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
     paths = []
     for file in files:
         filename = file.filename
-        # VAlidate the file is .bin and contains a _$timestamp.bin, if not, 400 bad request
+        # Validate the file is .bin and contains a _$timestamp.bin, if not, 400 bad request
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:
@@ -118,8 +118,14 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
     # Pros -> lesser segments, faster, less concurrency
     # Cons -> less accuracy.
+
+    # edge case, multiple small segments that map towards the same memory .-.
+    # so ... let's merge them if distance < 120 seconds
+    # a better option would be to keep here 1s, and merge them like that after transcribing
+    # but FAL has 10 RPS limit, **let's merge it here for simplicity for now**
+
     for i, segment in enumerate(voice_segments):
-        if segments and (segment['start'] - segments[-1]['end']) < 1:
+        if segments and (segment['start'] - segments[-1]['end']) < 120:
             segments[-1]['end'] = segment['end']
         else:
             segments.append(segment)
@@ -153,26 +159,53 @@ def process_segment(path: str, uid: str, response: dict):
     if not transcript_segments:
         print('failed to get fal segments')
         return
+
     timestamp = get_timestamp_from_path(path)
     closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
-    # if not closest_memory:
-    create_memory = CreateMemory(
-        started_at=datetime.fromtimestamp(timestamp),
-        finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
-        transcript_segments=transcript_segments
-    )
-    created = process_memory(uid, language, create_memory)
-    response['new_memories'].add(created.id)
-    # else:
-    # TODO: take transcript segments from closest memory, and set timestamp to each segment
-    #  - take this ones and set timestamp
-    #  - sort by timestamp
-    #  - update the memory transcript segments
-    # pass
+
+    if not closest_memory:
+        create_memory = CreateMemory(
+            started_at=datetime.fromtimestamp(timestamp),
+            finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
+            transcript_segments=transcript_segments
+        )
+        created = process_memory(uid, language, create_memory)
+        response['new_memories'].add(created.id)
+    else:
+        transcript_segments = [s.dict() for s in transcript_segments]
+
+        # assign timestamps to each segment
+        for segment in transcript_segments:
+            segment['timestamp'] = timestamp + segment['start']
+        for segment in closest_memory['transcript_segments']:
+            segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
+
+        # merge and sort segments by start timestamp
+        segments = closest_memory['transcript_segments'] + transcript_segments
+        segments.sort(key=lambda x: x['timestamp'])
+
+        # fix segment.start .end to be relative to the memory
+        for i, segment in enumerate(segments):
+            duration = segment['end'] - segment['start']
+            segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
+            segment['end'] = segment['start'] + duration
+
+        print('reordered segments:')
+        for segment in segments:
+            print(round(segment['start'], 2), round(segment['end'], 2), segment['text'])
+
+        # remove timestamp field
+        for segment in segments:
+            segment.pop('timestamp')
+
+        # save
+        response['updated_memories'].add(closest_memory['id'])
+        update_memory_segments(uid, closest_memory['id'], segments)
 
 
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
     paths = retrieve_file_paths(files, uid)
     wav_paths = decode_files_to_wav(paths)
 
@@ -183,9 +216,10 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             [t.join() for t in threads[i:i + chunk_size]]
 
     segmented_paths = set()
-    # TODO: should the processing have certain order? should we actually merge VAD?
     threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
     chunk_threads(threads)
+
+    print('sync_local_files len(segmented_paths)', len(segmented_paths))
 
     response = {'updated_memories': set(), 'new_memories': set()}
     threads = [threading.Thread(target=process_segment, args=(path, uid, response,)) for path in segmented_paths]
