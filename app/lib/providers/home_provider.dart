@@ -14,6 +14,42 @@ class HomeProvider extends ChangeNotifier {
   bool isLoading = false;
   String recordingLanguage = SharedPreferencesUtil().recordingsLanguage;
 
+  final Map<String, String> availableLanguages = {
+    'Bulgarian': 'bg',
+    'Catalan': 'ca',
+    'Chinese': 'zh',
+    'Czech': 'cs',
+    'Danish': 'da',
+    'Dutch': 'nl',
+    'English': 'en',
+    'Estonian': 'et',
+    'Finnish': 'fi',
+    'French': 'fr',
+    'German': 'de',
+    'Greek': 'el',
+    'Hindi': 'hi',
+    'Hungarian': 'hu',
+    'Indonesian': 'id',
+    'Italian': 'it',
+    'Japanese': 'ja',
+    'Korean': 'ko',
+    'Latvian': 'lv',
+    'Lithuanian': 'lt',
+    'Malay': 'ms',
+    'Norwegian': 'no',
+    'Polish': 'pl',
+    'Portuguese': 'pt',
+    'Romanian': 'ro',
+    'Russian': 'ru',
+    'Slovak': 'sk',
+    'Spanish': 'es',
+    'Swedish': 'sv',
+    'Thai': 'th',
+    'Turkish': 'tr',
+    'Ukrainian': 'uk',
+    'Vietnamese': 'vi',
+  };
+
   HomeProvider() {
     memoryFieldFocusNode.addListener(_onFocusChange);
     chatFieldFocusNode.addListener(_onFocusChange);
@@ -55,6 +91,10 @@ class HomeProvider extends ChangeNotifier {
     recordingLanguage = language;
     SharedPreferencesUtil().recordingsLanguage = language;
     notifyListeners();
+  }
+
+  String getLanguageName(String code) {
+    return availableLanguages.entries.firstWhere((element) => element.value == code).key;
   }
 
   Future setUserPeople() async {
