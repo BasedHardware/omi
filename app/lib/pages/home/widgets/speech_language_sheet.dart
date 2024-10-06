@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/settings/widgets.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 
 class SpeechLanguageSheet extends StatelessWidget {
   final String recordingLanguage;
   final Function(String) setRecordingLanguage;
-  const SpeechLanguageSheet({super.key, required this.recordingLanguage, required this.setRecordingLanguage});
+  final Map<String, String> availableLanguages;
+  const SpeechLanguageSheet(
+      {super.key,
+      required this.recordingLanguage,
+      required this.setRecordingLanguage,
+      required this.availableLanguages});
 
   @override
   Widget build(BuildContext context) {
