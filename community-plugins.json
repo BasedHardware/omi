@@ -600,7 +600,7 @@
     "id": "map-notes",
     "name": "Map Notes",
     "author": "Blockchain at Berkeley",
-    "description": "Drop notes as pins on the world around you with trigger phrases start & finish.",
+    "description": "Drop notes as pins on the world around you by saying 'start', your note, then 'finish.'",
     "image": "/plugins/logos/map-notes-logo.png",
     "capabilities": [
       "external_integration"
