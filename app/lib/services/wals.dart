@@ -48,7 +48,7 @@ enum WalStorage {
 }
 
 class Wal {
-  int timestamp; // in seconds
+  int timerStart; // in seconds
   String codec;
   int channel;
   int sampleRate;
@@ -59,10 +59,10 @@ class Wal {
   String? filePath;
   List<List<int>> data = [];
 
-  String get id => '$timestamp';
+  String get id => '$timerStart';
 
   Wal(
-      {required this.timestamp,
+      {required this.timerStart,
       this.codec = "opus",
       this.sampleRate = 16000,
       this.channel = 1,
@@ -75,7 +75,7 @@ class Wal {
 
   factory Wal.fromJson(Map<String, dynamic> json) {
     return Wal(
-      timestamp: json['timestamp'],
+      timerStart: json['timer_start'],
       codec: json['codec'],
       channel: json['channel'],
       sampleRate: json['sample_rate'],
@@ -87,7 +87,7 @@ class Wal {
 
   Map<String, dynamic> toJson() {
     return {
-      'timestamp': timestamp,
+      'timer_start': timerStart,
       'codec': codec,
       'channel': channel,
       'sample_rate': sampleRate,
@@ -100,7 +100,7 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${timestamp}_${codec}_${sampleRate}_$channel.bin";
+    return "audio_${timerStart}_${codec}_${sampleRate}_$channel.bin";
   }
 }
 
@@ -157,15 +157,20 @@ class WalService implements IWalService, IWalSocketServiceListener {
   }
 
   Future _chunk() async {
-    debugPrint("_chunk");
     if (_frames.isEmpty) {
       debugPrint("Frames are empty");
       return;
     }
 
     var framesPerSeconds = 100;
-    var ts = DateTime.now().millisecondsSinceEpoch;
-    var pivot = _frames.length;
+    var newFrameSyncDelaySeconds = 5; // wait 5s for new frame synced
+    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
+    var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
+    if (pivot <= 0) {
+      return;
+    }
+
+    // Scan backward
     var high = pivot;
     while (high > 0) {
       var low = high - framesPerSeconds * ChunkSizeInSeconds;
@@ -182,14 +187,14 @@ class WalService implements IWalService, IWalSocketServiceListener {
           break;
         }
       }
-      debugPrint("_chunk high ${high} low ${low} - sync ${synced} - ts: ${ts ~/ 1000}");
+      var timerStart = timerEnd - (high - low) ~/ framesPerSeconds;
+      debugPrint("_chunk high: ${high} low: ${low} sync: ${synced} timerEnd: ${timerEnd} timerStart: ${timerStart}");
       if (!synced) {
-        var timestamp = ts ~/ 1000;
-        var missWalIdx = _wals.indexWhere((w) => w.timestamp == timestamp);
+        var missWalIdx = _wals.indexWhere((w) => w.timerStart == timerStart);
         Wal missWal;
         if (missWalIdx < 0) {
           missWal = Wal(
-            timestamp: timestamp,
+            timerStart: timerStart,
             data: chunk,
             storage: WalStorage.mem,
             status: WalStatus.miss,
@@ -210,7 +215,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
       }
 
       // next
-      ts -= ChunkSizeInSeconds * 1000;
+      timerEnd -= ChunkSizeInSeconds;
       high = low;
     }
 
@@ -221,8 +226,6 @@ class WalService implements IWalService, IWalSocketServiceListener {
   }
 
   Future _flush() async {
-    debugPrint("_flush");
-
     // Storage file
     for (var i = 0; i < _wals.length; i++) {
       final wal = _wals[i];
@@ -376,7 +379,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
         _socket?.send(byteFrame.buffer.asUint8List());
 
         debugPrint("sync wal ${wal.id} file ${wal.filePath} length ${bytes.length}");
-        debugPrint("[${bytes.sublist(0, 100).join(", ")}]");
+        //debugPrint("[${bytes.sublist(0, 100).join(", ")}]");
       } catch (e) {
         debugPrint(e.toString());
         continue;
@@ -401,22 +404,22 @@ class WalService implements IWalService, IWalSocketServiceListener {
   @override
   void onMessageEventReceived(ServerMessageEvent event) async {
     if (event.type == MessageEventType.memoyBackwardSynced) {
-      debugPrint("onMessageEventReceived > memoyBackwardSynced");
-      int? timestamp = int.tryParse(event.name?.split("_")[1] ?? "");
-      final idx = _wals.indexWhere((w) => w.timestamp == timestamp);
-      if (idx <= 0) {
+      int? timerStart = int.tryParse(event.name?.split("_")[1] ?? "");
+      final idx = _wals.indexWhere((w) => w.timerStart == timerStart);
+      if (idx < 0) {
+        debugPrint("Wal is not found $timerStart");
         return;
       }
       var wal = _wals[idx];
+
+      // update
+      await _deleteWal(wal);
+      SharedPreferencesUtil().wals = _wals;
 
       // send
       for (var sub in _subscriptions.values) {
         sub.onWalSynced(wal);
       }
-
-      // update
-      await _deleteWal(wal);
-      SharedPreferencesUtil().wals = _wals;
     }
   }
 }
