@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
@@ -100,7 +102,7 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${timerStart}_${codec}_${sampleRate}_$channel.bin";
+    return "audio_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
   }
 }
 
@@ -332,8 +334,8 @@ class WalService implements IWalService, IWalSocketServiceListener {
     return true;
   }
 
-  @override
-  Future syncAll({IWalSyncProgressListener? progress}) async {
+  @Deprecated("keep")
+  Future syncAllWs({IWalSyncProgressListener? progress}) async {
     _wals.removeWhere((wal) => wal.status == WalStatus.synced);
     await _flush();
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
@@ -385,13 +387,69 @@ class WalService implements IWalService, IWalSocketServiceListener {
         continue;
       }
     }
-
-    // End
-    final byteFrame = ByteData(4);
-    byteFrame.setUint32(0, 0, Endian.big); // 0000, end
-    _socket?.send(byteFrame.buffer.asUint8List());
   }
 
+  @override
+  Future syncAll({IWalSyncProgressListener? progress}) async {
+    _wals.removeWhere((wal) => wal.status == WalStatus.synced);
+    await _flush();
+    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
+    if (wals.isEmpty) {
+      debugPrint("All synced!");
+      return;
+    }
+
+    var steps = 10;
+    for (var i = 0; i < wals.length; i += steps) {
+      List<File> files = [];
+      for (var j = i; j < i + steps && j < wals.length; j++) {
+        var wal = wals[j];
+        debugPrint("sync id ${wal.id}");
+        if (wal.filePath == null) {
+          debugPrint("sync error: file path is not found. wal id ${wal.id}");
+          continue;
+        }
+
+        try {
+          File file = File(wal.filePath!);
+          files.add(file);
+          debugPrint("sync wal ${wal.id} file ${wal.filePath}");
+        } catch (e) {
+          debugPrint(e.toString());
+          continue;
+        }
+      }
+
+      if (files.isEmpty) {
+        debugPrint("Files are empty");
+        continue;
+      }
+
+      // Sync
+      try {
+        await syncLocalFiles(files);
+      } catch (e) {
+        debugPrint(e.toString());
+        continue;
+      }
+
+      // On success?
+      for (var j = 0; j < i + steps && j < wals.length; j++) {
+        var wal = _wals[j];
+        await _deleteWal(wal);
+
+        // Send
+        for (var sub in _subscriptions.values) {
+          sub.onWalSynced(wal);
+        }
+      }
+      SharedPreferencesUtil().wals = _wals;
+    }
+  }
+
+  // *
+  // WS
+  // *
   @override
   void onClosed() {}
 
