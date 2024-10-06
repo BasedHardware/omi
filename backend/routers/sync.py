@@ -127,12 +127,13 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
     print(path, segments)
 
     aseg = AudioSegment.from_wav(path)
+    path_dir = '/'.join(path.split('/')[:-1])
     os.remove(path)
     for i, segment in enumerate(segments):
         if (segment['end'] - segment['start']) < 1:
             continue
         segment_timestamp = start_timestamp + segment['start']
-        segment_path = f'{segment_timestamp}.wav'
+        segment_path = f'{path_dir}/{segment_timestamp}.wav'
         segment_aseg = aseg[segment['start'] * 1000:segment['end'] * 1000]
         segment_aseg.export(segment_path, format='wav')
         segmented_paths.add(segment_path)
@@ -168,7 +169,6 @@ def process_segment(path: str, uid: str, response: dict):
     #  - sort by timestamp
     #  - update the memory transcript segments
     # pass
-    print(timestamp, transcript_segments)
 
 
 @router.post("/v1/sync-local-files")
