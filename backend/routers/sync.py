@@ -1,6 +1,7 @@
 import os
 import struct
 import threading
+import time
 from datetime import datetime
 from typing import List
 
@@ -10,9 +11,10 @@ from pydub import AudioSegment
 
 from database.memories import get_closest_memory_to_timestamps
 from models.memory import CreateMemory
+from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
-from utils.other.storage import test_file_url
+from utils.other.storage import get_syncing_file_temporal_url, delete_syncing_temporal_file
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
 
@@ -61,11 +63,11 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
             print("No PCM data was decoded.")
 
 
-# decode_opus_file_to_wav('audio.bin', 'audio.wav')
-
 def get_timestamp_from_path(path: str):
-    # TODO: output always seconds, /1000 if needed
-    return int(path.split('/')[-1].split('_')[-1].split('.')[0])
+    timestamp = int(path.split('/')[-1].split('_')[-1].split('.')[0])
+    if timestamp > 1e10:
+        return int(timestamp / 1000)
+    return timestamp
 
 
 def retrieve_file_paths(files: List[UploadFile], uid: str):
@@ -109,85 +111,84 @@ def decode_files_to_wav(files_path: List[str]):
     return wav_files
 
 
+def retrieve_vad_segments(path: str, segmented_paths: set):
+    start_timestamp = get_timestamp_from_path(path)
+    voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+    segments = []
+    # should we merge more aggressively, to avoid too many small segments? ~ not for now
+    # Pros -> lesser segments, faster, less concurrency
+    # Cons -> less accuracy.
+    for i, segment in enumerate(voice_segments):
+        if segments and (segment['start'] - segments[-1]['end']) < 1:
+            segments[-1]['end'] = segment['end']
+        else:
+            segments.append(segment)
+
+    print(path, segments)
+
+    aseg = AudioSegment.from_wav(path)
+    os.remove(path)
+    for i, segment in enumerate(segments):
+        if (segment['end'] - segment['start']) < 1:
+            continue
+        segment_timestamp = start_timestamp + segment['start']
+        segment_path = f'{segment_timestamp}.wav'
+        segment_aseg = aseg[segment['start'] * 1000:segment['end'] * 1000]
+        segment_aseg.export(segment_path, format='wav')
+        segmented_paths.add(segment_path)
+
+
+def process_segment(path: str, uid: str, response: dict):
+    url = get_syncing_file_temporal_url(path)
+
+    def delete_file():
+        time.sleep(480)
+        delete_syncing_temporal_file(path)
+
+    threading.Thread(target=delete_file).start()
+
+    words, language = fal_whisperx(url, 3, 2, True)
+    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    if not transcript_segments:
+        print('failed to get fal segments')
+        return
+    timestamp = get_timestamp_from_path(path)
+    closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
+    # if not closest_memory:
+    create_memory = CreateMemory(
+        started_at=datetime.fromtimestamp(timestamp),
+        finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
+        transcript_segments=transcript_segments
+    )
+    created = process_memory(uid, language, create_memory)
+    response['new_memories'].add(created.id)
+    # else:
+    # TODO: take transcript segments from closest memory, and set timestamp to each segment
+    #  - take this ones and set timestamp
+    #  - sort by timestamp
+    #  - update the memory transcript segments
+    # pass
+    print(timestamp, transcript_segments)
+
+
 @router.post("/v1/sync-local-files")
-async def upload_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     paths = retrieve_file_paths(files, uid)
-    paths = decode_files_to_wav(paths)
+    wav_paths = decode_files_to_wav(paths)
+
+    def chunk_threads(threads):
+        chunk_size = 5
+        for i in range(0, len(threads), chunk_size):
+            [t.start() for t in threads[i:i + chunk_size]]
+            [t.join() for t in threads[i:i + chunk_size]]
 
     segmented_paths = set()
-
-    # - TODO: record 5 to 10 samples, with different types for testing
-    # - some heavy ones too
-
-    def single(path):
-        start_timestamp = get_timestamp_from_path(path)
-        voice_segments = vad_is_empty(path, return_segments=True)
-        segments = []
-        for i, segment in enumerate(voice_segments):
-            if segments and (segment['start'] - segments[-1]['end']) < 1:
-                segments[-1]['end'] = segment['end']
-            else:
-                segments.append(segment)
-        print(path, segments)
-        # any other segments combine to do here?
-        aseg = AudioSegment.from_wav(path)
-        os.remove(path)
-        for i, segment in enumerate(segments):
-            segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{segment_timestamp}.wav'
-            print(segment['end'] - segment['start'])
-            if (segment['end'] - segment['start']) < 1:
-                continue
-            segment_aseg = aseg[segment['start'] * 1000:segment['end'] * 1000]
-            segment_aseg.export(segment_path, format='wav')
-            segmented_paths.add(segment_path)
-
-    threads = []
-    for path in paths:
-        threads.append(threading.Thread(target=single, args=(path,)))
-
-    chunk_size = 5
-    for i in range(0, len(threads), chunk_size):
-        [t.start() for t in threads[i:i + chunk_size]]
-        [t.join() for t in threads[i:i + chunk_size]]
+    threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
+    chunk_threads(threads)
 
     response = {'updated_memories': set(), 'new_memories': set()}
-
-    def single(path: str):
-        url = test_file_url(path)  # TODO: use signed, and/or remove file after
-        words = fal_whisperx(url, 3, 2)
-        # TODO: get language `inferred_languages`
-        fal_segments = fal_postprocessing(words, 0)
-        if not fal_segments:
-            print('failed to get fal segments')
-            return
-        timestamp = get_timestamp_from_path(path)
-        closest_memory = get_closest_memory_to_timestamps(uid, timestamp, timestamp + fal_segments[-1]['end'], 120)
-        if not closest_memory:
-            create_memory = CreateMemory(
-                started_at=datetime.fromtimestamp(timestamp),
-                finished_at=datetime.fromtimestamp(timestamp + fal_segments[-1]['end']),
-                transcript_segments=fal_segments
-            )
-            created = process_memory(uid, 'en', create_memory)
-            response['new_memories'].add(created.id)
-        else:
-            # TODO: take transcript segments from closest memory, and set timestamp to each segment
-            #  - take this ones and set timestamp
-            #  - sort by timestamp
-            #  - update the memory transcript segments
-            pass
-
-        print(timestamp, fal_segments)
-
-    threads = []
-    for path in segmented_paths:
-        threads.append(threading.Thread(target=single, args=(path,)))
-
-    chunk_size = 5
-    for i in range(0, len(threads), chunk_size):
-        [t.start() for t in threads[i:i + chunk_size]]
-        [t.join() for t in threads[i:i + chunk_size]]
+    threads = [threading.Thread(target=process_segment, args=(path, uid, response,)) for path in segmented_paths]
+    chunk_threads(threads)
 
     # notify through FCM too ?
     return response
