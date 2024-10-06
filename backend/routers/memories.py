@@ -78,7 +78,6 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
     memory = Memory(**memory)
     memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
     memory = process_memory(uid, memory.language, memory)
-    memories_db.update_memory_status(uid, memory.id, MemoryStatus.completed)
     messages = trigger_external_integrations(uid, memory)
 
     return CreateMemoryResponse(memory=memory, messages=messages)
