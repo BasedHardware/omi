@@ -13,6 +13,7 @@ import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/device.dart';
+import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -29,6 +30,7 @@ import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -109,7 +111,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     debugPrint(event);
     InstabugLog.logInfo(event);
   }
-
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
@@ -468,6 +469,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     );
                   }
                 }),
+                Consumer<HomeProvider>(
+                  builder: (context, provider, child) {
+                    if (provider.selectedIndex != 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Flexible(
+                      child: Row(
+                        children: [
+                          const Spacer(),
+                          SpeechLanguageSheet(
+                            recordingLanguage: provider.recordingLanguage,
+                            setRecordingLanguage: provider.setRecordingLanguage,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 Consumer2<PluginProvider, HomeProvider>(
                   builder: (context, provider, home, child) {
                     if (home.selectedIndex != 1) {
