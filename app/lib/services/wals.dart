@@ -6,7 +6,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/services/sockets/transcription_connection.dart';
+import 'package:friend_private/services/sockets/wal_connection.dart';
 import 'package:path_provider/path_provider.dart';
 
 const ChunkSizeInSeconds = 7; // 30
@@ -108,10 +111,12 @@ abstract class IWalSyncProgressListener {
 abstract class IWalServiceListener {
   void onStatusChanged(WalServiceStatus status);
   void onNewMissingWal(Wal wal);
-  void onWalSynced(Wal wal, ServerMemory memory);
+  void onWalSynced(Wal wal, {ServerMemory? memory});
 }
 
-class WalService implements IWalService {
+class WalService implements IWalService, IWalSocketServiceListener {
+  WalSocketService? _socket;
+
   List<Wal> _wals = const [];
 
   List<List<int>> _frames = [];
@@ -256,6 +261,8 @@ class WalService implements IWalService {
 
   @override
   Future stop() async {
+    _socket?.stop();
+
     debugPrint("wal service stop");
     _chunkingTimer?.cancel();
     _flushingTimer?.cancel();
@@ -278,8 +285,7 @@ class WalService implements IWalService {
     }
   }
 
-  @override
-  Future<bool> deleteWal(Wal wal) async {
+  Future<bool> _deleteWal(Wal wal) async {
     // Delete file
     if (wal.filePath != null) {
       try {
@@ -293,6 +299,11 @@ class WalService implements IWalService {
 
     _wals.removeWhere((w) => w.id == wal.id);
     return true;
+  }
+
+  @override
+  Future<bool> deleteWal(Wal wal) async {
+    return _deleteWal(wal);
   }
 
   @override
@@ -321,11 +332,26 @@ class WalService implements IWalService {
   @override
   Future syncAll({IWalSyncProgressListener? progress}) async {
     _wals.removeWhere((wal) => wal.status == WalStatus.synced);
-
     await _flush();
+    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
+    if (wals.isEmpty) {
+      debugPrint("All synced!");
+      return;
+    }
 
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk);
-    for (var wal in wals) {
+    // Establish connection
+    _socket?.stop();
+    _socket = WalSocketService.create(wals.map<String>((wal) => wal.getFileName()).toList());
+    await _socket?.start();
+    if (_socket?.state != SocketServiceState.connected) {
+      _socket?.stop();
+      debugPrint("Cant not connect to socket!");
+      return;
+    }
+    _socket?.subscribe(this, this);
+
+    for (var i = 0; i < wals.length; i++) {
+      var wal = wals[i];
       debugPrint("sync id ${wal.id}");
       if (wal.filePath == null) {
         debugPrint("sync error: file path is not found. wal id ${wal.id}");
@@ -336,13 +362,61 @@ class WalService implements IWalService {
         File file = File(wal.filePath!);
         var bytes = await file.readAsBytes();
 
-        // TODO: sync to socket
+        final byteFrame = ByteData(12 + bytes.length);
+        byteFrame.setUint32(0, 1, Endian.big); // 0001, start new file
+        byteFrame.setUint32(4, i, Endian.big); // index
+        byteFrame.setUint32(8, bytes.length, Endian.big); // length
+        for (int i = 0; i < bytes.length; i++) {
+          byteFrame.setUint8(i + 12, bytes[i]);
+        }
+        if (_socket?.state != SocketServiceState.connected) {
+          debugPrint("sync error: socket is closed. wal id ${wal.id}");
+          break;
+        }
+        _socket?.send(byteFrame.buffer.asUint8List());
+
         debugPrint("sync wal ${wal.id} file ${wal.filePath} length ${bytes.length}");
-        debugPrint("[${bytes.join(", ")}]");
+        debugPrint("[${bytes.sublist(0, 100).join(", ")}]");
       } catch (e) {
         debugPrint(e.toString());
         continue;
       }
+    }
+
+    // End
+    final byteFrame = ByteData(4);
+    byteFrame.setUint32(0, 0, Endian.big); // 0000, end
+    _socket?.send(byteFrame.buffer.asUint8List());
+  }
+
+  @override
+  void onClosed() {}
+
+  @override
+  void onConnected() {}
+
+  @override
+  void onError(Object err) {}
+
+  @override
+  void onMessageEventReceived(ServerMessageEvent event) async {
+    if (event.type == MessageEventType.memoyBackwardSynced) {
+      debugPrint("onMessageEventReceived > memoyBackwardSynced");
+      int? timestamp = int.tryParse(event.name?.split("_")[1] ?? "");
+      final idx = _wals.indexWhere((w) => w.timestamp == timestamp);
+      if (idx <= 0) {
+        return;
+      }
+      var wal = _wals[idx];
+
+      // send
+      for (var sub in _subscriptions.values) {
+        sub.onWalSynced(wal);
+      }
+
+      // update
+      await _deleteWal(wal);
+      SharedPreferencesUtil().wals = _wals;
     }
   }
 }
