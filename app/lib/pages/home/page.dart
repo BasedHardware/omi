@@ -481,6 +481,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           SpeechLanguageSheet(
                             recordingLanguage: provider.recordingLanguage,
                             setRecordingLanguage: provider.setRecordingLanguage,
+                            availableLanguages: provider.availableLanguages,
                           ),
                         ],
                       ),
