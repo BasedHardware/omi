@@ -102,7 +102,12 @@ def decode_files_to_wav(files_path: List[str]):
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
         decode_opus_file_to_wav(path, wav_path)
-        aseg = AudioSegment.from_wav(wav_path)
+        try:
+            aseg = AudioSegment.from_wav(wav_path)
+        except Exception as e:
+            print(e)
+            raise HTTPException(status_code=400, detail=f"Invalid file format {path}, {e}")
+
         if aseg.duration_seconds < 1:
             os.remove(wav_path)
             continue
@@ -134,7 +139,6 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
-    os.remove(path)
     for i, segment in enumerate(segments):
         if (segment['end'] - segment['start']) < 1:
             continue
