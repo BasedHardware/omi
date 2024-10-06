@@ -16,7 +16,6 @@ from models.message_event import MemoryEvent, MessageEvent, MemoryBackwardSycned
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
-import struct
 
 router = APIRouter()
 
@@ -100,7 +99,7 @@ async def _websocket_util(
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
         if existing := retrieve_in_progress_memory(uid):
-            print('_get_or_create_in_progress_memory existing', existing['id'])
+            # print('_get_or_create_in_progress_memory existing', existing['id'])
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
@@ -138,7 +137,7 @@ async def _websocket_util(
         return False
 
     async def memory_creation_timer(delay_seconds: int):
-        print('memory_creation_timer', delay_seconds)
+        # print('memory_creation_timer', delay_seconds)
         try:
             await asyncio.sleep(delay_seconds)
             await _create_memory()
@@ -295,10 +294,10 @@ async def _websocket_util(
                     data = decoder.decode(bytes(data), frame_size=160)
 
                 if include_speech_profile:
-                    # pick 320 bytes as a vad sample, cause frame_width 2?
                     vad_sample_size = 320
                     vad_sample = data[:vad_sample_size]
                     if len(vad_sample) < vad_sample_size:
+                        print('VAD sample is less than 320 bytes', len(vad_sample))
                         vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
                     has_speech = w_vad.is_speech(vad_sample, sample_rate)
                     if not has_speech:
@@ -308,7 +307,6 @@ async def _websocket_util(
                 # - but from write data, it feels faster, but the processing is having issues
                 # - and soniox after missingn a couple filtered bytes get's slower
                 # - specially after waiting for like a couple seconds.
-                # f.write(data)
 
                 if soniox_socket is not None:
                     await soniox_socket.send(data)
