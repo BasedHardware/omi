@@ -56,3 +56,11 @@ class ProcessingMemoryStatusChanged(MessageEvent):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         return j
+
+class MemoryBackwardSycnedEvent(MessageEvent):
+    name: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
