@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
@@ -11,46 +10,13 @@ import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
-import 'package:tuple/tuple.dart';
 
-Future<bool> migrateMemoriesToBackend(List<dynamic> memories) async {
+Future<CreateMemoryResponse?> processInProgressMemory() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/migration/memories',
-    headers: {'Content-Type': 'application/json'},
-    method: 'POST',
-    body: jsonEncode(memories),
-  );
-  debugPrint('migrateMemoriesToBackend: ${response?.body}');
-  return response?.statusCode == 200;
-}
-
-Future<CreateMemoryResponse?> createMemoryServer({
-  required DateTime startedAt,
-  required DateTime finishedAt,
-  required List<TranscriptSegment> transcriptSegments,
-  Geolocation? geolocation,
-  List<Tuple2<String, String>> photos = const [],
-  bool triggerIntegrations = true,
-  String? language,
-  File? audioFile,
-  String? source,
-  String? processingMemoryId,
-}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories?trigger_integrations=$triggerIntegrations&source=$source',
+    url: '${Env.apiBaseUrl}v2/memories',
     headers: {},
     method: 'POST',
-    body: jsonEncode({
-      'started_at': startedAt.toUtc().toIso8601String(),
-      'finished_at': finishedAt.toUtc().toIso8601String(),
-      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'geolocation': geolocation?.toJson(),
-      'photos': photos.map((photo) => {'base64': photo.item1, 'description': photo.item2}).toList(),
-      'source': transcriptSegments.isNotEmpty ? 'friend' : 'openglass',
-      'language': language, // maybe determine auto?
-      'processing_memory_id': processingMemoryId,
-      // 'audio_base64_url': audioFile != null ? await wavToBase64Url(audioFile.path) : null,
-    }),
+    body: jsonEncode({}),
   );
   if (response == null) return null;
   debugPrint('createMemoryServer: ${response.body}');
@@ -64,16 +30,19 @@ Future<CreateMemoryResponse?> createMemoryServer({
       level: NonFatalExceptionLevel.info,
       userAttributes: {
         'response': response.body,
-        'transcriptSegments': TranscriptSegment.segmentsAsString(transcriptSegments),
       },
     );
   }
   return null;
 }
 
-Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
+Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0, List<MemoryStatus> statuses = const []}) async {
   var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset', headers: {}, method: 'GET', body: '');
+      url:
+          '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+      headers: {},
+      method: 'GET',
+      body: '');
   if (response == null) return [];
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
@@ -81,23 +50,8 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0}) async {
     var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
-  }
-  return [];
-}
-
-Future<List<ServerProcessingMemory>> getProcessingMemories(
-    {List<String> filterIds = const [], int limit = 5, int offset = 0}) async {
-  var url = '${Env.apiBaseUrl}v1/processing-memories?filter_ids=${filterIds.join(",")}&limit=$limit&offset=$offset';
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
-  if (response.statusCode == 200) {
-    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
-    var body = utf8.decode(response.bodyBytes);
-    var memories =
-        (jsonDecode(body)["result"] as List<dynamic>).map((memory) => ServerProcessingMemory.fromJson(memory)).toList();
-    return memories;
   } else {
-    debugPrint("[API-Error] $url - ${response.statusCode}");
+    debugPrint('getMemories error ${response.statusCode}');
   }
   return [];
 }
@@ -140,21 +94,6 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   debugPrint('getMemoryById: ${response.body}');
   if (response.statusCode == 200) {
     return ServerMemory.fromJson(jsonDecode(response.body));
-  }
-  return null;
-}
-
-Future<ServerProcessingMemory?> getProcessingMemoryById(String id) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/processing-memories/$id',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  debugPrint('getProcessingMemoryById: ${response.body}');
-  if (response.statusCode == 200) {
-    return ServerProcessingMemory.fromJson(jsonDecode(response.body));
   }
   return null;
 }
@@ -310,5 +249,32 @@ Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTime
   } catch (e) {
     debugPrint('An error occurred storageSend: $e');
     return [];
+  }
+}
+
+Future<bool> syncLocalFiles(List<File> files) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),
+  );
+  for (var file in files) {
+    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('syncLocalFile Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadSample: $e');
+    throw Exception('An error occurred uploadSample: $e');
   }
 }

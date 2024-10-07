@@ -40,7 +40,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
-  bool hasAudioRecording = false;
+  // bool hasAudioRecording = false;
 
   List<MemoryPhoto> photos = [];
   List<Tuple2<String, String>> photosData = [];
@@ -133,9 +133,9 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
         await populatePhotosData();
       });
     } else if (memory.source == MemorySource.friend) {
-      await hasMemoryRecording(memory.id).then((value) {
-        hasAudioRecording = value;
-      });
+      // await hasMemoryRecording(memory.id).then((value) {
+      //   hasAudioRecording = value;
+      // });
     }
     pluginsList = pluginProvider!.plugins;
     // updateLoadingState(false);

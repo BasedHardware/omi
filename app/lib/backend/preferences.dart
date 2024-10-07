@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesUtil {
@@ -383,9 +385,9 @@ class SharedPreferencesUtil {
 
   String get calendarId => getString('calendarId') ?? '';
 
-  set calendarType(String value) => saveString('calendarType', value); // auto, manual
+  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
-  String get calendarType => getString('calendarType') ?? 'auto';
+  String get calendarType => getString('calendarType2') ?? 'manual';
 
   bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
 
@@ -419,4 +421,13 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
+  set wals(List<Wal> wals) {
+    final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('v3/wals', value);
+  }
+
+  List<Wal> get wals {
+    final List<String> value = getStringList('v3/wals') ?? [];
+    return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
+  }
 }
