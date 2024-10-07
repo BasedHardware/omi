@@ -11,7 +11,7 @@ import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 
-class MemoryProvider extends ChangeNotifier implements IWalServiceListener {
+class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerMemory> memories = [];
   Map<DateTime, List<ServerMemory>> groupedMemories = {};
 
@@ -27,6 +27,8 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener {
   IWalService get _wal => ServiceManager.instance().wal;
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
+  double _walsSyncedProgress = 0.0;
+  double get walsSyncedProgress => _walsSyncedProgress;
 
   MemoryProvider() {
     _wal.subscribe(this, this);
@@ -324,6 +326,12 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener {
   void onStatusChanged(WalServiceStatus status) {}
 
   void syncWals() {
-    _wal.syncAll();
+    _walsSyncedProgress = 0.0;
+    _wal.syncAll(progress: this);
+  }
+
+  @override
+  void onWalSyncedProgress(double percentage) {
+    _walsSyncedProgress = percentage;
   }
 }
