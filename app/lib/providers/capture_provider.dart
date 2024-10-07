@@ -41,7 +41,8 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get wal => ServiceManager.instance().wal;
+  bool _walFeatureEnabled = false;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -153,9 +154,9 @@ class CaptureProvider extends ChangeNotifier
       if (value.isEmpty) return;
 
       // support: opus
-      var isWalSupported = codec == BleAudioCodec.opus;
+      var isWalSupported = codec == BleAudioCodec.opus && _walFeatureEnabled;
       if (isWalSupported) {
-        wal.onByteStream(value);
+        _wal.onByteStream(value);
       }
 
       if (_socket?.state == SocketServiceState.connected) {
@@ -164,7 +165,7 @@ class CaptureProvider extends ChangeNotifier
 
         // synced
         if (isWalSupported) {
-          wal.onBytesSync(value);
+          _wal.onBytesSync(value);
         }
       }
     });
