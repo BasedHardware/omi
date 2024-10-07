@@ -10,23 +10,30 @@ void _startForegroundCallback() {
 }
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
+  DateTime? _locationUpdatedAt;
+
   @override
   void onStart(DateTime timestamp) async {
     debugPrint("Starting foreground task");
+    _locationInBackground();
   }
 
-  Future locationInBackground() async {
+  Future _locationInBackground() async {
     if (await Geolocator.isLocationServiceEnabled()) {
       if (await Geolocator.checkPermission() == LocationPermission.always) {
         var locationData = await Geolocator.getCurrentPosition();
-        Object loc = {
-          "latitude": locationData.latitude,
-          "longitude": locationData.longitude,
-          'altitude': locationData.altitude,
-          'accuracy': locationData.accuracy,
-          'time': locationData.timestamp.toUtc().toIso8601String(),
-        };
-        FlutterForegroundTask.sendDataToMain(loc);
+        if (_locationUpdatedAt == null ||
+            _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
+          Object loc = {
+            "latitude": locationData.latitude,
+            "longitude": locationData.longitude,
+            'altitude': locationData.altitude,
+            'accuracy': locationData.accuracy,
+            'time': locationData.timestamp.toUtc().toIso8601String(),
+          };
+          FlutterForegroundTask.sendDataToMain(loc);
+          _locationUpdatedAt = DateTime.now();
+        }
       } else {
         Object loc = {'error': 'Always location permission is not granted'};
         FlutterForegroundTask.sendDataToMain(loc);
@@ -40,13 +47,13 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onReceiveData(Object data) async {
     debugPrint('onReceiveData: $data');
-    await locationInBackground();
+    await _locationInBackground();
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
     print("Foreground repeat event triggered");
-    await locationInBackground();
+    await _locationInBackground();
   }
 
   @override
@@ -101,7 +108,9 @@ class ForegroundUtil {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 30000,
+        // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
+        // such as 1m + self-validation in each service.
+        interval: 60 * 1000 * 5,
         isOnceEvent: false,
         autoRunOnBoot: false,
         allowWakeLock: true,

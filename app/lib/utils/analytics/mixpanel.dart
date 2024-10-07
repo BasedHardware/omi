@@ -134,6 +134,8 @@ class MixpanelManager {
     setUserProperty('Calendar Enabled', false);
   }
 
+  void calendarModePressed(String mode) => track('Calendar Mode $mode Pressed');
+
   void calendarTypeChanged(String type) => track('Calendar Type Changed', properties: {'type': type});
 
   void calendarSelected() => track('Calendar Selected');
@@ -141,8 +143,6 @@ class MixpanelManager {
   void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
 
   void deviceConnected() => track('Device Connected', properties: {
-        //TODO; Mohsin
-        // ..._preferences.btDeviceStruct.toJson(fwverAsString: true),
         ..._preferences.btDevice.toJson(),
       });
 

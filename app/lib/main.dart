@@ -46,9 +46,6 @@ Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
 
-  // TODO: thinh, move to app start
-  await ServiceManager.instance().start();
-
   // Firebase
   if (F.env == Environment.prod) {
     await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform, name: 'prod');
@@ -60,6 +57,10 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
+
+  // TODO: thinh, move to app start
+  await ServiceManager.instance().start();
+
   bool isAuth = false;
   try {
     isAuth = (await getIdToken()) != null;
@@ -90,8 +91,8 @@ void main() async {
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          // invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
-          invocationEvents: [],
+          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
+          // invocationEvents: [],
         );
         if (isAuth) {
           Instabug.identifyUser(

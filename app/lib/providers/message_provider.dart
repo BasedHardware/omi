@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
@@ -13,6 +14,7 @@ class MessageProvider extends ChangeNotifier {
   bool hasCachedMessages = false;
   bool isClearingChat = false;
   bool showTypingIndicator = false;
+  bool sendingMessage = false;
 
   String firstTimeLoadingText = '';
 
@@ -22,6 +24,11 @@ class MessageProvider extends ChangeNotifier {
 
   void setHasCachedMessages(bool value) {
     hasCachedMessages = value;
+    notifyListeners();
+  }
+
+  void setSendingMessage(bool value) {
+    sendingMessage = value;
     notifyListeners();
   }
 
@@ -102,6 +109,14 @@ class MessageProvider extends ChangeNotifier {
       messages[0] = mes;
     }
     setShowTypingIndicator(false);
+    notifyListeners();
+  }
+
+  Future sendInitialPluginMessage(Plugin? plugin) async {
+    setSendingMessage(true);
+    ServerMessage message = await getInitialPluginMessage(plugin?.id);
+    addMessage(message);
+    setSendingMessage(false);
     notifyListeners();
   }
 

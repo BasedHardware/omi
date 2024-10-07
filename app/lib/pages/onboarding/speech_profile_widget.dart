@@ -228,7 +228,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     child: TextButton(
                                       onPressed: () async {
                                         await stopDeviceRecording();
-                                        await provider.initialise(true, finalizedCallback: restartDeviceRecording);
+                                        await provider.initialise(finalizedCallback: restartDeviceRecording);
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () async {
                                           provider.finalize();

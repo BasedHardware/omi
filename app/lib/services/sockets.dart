@@ -4,18 +4,20 @@ import 'package:friend_private/services/sockets/transcription_connection.dart';
 
 abstract class ISocketService {
   void start();
+
   void stop();
 
-  Future<TranscripSegmentSocketService?> memory(
+  Future<TranscriptSegmentSocketService?> memory(
       {required BleAudioCodec codec, required int sampleRate, bool force = false});
-  Future<TranscripSegmentSocketService?> speechProfile(
+
+  Future<TranscriptSegmentSocketService?> speechProfile(
       {required BleAudioCodec codec, required int sampleRate, bool force = false});
 }
 
 abstract interface class ISocketServiceSubsciption {}
 
 class SocketServicePool extends ISocketService {
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
 
   @override
   void start() {
@@ -29,8 +31,12 @@ class SocketServicePool extends ISocketService {
 
   // Warn: Should use a better solution to prevent race conditions
   bool mutex = false;
-  Future<TranscripSegmentSocketService?> socket(
-      {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
+
+  Future<TranscriptSegmentSocketService?> socket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    bool force = false,
+  }) async {
     while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -47,7 +53,7 @@ class SocketServicePool extends ISocketService {
       // new socket
       await _socket?.stop();
 
-      _socket = MemoryTranscripSegmentSocketService.create(sampleRate, codec);
+      _socket = MemoryTranscriptSegmentSocketService.create(sampleRate, codec);
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
         return null;
@@ -62,14 +68,14 @@ class SocketServicePool extends ISocketService {
   }
 
   @override
-  Future<TranscripSegmentSocketService?> memory(
+  Future<TranscriptSegmentSocketService?> memory(
       {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
     debugPrint("socket memory > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, force: force);
   }
 
   @override
-  Future<TranscripSegmentSocketService?> speechProfile(
+  Future<TranscriptSegmentSocketService?> speechProfile(
       {required BleAudioCodec codec, required int sampleRate, bool force = false}) async {
     debugPrint("socket speech profile > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, force: force);
