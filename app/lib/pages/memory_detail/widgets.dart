@@ -361,7 +361,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Re-summarise', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
