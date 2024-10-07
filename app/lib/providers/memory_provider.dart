@@ -24,9 +24,12 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   List<ServerMemory> processingMemories = [];
 
-  IWalService get _wal => ServiceManager.instance().wal;
+  IWalService get _walService => ServiceManager.instance().wal;
+
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
+  int get missingWalsInSeconds =>
+      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
   double _walsSyncedProgress = 0.0;
   double get walsSyncedProgress => _walsSyncedProgress;
@@ -36,12 +39,12 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   Map<String, dynamic>? syncResult;
 
   MemoryProvider() {
-    _wal.subscribe(this, this);
+    _walService.subscribe(this, this);
     _preload();
   }
 
   _preload() async {
-    _missingWals = await _wal.getMissingWals();
+    _missingWals = await _walService.getMissingWals();
     notifyListeners();
   }
 
@@ -311,19 +314,19 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
-    _wal.unsubscribe(this);
+    _walService.unsubscribe(this);
     super.dispose();
   }
 
   @override
   void onNewMissingWal(Wal wal) async {
-    _missingWals = await _wal.getMissingWals();
+    _missingWals = await _walService.getMissingWals();
     notifyListeners();
   }
 
   @override
   void onWalSynced(Wal wal, {ServerMemory? memory}) async {
-    _missingWals = await _wal.getMissingWals();
+    _missingWals = await _walService.getMissingWals();
     notifyListeners();
   }
 
@@ -338,7 +341,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   Future<Map<String, dynamic>?> syncWals() async {
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
-    var res = await _wal.syncAll(progress: this);
+    var res = await _walService.syncAll(progress: this);
     syncResult = res.$1;
     syncCompleted = true;
     setIsSyncing(false);
