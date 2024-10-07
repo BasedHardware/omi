@@ -27,6 +27,9 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define INVALID_FILE_SIZE 3
 #define ZERO_FILE_SIZE 4
 #define INVALID_COMMAND 6
+
+#define MAX_HEARTBEAT_FRAMES 100
+#define HEARTBEAT 50
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -39,7 +42,7 @@ K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
 extern uint8_t file_count;
-extern uint32_t file_num_array[40];
+extern uint32_t file_num_array[2];
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
@@ -54,7 +57,6 @@ static struct bt_gatt_attr storage_service_attr[] = {
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
 bool storage_is_on = false;
-
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
 {
@@ -78,11 +80,11 @@ static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint
 static ssize_t storage_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
 {
     k_msleep(10);
-    uint32_t amount[50] = {0};
-    for (int i = 0; i < file_count; i++) {
+    uint32_t amount[2] = {0};
+    for (int i = 0; i < 2; i++) {
            amount[i] = file_num_array[i];
         }
-    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 1 * sizeof(uint32_t));
+    ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 2 * sizeof(uint32_t));
     return result;
 }
 
@@ -138,6 +140,7 @@ static int setup_storage_tx()
 }
 uint8_t delete_num = 0;
 uint8_t nuke_started = 0;
+static uint8_t heartbeat_count = 0;
 static uint8_t parse_storage_command(void *buf,uint16_t len) 
 {
 
@@ -172,7 +175,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
         if ( file_num == ( file_count ) ) 
         {
             LOG_INF("file_count == final file");
-            offset = size;
+            offset = size - (size % 80);
             current_read_num = file_num;
             transport_started = 1;           
         }
@@ -189,7 +192,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
         else 
         {
             LOG_INF("valid command, setting up ");
-            offset = size;
+            offset = size - (size % 80);
             current_read_num = file_num;
             transport_started = 1;
         }
@@ -203,10 +206,14 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
     {
         nuke_started = 1;
     }
-    else if (command == STOP_COMMAND) 
+    else if (command == STOP_COMMAND) //should be no explicit stop command, send heartbeats to keep connection alive
     {
-        remaining_length = 80;
+        remaining_length = 0;
         stop_started = 1;
+    }
+    else if (command == HEARTBEAT)
+    {
+        heartbeat_count = 0;
     }
     else 
     {
@@ -244,21 +251,30 @@ static void write_to_gatt(struct bt_conn *conn)
 
     int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
     offset = offset + packet_size;
-    remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
+
     index++;
 
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
+    if (err) 
+    {
+        printk("error writing to gatt: %d\n",err);
+    }
+    else 
+    {
+    remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
+    }
 }
 
 // static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max speeds. udp?
 
-//     uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH*5);
+//     uint32_t packet_size = MIN(remaining_length,440);
 
 //     int r = read_audio_data(storage_write_buffer,packet_size,offset);
 //     offset = offset + packet_size;
 //     remaining_length = remaining_length - packet_size;
 //     printk("remaining length%d\n",remaining_length);
 //     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
+//     printk("wrote to gatt %d\n",err);
 // }
 
 void storage_write(void) 
@@ -277,6 +293,7 @@ void storage_write(void)
     { 
         LOG_INF("delete:%d\n",delete_started);
         int err = clear_audio_file(delete_num);
+        save_offset(0);
         if (err) 
         {
             printk("error clearing\n");
@@ -295,12 +312,21 @@ void storage_write(void)
     if (nuke_started) 
     {
         clear_audio_directory();
+        save_offset(0);
         nuke_started = 0;
     }
     if (stop_started) 
     { 
         remaining_length = 0;
         stop_started = 0;
+        save_offset(offset);
+    }
+    if (heartbeat_count == MAX_HEARTBEAT_FRAMES)
+    {
+        printk("no heartbeat sent\n");
+        save_offset(offset);
+        // k_yield();
+        // continue;
     }
 
     if(remaining_length > 0 ) 
@@ -309,12 +335,18 @@ void storage_write(void)
         {
             LOG_ERR("invalid connection");
             remaining_length = 0;
-            k_yield();
+            save_offset(offset);
+            //save offset to flash
+            continue;
+            // k_yield();
         }
-        write_to_gatt(conn);
+        // printk("remaining length: %d\n",remaining_length);
 
+        write_to_gatt(conn);
+        heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
+        
         transport_started = 0;
-       if (remaining_length == 0 ) 
+        if (remaining_length == 0 ) 
         {
             if(stop_started)
             {

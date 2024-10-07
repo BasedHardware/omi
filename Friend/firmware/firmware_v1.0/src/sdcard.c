@@ -27,7 +27,7 @@ static char current_full_path[MAX_PATH_LENGTH];
 static char read_buffer[MAX_PATH_LENGTH];
 static char write_buffer[MAX_PATH_LENGTH];
 
-uint32_t file_num_array[40];    
+uint32_t file_num_array[2];    
 
 static const char *disk_mount_pt = "/SD:/";
 
@@ -137,8 +137,10 @@ int mount_sd_card(void)
     if (res) 
     {
         res = create_file("info.txt");
+        save_offset(0);
         LOG_INF("result of info.txt creation: %d ",res);
     }
+    
     LOG_INF("result of check: %d",res);
 
 	return 0;
@@ -385,4 +387,55 @@ int clear_audio_directory()
     move_write_pointer(1);
     return 0;
     //if files are cleared, then directory is oked for destrcution.
+}
+
+int save_offset(uint32_t offset)
+{
+    uint8_t buf[4] = {offset & 0xFF, (offset >> 8) & 0xFF, (offset >> 16) & 0xFF, (offset >> 24) & 0xFF};
+
+    struct fs_file_t write_file;
+	fs_file_t_init(&write_file);
+   	int res = fs_open(&write_file, "/SD:/info.txt" , FS_O_WRITE | FS_O_CREATE);
+    if (res) 
+    {
+        // printk("error opening file %d\n",res);
+        return -1;
+    }
+    res = fs_write(&write_file,&buf,4);
+    if (res < 0)
+    {
+        // printk("error writing file %d\n",res);
+        return -1;
+    }
+    fs_close(&write_file);
+    return 0;
+}
+
+int get_offset()
+{
+    uint8_t buf[4];
+    struct fs_file_t read_file;
+	fs_file_t_init(&read_file);
+	int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
+    if (rc < 0)
+    {
+        // printk("error opening file %d\n",rc);
+        return -1;
+    }
+    rc = fs_seek(&read_file,0,FS_SEEK_SET);
+    if (rc < 0)
+    {
+        // printk("error seeking file %d\n",rc);
+        return -1;
+    }
+    rc = fs_read(&read_file, &buf, 4);
+    if (rc < 0)
+    {
+        // printk("error reading file %d\n",rc);
+        return -1;
+    }
+    uint32_t *offset_ptr = (uint32_t*)buf;
+    printk("get offset is %d\n",offset_ptr[0]);
+
+    return offset_ptr[0];
 }
