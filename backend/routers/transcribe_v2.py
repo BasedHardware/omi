@@ -75,7 +75,7 @@ async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True
 ):
-    print('websocket_endpoint', uid, language, sample_rate, codec, include_speech_profile)
+    print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     if language == 'en' and sample_rate == 16000 and codec == 'opus':
@@ -96,6 +96,89 @@ async def _websocket_util(
     # Stream transcript
     loop = asyncio.get_event_loop()
     memory_creation_timeout = 120
+
+    async def _send_message_event(msg: MessageEvent):
+        print(f"Message: type ${msg.event_type}")
+        try:
+            await websocket.send_json(msg.to_json())
+            return True
+        except WebSocketDisconnect:
+            print("WebSocket disconnected")
+        except RuntimeError as e:
+            print(f"Can not send message event, error: {e}")
+
+        return False
+
+    async def _trigger_create_memory_with_delay(delay_seconds: int):
+        # print('memory_creation_timer', delay_seconds)
+        try:
+            await asyncio.sleep(delay_seconds)
+            await _create_current_memory()
+        except asyncio.CancelledError:
+            pass
+
+    async def _create_memory(memory: dict):
+        memory = Memory(**memory)
+        if memory.status != MemoryStatus.processing:
+            asyncio.create_task(_send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory)))
+            memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
+            memory.status = MemoryStatus.processing
+
+        try:
+            memory = process_memory(uid, language, memory)
+            messages = trigger_external_integrations(uid, memory)
+        except Exception as e:
+            print(f"Error processing memory: {e}")
+            memories_db.set_memory_as_discarded(uid, memory.id)
+            memory.discarded = True
+            messages = []
+
+        asyncio.create_task(
+            _send_message_event(MemoryEvent(event_type="memory_created", memory=memory, messages=messages))
+        )
+
+    async def finalize_processing_memories(processing: List[dict]):
+        # handle edge case of memory was actually processing? maybe later, doesn't hurt really anyway.
+        # also fix from getMemories endpoint?
+        print('finalize_processing_memories len(processing):', len(processing))
+        for memory in processing:
+            await _create_memory(memory)
+
+    processing = memories_db.get_processing_memories(uid)
+    asyncio.create_task(finalize_processing_memories(processing))
+
+    async def _create_current_memory():
+        print("_create_current_memory")
+        # Reset state variables
+        nonlocal seconds_to_trim
+        nonlocal seconds_to_add
+        seconds_to_trim = None
+        seconds_to_add = None
+
+        memory = retrieve_in_progress_memory(uid)
+        if not memory or not memory['transcript_segments']:
+            return
+        await _create_memory(memory)
+
+    memory_creation_task = None
+    seconds_to_trim = None
+    seconds_to_add = None
+
+    # Determine previous disconnected socket seconds to add + start processing timer if a memory in progress
+    if existing_memory := retrieve_in_progress_memory(uid):
+        # segments seconds alignment
+        started_at = datetime.fromisoformat(existing_memory['started_at'].isoformat())
+        seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
+
+        # processing if needed logic
+        finished_at = datetime.fromisoformat(existing_memory['finished_at'].isoformat())
+        seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
+        if seconds_since_last_segment >= memory_creation_timeout:
+            asyncio.create_task(_create_current_memory())
+        else:
+            memory_creation_task = asyncio.create_task(
+                _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment)
+            )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
         if existing := retrieve_in_progress_memory(uid):
@@ -124,70 +207,6 @@ async def _websocket_util(
         redis_db.set_in_progress_memory_id(uid, memory.id)
         return memory
 
-    async def _send_message_event(msg: MessageEvent):
-        print(f"Message: type ${msg.event_type}")
-        try:
-            await websocket.send_json(msg.to_json())
-            return True
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
-        except RuntimeError as e:
-            print(f"Can not send message event, error: {e}")
-
-        return False
-
-    async def memory_creation_timer(delay_seconds: int):
-        # print('memory_creation_timer', delay_seconds)
-        try:
-            await asyncio.sleep(delay_seconds)
-            await _create_memory()
-        except asyncio.CancelledError:
-            pass
-
-    async def _create_memory():
-        print("_create_memory")
-        # Reset state variables
-        nonlocal seconds_to_trim
-        nonlocal seconds_to_add
-        seconds_to_trim = None
-        seconds_to_add = None
-
-        memory = retrieve_in_progress_memory(uid)
-        if not memory or not memory['transcript_segments']:
-            # this edge can happen? when
-            raise Exception('FAILED')
-        memory = Memory(**memory)
-
-        asyncio.create_task(_send_message_event(MemoryEvent(event_type="memory_processing_started", memory=memory)))
-
-        memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
-        memory = process_memory(uid, language, memory)
-        messages = trigger_external_integrations(uid, memory)
-
-        asyncio.create_task(
-            _send_message_event(MemoryEvent(event_type="memory_created", memory=memory, messages=messages))
-        )
-
-    memory_creation_task = None
-    seconds_to_trim = None
-    seconds_to_add = None
-
-    # Determine previous disconnected socket seconds to add + start processing timer if a memory in progress
-    if existing_memory := retrieve_in_progress_memory(uid):
-        # segments seconds alignment
-        started_at = datetime.fromisoformat(existing_memory['started_at'].isoformat())
-        seconds_to_add = (datetime.now(timezone.utc) - started_at).total_seconds()
-
-        # processing if needed logic
-        finished_at = datetime.fromisoformat(existing_memory['finished_at'].isoformat())
-        seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
-        if seconds_since_last_segment >= memory_creation_timeout:
-            asyncio.create_task(_create_memory())
-        else:
-            memory_creation_task = asyncio.create_task(
-                memory_creation_timer(memory_creation_timeout - seconds_since_last_segment)
-            )
-
     def stream_transcript(segments, _):
         nonlocal websocket
         nonlocal seconds_to_trim
@@ -202,7 +221,7 @@ async def _websocket_util(
 
         if memory_creation_task is not None:
             memory_creation_task.cancel()
-        memory_creation_task = asyncio.create_task(memory_creation_timer(memory_creation_timeout))
+        memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
 
         # Segments aligning duration seconds.
         if seconds_to_add:
@@ -454,7 +473,8 @@ async def _websocket_util_backward(
 
                 # TODO: FIXME, sync to file or do transcribe
 
-                asyncio.create_task(_send_message_event(MemoryBackwardSycnedEvent(event_type="memory_backward_synced", name=file_name)))
+                asyncio.create_task(
+                    _send_message_event(MemoryBackwardSycnedEvent(event_type="memory_backward_synced", name=file_name)))
 
             except Exception as e:
                 print(e)
@@ -469,7 +489,7 @@ async def _websocket_util_backward(
                 print(f"Error closing WebSocket: {e}")
 
 
-@ router.websocket("/v2/listen/backward")
+@router.websocket("/v2/listen/backward")
 async def websocket_endpoint_backward(
         websocket: WebSocket, uid: str, language: str = 'en', file_names: str = '',
 ):

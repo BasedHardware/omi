@@ -23,22 +23,12 @@ def _get_memory_by_id(uid: str, memory_id: str) -> dict:
     return memory
 
 
+# DEPRECATED
 @router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
 def create_memory(
         create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
         source: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    """
-    Create Memory endpoint.
-    :param source:
-    :param create_memory: data to create memory
-    :param trigger_integrations: determine if triggering the on_memory_created plugins webhooks.
-    :param language_code: language.
-    :param uid: user id.
-    :return: The new memory created + any messages triggered by on_memory_created integrations.
-
-    TODO: Should receive raw segments by deepgram, instead of the beautified ones? and get beautified on read?
-    """
     if not create_memory.transcript_segments and not create_memory.photos:
         raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
 
@@ -49,10 +39,6 @@ def create_memory(
         language_code = create_memory.language
     else:
         create_memory.language = language_code
-
-    if create_memory.processing_memory_id:
-        print(
-            f"warn: split-brain in memory (maybe) by forcing new memory creation during processing. uid: {uid}, processing_memory_id: {create_memory.processing_memory_id}")
 
     memory = process_memory(uid, language_code, create_memory, force_process=source == 'speech_profile_onboarding')
     if not trigger_integrations:
@@ -77,7 +63,7 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
 
     memory = Memory(**memory)
     memories_db.update_memory_status(uid, memory.id, MemoryStatus.processing)
-    memory = process_memory(uid, memory.language, memory)
+    memory = process_memory(uid, memory.language, memory, force_process=True)
     messages = trigger_external_integrations(uid, memory)
 
     return CreateMemoryResponse(memory=memory, messages=messages)
