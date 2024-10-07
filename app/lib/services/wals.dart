@@ -163,7 +163,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
     }
 
     var framesPerSeconds = 100;
-    var lossesThreshold = 1 * framesPerSeconds; // 1s
+    var lossesThreshold = 3 * framesPerSeconds; // 3s
     var newFrameSyncDelaySeconds = 5; // wait 5s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
