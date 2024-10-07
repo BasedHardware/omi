@@ -284,7 +284,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               ),
                               child: TextButton(
                                 onPressed: () {
-                                  provider.close();
                                   widget.goNext();
                                 },
                                 child: const Text(

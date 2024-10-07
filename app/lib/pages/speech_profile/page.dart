@@ -31,6 +31,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      context.read<SpeechProfileProvider>().close();
       await context.read<SpeechProfileProvider>().updateDevice();
     });
 
