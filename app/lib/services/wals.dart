@@ -24,7 +24,7 @@ abstract class IWalService {
 
   void onByteStream(List<int> value);
   void onBytesSync(List<int> value);
-  Future syncAll({IWalSyncProgressListener? progress});
+  Future<(Map<String, dynamic>?, bool)> syncAll({IWalSyncProgressListener? progress});
   Future<bool> syncWal(Wal wal);
   Future<bool> deleteWal(Wal wal);
   Future<List<Wal>> getMissingWals();
@@ -401,14 +401,16 @@ class WalService implements IWalService, IWalSocketServiceListener {
   }
 
   @override
-  Future syncAll({IWalSyncProgressListener? progress}) async {
+  Future<(Map<String, dynamic>?, bool)> syncAll({IWalSyncProgressListener? progress}) async {
     _wals.removeWhere((wal) => wal.status == WalStatus.synced);
     await _flush();
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
       debugPrint("All synced!");
-      return;
+      return (null, true);
     }
+
+    (Map<String, dynamic>?, bool) res = (null, false);
 
     var steps = 10;
     for (var i = 0; i < wals.length; i += steps) {
@@ -441,7 +443,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
       // Sync
       try {
-        await syncLocalFiles(files);
+        res = await syncLocalFiles(files);
       } catch (e) {
         debugPrint(e.toString());
         continue;
@@ -461,6 +463,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
     // Progress
     progress?.onWalSyncedProgress(1.0);
+    return res;
   }
 
   // *
