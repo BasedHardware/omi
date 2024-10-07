@@ -94,19 +94,12 @@ class ServerMemory {
 
   final MemoryExternalData? externalIntegration;
 
-  // MemoryPostProcessing? postprocessing;
-  String? processingMemoryId;
-
+  MemoryStatus status;
   bool discarded;
   final bool deleted;
 
-  // local failed memories
-  final bool failed;
-  int retries;
-
   // local label
   bool isNew = false;
-  MemoryStatus status;
 
   ServerMemory({
     required this.id,
@@ -120,13 +113,9 @@ class ServerMemory {
     this.photos = const [],
     this.discarded = false,
     this.deleted = false,
-    this.failed = false,
-    this.retries = 0,
     this.source,
     this.language,
     this.externalIntegration,
-    // this.postprocessing,
-    this.processingMemoryId,
     this.status = MemoryStatus.completed,
   });
 
@@ -148,11 +137,7 @@ class ServerMemory {
       source: json['source'] != null ? MemorySource.values.asNameMap()[json['source']] : MemorySource.friend,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      failed: json['failed'] ?? false,
-      retries: json['retries'] ?? 0,
       externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
-      // postprocessing: json['postprocessing'] != null ? MemoryPostProcessing.fromJson(json['postprocessing']) : null,
-      processingMemoryId: json['processing_memory_id'],
       status: json['status'] != null
           ? MemoryStatus.values.asNameMap()[json['status']] ?? MemoryStatus.completed
           : MemoryStatus.completed,
@@ -174,11 +159,7 @@ class ServerMemory {
       'deleted': deleted,
       'source': source?.toString(),
       'language': language,
-      'failed': failed,
-      'retries': retries,
       'external_data': externalIntegration?.toJson(),
-      // 'postprocessing': postprocessing?.toJson(),
-      'processing_memory_id': processingMemoryId,
       'status': status.toString().split('.').last,
     };
   }
@@ -187,7 +168,6 @@ class ServerMemory {
     if (source == MemorySource.screenpipe) return 'Screenpipe';
     if (source == MemorySource.openglass) return 'Openglass';
     if (source == MemorySource.sdcard) return 'SD Card';
-    if (failed) return 'Failed';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
@@ -204,13 +184,6 @@ class ServerMemory {
 
   VoidCallback? onTagPressed(BuildContext context) {
     if (source == MemorySource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
-    if (failed) {
-      return () => showDialog(
-          builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-              'Failed Memory', 'This memory failed to be created. Will be retried once you reopen the app.',
-              singleButton: true, okButtonText: 'OK'),
-          context: context);
-    }
     return null;
   }
 

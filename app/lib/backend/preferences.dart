@@ -261,32 +261,6 @@ class SharedPreferencesUtil {
     }
   }
 
-  addFailedMemory(ServerMemory memory) {
-    if (memory.transcriptSegments.isEmpty && memory.photos.isEmpty) return;
-
-    final List<ServerMemory> memories = failedMemories;
-    memories.add(memory);
-    failedMemories = memories;
-  }
-
-  removeFailedMemory(String memoryId) {
-    final List<ServerMemory> memories = failedMemories;
-    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
-    if (memory != null) {
-      memories.remove(memory);
-      failedMemories = memories;
-    }
-  }
-
-  increaseFailedMemoryRetries(String memoryId) {
-    final List<ServerMemory> memories = failedMemories;
-    ServerMemory? memory = memories.firstWhereOrNull((m) => m.id == memoryId);
-    if (memory != null) {
-      memory.retries += 1;
-      failedMemories = memories;
-    }
-  }
-
   ServerMemory? get modifiedMemoryDetails {
     final String memory = getString('modifiedMemoryDetails') ?? '';
     if (memory.isEmpty) return null;
