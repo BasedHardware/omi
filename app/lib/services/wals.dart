@@ -166,6 +166,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
     }
 
     var framesPerSeconds = 100;
+    var lossesThreshold = 1 * framesPerSeconds; // 1s
     var newFrameSyncDelaySeconds = 5; // wait 5s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
@@ -181,13 +182,17 @@ class WalService implements IWalService, IWalSocketServiceListener {
         low = 0;
       }
       var synced = true;
+      var losses = 0;
       var chunk = _frames.sublist(low, high);
       for (var f in chunk) {
         var head = f.sublist(0, 3);
         var seq = Uint8List.fromList(head..add(0)).buffer.asByteData().getInt32(0);
         if (!_syncFrameSeq.contains(seq)) {
-          synced = false;
-          break;
+          losses++;
+          if (losses >= lossesThreshold) {
+            synced = false;
+            break;
+          }
         }
       }
       var timerStart = timerEnd - (high - low) ~/ framesPerSeconds;
