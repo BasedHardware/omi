@@ -449,17 +449,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                         child: Row(
                           children: [
-                            Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                            Image.asset('assets/images/logo_transparent.png', width: 20, height: 20),
                             isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                             deviceProvider.isConnecting && isMemoriesPage
-                                ? Text(
+                                ? const Text(
                                     "Connecting",
-                                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                    style: TextStyle(color: Colors.white, fontSize: 14),
                                   )
                                 : isMemoriesPage
-                                    ? Text(
+                                    ? const Text(
                                         "No device found",
-                                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                        style: TextStyle(color: Colors.white, fontSize: 14),
                                       )
                                     : const SizedBox.shrink(),
                           ],
