@@ -6,6 +6,7 @@
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/bluetooth/hci.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
@@ -19,13 +20,13 @@
 #include "storage.h"
 #include "button.h"
 #include "lib/battery/battery.h"
-
+// #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
-extern uint32_t file_num_array[40];
+extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0; 
@@ -479,7 +480,6 @@ K_THREAD_STACK_DEFINE(pusher_stack, 4096);
 static struct k_thread pusher_thread;
 static uint16_t packet_next_index = 0;
 static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE];
-static char storage_temp_data[400];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
@@ -536,7 +536,8 @@ static bool push_to_gatt(struct bt_conn *conn)
 }
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-#define MAX_WRITE_SIZE 400
+#define MAX_WRITE_SIZE 440
+static uint8_t storage_temp_data[440];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 bool write_to_storage(void) 
@@ -570,37 +571,41 @@ bool write_to_storage(void)
 //     }
 
 //     uint8_t *buffer = tx_buffer+2;
-//     uint8_t packet_size = (uint8_t)(tx_buffer_size+ OPUS_PREFIX_LENGTH);
+//     uint8_t packet_size = (uint8_t)(tx_buffer_size + OPUS_PREFIX_LENGTH);
 
 //     // buffer_offset = buffer_offset+amount_to_fill;
 //     //check if adding the new packet will cause a overflow
-//     if(buffer_offset+packet_size > MAX_WRITE_SIZE) { 
+//     if(buffer_offset + packet_size > MAX_WRITE_SIZE-1) 
+//     { 
 
-//     storage_temp_data[buffer_offset] = packet_size-1;
-//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     storage_temp_data[buffer_offset] = tx_buffer_size;
+//     uint8_t *write_ptr = storage_temp_data;
 //     write_to_file(write_ptr,MAX_WRITE_SIZE);
 
 //     buffer_offset = packet_size;
-//     storage_temp_data[0] = packet_size-1;
-//     memcpy(storage_temp_data +1, buffer, packet_size-1);
+//     storage_temp_data[0] = tx_buffer_size;
+//     memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
 
 //     }
-//     else if (buffer_offset + packet_size == MAX_WRITE_SIZE) { //exact frame needed 
-//     storage_temp_data[buffer_offset] = packet_size-1;
-//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1) 
+//     { //exact frame needed 
+//     storage_temp_data[buffer_offset] = tx_buffer_size;
+//     memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
 //     buffer_offset = 0;
 //     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
 //     write_to_file(write_ptr,MAX_WRITE_SIZE);
     
 //     }
-//     else {
-//     storage_temp_data[buffer_offset] = packet_size-1;
-//     memcpy(storage_temp_data+ buffer_offset+1, buffer, packet_size-1);
+//     else 
+//     {
+//     storage_temp_data[buffer_offset] = tx_buffer_size;
+//     memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
 //     buffer_offset = buffer_offset + packet_size;
 //     }
 
 //     return true;
 // }
+
 extern bool is_off;
 static bool use_storage = true;
 #define MAX_FILES 10
@@ -610,7 +615,9 @@ static int recent_file_size_updated = 0;
 void update_file_size() 
 {
     file_num_array[0] = get_file_size(1);
-    printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+    file_num_array[1] = get_offset();
+    // printk("file size for file count %d %d\n",file_count,file_num_array[0]);
+    // printk("offset for file count %d %d\n",file_count,file_num_array[1]);
 }
 
 void pusher(void)
@@ -698,9 +705,11 @@ int bt_on()
 {
     int err = bt_enable(NULL);
     bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    // bt_gatt_service_register(&storage_service);
 
 }
 
+//periodic advertising
 int transport_start()
 {
     // Configure callbacks
@@ -776,6 +785,8 @@ int transport_start()
 	{
 		LOG_INF("Battery initialized");
 	}
+
+    // friend_init();
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);
