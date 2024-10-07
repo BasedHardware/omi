@@ -106,10 +106,25 @@ def get_in_progress_memory(uid: str):
     return docs[0] if docs else None
 
 
+def get_processing_memories(uid: str):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = (
+        user_ref.collection('memories')
+        .where(filter=FieldFilter('status', '==', 'processing'))
+    )
+    return [doc.to_dict() for doc in memories_ref.stream()]
+
+
 def update_memory_status(uid: str, memory_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'status': status})
+
+
+def set_memory_as_discarded(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'discarded': True})
 
 
 # *********************************
