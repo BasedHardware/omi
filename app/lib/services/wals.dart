@@ -108,7 +108,7 @@ class Wal {
 }
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(Wal wal, Float percentage);
+  void onWalSyncedProgress(double percentage); // 0..1
 }
 
 abstract class IWalServiceListener {
@@ -261,6 +261,13 @@ class WalService implements IWalService, IWalSocketServiceListener {
         debugPrint("_flush file ${wal.filePath}");
 
         _wals[i] = wal;
+      }
+    }
+
+    // Clean synced wal
+    for (var i = _wals.length - 1; i >= 0; i--) {
+      if (_wals[i].status == WalStatus.synced) {
+        await _deleteWal(_wals[i]);
       }
     }
 
@@ -428,6 +435,9 @@ class WalService implements IWalService, IWalSocketServiceListener {
         continue;
       }
 
+      // Progress
+      progress?.onWalSyncedProgress((i + 1).toDouble() / wals.length);
+
       // Sync
       try {
         await syncLocalFiles(files);
@@ -438,16 +448,18 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
       // On success?
       for (var j = 0; j < i + steps && j < wals.length; j++) {
-        var wal = _wals[j];
-        await _deleteWal(wal);
+        _wals[j].status = WalStatus.synced;
 
         // Send
         for (var sub in _subscriptions.values) {
-          sub.onWalSynced(wal);
+          sub.onWalSynced(_wals[j]);
         }
       }
       SharedPreferencesUtil().wals = _wals;
     }
+
+    // Progress
+    progress?.onWalSyncedProgress(1.0);
   }
 
   // *
