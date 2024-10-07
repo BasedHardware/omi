@@ -14,6 +14,7 @@ import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
@@ -41,7 +42,9 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get wal => ServiceManager.instance().wal;
+  bool _walFeatureEnabled = true;
+  IWalService get _walService => ServiceManager.instance().wal;
+  IDeviceService get _deviceService => ServiceManager.instance().device;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -152,19 +155,24 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
 
-      // support: opus
-      var isWalSupported = codec == BleAudioCodec.opus;
-      if (isWalSupported) {
-        wal.onByteStream(value);
+      // support: opus codec, 1m from the first device connectes
+      var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
+      var isWalEnabled = codec == BleAudioCodec.opus &&
+          (deviceFirstConnectedAt != null &&
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 60)))) &&
+          _walFeatureEnabled;
+      if (isWalEnabled) {
+        _walService.onByteStream(value);
       }
 
+      // send ws
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
 
         // synced
-        if (isWalSupported) {
-          wal.onBytesSync(value);
+        if (isWalEnabled) {
+          _walService.onBytesSync(value);
         }
       }
     });
