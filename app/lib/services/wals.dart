@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:ffi';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -10,13 +8,12 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/sockets/wal_connection.dart';
 import 'package:path_provider/path_provider.dart';
 
-const ChunkSizeInSeconds = 7; // 30
-const FlushIntervalInSeconds = 15; //300
+const chunkSizeInSeconds = 30;
+const flushIntervalInSeconds = 60;
 
 abstract class IWalService {
   void start();
@@ -74,7 +71,7 @@ class Wal {
       this.filePath,
       this.data = const []});
 
-  get seconds => ChunkSizeInSeconds;
+  get seconds => chunkSizeInSeconds;
 
   factory Wal.fromJson(Map<String, dynamic> json) {
     return Wal(
@@ -150,10 +147,10 @@ class WalService implements IWalService, IWalSocketServiceListener {
   void start() {
     _wals = SharedPreferencesUtil().wals;
     debugPrint("wal service start: ${_wals.length}");
-    _chunkingTimer = Timer.periodic(const Duration(seconds: ChunkSizeInSeconds), (t) async {
+    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds), (t) async {
       await _chunk();
     });
-    _flushingTimer = Timer.periodic(const Duration(seconds: FlushIntervalInSeconds), (t) async {
+    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds), (t) async {
       await _flush();
     });
     _status = WalServiceStatus.ready;
@@ -166,6 +163,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
     }
 
     var framesPerSeconds = 100;
+    var lossesThreshold = 3 * framesPerSeconds; // 3s
     var newFrameSyncDelaySeconds = 5; // wait 5s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
@@ -176,18 +174,22 @@ class WalService implements IWalService, IWalSocketServiceListener {
     // Scan backward
     var high = pivot;
     while (high > 0) {
-      var low = high - framesPerSeconds * ChunkSizeInSeconds;
+      var low = high - framesPerSeconds * chunkSizeInSeconds;
       if (low < 0) {
         low = 0;
       }
       var synced = true;
+      var losses = 0;
       var chunk = _frames.sublist(low, high);
       for (var f in chunk) {
         var head = f.sublist(0, 3);
         var seq = Uint8List.fromList(head..add(0)).buffer.asByteData().getInt32(0);
         if (!_syncFrameSeq.contains(seq)) {
-          synced = false;
-          break;
+          losses++;
+          if (losses >= lossesThreshold) {
+            synced = false;
+            break;
+          }
         }
       }
       var timerStart = timerEnd - (high - low) ~/ framesPerSeconds;
@@ -218,7 +220,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
       }
 
       // next
-      timerEnd -= ChunkSizeInSeconds;
+      timerEnd -= chunkSizeInSeconds;
       high = low;
     }
 
@@ -278,7 +280,6 @@ class WalService implements IWalService, IWalSocketServiceListener {
   Future stop() async {
     _socket?.stop();
 
-    debugPrint("wal service stop");
     _chunkingTimer?.cancel();
     _flushingTimer?.cancel();
 
