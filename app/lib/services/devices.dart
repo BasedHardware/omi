@@ -16,6 +16,8 @@ abstract class IDeviceService {
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
+
+  DateTime? getFirstConnectedAt();
 }
 
 enum DeviceServiceStatus {
@@ -48,6 +50,8 @@ class DeviceService implements IDeviceService {
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
+
+  DateTime? _firstConnectedAt;
 
   @override
   Future<void> discover({
@@ -249,9 +253,19 @@ class DeviceService implements IDeviceService {
 
       // connect
       await _connectToDevice(deviceId);
+
+      if (_firstConnectedAt == null) {
+        _firstConnectedAt = DateTime.now();
+      }
+
       return _connection;
     } finally {
       mutex = false;
     }
+  }
+
+  @override
+  DateTime? getFirstConnectedAt() {
+    return _firstConnectedAt;
   }
 }

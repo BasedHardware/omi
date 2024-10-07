@@ -79,7 +79,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: memoryProvider.missingWals.isNotEmpty
+              child: memoryProvider.missingWalsInSeconds > 120
                   ? GestureDetector(
                       onTap: () {
                         routeToPage(context, const SyncPage());
@@ -95,7 +95,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                         child: ListTile(
                           leading: const Icon(Icons.record_voice_over_rounded),
                           title: Text(
-                            'You have ${secondsToHumanReadable(memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b))} of conversation locally, sync now?',
+                            'You have ${secondsToHumanReadable(memoryProvider.missingWalsInSeconds)} of conversation locally, sync now?',
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ),
