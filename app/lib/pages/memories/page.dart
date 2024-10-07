@@ -56,8 +56,10 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                             onTap: () {
                               memoryProvider.syncWals();
                             },
-                            child: Text(
-                                "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?"),
+                            child: memoryProvider.walsSyncedProgress == 0.0
+                                ? Text(
+                                    "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?")
+                                : Text("${(memoryProvider.walsSyncedProgress * 100).toInt()}%"),
                           ),
                         ),
                       )
