@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
@@ -243,11 +244,13 @@ class WalService implements IWalService, IWalSocketServiceListener {
           // Format:
           // <length>|<bytes>
           // 4 bytes |  n bytes
-          final byteFrame = ByteData(4 + frame.length); // skip first 3 bytes
-          byteFrame.setUint32(0, frame.length, Endian.big);
+          final byteFrame = ByteData(frame.length);
+          // Check why 37 -> [0, 0, 0, 37] ???
+          // byteFrame.setUint32(0, frame.length, Endian.big);
           for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i + 4, frame[i]);
+            byteFrame.setUint8(i, frame[i]);
           }
+          data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
           data.addAll(byteFrame.buffer.asUint8List());
         }
         final file = File(filePath);
