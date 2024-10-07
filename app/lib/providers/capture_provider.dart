@@ -151,11 +151,21 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream?.cancel();
     _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
-      wal.onByteStream(value);
+
+      // support: opus
+      var isWalSupported = codec == BleAudioCodec.opus;
+      if (isWalSupported) {
+        wal.onByteStream(value);
+      }
+
       if (_socket?.state == SocketServiceState.connected) {
         final trimmedValue = value.sublist(3);
         _socket?.send(trimmedValue);
-        wal.onBytesSync(value);
+
+        // synced
+        if (isWalSupported) {
+          wal.onBytesSync(value);
+        }
       }
     });
     setAudioBytesConnected(true);
