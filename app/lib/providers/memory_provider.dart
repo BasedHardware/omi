@@ -27,8 +27,13 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   IWalService get _wal => ServiceManager.instance().wal;
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
+
   double _walsSyncedProgress = 0.0;
   double get walsSyncedProgress => _walsSyncedProgress;
+
+  bool isSyncing = false;
+  bool syncCompleted = false;
+  Map<String, dynamic>? syncResult;
 
   MemoryProvider() {
     _wal.subscribe(this, this);
@@ -325,13 +330,30 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   @override
   void onStatusChanged(WalServiceStatus status) {}
 
-  void syncWals() {
-    _walsSyncedProgress = 0.0;
-    _wal.syncAll(progress: this);
-  }
-
   @override
   void onWalSyncedProgress(double percentage) {
     _walsSyncedProgress = percentage;
+  }
+
+  Future<Map<String, dynamic>?> syncWals() async {
+    _walsSyncedProgress = 0.0;
+    setIsSyncing(true);
+    var res = await _wal.syncAll(progress: this);
+    syncResult = res.$1;
+    syncCompleted = true;
+    setIsSyncing(false);
+    notifyListeners();
+    return res.$1;
+  }
+
+  void clearSyncResult() {
+    syncResult = null;
+    syncCompleted = false;
+    notifyListeners();
+  }
+
+  void setIsSyncing(bool value) {
+    isSyncing = value;
+    notifyListeners();
   }
 }
