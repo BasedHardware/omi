@@ -1,18 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/http/api/processing_memories.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -21,10 +18,9 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
@@ -36,9 +32,16 @@ class CaptureProvider extends ChangeNotifier
     implements ITransctipSegmentSocketServiceListener {
   MemoryProvider? memoryProvider;
   MessageProvider? messageProvider;
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
+
+  // In progress memory
+  ServerMemory? _inProgressMemory;
+
+  ServerMemory? get inProgressMemory => _inProgressMemory;
+
+  IWalService get wal => ServiceManager.instance().wal;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -48,10 +51,10 @@ class CaptureProvider extends ChangeNotifier
 
   BtDevice? _recordingDevice;
   List<TranscriptSegment> segments = [];
-  Geolocation? geolocation;
 
   bool hasTranscripts = false;
-  bool memoryCreating = false;
+
+  // bool memoryCreating = false;
   bool audioBytesConnected = false;
 
   StreamSubscription? _bleBytesStream;
@@ -73,31 +76,6 @@ class CaptureProvider extends ChangeNotifier
   // -----------------------
   // Memory creation variables
   String conversationId = const Uuid().v4();
-  int elapsedSeconds = 0;
-
-  // -----------------------
-
-  String? processingMemoryId;
-  ServerProcessingMemory? capturingProcessingMemory;
-  Timer? _processingMemoryWatchTimer;
-
-  List<int> currentStorageFiles = <int>[];
-  int sdCardFileNum = 1;
-
-  int totalStorageFileBytes = 0; // how much in storage
-  int totalBytesReceived = 0; // how much already received
-  double sdCardSecondsTotal = 0.0; // time to send the next chunk
-  double sdCardSecondsReceived = 0.0;
-  bool sdCardDownloadDone = false;
-  bool sdCardReady = false;
-  bool sdCardIsDownloading = false;
-  String btConnectedTime = "";
-  Timer? sdCardReconnectionTimer;
-  
-  void setSdCardIsDownloading(bool value) {
-    sdCardIsDownloading = value;
-    notifyListeners();
-  }
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -106,18 +84,7 @@ class CaptureProvider extends ChangeNotifier
 
   void setMemoryCreating(bool value) {
     debugPrint('set memory creating $value');
-    memoryCreating = value;
-    notifyListeners();
-  }
-
-  void setGeolocation(Geolocation? value) {
-    geolocation = value;
-
-    // Update processing memory on geolocation
-    if (processingMemoryId != null) {
-      _updateProcessingMemory();
-    }
-
+    // memoryCreating = value;
     notifyListeners();
   }
 
@@ -132,221 +99,15 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _onMemoryCreating() {
-    setMemoryCreating(true);
-  }
-
-  Future<void> _updateProcessingMemory() async {
-    if (processingMemoryId == null) {
-      return;
-    }
-
-    debugPrint("update processing memory");
-    // Update info likes geolocation
-    UpdateProcessingMemoryResponse? result = await updateProcessingMemoryServer(
-      id: processingMemoryId!,
-      geolocation: geolocation,
-      emotionalFeedback: GrowthbookUtil().isOmiFeedbackEnabled(),
-    );
-    if (result?.result == null) {
-      debugPrint("Can not update processing memory, result null");
-    }
-  }
-
-  Future<void> _onProcessingMemoryStatusChanged(String processingMemoryId, ServerProcessingMemoryStatus status) async {
-    if (capturingProcessingMemory == null || capturingProcessingMemory?.id != processingMemoryId) {
-      debugPrint("Warn: Didn't track processing memory yet $processingMemoryId");
-    }
-
-    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: processingMemoryId);
-    if (result?.result == null) {
-      debugPrint("Can not fetch processing memory, result null");
-      return;
-    }
-    var pm = result!.result!;
-    if (status == ServerProcessingMemoryStatus.processing) {
-      memoryProvider?.onNewProcessingMemory(pm);
-      return;
-    }
-    if (status == ServerProcessingMemoryStatus.done) {
-      memoryProvider?.onProcessingMemoryDone(pm);
-      return;
-    }
-  }
-
-  Future<void> _onProcessingMemoryCreated(String processingMemoryId) async {
-    this.processingMemoryId = processingMemoryId;
-
-    // Fetch and watch capturing status
-    ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(
-      id: processingMemoryId,
-    );
-    if (result?.result == null) {
-      debugPrint("Can not fetch processing memory, result null");
-    }
-    _setCapturingProcessingMemory(result?.result);
-
-    // Set pre-segments
-    if (capturingProcessingMemory != null && (capturingProcessingMemory?.transcriptSegments ?? []).isNotEmpty) {
-      segments = capturingProcessingMemory!.transcriptSegments;
-      setHasTranscripts(segments.isNotEmpty);
-    }
-
-    // Notify capturing
-    if (capturingProcessingMemory != null) {
-      //    memoryProvider?.onNewCapturingMemory(capturingProcessingMemory!);
-    }
-
-    // Update processing memory
-    _updateProcessingMemory();
-  }
-
-  void _trackCapturingProcessingMemory() {
-    if (capturingProcessingMemory == null) {
-      return;
-    }
-
-    var pm = capturingProcessingMemory!;
-
-    var delayMs = pm.capturingTo != null
-        ? pm.capturingTo!.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch
-        : 2 * 60 * 1000; // 2m
-    if (delayMs > 0) {
-      _processingMemoryWatchTimer?.cancel();
-      _processingMemoryWatchTimer = Timer(Duration(milliseconds: delayMs), () async {
-        ProcessingMemoryResponse? result = await fetchProcessingMemoryServer(id: pm.id);
-        if (result?.result == null) {
-          debugPrint("Can not fetch processing memory, result null");
-          return;
-        }
-
-        _setCapturingProcessingMemory(result?.result);
-        if (capturingProcessingMemory == null) {
-          // Force clean
-          _clean();
-        }
-      });
-    }
-  }
-
-  void _setCapturingProcessingMemory(ServerProcessingMemory? pm) {
-    if (pm != null &&
-        pm.status == ServerProcessingMemoryStatus.capturing &&
-        pm.capturingTo != null &&
-        pm.capturingTo!.isAfter(DateTime.now())) {
-      capturingProcessingMemory = pm;
-      _trackCapturingProcessingMemory();
-
-      notifyListeners();
-      return;
-    }
-
-    capturingProcessingMemory = null;
-    _processingMemoryWatchTimer?.cancel();
-
-    notifyListeners();
-  }
-
-  Future<void> _onMemoryCreated(ServerMessageEvent event) async {
-    if (event.memory == null) {
-      debugPrint("Memory is not found, processing memory ${event.processingMemoryId}");
-      return;
-    }
-    _processOnMemoryCreated(event.memory, event.messages ?? []);
-  }
-
-  void _onMemoryCreateFailed() {
-    _processOnMemoryCreated(null, []); // force failed
-  }
-
-  Future<void> _processOnMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
-    if (memory == null) {
-      return;
-    }
-    await processMemoryContent(
-      memory: memory,
-      messages: messages,
-      sendMessageToChat: (v) {
-        messageProvider?.addMessage(v);
-      },
-    );
-
-    // use memory provider to add memory
-    MixpanelManager().memoryCreated(memory);
-    memoryProvider?.upsertMemory(memory);
-    if (memoryProvider?.memories.isEmpty ?? false) {
-      memoryProvider?.getMoreMemoriesFromServer();
-    }
-
-    _cleanNew();
-
-    // Notify
-    setMemoryCreating(false);
-    setHasTranscripts(false);
-    _handleCalendarCreation(memory);
-    notifyListeners();
-    return;
-  }
-
-  Future<void> createMemory() async {
-    if (processingMemoryId != null) {
-      setMemoryCreating(true);
-
-      // Clean to force close socket to create new memory
-      _cleanNew();
-
-      // Notify
-      setMemoryCreating(false);
-      setHasTranscripts(false);
-      notifyListeners();
-      return;
-    }
-  }
-
-  Future _clean() async {
+  Future _resetStateVariables() async {
     segments = [];
-
-    elapsedSeconds = 0;
-
     conversationId = const Uuid().v4();
-
-    processingMemoryId = null;
-    capturingProcessingMemory = null;
-    _processingMemoryWatchTimer?.cancel();
-  }
-
-  Future _cleanNew() async {
-    _clean();
-
-    // Create new socket session
-    // Warn: should have a better solution to keep the socket alived
-    debugPrint("_cleanNew");
-    await _initiateWebsocket(force: true);
-  }
-
-  _handleCalendarCreation(ServerMemory memory) {
-    if (!SharedPreferencesUtil().calendarEnabled) return;
-    if (SharedPreferencesUtil().calendarType != 'auto') return;
-
-    List<Event> events = memory.structured.events;
-    if (events.isEmpty) return;
-
-    List<int> indexes = events.mapIndexed((index, e) => index).toList();
-    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-    for (var i = 0; i < events.length; i++) {
-      if (events[i].created) continue;
-      events[i].created = true;
-      CalendarUtil().createEvent(
-        events[i].title,
-        events[i].startsAt,
-        events[i].duration,
-        description: events[i].description,
-      );
-    }
+    hasTranscripts = false;
+    notifyListeners();
   }
 
   Future<void> onRecordProfileSettingChanged() async {
-    await _resetState(restartBytesProcessing: true);
+    await _resetState();
   }
 
   Future<void> changeAudioRecordProfile([
@@ -354,7 +115,7 @@ class CaptureProvider extends ChangeNotifier
     int? sampleRate,
   ]) async {
     debugPrint("changeAudioRecordProfile");
-    await _resetState(restartBytesProcessing: true);
+    await _resetState();
     await _initiateWebsocket(audioCodec: audioCodec, sampleRate: sampleRate);
   }
 
@@ -370,32 +131,426 @@ class CaptureProvider extends ChangeNotifier
 
     debugPrint('is ws null: ${_socket == null}');
 
-    // Get memory socket
+    // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
     if (_socket == null) {
-      throw Exception("Can not create new memory socket");
+      _startKeepAliveServices();
+      debugPrint("Can not create new memory socket");
+      return;
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+
+    _loadInProgressMemory();
+
     notifyListeners();
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
-    if (_bleBytesStream != null) {
-      _bleBytesStream?.cancel();
-    }
-    _bleBytesStream = await _getBleAudioBytesListener(
-      id,
-      onAudioBytesReceived: (List<int> value) {
-        if (value.isEmpty) return;
-        if (_socket?.state == SocketServiceState.connected) {
-          final trimmedValue = value.sublist(3);
-          _socket?.send(trimmedValue);
+    _bleBytesStream?.cancel();
+    _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
+      if (value.isEmpty) return;
+
+      // support: opus
+      var isWalSupported = codec == BleAudioCodec.opus;
+      if (isWalSupported) {
+        wal.onByteStream(value);
+      }
+
+      if (_socket?.state == SocketServiceState.connected) {
+        final trimmedValue = value.sublist(3);
+        _socket?.send(trimmedValue);
+
+        // synced
+        if (isWalSupported) {
+          wal.onBytesSync(value);
         }
-      },
-    );
+      }
+    });
     setAudioBytesConnected(true);
+    notifyListeners();
+  }
+
+  Future<void> _resetState() async {
+    debugPrint('resetState');
+    _cleanupCurrentState();
+    await _recheckCodecChange();
+    await _ensureSocketConnection(force: true);
+    await _initiateFriendAudioStreaming();
+    await initiateStorageBytesStreaming(); // ??
+    notifyListeners();
+  }
+
+  void _cleanupCurrentState() {
+    closeBleStream();
+    cancelMemoryCreationTimer();
+    setAudioBytesConnected(false);
+  }
+
+  // TODO: use connection directly
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return BleAudioCodec.pcm8;
+    }
+    return connection.getAudioCodec();
+  }
+
+  Future<StreamSubscription?> _getBleStorageBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
+  }
+
+  Future<StreamSubscription?> _getBleAudioBytesListener(
+    String deviceId, {
+    required void Function(List<int>) onAudioBytesReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
+  Future<bool> _recheckCodecChange() async {
+    if (_recordingDevice != null) {
+      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
+      if (SharedPreferencesUtil().deviceCodec != newCodec) {
+        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
+        await SharedPreferencesUtil().setDeviceCodec(newCodec);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _ensureSocketConnection({bool force = false}) async {
+    debugPrint("_ensureSocketConnection ${_socket?.state}");
+    var codec = SharedPreferencesUtil().deviceCodec;
+    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+      await _initiateWebsocket(force: force);
+    }
+  }
+
+  Future<void> _initiateFriendAudioStreaming() async {
+    if (_recordingDevice == null) return;
+
+    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    if (SharedPreferencesUtil().deviceCodec != codec) {
+      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
+      SharedPreferencesUtil().deviceCodec = codec;
+      notifyInfo('FIM_CHANGE');
+      await _ensureSocketConnection();
+    }
+
+    // Why is the _recordingDevice null at this point?
+    if (!audioBytesConnected) {
+      if (_recordingDevice != null) {
+        await streamAudioToWs(_recordingDevice!.id, codec);
+      } else {
+        // Is the app in foreground when this happens?
+        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
+      }
+    }
+
+    notifyListeners();
+  }
+
+  void clearTranscripts() {
+    segments = [];
+    hasTranscripts = false;
+    notifyListeners();
+  }
+
+  void closeBleStream() {
+    _bleBytesStream?.cancel();
+    notifyListeners();
+  }
+
+  void cancelMemoryCreationTimer() {
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _bleBytesStream?.cancel();
+    _socket?.unsubscribe(this);
+    _keepAliveTimer?.cancel();
+    super.dispose();
+  }
+
+  void updateRecordingState(RecordingState state) {
+    recordingState = state;
+    notifyListeners();
+  }
+
+  streamRecording() async {
+    await Permission.microphone.request();
+
+    // prepare
+    await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+
+    // record
+    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
+      if (_socket?.state == SocketServiceState.connected) {
+        _socket?.send(bytes);
+      }
+    }, onRecording: () {
+      updateRecordingState(RecordingState.record);
+    }, onStop: () {
+      updateRecordingState(RecordingState.stop);
+    }, onInitializing: () {
+      updateRecordingState(RecordingState.initialising);
+    });
+  }
+
+  stopStreamRecording() async {
+    _cleanupCurrentState();
+    ServiceManager.instance().mic.stop();
+    await _socket?.stop(reason: 'stop stream recording');
+  }
+
+  Future streamDeviceRecording({BtDevice? device}) async {
+    debugPrint("streamDeviceRecording $device");
+    if (device != null) _updateRecordingDevice(device);
+    await _resetState();
+  }
+
+  Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    if (cleanDevice) {
+      _updateRecordingDevice(null);
+    }
+    _cleanupCurrentState();
+    await _socket?.stop(reason: 'stop stream device recording');
+  }
+
+  // Socket handling
+
+  @override
+  void onClosed() {
+    _transcriptServiceReady = false;
+    debugPrint('[Provider] Socket is closed');
+
+    // Wait for in process memory or reset
+    if (inProgressMemory == null) {
+      _resetStateVariables();
+    }
+
+    notifyListeners();
+    _startKeepAliveServices();
+  }
+
+  void _startKeepAliveServices() {
+    if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+        debugPrint("[Provider] keep alive...");
+
+        if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
+          t.cancel();
+          return;
+        }
+
+        await _initiateWebsocket();
+      });
+    }
+  }
+
+  @override
+  void onError(Object err) {
+    _transcriptServiceReady = false;
+    debugPrint('err: $err');
+    notifyListeners();
+    _startKeepAliveServices();
+  }
+
+  @override
+  void onConnected() {
+    _transcriptServiceReady = true;
+    notifyListeners();
+  }
+
+  void _loadInProgressMemory() async {
+    var memories = await getMemories(statuses: [MemoryStatus.in_progress], limit: 1);
+    _inProgressMemory = memories.isNotEmpty ? memories.first : null;
+    if (segments.isEmpty && _inProgressMemory != null) {
+      segments = _inProgressMemory!.transcriptSegments;
+      setHasTranscripts(segments.isNotEmpty);
+    }
+    notifyListeners();
+  }
+
+  @override
+  void onMessageEventReceived(ServerMessageEvent event) {
+    if (event.type == MessageEventType.memoryProcessingStarted) {
+      if (event.memory == null) {
+        debugPrint("Memory data not received in event. Content is: $event");
+        return;
+      }
+      memoryProvider!.addProcessingMemory(event.memory!);
+      _resetStateVariables();
+      return;
+    }
+
+    if (event.type == MessageEventType.memoryCreated) {
+      if (event.memory == null) {
+        debugPrint("Memory data not received in event. Content is: $event");
+        return;
+      }
+      event.memory!.isNew = true;
+      memoryProvider!.removeProcessingMemory(event.memory!.id);
+      _processMemoryCreated(event.memory, event.messages ?? []);
+      return;
+    }
+  }
+
+  Future<void> forceProcessingCurrentMemory() async {
+    _resetStateVariables();
+    memoryProvider!.addProcessingMemory(
+      ServerMemory(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
+    );
+    processInProgressMemory().then((result) {
+      if (result == null || result.memory == null) {
+        _initiateWebsocket();
+        memoryProvider!.removeProcessingMemory('0');
+        return;
+      }
+      memoryProvider!.removeProcessingMemory('0');
+      result.memory!.isNew = true;
+      _processMemoryCreated(result.memory, result.messages);
+      _initiateWebsocket();
+    });
+
+    return;
+  }
+
+  Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+    if (memory == null) return;
+
+    processMemoryContent(memory: memory, messages: messages, sendMessageToChat: messageProvider?.addMessage);
+    memoryProvider?.upsertMemory(memory);
+    MixpanelManager().memoryCreated(memory);
+  }
+
+  @override
+  void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    if (newSegments.isEmpty) return;
+
+    if (segments.isEmpty) {
+      debugPrint('newSegments: ${newSegments.last}');
+      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      _loadInProgressMemory();
+    }
+    TranscriptSegment.combineSegments(segments, newSegments);
+    triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
+      messageProvider?.addMessage(v);
+    });
+    hasTranscripts = true;
+    notifyListeners();
+  }
+
+  /*
+  *
+  *
+  *
+  *
+  *
+  * */
+
+  List<int> currentStorageFiles = <int>[];
+  int sdCardFileNum = 1;
+
+  int totalStorageFileBytes = 0; // how much in storage
+  int totalBytesReceived = 0; // how much already received
+  double sdCardSecondsTotal = 0.0; // time to send the next chunk
+  double sdCardSecondsReceived = 0.0;
+  bool sdCardDownloadDone = false;
+  bool sdCardReady = false;
+  bool sdCardIsDownloading = false;
+  String btConnectedTime = "";
+  Timer? sdCardReconnectionTimer;
+
+  void setSdCardIsDownloading(bool value) {
+    sdCardIsDownloading = value;
+    notifyListeners();
+  }
+  
+   Future<void> updateStorageList() async {
+     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+     if (currentStorageFiles.isEmpty) {
+       debugPrint('No storage files found');
+       SharedPreferencesUtil().deviceIsV2 = false;
+       debugPrint('Device is not V2');
+
+       return;
+     }
+     totalStorageFileBytes = currentStorageFiles[0];
+     var storageOffset = currentStorageFiles[1];
+     totalBytesReceived = storageOffset;
+     notifyListeners();
+   }
+
+  Future<void> initiateStorageBytesStreaming() async {
+    debugPrint('initiateStorageBytesStreaming');
+
+    if (_recordingDevice == null) return;
+    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+    if (currentStorageFiles.isEmpty) {
+      debugPrint('No storage files found');
+      SharedPreferencesUtil().deviceIsV2 = false;
+      debugPrint('Device is not V2');
+
+      return;
+    }
+    SharedPreferencesUtil().deviceIsV2 = true;
+    debugPrint('Device is V2');
+    debugPrint('Device model name: ${_recordingDevice!.name}');
+    debugPrint('Storage files: $currentStorageFiles');
+    totalStorageFileBytes = currentStorageFiles[0];
+    var storageOffset = currentStorageFiles[1];
+    debugPrint('storageOffset: $storageOffset');
+    // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
+    //check if new or old file
+    if (totalStorageFileBytes < previousStorageBytes) {
+      totalBytesReceived = 0;
+      SharedPreferencesUtil().currentStorageBytes = 0;
+    } else {
+      totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
+    }
+    if (totalBytesReceived > totalStorageFileBytes) {
+      totalBytesReceived = 0;
+    }
+    totalBytesReceived = storageOffset;
+    SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
+    sdCardSecondsTotal =
+        ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
+    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
+    debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
+    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
+    btConnectedTime = DateTime.now().toUtc().toString();
+    sdCardSocket.setupSdCardWebSocket(
+      //replace
+      onMessageReceived: () {
+        debugPrint('onMessageReceived');
+        memoryProvider?.getMemoriesFromServer();
+        notifyListeners();
+        _notifySdCardComplete();
+        return;
+      },
+      btConnectedTime: btConnectedTime,
+    );
+
+    if (totalStorageFileBytes > 100) {
+      sdCardReady = true;
+    }
     notifyListeners();
   }
 
@@ -529,75 +684,6 @@ class CaptureProvider extends ChangeNotifier
     );
   }
 
-  void setsdCardReady(bool value) {
-    sdCardReady = value;
-    notifyListeners();
-  }
-
-  void clearTranscripts() {
-    segments = [];
-    setHasTranscripts(false);
-    notifyListeners();
-  }
-
-  Future resetForSpeechProfile() async {
-    closeBleStream();
-    await _socket?.stop(reason: 'reset for speech profile');
-    setAudioBytesConnected(false);
-    notifyListeners();
-  }
-
-  Future<void> _resetState({
-    bool restartBytesProcessing = true,
-  }) async {
-    debugPrint('resetState: restartBytesProcessing=$restartBytesProcessing');
-
-    _cleanupCurrentState();
-    await _recheckCodecChange();
-    await _ensureSocketConnection(force: true);
-    await _initiateFriendAudioStreaming();
-    // TODO: Commenting this for now as DevKit 2 is not yet used in production
-    await initiateStorageBytesStreaming();
-    notifyListeners();
-  }
-
-  void _cleanupCurrentState() {
-    closeBleStream();
-    cancelMemoryCreationTimer();
-    setAudioBytesConnected(false);
-  }
-
-  // TODO: use connection directly
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
-  }
-
-  Future<StreamSubscription?> _getBleStorageBytesListener(
-    String deviceId, {
-    required void Function(List<int>) onStorageBytesReceived,
-  }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return connection.getBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
-  }
-
-  Future<StreamSubscription?> _getBleAudioBytesListener(
-    String deviceId, {
-    required void Function(List<int>) onAudioBytesReceived,
-  }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
-  }
-
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
@@ -614,287 +700,9 @@ class CaptureProvider extends ChangeNotifier
     return connection.getStorageList();
   }
 
-  Future<bool> _recheckCodecChange() async {
-    if (_recordingDevice != null) {
-      BleAudioCodec newCodec = await _getAudioCodec(_recordingDevice!.id);
-      if (SharedPreferencesUtil().deviceCodec != newCodec) {
-        debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $newCodec');
-        await SharedPreferencesUtil().setDeviceCodec(newCodec);
-        return true;
-      }
-    }
-    return false;
-  }
 
-  Future<void> _ensureSocketConnection({bool force = false}) async {
-    debugPrint("_ensureSocketConnection ${_socket?.state}");
-    var codec = SharedPreferencesUtil().deviceCodec;
-    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
-      await _initiateWebsocket(force: force);
-    }
-  }
-
-  Future<void> _initiateFriendAudioStreaming() async {
-    if (_recordingDevice == null) return;
-
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    if (SharedPreferencesUtil().deviceCodec != codec) {
-      debugPrint('Device codec changed from ${SharedPreferencesUtil().deviceCodec} to $codec');
-      SharedPreferencesUtil().deviceCodec = codec;
-      notifyInfo('FIM_CHANGE');
-      await _ensureSocketConnection();
-    }
-
-    // Why is the _recordingDevice null at this point?
-    if (!audioBytesConnected) {
-      if (_recordingDevice != null) {
-        await streamAudioToWs(_recordingDevice!.id, codec);
-      } else {
-        // Is the app in foreground when this happens?
-        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
-            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
-      }
-    }
-
-    notifyListeners();
-  }
-
-  Future<void> updateStorageList() async {
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
-
-      return;
-    }
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
-    totalBytesReceived = storageOffset;
-    notifyListeners();
-  }
-
-  Future<void> initiateStorageBytesStreaming() async {
-    debugPrint('initiateStorageBytesStreaming');
-
-    if (_recordingDevice == null) return;
-    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
-      debugPrint('No storage files found');
-      SharedPreferencesUtil().deviceIsV2 = false;
-      debugPrint('Device is not V2');
-
-      return;
-    }
-    SharedPreferencesUtil().deviceIsV2 = true;
-    debugPrint('Device is V2');
-    debugPrint('Device model name: ${_recordingDevice!.name}');
-    debugPrint('Storage files: $currentStorageFiles');
-    totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
-    debugPrint('storageOffset: $storageOffset');
-    var previousStorageBytes = SharedPreferencesUtil().previousStorageBytes;
-    // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
-    //check if new or old file
-    if (totalStorageFileBytes < previousStorageBytes) {
-      totalBytesReceived = 0;
-      SharedPreferencesUtil().currentStorageBytes = 0;
-    } else {
-      totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
-    }
-    if (totalBytesReceived > totalStorageFileBytes) {
-      totalBytesReceived = 0;
-    }
-    totalBytesReceived = storageOffset;
-    SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes; //save the original file size
-    sdCardSecondsTotal = ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
-    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
-    debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
-    btConnectedTime = DateTime.now().toUtc().toString();
-    sdCardSocket.setupSdCardWebSocket(
-      //replace
-      onMessageReceived: () {
-        debugPrint('onMessageReceived');
-        memoryProvider?.getMemoriesFromServer();
-        notifyListeners();
-        _notifySdCardComplete();
-        return;
-      },
-      btConnectedTime: btConnectedTime,
-    );
-
-    if (totalStorageFileBytes > 100) {
-      sdCardReady = true;
-    }
-    notifyListeners();
-  }
-
-  void closeBleStream() {
-    _bleBytesStream?.cancel();
-    notifyListeners();
-  }
-
-  void cancelMemoryCreationTimer() {
-    notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _bleBytesStream?.cancel();
-    _socket?.unsubscribe(this);
-    _keepAliveTimer?.cancel();
-    _processingMemoryWatchTimer?.cancel();
-    super.dispose();
-  }
-
-  void updateRecordingState(RecordingState state) {
-    recordingState = state;
-    notifyListeners();
-  }
-
-  streamRecording() async {
-    await Permission.microphone.request();
-
-    // record
-    await ServiceManager.instance().mic.start(onByteReceived: (bytes) {
-      if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(bytes);
-      }
-    }, onRecording: () {
-      updateRecordingState(RecordingState.record);
-    }, onStop: () {
-      updateRecordingState(RecordingState.stop);
-    }, onInitializing: () {
-      updateRecordingState(RecordingState.initialising);
-    });
-  }
-
-  stopStreamRecording() {
-    ServiceManager.instance().mic.stop();
-  }
-
-  Future streamDeviceRecording({
-    BtDevice? device,
-    bool restartBytesProcessing = true,
-  }) async {
-    debugPrint("streamDeviceRecording $device $restartBytesProcessing");
-    if (device != null) {
-      _updateRecordingDevice(device);
-    }
-
-    await _resetState(
-      restartBytesProcessing: restartBytesProcessing,
-    );
-  }
-
-  Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
-    if (cleanDevice) {
-      _updateRecordingDevice(null);
-    }
-    _cleanupCurrentState();
-    await _socket?.stop(reason: 'stop stream device recording');
-    // await _handleMemoryCreation(false);
-  }
-
-  // Socket handling
-
-  @override
-  void onClosed() {
-    _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed');
-
-    // Wait reconnect
-    if (capturingProcessingMemory == null) {
-      _clean();
-      setMemoryCreating(false);
-      setHasTranscripts(false);
-    }
-    notifyListeners();
-
-    // Keep alive
-    _startKeepAliveServices();
-  }
-
-  void _startKeepAliveServices() {
-    if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
-      _keepAliveTimer?.cancel();
-      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-        debugPrint("[Provider] keep alive...");
-
-        if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
-          t.cancel();
-          return;
-        }
-
-        await _initiateWebsocket();
-      });
-    }
-  }
-
-  @override
-  void onError(Object err) {
-    _transcriptServiceReady = false;
-    debugPrint('err: $err');
-    notifyListeners();
-    _startKeepAliveServices();
-  }
-
-  @override
-  void onConnected() {
-    _transcriptServiceReady = true;
-    notifyListeners();
-  }
-
-  @override
-  void onMessageEventReceived(ServerMessageEvent event) {
-    if (event.type == MessageEventType.newMemoryCreating) {
-      _onMemoryCreating();
-      return;
-    }
-
-    if (event.type == MessageEventType.newMemoryCreated) {
-      _onMemoryCreated(event);
-      return;
-    }
-
-    if (event.type == MessageEventType.newMemoryCreateFailed) {
-      _onMemoryCreateFailed();
-      return;
-    }
-
-    if (event.type == MessageEventType.newProcessingMemoryCreated) {
-      if (event.processingMemoryId == null) {
-        debugPrint("New processing memory created message event is invalid");
-        return;
-      }
-      _onProcessingMemoryCreated(event.processingMemoryId!);
-      return;
-    }
-
-    if (event.type == MessageEventType.processingMemoryStatusChanged) {
-      if (event.processingMemoryId == null || event.processingMemoryStatus == null) {
-        debugPrint("Processing memory message event is invalid");
-        return;
-      }
-      _onProcessingMemoryStatusChanged(event.processingMemoryId!, event.processingMemoryStatus!);
-      return;
-    }
-  }
-
-  @override
-  void onSegmentReceived(List<TranscriptSegment> newSegments) {
-    if (newSegments.isEmpty) return;
-
-    if (segments.isEmpty) {
-      debugPrint('newSegments: ${newSegments.last}');
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-    }
-    TranscriptSegment.combineSegments(segments, newSegments);
-    triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
-      messageProvider?.addMessage(v);
-    });
-    setHasTranscripts(true);
+  void setsdCardReady(bool value) {
+    sdCardReady = value;
     notifyListeners();
   }
 }

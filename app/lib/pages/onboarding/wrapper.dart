@@ -15,7 +15,6 @@ import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -146,11 +145,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       pages.addAll([
         SpeechProfileWidget(
           goNext: () {
-            if (context.read<SpeechProfileProvider>().memory == null) {
-              routeToPage(context, const HomePageWrapper(), replace: true);
-            } else {
-              _goNext();
-            }
+            routeToPage(context, const HomePageWrapper(), replace: true);
+            // if (context.read<SpeechProfileProvider>().memory == null) {
+            // } else {
+            //   _goNext();
+            // }
             MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
