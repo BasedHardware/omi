@@ -423,11 +423,11 @@ class SharedPreferencesUtil {
 
   set wals(List<Wal> wals) {
     final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('v2/wals', value);
+    saveStringList('v3/wals', value);
   }
 
   List<Wal> get wals {
-    final List<String> value = getStringList('v2/wals') ?? [];
+    final List<String> value = getStringList('v3/wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
 }

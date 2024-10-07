@@ -92,10 +92,10 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         // Track memory
-        if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
-            (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
-          _pushNewMemory(context, provider.memoryProvider!.memories.first);
-        }
+        // if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
+        //     (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
+        //   _pushNewMemory(context, provider.memoryProvider!.memories.first);
+        // }
 
         // Memory source
         var memorySource = MemorySource.friend;
