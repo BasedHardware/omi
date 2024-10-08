@@ -161,6 +161,22 @@ class SharedPreferencesUtil {
     saveStringList('pluginsList', plugins);
   }
 
+  /// Products List screen
+  List<Product> get subProductsList {
+    final List<String> products = getStringList('subProductList') ?? [];
+    var data = jsonDecode(products.toString());
+    return (data as List)
+        .map((productJson) => Product.fromJson(productJson))
+        .toList();
+  }
+
+  /// Set products list screen
+  set subProductsList(List<Product> value) {
+    final List<String> products =
+    value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('subProductList', products);
+  }
+
   /*List<um.UserMemoriesModel> get pluginMemoriesList {
     final String plugins = getString('pluginMemories') ?? "";
     final List<um.UserMemoriesModel> userMemoriesModels =

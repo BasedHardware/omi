@@ -77,6 +77,7 @@ class _HomePageWrapperState extends State<HomePageWrapper>
   BTDeviceStruct? _device;
 
   List<Plugin> plugins = [];
+  //List<Product> subProducts = [];
 
   List<UserMemoriesModel>? userMemoriesModels = [];
   List<PluginModel>? pluginsModels = [];
@@ -206,7 +207,10 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     });
 
     plugins = SharedPreferencesUtil().pluginsList;
+    //subProducts = SharedPreferencesUtil().subProductsList;
+    //revenueCateOfferings = SharedPreferencesUtil().
     plugins = await retrievePlugins();
+    //revenueCateOfferings = await subscriptionsProducts();
 
     userMemoriesModels = await UserMemoriesService().getUserMemoriesList();
     if (userMemoriesModels != null) {
@@ -267,6 +271,8 @@ class _HomePageWrapperState extends State<HomePageWrapper>
   @override
   void initState() {
     connectivityController.init();
+
+
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
 

@@ -251,3 +251,54 @@ Future<bool> isPluginSetupCompleted(String? url) async {
   // Return the value of `is_setup_completed` or false if it is not found
   return data['is_setup_completed'] ?? false;
 }
+
+/// Subscription Plugins
+Future<List<Product>> subscriptionsProductsOld() async {
+  // Log request details
+  //final url = '${Env.apiBaseUrl}v2/plugins';
+  const url = 'https://api.rechargeapps.com/products';
+  print('subscriptionsProducts Request URL: $url');
+
+  var response = await makeApiCall(
+    url: url,
+    headers: {'X-Recharge-Access-Token': '${Env.rechargeAppApiKey}'},
+    body: '',
+    method: 'GET',
+  );
+
+  print('subscriptionsProducts Response Status Code: ${response?.statusCode}');
+  print('subscriptionsProducts Response Body: ${response?.body}');
+  // Check the response status and log response data
+  if (response?.statusCode == 200) {
+    try {
+      // Attempt to decode the response and parse plugins
+      var data = jsonDecode(response!.body);
+      List<Product> products = (data['products'] as List)
+          .map((productJson) => Product.fromJson(productJson))
+          .toList();
+
+      ///var products = Product.fromJsonList(data['products']);
+      // Save the plugin list to shared preferences
+      SharedPreferencesUtil().subProductsList = products;
+      // Log the response body
+      print('subscriptionsProducts Response Body: ${response.body}');
+
+      return products;
+    } catch (e, stackTrace) {
+      // Log the error and stack trace
+      print('subscriptionsProducts Error: $e');
+      CrashReporting.reportHandledCrash(e, stackTrace);
+
+      // Return the saved plugin list from shared preferences in case of error
+      return SharedPreferencesUtil().subProductsList;
+    }
+  } else {
+    // Log the response status code and body in case of error
+    print(
+        'subscriptionsProducts Failed Response Status Code: ${response?.statusCode}');
+    print('subscriptionsProducts Failed Response Body: ${response?.body}');
+  }
+
+  // Return the saved plugin list from shared preferences if the response is not successful
+  return SharedPreferencesUtil().subProductsList;
+}

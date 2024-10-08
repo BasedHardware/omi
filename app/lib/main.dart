@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -22,6 +23,8 @@ import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/no_scroll_glow.dart';
+import 'package:friend_private/utils/purchase/constant.dart';
+import 'package:friend_private/utils/purchase/store_config.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -70,6 +73,12 @@ Future<bool> _init() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isIOS) {
+    StoreConfig(store: StoreT.appleStore, apiKey: appleApiKey);
+  } else if (Platform.isAndroid) {
+    StoreConfig(store: StoreT.googlePlay, apiKey: googleApiKey);
+  }
+  //await Purchases.configure(PurchasesConfiguration("your_public_sdk_key"));
   if (F.env == Environment.prod) {
     debugPrint("called Prod");
     Env.init(ProdEnv());

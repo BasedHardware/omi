@@ -8,6 +8,7 @@ String constGoogleMapsApiKey = "";
 String constGrowthBookApiKey = "";
 String constMixpanelProjectToken = "";
 String constOpenaiApiKey = "";
+String constRechargeAppApiKey = "";
 
 class RemoteConfigService {
   RemoteConfigService({required FirebaseRemoteConfig remoteConfig})
@@ -20,6 +21,7 @@ class RemoteConfigService {
     RemoteConstant.growthBookApiKey: Env.growthbookApiKey,
     RemoteConstant.mixpanelProjectToken: Env.mixpanelProjectToken,
     RemoteConstant.openaiApiKey: Env.openAIAPIKey,
+    RemoteConstant.rechargeAppApiKey: Env.rechargeAppApiKey,
   };
 
   static RemoteConfigService? _instance;
@@ -80,4 +82,5 @@ class RemoteConstant {
   static const String growthBookApiKey = "GROWTHBOOK_API_KEY";
   static const String mixpanelProjectToken = "MIXPANEL_PROJECT_TOKEN";
   static const String openaiApiKey = "OPENAI_API_KEY";
+  static const String rechargeAppApiKey = "RECHARGEAPP_API_KEY";
 }

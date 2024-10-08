@@ -14,11 +14,19 @@
       },
       "oauth_client": [
         {
-          "client_id": "662477620892-s05g1o45a79b2agnd78phpqqoag9c5qv.apps.googleusercontent.com",
+          "client_id": "662477620892-23alm376di4prf5nh44p4r6amavfue8e.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.ai.wearable",
-            "certificate_hash": "aa62b03c8af6d91aac2b640ec5f17b7c21cb2add"
+            "certificate_hash": "9e4ba4587793d35d4fc273ce2d71c76039221bdf"
+          }
+        },
+        {
+          "client_id": "662477620892-p1ga7gcmn1or1p7399i0nrcp059goajl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ai.wearable",
+            "certificate_hash": "f172635f6ad4f6a8144d80ee5c837e43b9028236"
           }
         },
         {

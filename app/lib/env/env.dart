@@ -31,6 +31,9 @@ abstract class Env {
   static String? get googleMapsApiKey => (constGoogleMapsApiKey.isNotEmpty)
       ? constGoogleMapsApiKey
       : _instance.googleMapsApiKey;
+
+  static String? get rechargeAppApiKey =>
+      (constRechargeAppApiKey.isNotEmpty) ? constRechargeAppApiKey : _instance.rechargeAppApiKey;
 }
 
 abstract class EnvFields {
@@ -47,4 +50,6 @@ abstract class EnvFields {
   String? get growthbookApiKey;
 
   String? get googleMapsApiKey;
+
+  String? get rechargeAppApiKey;
 }
