@@ -92,8 +92,8 @@ uint8_t transport_started = 0;
 
 
 static uint16_t packet_next_index = 0;
-
-static uint8_t storage_write_buffer[400];
+#define SD_BLE_SIZE 440
+static uint8_t storage_write_buffer[SD_BLE_SIZE];
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
@@ -175,7 +175,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
         if ( file_num == ( file_count ) ) 
         {
             LOG_INF("file_count == final file");
-            offset = size - (size % 80);
+            offset = size - (size % SD_BLE_SIZE); //round down to nearest SD_BLE_SIZE
             current_read_num = file_num;
             transport_started = 1;           
         }
@@ -192,7 +192,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
         else 
         {
             LOG_INF("valid command, setting up ");
-            offset = size - (size % 80);
+            offset = size - (size % SD_BLE_SIZE);
             current_read_num = file_num;
             transport_started = 1;
         }
@@ -239,43 +239,49 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
     return len;
 }
 
-static void write_to_gatt(struct bt_conn *conn) 
-{
-    uint32_t id = packet_next_index++;
-    index = 0;
-    storage_write_buffer[0] = id & 0xFF;
-    storage_write_buffer[1] = (id >> 8) & 0xFF;
-    storage_write_buffer[2] = index;
+// static void write_to_gatt(struct bt_conn *conn) 
+// {
+//     uint32_t id = packet_next_index++;
+//     index = 0;
+//     storage_write_buffer[0] = id & 0xFF;
+//     storage_write_buffer[1] = (id >> 8) & 0xFF;
+//     storage_write_buffer[2] = index;
 
-    const uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
+//     const uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
 
-    int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
+//     int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
+//     offset = offset + packet_size;
+
+//     index++;
+
+//     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
+//     if (err) 
+//     {
+//         printk("error writing to gatt: %d\n",err);
+//     }
+//     else 
+//     {
+//     remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
+//     }
+// }
+
+static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max speeds. udp?
+
+    uint32_t packet_size = MIN(remaining_length,SD_BLE_SIZE);
+
+    int r = read_audio_data(storage_write_buffer,packet_size,offset);
     offset = offset + packet_size;
-
-    index++;
-
-    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
+    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
     if (err) 
     {
         printk("error writing to gatt: %d\n",err);
     }
     else 
     {
-    remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
+    remaining_length = remaining_length - SD_BLE_SIZE;
     }
+    // printk("wrote to gatt %d\n",err);
 }
-
-// static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max speeds. udp?
-
-//     uint32_t packet_size = MIN(remaining_length,440);
-
-//     int r = read_audio_data(storage_write_buffer,packet_size,offset);
-//     offset = offset + packet_size;
-//     remaining_length = remaining_length - packet_size;
-//     printk("remaining length%d\n",remaining_length);
-//     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
-//     printk("wrote to gatt %d\n",err);
-// }
 
 void storage_write(void) 
 {
@@ -292,8 +298,10 @@ void storage_write(void)
     if (delete_started) 
     { 
         LOG_INF("delete:%d\n",delete_started);
-        int err = clear_audio_file(delete_num);
-        save_offset(0);
+        int err = clear_audio_file(1);
+        offset = 0;
+        save_offset(offset);
+        
         if (err) 
         {
             printk("error clearing\n");

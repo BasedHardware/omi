@@ -64,10 +64,10 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
-// #ifdef CONFIG_ENABLE_SPEAKER
-//     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
-//     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
-// #endif
+#ifdef CONFIG_ENABLE_SPEAKER
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+#endif
     
 };
 
@@ -244,7 +244,9 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-    uint16_t amount = 0;
+    uint16_t amount = 400;
+    int16_t *int16_buf = (int16_t *)buf;
+    uint8_t *data = (uint8_t *)buf;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
@@ -537,74 +539,74 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
-static uint8_t storage_temp_data[440];
+static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-bool write_to_storage(void) 
-{
-    if (!read_from_tx_queue())
-    {
-        return false;
-    }
-
-    uint8_t *buffer = tx_buffer+2;
-    const uint32_t packet_size = tx_buffer_size;
-    //load into write at 400 bytes at a time. is faster 
-    memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
-    storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
-    
-    buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
-    if(buffer_offset >= OPUS_PADDED_LENGTH*5) { 
-    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-    write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
-
-    buffer_offset = 0;
-    }
-
-    return true;
-}
-//for improving ble bandwidth
-// bool write_to_storage(void) {//max possible packing
+// bool write_to_storage(void) 
+// {
 //     if (!read_from_tx_queue())
 //     {
 //         return false;
 //     }
 
 //     uint8_t *buffer = tx_buffer+2;
-//     uint8_t packet_size = (uint8_t)(tx_buffer_size + OPUS_PREFIX_LENGTH);
-
-//     // buffer_offset = buffer_offset+amount_to_fill;
-//     //check if adding the new packet will cause a overflow
-//     if(buffer_offset + packet_size > MAX_WRITE_SIZE-1) 
-//     { 
-
-//     storage_temp_data[buffer_offset] = tx_buffer_size;
-//     uint8_t *write_ptr = storage_temp_data;
-//     write_to_file(write_ptr,MAX_WRITE_SIZE);
-
-//     buffer_offset = packet_size;
-//     storage_temp_data[0] = tx_buffer_size;
-//     memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
-
-//     }
-//     else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1) 
-//     { //exact frame needed 
-//     storage_temp_data[buffer_offset] = tx_buffer_size;
-//     memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-//     buffer_offset = 0;
-//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-//     write_to_file(write_ptr,MAX_WRITE_SIZE);
+//     const uint32_t packet_size = tx_buffer_size;
+//     //load into write at 400 bytes at a time. is faster 
+//     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
+//     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
     
-//     }
-//     else 
-//     {
-//     storage_temp_data[buffer_offset] = tx_buffer_size;
-//     memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
-//     buffer_offset = buffer_offset + packet_size;
+//     buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
+//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) { 
+//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+//     write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
+
+//     buffer_offset = 0;
 //     }
 
 //     return true;
 // }
+//for improving ble bandwidth
+bool write_to_storage(void) {//max possible packing
+    if (!read_from_tx_queue())
+    {
+        return false;
+    }
+
+    uint8_t *buffer = tx_buffer+2;
+    uint8_t packet_size = (uint8_t)(tx_buffer_size + OPUS_PREFIX_LENGTH);
+
+    // buffer_offset = buffer_offset+amount_to_fill;
+    //check if adding the new packet will cause a overflow
+    if(buffer_offset + packet_size > MAX_WRITE_SIZE-1) 
+    { 
+
+    storage_temp_data[buffer_offset] = tx_buffer_size;
+    uint8_t *write_ptr = storage_temp_data;
+    write_to_file(write_ptr,MAX_WRITE_SIZE);
+
+    buffer_offset = packet_size;
+    storage_temp_data[0] = tx_buffer_size;
+    memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
+
+    }
+    else if (buffer_offset + packet_size == MAX_WRITE_SIZE-1) 
+    { //exact frame needed 
+    storage_temp_data[buffer_offset] = tx_buffer_size;
+    memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
+    buffer_offset = 0;
+    uint8_t *write_ptr = (uint8_t*)storage_temp_data;
+    write_to_file(write_ptr,MAX_WRITE_SIZE);
+    
+    }
+    else 
+    {
+    storage_temp_data[buffer_offset] = tx_buffer_size;
+    memcpy(storage_temp_data+ buffer_offset+1, buffer, tx_buffer_size);
+    buffer_offset = buffer_offset + packet_size;
+    }
+
+    return true;
+}
 
 extern bool is_off;
 static bool use_storage = true;
