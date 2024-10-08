@@ -97,8 +97,8 @@ class SpeechLanguageSheet extends StatelessWidget {
         );
       },
       child: Container(
-        width: 80,
-        height: 36,
+        width: MediaQuery.of(context).size.width * 0.19,
+        height: MediaQuery.of(context).size.height * 0.041,
         decoration: BoxDecoration(
           border: Border.all(
             color: Colors.grey,
