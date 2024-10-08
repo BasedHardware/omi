@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
