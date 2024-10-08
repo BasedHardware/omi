@@ -24,8 +24,9 @@ class SpeechProfileProvider extends ChangeNotifier
   bool loading = false;
   BtDevice? device;
 
-  final targetWordsCount = 70;
-  final maxDuration = 90;
+  final targetWordsCount = 30; //TODO: 15 seems way too less
+  final maxDuration = 150;
+
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
@@ -142,14 +143,18 @@ class SpeechProfileProvider extends ChangeNotifier
       if (uploadingProfile || profileCompleted) return;
 
       int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-      if (duration < 5 || duration > 120) {
-        notifyError('INVALID_RECORDING');
+      if (duration < 10 || duration > 155) {
+        if (percentageCompleted < 80) {
+          notifyError('NO_SPEECH');
+          return;
+        }
       }
 
       String text = segments.map((e) => e.text).join(' ').trim();
       if (text.split(' ').length < (targetWordsCount / 2)) {
         // 25 words
         notifyError('TOO_SHORT');
+        return;
       }
       uploadingProfile = true;
       notifyListeners();
@@ -220,7 +225,7 @@ class SpeechProfileProvider extends ChangeNotifier
         },
       );
       debugPrint('speakerToWords: $speakerToWords');
-      if (speakerToWords.values.every((element) => element / segments.length > 0.2)) {
+      if (speakerToWords.values.every((element) => element / segments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
     }
@@ -230,6 +235,8 @@ class SpeechProfileProvider extends ChangeNotifier
     segments.clear();
     streamStartedAtSecond = null;
     audioStorage.clearAudioBytes();
+    text = '';
+    percentageCompleted = 0;
     notifyListeners();
   }
 
