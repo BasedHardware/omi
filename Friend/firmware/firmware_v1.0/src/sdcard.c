@@ -436,6 +436,7 @@ int get_offset()
     }
     uint32_t *offset_ptr = (uint32_t*)buf;
     printk("get offset is %d\n",offset_ptr[0]);
+    fs_close(&read_file);
 
     return offset_ptr[0];
 }
