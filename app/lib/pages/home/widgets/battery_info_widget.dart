@@ -81,7 +81,7 @@ class BatteryInfoWidget extends StatelessWidget {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   // backgroundColor: Colors.transparent,
                   decoration: BoxDecoration(
                     color: Colors.transparent,
@@ -90,7 +90,11 @@ class BatteryInfoWidget extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Image.asset('assets/images/logo_transparent.png', width: 25, height: 25),
+                      Image.asset(
+                        'assets/images/logo_transparent.png',
+                        width: MediaQuery.sizeOf(context).width * 0.05,
+                        height: MediaQuery.sizeOf(context).width * 0.05,
+                      ),
                       isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                       deviceProvider.isConnecting && isMemoriesPage
                           ? Text(
