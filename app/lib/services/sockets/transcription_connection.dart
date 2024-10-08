@@ -23,12 +23,13 @@ abstract interface class ITransctipSegmentSocketServiceListener {
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
+  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
       : super.create(includeSpeechProfile: false);
 }
 
 class MemoryTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  MemoryTranscriptSegmentSocketService.create(super.sampleRate, super.codec) : super.create(includeSpeechProfile: true);
+  MemoryTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+      : super.create(includeSpeechProfile: true);
 }
 
 enum SocketServiceState {
@@ -45,15 +46,16 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   int sampleRate;
   BleAudioCodec codec;
+  String language;
   bool includeSpeechProfile;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
-    this.codec, {
+    this.codec,
+    this.language, {
     this.includeSpeechProfile = false,
   }) {
-    final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-    var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
     String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v2/listen$params';
 
