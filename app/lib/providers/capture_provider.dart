@@ -42,7 +42,7 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  bool _walFeatureEnabled = true;
+  bool _walFeatureEnabled = false;
   IWalService get _walService => ServiceManager.instance().wal;
   IDeviceService get _deviceService => ServiceManager.instance().device;
 
