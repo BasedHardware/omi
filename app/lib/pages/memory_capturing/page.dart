@@ -37,9 +37,11 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final captureProvider = context.read<CaptureProvider>();
       if (captureProvider.segments.isNotEmpty) {
-        setState(() {
-          _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressMemory!.createdAt);
-        });
+        if (captureProvider.inProgressMemory != null) {
+          setState(() {
+            _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressMemory!.createdAt);
+          });
+        }
         _startTimer();
       }
     });
