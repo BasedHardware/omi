@@ -8,7 +8,9 @@ from utils.other.endpoints import timeit
 
 
 @timeit
-def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) -> List[dict]:
+def fal_whisperx(
+        audio_url: str, speakers_count: int = None, attempts: int = 0, return_language: bool = False
+) -> List[dict]:
     print('fal_whisperx', audio_url, speakers_count, attempts)
 
     try:
@@ -18,7 +20,6 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) 
                 "audio_url": audio_url,
                 'task': 'transcribe',
                 'diarize': True,
-                'language': 'en',  # TODO: use language as a parameter
                 'chunk_level': 'word',
                 'version': '3',
                 'batch_size': 64,
@@ -26,13 +27,20 @@ def fal_whisperx(audio_url: str, speakers_count: int = None, attempts: int = 0) 
             },
         )
         result = handler.get()
+        print(result)
         words = result.get('chunks', [])
         if not words:
             raise Exception('No chunks found')
+        if return_language:
+            return words, result.get('inferred_languages', ['en'])[0]
         return words
     except Exception as e:
         print(e)
-        return fal_whisperx(audio_url, speakers_count, attempts + 1) if attempts < 2 else []
+        if attempts < 2:
+            return fal_whisperx(audio_url, speakers_count, attempts + 1, return_language)
+        if return_language:
+            return [], 'en'
+        return []
 
 
 def _words_cleaning(words: List[dict]):

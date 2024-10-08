@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
@@ -15,10 +14,12 @@ import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
@@ -40,6 +41,10 @@ class CaptureProvider extends ChangeNotifier
   ServerMemory? _inProgressMemory;
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
+
+  bool _walFeatureEnabled = false;
+  IWalService get _walService => ServiceManager.instance().wal;
+  IDeviceService get _deviceService => ServiceManager.instance().device;
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -130,7 +135,10 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
+    String language = SharedPreferencesUtil().recordingsLanguage;
+    _socket = await ServiceManager.instance()
+        .socket
+        .memory(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new memory socket");
@@ -146,19 +154,31 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
-    if (_bleBytesStream != null) {
-      _bleBytesStream?.cancel();
-    }
-    _bleBytesStream = await _getBleAudioBytesListener(
-      id,
-      onAudioBytesReceived: (List<int> value) {
-        if (value.isEmpty) return;
-        if (_socket?.state == SocketServiceState.connected) {
-          final trimmedValue = value.sublist(3);
-          _socket?.send(trimmedValue);
+    _bleBytesStream?.cancel();
+    _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
+      if (value.isEmpty) return;
+
+      // support: opus codec, 1m from the first device connectes
+      var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
+      var isWalEnabled = codec == BleAudioCodec.opus &&
+          (deviceFirstConnectedAt != null &&
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 60)))) &&
+          _walFeatureEnabled;
+      if (isWalEnabled) {
+        _walService.onByteStream(value);
+      }
+
+      // send ws
+      if (_socket?.state == SocketServiceState.connected) {
+        final trimmedValue = value.sublist(3);
+        _socket?.send(trimmedValue);
+
+        // synced
+        if (isWalEnabled) {
+          _walService.onBytesSync(value);
         }
-      },
-    );
+      }
+    });
     setAudioBytesConnected(true);
     notifyListeners();
   }
@@ -167,7 +187,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('resetState');
     _cleanupCurrentState();
     await _recheckCodecChange();
-    await _ensureSocketConnection(force: true);
+    await _ensureSocketConnection();
     await _initiateFriendAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
@@ -222,11 +242,11 @@ class CaptureProvider extends ChangeNotifier
     return false;
   }
 
-  Future<void> _ensureSocketConnection({bool force = false}) async {
-    debugPrint("_ensureSocketConnection ${_socket?.state}");
+  Future<void> _ensureSocketConnection() async {
     var codec = SharedPreferencesUtil().deviceCodec;
-    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
-      await _initiateWebsocket(force: force);
+    var language = SharedPreferencesUtil().recordingsLanguage;
+    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+      await _initiateWebsocket(audioCodec: codec, force: true);
     }
   }
 

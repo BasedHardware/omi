@@ -55,6 +55,9 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
 
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
+    if not memory or memory.discarded:
+        return []
+
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if
                         plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]

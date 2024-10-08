@@ -40,8 +40,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        _goNext();
+        if (mounted) {
+          context.read<HomeProvider>().setupHasSpeakerProfile();
+          _goNext();
+        }
       }
     });
     super.initState();
