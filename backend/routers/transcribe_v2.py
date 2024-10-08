@@ -207,10 +207,21 @@ async def _websocket_util(
         redis_db.set_in_progress_memory_id(uid, memory.id)
         return memory
 
+    async def create_memory_creation_task():
+        nonlocal memory_creation_task
+
+        if memory_creation_task is not None:
+            await memory_creation_task.cancel()
+            try:
+                await memory_creation_task
+            except asyncio.CancelledError:
+                print("memory_creation_task is cancelled now")
+
+        memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
+
     def stream_transcript(segments, _):
         nonlocal websocket
         nonlocal seconds_to_trim
-        nonlocal memory_creation_task
 
         if not segments or len(segments) == 0:
             return
@@ -219,9 +230,7 @@ async def _websocket_util(
         if seconds_to_trim is None:
             seconds_to_trim = segments[0]["start"]
 
-        if memory_creation_task is not None:
-            memory_creation_task.cancel()
-        memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
+        asyncio.run_coroutine_threadsafe(create_memory_creation_task(), loop)
 
         # Segments aligning duration seconds.
         if seconds_to_add:
@@ -333,7 +342,7 @@ async def _websocket_util(
                 if speechmatics_socket1 is not None:
                     await speechmatics_socket1.send(data)
 
-                if deepgram_socket is not None:
+                if dg_socket1 is not None:
                     elapsed_seconds = time.time() - timer_start
                     if elapsed_seconds > speech_profile_duration or not dg_socket2:
                         dg_socket1.send(data)
