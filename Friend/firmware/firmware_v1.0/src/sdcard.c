@@ -101,7 +101,7 @@ int mount_sd_card(void)
         return -1;
     }
     LOG_INF("result of opendir: %d",err);
-    
+    initialize_audio_file(1);
     struct fs_dirent file_count_entry;
     file_count = get_file_contents(&audio_dir_entry, &file_count_entry);
     file_count = 1;
@@ -155,7 +155,7 @@ uint32_t get_file_size(uint8_t num)
     int res = fs_stat(&current_full_path,&entry);
     if (res)
     {
-        LOG_ERR("invalid file\n");
+        LOG_ERR("invalid file in get file size\n");
         return 0;  
     }
     return (uint32_t)entry.size;
@@ -170,7 +170,7 @@ int move_read_pointer(uint8_t num)
     int res = fs_stat(&read_buffer,&entry);
     if (res) 
     {
-        LOG_ERR("invalid file\n");
+        LOG_ERR("invalid file in move read ptr\n");
         return -1;  
     }
     return 0;
@@ -185,7 +185,7 @@ int move_write_pointer(uint8_t num)
     int res = fs_stat(&write_buffer,&entry);
     if (res) 
     {
-        LOG_ERR("invalid file\n");  
+        LOG_ERR("invalid file in move write pointer\n");  
         return -1;  
     }
     return 0;   
@@ -434,6 +434,7 @@ int get_offset()
         // printk("error reading file %d\n",rc);
         return -1;
     }
+    fs_close(&read_file);
     uint32_t *offset_ptr = (uint32_t*)buf;
     printk("get offset is %d\n",offset_ptr[0]);
 
