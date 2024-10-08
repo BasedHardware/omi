@@ -81,6 +81,7 @@ class ConfirmationDialog extends StatelessWidget {
             Text(
               description,
               textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
             Row(
@@ -103,11 +104,11 @@ class ConfirmationDialog extends StatelessWidget {
         actions: [
           CupertinoDialogAction(
             onPressed: onCancel,
-            child: Text(cancelText ?? "Cancel", style: const TextStyle(color: Colors.white)),
+            child: Text(cancelText ?? "Cancel", style: const TextStyle(color: Colors.white, fontSize: 14)),
           ),
           CupertinoDialogAction(
             onPressed: onConfirm,
-            child: Text(confirmText ?? "Confirm", style: const TextStyle(color: Colors.white)),
+            child: Text(confirmText ?? "Confirm", style: const TextStyle(color: Colors.white, fontSize: 14)),
           ),
         ],
       );
