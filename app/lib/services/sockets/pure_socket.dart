@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
 abstract class IPureSocketListener {
+  void onConnected();
   void onMessage(dynamic message);
   void onClosed();
   void onError(Object err, StackTrace trace);
@@ -29,6 +30,7 @@ abstract class IPureSocket {
   void onInternetSatusChanged(InternetStatus status);
 
   void onMessage(dynamic message);
+  void onConnected();
   void onClosed();
   void onError(Object err, StackTrace trace);
 }
@@ -131,6 +133,7 @@ class PureSocket implements IPureSocket {
     }
     _status = PureSocketStatus.connected;
     _retries = 0;
+    onConnected();
 
     final that = this;
 
@@ -195,6 +198,11 @@ class PureSocket implements IPureSocket {
   }
 
   @override
+  void onConnected() {
+    _listener?.onConnected();
+  }
+
+  @override
   void send(message) {
     _channel?.sink.add(message);
   }
@@ -203,7 +211,7 @@ class PureSocket implements IPureSocket {
     debugPrint("[Socket] reconnect...${_retries + 1}...");
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
-    const int maxRetries = 7;
+    const int maxRetries = 8;
 
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       debugPrint("[Socket] Can not reconnect, because socket is $_status");
@@ -221,7 +229,7 @@ class PureSocket implements IPureSocket {
     int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
-    if (_retries >= maxRetries) {
+    if (_retries > maxRetries) {
       debugPrint("[Socket] Reach max retries $maxRetries");
       _listener?.onMaxRetriesReach();
       return;

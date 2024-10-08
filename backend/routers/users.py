@@ -5,7 +5,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from database.redis_db import cache_user_geolocation
 from database.users import *
+from models.memory import Geolocation
 from models.other import Person, CreatePerson
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
@@ -14,6 +16,7 @@ from utils.other.storage import delete_all_memory_recordings, get_user_person_sp
 router = APIRouter()
 
 
+# TODO: url should be /v1/users
 @router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(uid: str = Depends(auth.get_current_user_uid)):
     try:
@@ -24,14 +27,12 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
     except Exception as e:
         print('delete_account', str(e))
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-def update_user(uid: str, data: dict):
-    try:
-        user_ref = db.collection('users').document(uid)
-        user_ref.update(data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
+
+@router.patch('/v1/users/geolocation', tags=['v1'])
+def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
+    cache_user_geolocation(uid, geolocation.dict())
+    return {'status': 'ok'}
 
 
 # *************************************************

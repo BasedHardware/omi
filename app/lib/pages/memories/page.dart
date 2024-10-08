@@ -46,10 +46,28 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
+            // TODO: FIXME
+            SliverToBoxAdapter(
+                child: memoryProvider.missingWals.isNotEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              memoryProvider.syncWals();
+                            },
+                            child: memoryProvider.walsSyncedProgress == 0.0
+                                ? Text(
+                                    "You have ${memoryProvider.missingWals.map((val) => val.seconds).reduce((a, b) => a + b)}s stereo localy, sync now?")
+                                : Text("${(memoryProvider.walsSyncedProgress * 100).toInt()}%"),
+                          ),
+                        ),
+                      )
+                    : SizedBox.shrink()),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            SliverToBoxAdapter(child: getMemoryCaptureWidget()),
+            const SliverToBoxAdapter(child: MemoryCaptureWidget()),
             getProcessingMemoriesWidget(memoryProvider.processingMemories),
             if (memoryProvider.groupedMemories.isEmpty && !memoryProvider.isLoadingMemories)
               const SliverToBoxAdapter(

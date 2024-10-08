@@ -113,7 +113,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 language='en'
             )
             result: Memory = process_memory(uid, temp_memory.language, temp_memory, force_process=False)
-            # TODO: should use the websocket to send each memory as created to the client, check transcribe.py
+            # TODO: should use the websocket to send each memory as created to the client, check transcribe_v2.py
             # websocket.send_json(result.to_json()) 
         await websocket.send_json({"type": "done"})
 

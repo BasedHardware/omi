@@ -14,6 +14,16 @@ class MessageEvent(BaseModel):
         return j
 
 
+class MemoryEvent(MessageEvent):
+    memory: Memory
+    messages: Optional[List[Message]] = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
+
+
 class NewMemoryCreated(MessageEvent):
     processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
@@ -36,10 +46,19 @@ class NewProcessingMemoryCreated(MessageEvent):
         j["type"] = self.event_type
         return j
 
+
 class ProcessingMemoryStatusChanged(MessageEvent):
     processing_memory_id: Optional[str] = None
     processing_memory_status: Optional[str] = None
     memory_id: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        return j
+
+class MemoryBackwardSycnedEvent(MessageEvent):
+    name: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")

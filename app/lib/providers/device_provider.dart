@@ -226,7 +226,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(device);
     setIsConnected(true);
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(restartBytesProcessing: true, device: device);
+    await captureProvider?.streamDeviceRecording(device: device);
     //  initiateBleBatteryListener();
     // The device is still disconnected for some reason
     if (connectedDevice != null) {
