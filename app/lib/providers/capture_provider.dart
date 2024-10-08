@@ -135,7 +135,10 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('is ws null: ${_socket == null}');
 
     // Connect to the transcript socket
-    _socket = await ServiceManager.instance().socket.memory(codec: codec, sampleRate: sampleRate, force: force);
+    String language = SharedPreferencesUtil().recordingsLanguage;
+    _socket = await ServiceManager.instance()
+        .socket
+        .memory(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new memory socket");
@@ -184,7 +187,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('resetState');
     _cleanupCurrentState();
     await _recheckCodecChange();
-    await _ensureSocketConnection(force: true);
+    await _ensureSocketConnection();
     await _initiateFriendAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
@@ -239,11 +242,11 @@ class CaptureProvider extends ChangeNotifier
     return false;
   }
 
-  Future<void> _ensureSocketConnection({bool force = false}) async {
-    debugPrint("_ensureSocketConnection ${_socket?.state}");
+  Future<void> _ensureSocketConnection() async {
     var codec = SharedPreferencesUtil().deviceCodec;
-    if (codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
-      await _initiateWebsocket(force: force);
+    var language = SharedPreferencesUtil().recordingsLanguage;
+    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+      await _initiateWebsocket(audioCodec: codec, force: true);
     }
   }
 
