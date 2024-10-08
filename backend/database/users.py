@@ -46,6 +46,7 @@ def delete_person(uid: str, person_id: str):
 
 
 def delete_user_data(uid: str):
+    # TODO: why dont we delete the whole document ref here?
     user_ref = db.collection('users').document(uid)
     memories_ref = user_ref.collection('memories')
     # delete all memories

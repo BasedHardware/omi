@@ -3,17 +3,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
-import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/sockets/pure_socket.dart';
+import 'package:friend_private/services/sockets/transcription_connection.dart';
 
-abstract interface class ITransctipSegmentSocketServiceListener {
+abstract interface class IWalSocketServiceListener {
   void onMessageEventReceived(ServerMessageEvent event);
-
-  void onSegmentReceived(List<TranscriptSegment> segments);
 
   void onError(Object err);
 
@@ -22,46 +18,27 @@ abstract interface class ITransctipSegmentSocketServiceListener {
   void onClosed();
 }
 
-class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec)
-      : super.create(includeSpeechProfile: false);
-}
-
-class MemoryTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  MemoryTranscriptSegmentSocketService.create(super.sampleRate, super.codec) : super.create(includeSpeechProfile: true);
-}
-
-enum SocketServiceState {
-  connected,
-  disconnected,
-}
-
-class TranscriptSegmentSocketService implements IPureSocketListener {
+class WalSocketService implements IPureSocketListener {
   late PureSocket _socket;
-  final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
+  final Map<Object, IWalSocketServiceListener> _listeners = {};
 
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 
-  int sampleRate;
-  BleAudioCodec codec;
-  bool includeSpeechProfile;
+  List<String> fileNames;
 
-  TranscriptSegmentSocketService.create(
-    this.sampleRate,
-    this.codec, {
-    this.includeSpeechProfile = false,
-  }) {
+  WalSocketService.create(
+    this.fileNames,
+  ) {
     final recordingsLanguage = SharedPreferencesUtil().recordingsLanguage;
-    var params = '?language=$recordingsLanguage&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
-        '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v2/listen$params';
+    var params = '?language=$recordingsLanguage&uid=${SharedPreferencesUtil().uid}&file_names=${fileNames.join(",")}';
+    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v2/listen/backward$params';
 
     _socket = PureSocket(url);
     _socket.setListener(this);
   }
 
-  void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
+  void subscribe(Object context, IWalSocketServiceListener listener) {
     _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
   }
@@ -121,18 +98,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
 
-    // Transcript segments
-    if (jsonEvent is List) {
-      var segments = jsonEvent;
-      if (segments.isEmpty) {
-        return;
-      }
-      _listeners.forEach((k, v) {
-        v.onSegmentReceived(segments.map((e) => TranscriptSegment.fromJson(e)).toList());
-      });
-      return;
-    }
-
     // Message event
     if (jsonEvent.containsKey("type")) {
       var event = ServerMessageEvent.fromJson(jsonEvent);
@@ -149,6 +114,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   void onInternetConnectionFailed() {
     debugPrint("onInternetConnectionFailed");
 
+    /*
     // Send notification
     NotificationService.instance.clearNotification(3);
     NotificationService.instance.createNotification(
@@ -156,12 +122,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       title: 'Internet Connection Lost',
       body: 'Your device is offline. Transcription is paused until connection is restored.',
     );
+		*/
   }
 
   @override
   void onMaxRetriesReach() {
     debugPrint("onMaxRetriesReach");
 
+    /*
     // Send notification
     NotificationService.instance.clearNotification(2);
     NotificationService.instance.createNotification(
@@ -170,6 +138,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       body: 'Unable to connect to the transcript service.'
           ' Please restart the app or contact support if the problem persists.',
     );
+		*/
   }
 
   @override

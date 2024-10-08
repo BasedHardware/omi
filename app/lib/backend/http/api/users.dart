@@ -3,8 +3,28 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
+
+Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/geolocation',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(geolocation.toJson()),
+  );
+  if (response == null) return false;
+  if (response.statusCode == 200) return true;
+  CrashReporting.reportHandledCrash(
+    Exception('Failed to update user geolocation'),
+    StackTrace.current,
+    level: NonFatalExceptionLevel.info,
+    userAttributes: {'response': response.body},
+  );
+  return false;
+}
 
 Future<bool> deleteAccount() async {
   var response = await makeApiCall(

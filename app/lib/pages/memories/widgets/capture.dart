@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -30,31 +28,9 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     context.read<CaptureProvider>().setHasTranscripts(hasTranscripts);
   }
 
-  void _onReceiveTaskData(dynamic data) {
-    if (data is Map<String, dynamic>) {
-      if (data.containsKey('latitude') && data.containsKey('longitude')) {
-        if (mounted) {
-          context.read<CaptureProvider>().setGeolocation(Geolocation(
-                latitude: data['latitude'],
-                longitude: data['longitude'],
-                accuracy: data['accuracy'],
-                altitude: data['altitude'],
-                time: DateTime.parse(data['time']),
-              ));
-        }
-      } else {
-        if (mounted) {
-          context.read<CaptureProvider>().setGeolocation(null);
-        }
-      }
-    }
-  }
-
   @override
   void initState() {
     WavBytesUtil.clearTempWavFiles();
-
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (context.read<DeviceProvider>().connectedDevice != null) {
