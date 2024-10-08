@@ -1,8 +1,8 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime
-from typing import List, Tuple
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -35,7 +35,8 @@ def get_memory(uid, memory_id):
     return memory_ref.get().to_dict()
 
 
-def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False, statuses: List[str] = []):
+def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded: bool = False,
+                 statuses: List[str] = []):
     memories_ref = (
         db.collection('users').document(uid).collection('memories')
         .where(filter=FieldFilter('deleted', '==', False))
@@ -92,7 +93,7 @@ def get_memories_by_id(uid, memory_ids):
 
 
 # **************************************
-# ********** CREATE STATES *************
+# ********** STATUS *************
 # **************************************
 
 def get_in_progress_memory(uid: str):
@@ -103,6 +104,27 @@ def get_in_progress_memory(uid: str):
     )
     docs = [doc.to_dict() for doc in memories_ref.stream()]
     return docs[0] if docs else None
+
+
+def get_processing_memories(uid: str):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = (
+        user_ref.collection('memories')
+        .where(filter=FieldFilter('status', '==', 'processing'))
+    )
+    return [doc.to_dict() for doc in memories_ref.stream()]
+
+
+def update_memory_status(uid: str, memory_id: str, status: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'status': status})
+
+
+def set_memory_as_discarded(uid: str, memory_id: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'discarded': True})
 
 
 # *********************************
@@ -129,12 +151,6 @@ def update_memory_segments(uid: str, memory_id: str, segments: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
     memory_ref.update({'transcript_segments': segments})
-
-
-def update_memory_status(uid: str, memory_id: str, status: str):
-    user_ref = db.collection('users').document(uid)
-    memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'status': status})
 
 
 # ***********************************
@@ -266,3 +282,50 @@ def get_memory_photos(uid: str, memory_id: str):
     memory_ref = user_ref.collection('memories').document(memory_id)
     photos_ref = memory_ref.collection('photos')
     return [doc.to_dict() for doc in photos_ref.stream()]
+
+
+# ********************************
+# ********** SYNCING *************
+# ********************************
+
+def get_closest_memory_to_timestamps(
+        uid: str, start_timestamp: int, end_timestamp: int
+) -> Optional[dict]:
+    print('get_closest_memory_to_timestamps', start_timestamp, end_timestamp)
+    start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
+    end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
+    print('get_closest_memory_to_timestamps', start_threshold, end_threshold)
+
+    query = (
+        db.collection('users').document(uid).collection('memories')
+        .where(filter=FieldFilter('finished_at', '>=', start_threshold))
+        .where(filter=FieldFilter('started_at', '<=', end_threshold))
+        .where(filter=FieldFilter('deleted', '==', False))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+
+    memories = [doc.to_dict() for doc in query.stream()]
+    print('get_closest_memory_to_timestamps len(memories)', len(memories))
+    if not memories:
+        return None
+
+    print('get_closest_memory_to_timestamps found:')
+    for memory in memories:
+        print('-', memory['id'], memory['started_at'], memory['finished_at'])
+
+    # get the memory that has the closest start timestamp or end timestamp
+    closest_memory = None
+    min_diff = float('inf')
+    for memory in memories:
+        memory_start_timestamp = memory['started_at'].timestamp()
+        memory_end_timestamp = memory['finished_at'].timestamp()
+        diff1 = abs(memory_start_timestamp - start_timestamp)
+        diff2 = abs(memory_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_memory = memory
+
+    print('get_closest_memory_to_timestamps closest_memory:', closest_memory['id'])
+    return closest_memory
+
+# get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)

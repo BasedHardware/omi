@@ -1,6 +1,8 @@
+import base64
+import json
 import os
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Union
 
 import redis
 
@@ -22,6 +24,32 @@ def try_catch_decorator(func):
             return None
 
     return wrapper
+
+
+@try_catch_decorator
+def get_generic_cache(path: str):
+    key = base64.b64encode(f'{path}'.encode('utf-8'))
+    key = key.decode('utf-8')
+
+    data = r.get(f'cache:{key}')
+    return json.loads(data) if data else None
+
+
+@try_catch_decorator
+def set_generic_cache(path: str, data: Union[dict, list], ttl: int = None):
+    key = base64.b64encode(f'{path}'.encode('utf-8'))
+    key = key.decode('utf-8')
+
+    r.set(f'cache:{key}', json.dumps(data, default=str))
+    if ttl:
+        r.expire(f'cache:{key}', ttl)
+
+
+@try_catch_decorator
+def delete_generic_cache(path: str):
+    key = base64.b64encode(f'{path}'.encode('utf-8'))
+    key = key.decode('utf-8')
+    r.delete(f'cache:{key}')
 
 
 def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
@@ -175,4 +203,3 @@ def get_in_progress_memory_id(uid: str) -> str:
     if not memory_id:
         return ''
     return memory_id.decode()
-
