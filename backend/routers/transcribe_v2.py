@@ -211,7 +211,7 @@ async def _websocket_util(
         nonlocal memory_creation_task
 
         if memory_creation_task is not None:
-            await memory_creation_task.cancel()
+            memory_creation_task.cancel()
             try:
                 await memory_creation_task
             except asyncio.CancelledError:
