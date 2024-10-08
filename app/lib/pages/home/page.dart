@@ -374,7 +374,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex != 0) {
-                      return const SizedBox.shrink();
+                      return const ChatPluginsDropdownWidget();
                     }
                     return Flexible(
                       child: Row(
@@ -397,7 +397,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     );
                   },
                 ),
-                const ChatPluginsDropdownWidget(),
                 Row(
                   children: [
                     Consumer2<MemoryProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
