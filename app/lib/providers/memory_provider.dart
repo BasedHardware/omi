@@ -6,10 +6,12 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 
-class MemoryProvider extends ChangeNotifier {
+class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerMemory> memories = [];
   Map<DateTime, List<ServerMemory>> groupedMemories = {};
 
@@ -21,6 +23,30 @@ class MemoryProvider extends ChangeNotifier {
   Timer? _processingMemoryWatchTimer;
 
   List<ServerMemory> processingMemories = [];
+
+  IWalService get _walService => ServiceManager.instance().wal;
+
+  List<Wal> _missingWals = [];
+  List<Wal> get missingWals => _missingWals;
+  int get missingWalsInSeconds =>
+      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+
+  double _walsSyncedProgress = 0.0;
+  double get walsSyncedProgress => _walsSyncedProgress;
+
+  bool isSyncing = false;
+  bool syncCompleted = false;
+  Map<String, dynamic>? syncResult;
+
+  MemoryProvider() {
+    _walService.subscribe(this, this);
+    _preload();
+  }
+
+  _preload() async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
 
   void addProcessingMemory(ServerMemory memory) {
     processingMemories.add(memory);
@@ -288,6 +314,49 @@ class MemoryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
+    _walService.unsubscribe(this);
     super.dispose();
+  }
+
+  @override
+  void onNewMissingWal(Wal wal) async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onWalSynced(Wal wal, {ServerMemory? memory}) async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onStatusChanged(WalServiceStatus status) {}
+
+  @override
+  void onWalSyncedProgress(double percentage) {
+    _walsSyncedProgress = percentage;
+  }
+
+  Future<Map<String, dynamic>?> syncWals() async {
+    _walsSyncedProgress = 0.0;
+    setIsSyncing(true);
+    var res = await _walService.syncAll(progress: this);
+    syncResult = res.$1;
+    syncCompleted = true;
+    setIsSyncing(false);
+    notifyListeners();
+    return res.$1;
+  }
+
+  void clearSyncResult() {
+    syncResult = null;
+    syncCompleted = false;
+    notifyListeners();
+  }
+
+  void setIsSyncing(bool value) {
+    isSyncing = value;
+    notifyListeners();
   }
 }

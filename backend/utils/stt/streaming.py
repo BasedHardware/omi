@@ -265,9 +265,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
     try:
         # Connect to Soniox WebSocket
         print("Connecting to Soniox WebSocket...")
-        soniox_socket = await websockets.connect(uri)
+        soniox_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         print("Connected to Soniox WebSocket.")
-
         # Send the initial request
         await soniox_socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
@@ -332,6 +331,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
 
         # Start the on_message coroutine
         asyncio.create_task(on_message())
+        asyncio.create_task(soniox_socket.keepalive_ping())
 
         # Return the Soniox WebSocket object
         return soniox_socket
