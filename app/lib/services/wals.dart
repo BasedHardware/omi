@@ -236,7 +236,6 @@ class WalService implements IWalService, IWalSocketServiceListener {
       final wal = _wals[i];
 
       if (wal.storage == WalStorage.mem) {
-        // Flush to disk
         final directory = await getTemporaryDirectory();
         String filePath = '${directory.path}/${wal.getFileName()}';
         List<int> data = [];
@@ -302,11 +301,12 @@ class WalService implements IWalService, IWalSocketServiceListener {
   }
 
   Future<bool> _deleteWal(Wal wal) async {
-    // Delete file
     if (wal.filePath != null) {
       try {
         final file = File(wal.filePath!);
-        await file.delete();
+        if (file.existsSync()) {
+          await file.delete();
+        }
       } catch (e) {
         debugPrint(e.toString());
         return false;
@@ -402,8 +402,8 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
   @override
   Future<(Map<String, dynamic>?, bool)> syncAll({IWalSyncProgressListener? progress}) async {
-    _wals.removeWhere((wal) => wal.status == WalStatus.synced);
     await _flush();
+
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
       debugPrint("All synced!");
