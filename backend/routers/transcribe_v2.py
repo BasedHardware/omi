@@ -160,6 +160,7 @@ async def _websocket_util(
             return
         await _create_memory(memory)
 
+    memory_creation_task_lock = False
     memory_creation_task = None
     seconds_to_trim = None
     seconds_to_add = None
@@ -209,15 +210,23 @@ async def _websocket_util(
 
     async def create_memory_creation_task():
         nonlocal memory_creation_task
+        nonlocal memory_creation_task_lock
 
-        if memory_creation_task is not None:
-            memory_creation_task.cancel()
-            try:
-                await memory_creation_task
-            except asyncio.CancelledError:
-                print("memory_creation_task is cancelled now")
+        if memory_creation_task_lock:
+            return
 
-        memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
+        memory_creation_task_lock = True
+        try:
+            if memory_creation_task is not None:
+                memory_creation_task.cancel()
+                try:
+                    await memory_creation_task
+                except asyncio.CancelledError:
+                    print("memory_creation_task is cancelled now")
+            memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
+
+        finally:
+            memory_creation_task_lock = False
 
     def stream_transcript(segments, _):
         nonlocal websocket
