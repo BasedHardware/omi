@@ -47,17 +47,38 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 if not first_packet_flag:
                     first_packet_flag = True
                     print('first valid packet received')
-            elif len(data) == 440:
+
+                    amount = int(data[3])
+                    frame_to_decode = bytes(list(data[4:4 + amount]))
+                    audio_frames.append(frame_to_decode)
+            elif len(data) == 440: # the other packet version
                 if not first_packet_flag:
                     first_packet_flag = True
                     print('first valid packet received')
+                max_packet_size_idx = 440 - 1
+                # print(i)
+                socket_segments = data
+                current_packet_size = 0
+                offset = 0
+                while True:
+                    current_packet_size = socket_segments[offset]
+
+                    print()
+                    if (current_packet_size + offset > max_packet_size_idx):
+                        break
+                    elif (current_packet_size + offset == max_packet_size_idx):
+                        audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
+                        break
+                    elif (current_packet_size + offset  < max_packet_size_idx):
+                        audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
+                        offset+=current_packet_size+1
+                        continue
+
             if data == 100:  # valid code
                 print('done.')
                 websocket_active = False
                 break
-            amount = int(data[3])
-            frame_to_decode = bytes(list(data[4:4 + amount]))
-            audio_frames.append(frame_to_decode)
+
 
     except WebSocketDisconnect:
         print("websocket gone")
