@@ -17,6 +17,7 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/sockets/pure_socket.dart';
 import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/wals.dart';
@@ -25,6 +26,7 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -42,9 +44,20 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  bool _walFeatureEnabled = false;
   IWalService get _walService => ServiceManager.instance().wal;
   IDeviceService get _deviceService => ServiceManager.instance().device;
+  bool _isWalSupported = false;
+  bool get isWalSupported => _isWalSupported;
+
+  StreamSubscription<InternetStatus>? _internetStatusListener;
+  InternetStatus? _internetStatus;
+  get internetStatus => _internetStatus;
+
+  CaptureProvider() {
+    _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
+      onInternetSatusChanged(status);
+    });
+  }
 
   void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
@@ -72,7 +85,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool _transcriptServiceReady = false;
 
-  bool get transcriptServiceReady => _transcriptServiceReady;
+  bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
@@ -160,11 +173,14 @@ class CaptureProvider extends ChangeNotifier
 
       // support: opus codec, 1m from the first device connectes
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var isWalEnabled = codec == BleAudioCodec.opus &&
+      var checkWalSupported = codec == BleAudioCodec.opus &&
           (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 60)))) &&
-          _walFeatureEnabled;
-      if (isWalEnabled) {
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
+          SharedPreferencesUtil().localSyncEnabled;
+      if (checkWalSupported != _isWalSupported) {
+        setIsWalSupported(checkWalSupported);
+      }
+      if (_isWalSupported) {
         _walService.onByteStream(value);
       }
 
@@ -174,7 +190,7 @@ class CaptureProvider extends ChangeNotifier
         _socket?.send(trimmedValue);
 
         // synced
-        if (isWalEnabled) {
+        if (_isWalSupported) {
           _walService.onBytesSync(value);
         }
       }
@@ -295,6 +311,7 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
+    _internetStatusListener?.cancel();
     super.dispose();
   }
 
@@ -465,6 +482,17 @@ class CaptureProvider extends ChangeNotifier
       messageProvider?.addMessage(v);
     });
     hasTranscripts = true;
+    notifyListeners();
+  }
+
+  void onInternetSatusChanged(InternetStatus status) {
+    debugPrint("[SocketService] Internet connection changed $status");
+    _internetStatus = status;
+    notifyListeners();
+  }
+
+  void setIsWalSupported(bool value) {
+    _isWalSupported = value;
     notifyListeners();
   }
 
