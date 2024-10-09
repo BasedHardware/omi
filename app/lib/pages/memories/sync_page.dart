@@ -76,7 +76,7 @@ class _SyncPageState extends State<SyncPage> {
                   ),
                   memoryProvider.isSyncing
                       ? Text(
-                          '${memoryProvider.walsSyncedProgress}% synced',
+                          '${(memoryProvider.walsSyncedProgress * 100).toInt()}% synced',
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                         )
                       : const SizedBox.shrink(),

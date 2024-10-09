@@ -14,7 +14,7 @@ from models.memory import CreateMemory
 from models.transcript_segment import TranscriptSegment
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
-from utils.other.storage import get_syncing_file_temporal_url, delete_syncing_temporal_file
+from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
 
@@ -150,7 +150,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
 
 
 def process_segment(path: str, uid: str, response: dict):
-    url = get_syncing_file_temporal_url(path)
+    url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
         time.sleep(480)

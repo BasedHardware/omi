@@ -16,11 +16,16 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
+  bool localSyncEnabled = false;
+
   void initialize() {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
+    localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
+
+    notifyListeners();
   }
 
   void saveSettings() async {
@@ -28,6 +33,7 @@ class DeveloperModeProvider extends BaseProvider {
     savingSettingsLoading = true;
     notifyListeners();
     final prefs = SharedPreferencesUtil();
+
     if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
       try {
         await authenticateGCP(base64: gcpCredentialsController.text.trim());
@@ -50,6 +56,9 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
 
+    // Experimental
+    prefs.localSyncEnabled = localSyncEnabled;
+
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
       hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
@@ -61,5 +70,10 @@ class DeveloperModeProvider extends BaseProvider {
     AppSnackbar.showSnackbarError(
       'Settings saved!',
     );
+  }
+
+  void onLocalSyncEnabledChanged(var value) {
+    localSyncEnabled = value;
+    notifyListeners();
   }
 }

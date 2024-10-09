@@ -395,13 +395,19 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
+  // WAL
+
   set wals(List<Wal> wals) {
     final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('v3/wals', value);
+    saveStringList('wals', value);
   }
 
   List<Wal> get wals {
-    final List<String> value = getStringList('v3/wals') ?? [];
+    final List<String> value = getStringList('wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
+
+  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
+
+  bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
 }
