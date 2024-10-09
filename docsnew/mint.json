@@ -18,7 +18,7 @@
   "topbarLinks": [
     {
       "name": "Support",
-      "url": "mailto:support@omi.me"
+      "url": "https://github.com/BasedHardware/omi/issues/new/choose"
     }
   ],
   "topbarCtaButton": {
@@ -42,32 +42,54 @@
     {
       "group": "Get Started",
       "pages": [
-        "_get_started/Setup"
+        "get_started/introduction",
+        "get_started/Setup",
+        "get_started/Flash_device",
+        {
+          "group": "Backend",
+          "pages": [
+            "get_started/backend/Backend_Setup",
+            "get_started/backend/backend_deepdive",
+            "get_started/backend/StoringMemory",
+            "get_started/backend/transcription",
+            "get_started/backend/memory_embeddings",
+            "get_started/backend/postprocessing"
+          ]
+        }
       ]
     },
     {
-      "group": "Essentials",
+      "group": "Assembly",
       "pages": [
-        "essentials/markdown",
-        "essentials/code",
-        "essentials/images",
-        "essentials/settings",
-        "essentials/navigation",
-        "essentials/reusable-snippets"
+        "assembly/Buying_Guide",
+        "assembly/Build_the_device",
+        "assembly/Compile_firmware",
+        "assembly/Install_firmware",
+        "assembly/audio_test"
       ]
     },
     {
-      "group": "API Documentation",
+      "group": "Developer",
       "pages": [
-        "api-reference/introduction"
+        "developer/HowItWorks",
+        "developer/Protocol",
+        "developer/Contribution",
+        "developer/savingaudio",
+        {
+          "group": "Plugins",
+          "pages": [
+            "developer/plugins/Introduction",
+            "developer/plugins/PromptBased",
+            "developer/plugins/Integrations",
+            "developer/plugins/Submitting"
+          ]
+        }
       ]
     },
     {
-      "group": "Endpoint Examples",
+      "group": "Hardware",
       "pages": [
-        "api-reference/endpoint/get",
-        "api-reference/endpoint/create",
-        "api-reference/endpoint/delete"
+        "hardware/DevKit1"
       ]
     }
   ],
