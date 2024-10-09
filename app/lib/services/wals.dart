@@ -449,13 +449,14 @@ class WalService implements IWalService, IWalSocketServiceListener {
         continue;
       }
 
-      // On success?
-      for (var j = 0; j < i + steps && j < wals.length; j++) {
-        _wals[j].status = WalStatus.synced;
+      // Success? update status to synced
+      for (var j = i; j < i + steps && j < wals.length; j++) {
+        var wal = wals[j];
+        wals[j].status = WalStatus.synced; // ref to _wals[]
 
         // Send
         for (var sub in _subscriptions.values) {
-          sub.onWalSynced(_wals[j]);
+          sub.onWalSynced(wal);
         }
       }
       SharedPreferencesUtil().wals = _wals;
