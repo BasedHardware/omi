@@ -31,10 +31,6 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   int get missingWalsInSeconds =>
       _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
-  int get missingWalsFlushedInSeconds => _missingWals.isEmpty
-      ? 0
-      : _missingWals.map((val) => val.storage == WalStorage.disk ? val.seconds : 0).reduce((a, b) => a + b);
-
   double _walsSyncedProgress = 0.0;
   double get walsSyncedProgress => _walsSyncedProgress;
 
