@@ -39,16 +39,14 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
   Widget build(BuildContext context) {
     return Consumer3<MemoryProvider, CaptureProvider, DeveloperModeProvider>(
         builder: (context, provider, captureProvider, devModeProvider, child) {
-      debugPrint("_LocalSyncWidgetState > ${captureProvider.isWalSupported}");
-      if (provider.missingWalsFlushedInSeconds > 0) {
+      if (provider.missingWalsInSeconds > 120) {
         _status = LocalSyncStatus.flush;
-        _missSeconds = max(_missSeconds, provider.missingWalsFlushedInSeconds); // est. good for ux
+        _missSeconds = max(_missSeconds, provider.missingWalsInSeconds); // est. good for ux
       } else if (!captureProvider.isWalSupported) {
         _status = LocalSyncStatus.disabled;
         _missSecondsInEstTimer?.cancel();
       } else if ((!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady) ||
           provider.missingWalsInSeconds > 0) {
-        // 120)
         var previousStatus = _status;
         _status = LocalSyncStatus.inProgress;
 
