@@ -16,14 +16,14 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
-  bool localSyncEnalbed = false;
+  bool localSyncEnabled = false;
 
   void initialize() {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
-    localSyncEnalbed = SharedPreferencesUtil().localSyncEnabled;
+    localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
 
     notifyListeners();
   }
@@ -57,7 +57,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
 
     // Experimental
-    prefs.localSyncEnabled = localSyncEnalbed;
+    prefs.localSyncEnabled = localSyncEnabled;
 
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
@@ -73,7 +73,7 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   void onLocalSyncEnabledChanged(var value) {
-    localSyncEnalbed = value;
+    localSyncEnabled = value;
     notifyListeners();
   }
 }
