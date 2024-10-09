@@ -38,27 +38,35 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer2<MemoryProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
+      var previousStatus = _status;
       if (provider.missingWalsInSeconds > 120) {
         _status = LocalSyncStatus.flush;
-        _missSeconds = max(_missSeconds, provider.missingWalsInSeconds); // est. good for ux
       } else if (!captureProvider.isWalSupported) {
         _status = LocalSyncStatus.disabled;
-        _missSecondsInEstTimer?.cancel();
-      } else if ((!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady) ||
-          provider.missingWalsInSeconds > 0) {
-        var previousStatus = _status;
+      } else if (provider.missingWalsInSeconds > 0) {
         _status = LocalSyncStatus.inProgress;
+      } else {
+        _status = LocalSyncStatus.disabled;
+      }
 
-        // Change state to in progress
-        if (previousStatus != LocalSyncStatus.inProgress) {
-          _missSecondsInEstTimer?.cancel();
+      // miss seconds
+      if (_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) {
+        if (previousStatus != _status) {
           _missSeconds = provider.missingWalsInSeconds;
-          _missSecondsInEstTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-            setState(() {
-              _missSeconds++;
-            });
-          });
         }
+      }
+
+      // timer
+      if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) &&
+          (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
+        _missSecondsInEstTimer ??= Timer.periodic(const Duration(seconds: 1), (t) {
+          setState(() {
+            _missSeconds++;
+          });
+        });
+      } else {
+        _missSecondsInEstTimer?.cancel();
+        _missSecondsInEstTimer = null;
       }
 
       // in progress
