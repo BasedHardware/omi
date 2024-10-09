@@ -332,6 +332,28 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     decoration: _getTextFieldDecoration('Endpoint URL'),
                     style: const TextStyle(color: Colors.white),
                   ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade500),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Experimental',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Try the latest experimental features from Omi Team.',
+                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.all(0),
+                    title: const Text(
+                      'Local Sync',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    value: provider.localSyncEnalbed,
+                    onChanged: provider.onLocalSyncEnabledChanged,
+                  ),
                   const SizedBox(height: 64),
                 ],
               ),
