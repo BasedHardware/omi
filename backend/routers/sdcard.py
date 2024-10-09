@@ -67,7 +67,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                     if (current_packet_size + offset > max_packet_size_idx):
                         break
                     elif (current_packet_size + offset == max_packet_size_idx):
-                        audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
+                        # audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
                         break
                     elif (current_packet_size + offset  < max_packet_size_idx):
                         audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
