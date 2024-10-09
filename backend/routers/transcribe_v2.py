@@ -331,10 +331,10 @@ async def _websocket_util(
                     data = decoder.decode(bytes(data), frame_size=160)
                 if uid not in ['QnwpAf9QjLg5taNlT5OZ4kVnOLH3']:
                     if include_speech_profile:
-                        vad_sample_size = 320
+                        vad_sample_size = 320 if sample_rate == 16000 else 160
                         vad_sample = data[:vad_sample_size]
                         if len(vad_sample) < vad_sample_size:
-                            print('VAD sample is less than 320 bytes', len(vad_sample))
+                            # print('VAD sample is less than 320 bytes', len(vad_sample))
                             vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
                         has_speech = w_vad.is_speech(vad_sample, sample_rate)
                         if not has_speech:
