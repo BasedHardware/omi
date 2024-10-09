@@ -23,6 +23,9 @@ class DeveloperModeProvider extends BaseProvider {
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
+    localSyncEnalbed = SharedPreferencesUtil().localSyncEnabled;
+
+    notifyListeners();
   }
 
   void saveSettings() async {
@@ -30,6 +33,7 @@ class DeveloperModeProvider extends BaseProvider {
     savingSettingsLoading = true;
     notifyListeners();
     final prefs = SharedPreferencesUtil();
+
     if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
       try {
         await authenticateGCP(base64: gcpCredentialsController.text.trim());
@@ -52,6 +56,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
 
+    // Experimental
     prefs.localSyncEnabled = localSyncEnalbed;
 
     MixpanelManager().settingsSaved(
