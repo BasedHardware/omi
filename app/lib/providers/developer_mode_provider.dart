@@ -16,6 +16,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
+  bool localSyncEnalbed = false;
+
   void initialize() {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
@@ -50,6 +52,8 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
 
+    prefs.localSyncEnabled = localSyncEnalbed;
+
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
       hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
@@ -61,5 +65,10 @@ class DeveloperModeProvider extends BaseProvider {
     AppSnackbar.showSnackbarError(
       'Settings saved!',
     );
+  }
+
+  void onLocalSyncEnabledChanged(var value) {
+    localSyncEnalbed = value;
+    notifyListeners();
   }
 }

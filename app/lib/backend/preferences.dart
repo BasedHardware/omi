@@ -404,4 +404,8 @@ class SharedPreferencesUtil {
     final List<String> value = getStringList('v3/wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
+
+  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
+
+  bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
 }
