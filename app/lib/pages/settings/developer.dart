@@ -346,12 +346,12 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   ),
                   const SizedBox(height: 16.0),
                   CheckboxListTile(
-                    contentPadding: EdgeInsets.all(0),
+                    contentPadding: const EdgeInsets.all(0),
                     title: const Text(
                       'Local Sync',
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
-                    value: provider.localSyncEnalbed,
+                    value: provider.localSyncEnabled,
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
                   const SizedBox(height: 64),
