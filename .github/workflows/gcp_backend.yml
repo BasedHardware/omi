@@ -12,6 +12,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
 
 env:
   SERVICE: backend
@@ -26,6 +30,12 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Environment Input
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@v2
 
