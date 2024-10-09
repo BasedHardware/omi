@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
+import 'package:friend_private/pages/memories/widgets/local_sync.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -67,7 +68,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
 
   @override
   Widget build(BuildContext context) {
-    print('building memories page');
+    debugPrint('building memories page');
     super.build(context);
     return Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
       return RefreshIndicator(
@@ -78,34 +79,10 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: memoryProvider.missingWalsInSeconds > 120
-                  ? GestureDetector(
-                      onTap: () {
-                        routeToPage(context, const SyncPage());
-                      },
-                      child: Container(
-                        width: double.maxFinite,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: const BorderRadius.all(Radius.circular(12)),
-                        ),
-                        margin: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-                        padding: const EdgeInsets.all(16),
-                        child: ListTile(
-                          leading: const Icon(Icons.record_voice_over_rounded),
-                          title: Text(
-                            'You have ${secondsToHumanReadable(memoryProvider.missingWalsInSeconds)} of conversation locally, sync now?',
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
             const SliverToBoxAdapter(child: SizedBox(height: 26)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
+            const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: MemoryCaptureWidget()),
             getProcessingMemoriesWidget(memoryProvider.processingMemories),
             if (memoryProvider.groupedMemories.isEmpty && !memoryProvider.isLoadingMemories)

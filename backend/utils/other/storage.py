@@ -210,6 +210,12 @@ def get_syncing_file_temporal_url(file_path: str):
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
 
+def get_syncing_file_temporal_signed_url(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.upload_from_filename(file_path)
+    return _get_signed_url(blob, 15)
+
 
 def delete_syncing_temporal_file(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)

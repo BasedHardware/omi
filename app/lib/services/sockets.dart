@@ -22,9 +22,7 @@ class SocketServicePool extends ISocketService {
   TranscriptSegmentSocketService? _socket;
 
   @override
-  void start() {
-    // TODO: implement start
-  }
+  void start() {}
 
   @override
   void stop() async {
