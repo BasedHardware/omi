@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/local_sync.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
