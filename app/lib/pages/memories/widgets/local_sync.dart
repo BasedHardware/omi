@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -27,7 +26,21 @@ enum LocalSyncStatus {
 class _LocalSyncWidgetState extends State<LocalSyncWidget> {
   LocalSyncStatus? _status;
   Timer? _missSecondsInEstTimer;
+  bool _missSecondsInEstTimerEnabled = false;
   int _missSeconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _missSecondsInEstTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_missSecondsInEstTimerEnabled) {
+        setState(() {
+          _missSeconds++;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -39,11 +52,11 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
   Widget build(BuildContext context) {
     return Consumer2<MemoryProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
       var previousStatus = _status;
-      if (provider.missingWalsInSeconds > 120) {
+      if (provider.missingWalsInSeconds >= 120) {
         _status = LocalSyncStatus.flush;
       } else if (!captureProvider.isWalSupported) {
         _status = LocalSyncStatus.disabled;
-      } else if (provider.missingWalsInSeconds > 0) {
+      } else if (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady) {
         _status = LocalSyncStatus.inProgress;
       } else {
         _status = LocalSyncStatus.disabled;
@@ -59,14 +72,9 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
       // timer
       if ((_status == LocalSyncStatus.inProgress || _status == LocalSyncStatus.flush) &&
           (!captureProvider.transcriptServiceReady && captureProvider.recordingDeviceServiceReady)) {
-        _missSecondsInEstTimer ??= Timer.periodic(const Duration(seconds: 1), (t) {
-          setState(() {
-            _missSeconds++;
-          });
-        });
+        _missSecondsInEstTimerEnabled = true;
       } else {
-        _missSecondsInEstTimer?.cancel();
-        _missSecondsInEstTimer = null;
+        _missSecondsInEstTimerEnabled = false;
       }
 
       // in progress
