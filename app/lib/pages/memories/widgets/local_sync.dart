@@ -37,8 +37,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<MemoryProvider, CaptureProvider, DeveloperModeProvider>(
-        builder: (context, provider, captureProvider, devModeProvider, child) {
+    return Consumer2<MemoryProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
       if (provider.missingWalsInSeconds > 120) {
         _status = LocalSyncStatus.flush;
         _missSeconds = max(_missSeconds, provider.missingWalsInSeconds); // est. good for ux
