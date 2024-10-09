@@ -12,8 +12,8 @@ import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/sockets/wal_connection.dart';
 import 'package:path_provider/path_provider.dart';
 
-const chunkSizeInSeconds = 7; // 30
-const flushIntervalInSeconds = 7; // 60
+const chunkSizeInSeconds = 30;
+const flushIntervalInSeconds = 60;
 
 abstract class IWalService {
   void start();
