@@ -170,12 +170,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             print("Speech Started")
 
         def on_utterance_end(self, utterance_end, **kwargs):
-            print("Utterance End")
-            global is_finals
-            if len(is_finals) > 0:
-                utterance = " ".join(is_finals)
-                print(f"Utterance End: {utterance}")
-                is_finals = []
+            pass
 
         def on_close(self, close, **kwargs):
             print("Connection Closed")
