@@ -44,9 +44,10 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  bool get _walFeatureEnabled => SharedPreferencesUtil().localSyncEnabled;
   IWalService get _walService => ServiceManager.instance().wal;
   IDeviceService get _deviceService => ServiceManager.instance().device;
+  bool _isWalSupported = false;
+  bool get isWalSupported => _isWalSupported;
 
   StreamSubscription<InternetStatus>? _internetStatusListener;
   InternetStatus? _internetStatus;
@@ -172,11 +173,14 @@ class CaptureProvider extends ChangeNotifier
 
       // support: opus codec, 1m from the first device connectes
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
-      var isWalEnabled = codec == BleAudioCodec.opus &&
+      var checkWalSupported = codec == BleAudioCodec.opus &&
           (deviceFirstConnectedAt != null &&
-              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 60)))) &&
-          _walFeatureEnabled;
-      if (isWalEnabled) {
+              deviceFirstConnectedAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) &&
+          SharedPreferencesUtil().localSyncEnabled;
+      if (checkWalSupported != _isWalSupported) {
+        setIsWalSupported(checkWalSupported);
+      }
+      if (_isWalSupported) {
         _walService.onByteStream(value);
       }
 
@@ -186,7 +190,7 @@ class CaptureProvider extends ChangeNotifier
         _socket?.send(trimmedValue);
 
         // synced
-        if (isWalEnabled) {
+        if (_isWalSupported) {
           _walService.onBytesSync(value);
         }
       }
@@ -484,6 +488,11 @@ class CaptureProvider extends ChangeNotifier
   void onInternetSatusChanged(InternetStatus status) {
     debugPrint("[SocketService] Internet connection changed $status");
     _internetStatus = status;
+    notifyListeners();
+  }
+
+  void setIsWalSupported(bool value) {
+    _isWalSupported = value;
     notifyListeners();
   }
 

@@ -22,6 +22,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -156,6 +157,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
           ListenableProvider(create: (context) => PluginProvider()),
           ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
             create: (context) => MessageProvider(),
