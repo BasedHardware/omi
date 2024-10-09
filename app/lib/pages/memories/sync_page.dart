@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -61,9 +62,18 @@ class _SyncPageState extends State<SyncPage> {
                           ),
                           child: TextButton(
                             onPressed: () async {
-                              _toggleAnimation();
-                              await memoryProvider.syncWals();
-                              _toggleAnimation();
+                              if (context.read<ConnectivityProvider>().isConnected) {
+                                _toggleAnimation();
+                                await memoryProvider.syncWals();
+                                _toggleAnimation();
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Internet connection is required to sync memories'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                             },
                             child: const Text(
                               'Sync Now',
