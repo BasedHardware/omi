@@ -36,6 +36,11 @@
       "name": "Discord",
       "icon": "discord",
       "url": "https://discord.gg/basedhardware"
+    },
+    {
+      "name": "Github",
+      "icon": "github",
+      "url": "https://github.com/BasedHardware/omi"
     }
   ],
   "navigation": [
