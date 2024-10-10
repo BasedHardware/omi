@@ -37,6 +37,8 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   bool isSyncing = false;
   bool syncCompleted = false;
   Map<String, dynamic>? syncResult;
+  Map<String, List<ServerMemory?>>? syncedMemories;
+  Map<String, List<Record>>? syncedMemoriesPointers;
 
   MemoryProvider() {
     _walService.subscribe(this, this);
@@ -343,10 +345,83 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     setIsSyncing(true);
     var res = await _walService.syncAll(progress: this);
     syncResult = res.$1;
+    if (syncResult != null) {
+      if (syncResult!['new_memories'] != [] || syncResult!['updated_memories']) {
+        syncedMemories = {};
+        await getSyncedMemoriesData();
+        addSyncedMemoriesToGroupedMemories();
+      }
+    }
     syncCompleted = true;
     setIsSyncing(false);
     notifyListeners();
     return res.$1;
+  }
+
+  Future getSyncedMemoriesData() async {
+    List<dynamic> newMemories = syncResult!['new_memories'] ?? [];
+    List<dynamic> updatedMemories = syncResult!['updated_memories'] ?? [];
+
+    List<Future<ServerMemory?>> newMemoriesFutures = newMemories.map((item) => getMemoryDetails(item)).toList();
+
+    List<Future<ServerMemory?>> updatedMemoriesFutures = updatedMemories.map((item) => getMemoryDetails(item)).toList();
+    try {
+      final newMemoriesResponses = await Future.wait(newMemoriesFutures);
+      syncedMemories!['new_memories'] = newMemoriesResponses;
+
+      final updatedMemoriesResponses = await Future.wait(updatedMemoriesFutures);
+      syncedMemories!['updated_memories'] = updatedMemoriesResponses;
+    } catch (e) {
+      print('Error during API calls: $e');
+    }
+  }
+
+  void addSyncedMemoriesToGroupedMemories() {
+    syncedMemoriesPointers = {'new_memories': [], 'updated_memories': []};
+    if (syncedMemories == null) return;
+    if (syncedMemories!['new_memories'] != null) {
+      for (var memory in syncedMemories!['new_memories']!) {
+        if (memory != null) {
+          addMemory(memory);
+          syncedMemoriesPointers!['new_memories']!.add(getMemoryDateAndIndex(memory));
+        }
+      }
+    }
+    if (syncedMemories!['updated_memories'] != null) {
+      for (var memory in syncedMemories!['updated_memories']!) {
+        if (memory != null && memory.status == MemoryStatus.completed) {
+          updateMemoryInSortedList(memory);
+          syncedMemoriesPointers!['updated_memories']!.add(getMemoryDateAndIndex(memory));
+        }
+      }
+    }
+  }
+
+  void updateSyncedMemory(ServerMemory memory) {
+    if (syncedMemoriesPointers!['updated_memories'] != null) {
+      var idx = syncedMemoriesPointers!['updated_memories']!.indexWhere((element) {
+        dynamic e = element;
+        return e.$3.id == memory.id;
+      });
+      if (idx != -1) {
+        updateMemory(memory);
+        syncedMemoriesPointers!['updated_memories']![idx] = getMemoryDateAndIndex(memory);
+      }
+    }
+  }
+
+  (DateTime, int, ServerMemory) getMemoryDateAndIndex(ServerMemory memory) {
+    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    var idx = groupedMemories[date]!.indexWhere((element) => element.id == memory.id);
+    if (idx == -1 && groupedMemories.containsKey(date)) {
+      groupedMemories[date]!.add(memory);
+    }
+    return (date, idx, memory);
+  }
+
+  Future<ServerMemory?> getMemoryDetails(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    return memory;
   }
 
   void clearSyncResult() {
