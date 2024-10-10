@@ -5,8 +5,7 @@ import 'package:provider/provider.dart';
 import 'widgets/synced_memory_list_item.dart';
 
 class SyncedMemoriesPage extends StatelessWidget {
-  final Map<String, dynamic>? res;
-  const SyncedMemoriesPage({super.key, this.res});
+  const SyncedMemoriesPage({super.key});
 
   @override
   Widget build(BuildContext context) {
