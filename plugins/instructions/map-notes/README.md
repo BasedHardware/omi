@@ -7,6 +7,7 @@ We wanted to explore how Omi can be used to interact with the physical world aro
 
 ## 📌 Pin Your Thoughts to the World
 Map Notes allows you to effortlessly create public location-based notes from your conversations. It's like leaving pins across a global map!
+Note: When using Map Notes, only memories that include your geolocation will be captured
 
 ## 🌟 Creating a Pin
 The triggers to start and end a map note are `start` and `finish`. 
@@ -19,3 +20,5 @@ Memories without these phrases are ignored.
 - **Travel Journaling**: Capture the essence of places you visit.
 - **Location-based Reminders**: "Note to self: Great coffee shop here!"
 - **Personal Growth**: Share your thoughts and feelings across different environments.
+
+
