@@ -37,7 +37,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       : null,
                 ),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
               !Platform.isIOS
                   ? SignInButton(
                       Buttons.google,
