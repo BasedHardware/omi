@@ -25,7 +25,7 @@ class SyncedMemoriesPage extends StatelessWidget {
                 MemoriesListWidget(
                   memories: memoryProvider.syncedMemoriesPointers!['updated_memories'],
                   title: 'Updated Memories',
-                  showReprocess: false,
+                  showReprocess: true,
                 ),
                 MemoriesListWidget(
                   memories: memoryProvider.syncedMemoriesPointers!['new_memories'],
