@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
+import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -54,7 +56,14 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
     }
 
     return GestureDetector(
-      onTap: () async {},
+      onTap: () async {
+        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
+        Provider.of<MemoryProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
+        routeToPage(
+          context,
+          MemoryDetailPage(memory: widget.memory, isFromOnboarding: false),
+        );
+      },
       child: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
