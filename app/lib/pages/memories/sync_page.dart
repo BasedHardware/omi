@@ -3,6 +3,7 @@ import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -27,8 +28,29 @@ class _SyncPageState extends State<SyncPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
+      canPop: !Provider.of<MemoryProvider>(context, listen: false).isSyncing,
       onPopInvoked: (didPop) {
-        Provider.of<MemoryProvider>(context, listen: false).clearSyncResult();
+        var provider = Provider.of<MemoryProvider>(context, listen: false);
+        if (provider.isSyncing) {
+          showDialog(
+              context: context,
+              builder: (ctx) {
+                return getDialog(
+                  context,
+                  () {
+                    Navigator.pop(context);
+                  },
+                  () {
+                    Navigator.pop(context);
+                  },
+                  'Sync In-Progress',
+                  'Memories are being synced. Please wait until the process is complete',
+                  singleButton: true,
+                );
+              });
+        } else {
+          provider.clearSyncResult();
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -85,10 +107,13 @@ class _SyncPageState extends State<SyncPage> {
                     height: 20,
                   ),
                   memoryProvider.isSyncing
-                      ? const Text(
-                          'Syncing Memories.\nPlease do not close the app or press the back button.',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                          textAlign: TextAlign.center,
+                      ? const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text(
+                            'Syncing Memories\nPlease don\'t close the app or press the back button',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
                         )
                       : memoryProvider.syncCompleted && memoryProvider.syncResult != null
                           ? Column(
