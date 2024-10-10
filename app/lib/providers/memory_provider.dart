@@ -397,6 +397,19 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     }
   }
 
+  void updateSyncedMemory(ServerMemory memory) {
+    if (syncedMemoriesPointers!['updated_memories'] != null) {
+      var idx = syncedMemoriesPointers!['updated_memories']!.indexWhere((element) {
+        dynamic e = element;
+        return e.$3.id == memory.id;
+      });
+      if (idx != -1) {
+        updateMemory(memory);
+        syncedMemoriesPointers!['updated_memories']![idx] = getMemoryDateAndIndex(memory);
+      }
+    }
+  }
+
   (DateTime, int, ServerMemory) getMemoryDateAndIndex(ServerMemory memory) {
     var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
     var idx = groupedMemories[date]!.indexWhere((element) => element.id == memory.id);

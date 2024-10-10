@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:provider/provider.dart';
 
 class SyncedMemoryListItem extends StatefulWidget {
   final DateTime date;
@@ -81,25 +83,6 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                               maxLines: 1,
                             ),
                       memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-                      memory.discarded
-                          ? const SizedBox.shrink()
-                          : Text(
-                              memory.structured.overview,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium!
-                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
-                              maxLines: 2,
-                            ),
-                      memory.discarded
-                          ? Text(
-                              memory.getTranscript(maxCount: 100),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium!
-                                  .copyWith(color: Colors.grey.shade300, height: 1.3),
-                            )
-                          : const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -112,6 +95,7 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                             setState(() {
                               memory = mem;
                             });
+                            context.read<MemoryProvider>().updateSyncedMemory(mem);
                           }
                           setReprocessing(false);
                         },
