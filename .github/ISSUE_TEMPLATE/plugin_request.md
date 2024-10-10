@@ -1,8 +1,8 @@
 ---
 name: Plugin Request
 about: Suggest an plugin for this project. If someone builds your plugin, you get $100. Best plugin idea of the month gets $100
-title: ''
-labels: ''
+title: '[Plugin Request] '
+labels: 'plugin'
 assignees: ''
 
 ---
