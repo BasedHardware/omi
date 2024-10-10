@@ -208,8 +208,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           ),
                     SizedBox(
                       height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
-                          ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context))
-                          : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context)),
+                          ? max(MediaQuery.of(context).size.height - 500 - 10,
+                              maxHeightWithTextScale(context, _controller!.index))
+                          : max(MediaQuery.of(context).size.height - 500 - 30,
+                              maxHeightWithTextScale(context, _controller!.index)),
                       child: Padding(
                         padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                         child: TabBarView(
@@ -291,10 +293,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 }
 
-double maxHeightWithTextScale(BuildContext context) {
+double maxHeightWithTextScale(BuildContext context, int index) {
   double textScaleFactor = MediaQuery.of(context).textScaleFactor;
   if (textScaleFactor > 1.0) {
-    return 405;
+    if (index == 0) {
+      return 200;
+    } else {
+      return 405;
+    }
   } else {
     return 305;
   }
