@@ -1,10 +1,10 @@
 name: Deploy Backend to Cloud RUN
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+#  push:
+#    branches: [ "main" ]
+#    paths:
+#      - 'backend/**'
   workflow_dispatch:
     inputs:
       environment:
