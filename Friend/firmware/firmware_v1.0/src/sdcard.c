@@ -366,22 +366,22 @@ int clear_audio_directory()
     res = fs_unlink("/SD:/audio");
     if (res) 
     {
-        printk("error deleting file\n");
+        LOG_ERR("error deleting file");
         return -1;
     }
     res = fs_mkdir("/SD:/audio");
     if (res) 
     {
-        printk("failed to make directory \n");
+        LOG_ERR("failed to make directory");
         return -1;
     }
     res = create_file("audio/a01.txt");
     if (res) 
     {
-        printk("failed to make new file in directory files\n");
+        LOG_ERR("failed to make new file in directory files");
         return -1;
     }
-    printk("done with clearing\n");
+    LOG_ERR("done with clearing");
 
     file_count = 1;  
     move_write_pointer(1);
@@ -391,20 +391,25 @@ int clear_audio_directory()
 
 int save_offset(uint32_t offset)
 {
-    uint8_t buf[4] = {offset & 0xFF, (offset >> 8) & 0xFF, (offset >> 16) & 0xFF, (offset >> 24) & 0xFF};
+    uint8_t buf[4] = {
+	offset & 0xFF,
+	(offset >> 8) & 0xFF,
+	(offset >> 16) & 0xFF, 
+	(offset >> 24) & 0xFF 
+    };
 
     struct fs_file_t write_file;
-	fs_file_t_init(&write_file);
-   	int res = fs_open(&write_file, "/SD:/info.txt" , FS_O_WRITE | FS_O_CREATE);
+    fs_file_t_init(&write_file);
+    int res = fs_open(&write_file, "/SD:/info.txt" , FS_O_WRITE | FS_O_CREATE);
     if (res) 
     {
-        // printk("error opening file %d\n",res);
+        LOG_ERR("error opening file %d",res);
         return -1;
     }
     res = fs_write(&write_file,&buf,4);
     if (res < 0)
     {
-        // printk("error writing file %d\n",res);
+        LOG_ERR("error writing file %d",res);
         return -1;
     }
     fs_close(&write_file);
@@ -415,28 +420,28 @@ int get_offset()
 {
     uint8_t buf[4];
     struct fs_file_t read_file;
-	fs_file_t_init(&read_file);
-	int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
+    fs_file_t_init(&read_file);
+    int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
     if (rc < 0)
     {
-        // printk("error opening file %d\n",rc);
+        LOG_ERR("error opening file %d",rc);
         return -1;
     }
     rc = fs_seek(&read_file,0,FS_SEEK_SET);
     if (rc < 0)
     {
-        // printk("error seeking file %d\n",rc);
+        LOG_ERR("error seeking file %d",rc);
         return -1;
     }
     rc = fs_read(&read_file, &buf, 4);
     if (rc < 0)
     {
-        // printk("error reading file %d\n",rc);
+        LOG_ERR("error reading file %d",rc);
         return -1;
     }
     fs_close(&read_file);
     uint32_t *offset_ptr = (uint32_t*)buf;
-    printk("get offset is %d\n",offset_ptr[0]);
+    LOG_INF("get offset is %d",offset_ptr[0]);
     fs_close(&read_file);
 
     return offset_ptr[0];
