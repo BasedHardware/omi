@@ -3,6 +3,8 @@
 
 We wanted to explore how Omi can be used to interact with the physical world around us.
 
+## 📍 [Visit Map Notes here](https://omi-map-notes.vercel.app/)
+
 ## 📌 Pin Your Thoughts to the World
 Map Notes allows you to effortlessly create public location-based notes from your conversations. It's like leaving pins across a global map!
 
