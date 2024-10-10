@@ -22,7 +22,7 @@ dependencies:
   auto_size_text: 3.0.0
   collection: 1.18.0
   equatable: 2.0.5
-  flutter_blue_plus: ^1.32.12
+  flutter_blue_plus: ^1.33.4
   font_awesome_flutter: 10.6.0
   from_css_color: 2.0.0
   http: ^1.2.1
