@@ -340,11 +340,13 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     _walsSyncedProgress = percentage;
   }
 
-  Future<Map<String, dynamic>?> syncWals() async {
+  Future syncWals() async {
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
     var res = await _walService.syncAll(progress: this);
-    syncResult = res.$1;
+    if (res != null) {
+      syncResult = {"new_memories": res.newMemoryIds, 'updated_memories': res.updatedMemoryIds};
+    }
     if (syncResult != null) {
       if (syncResult!['new_memories'] != [] || syncResult!['updated_memories']) {
         syncedMemories = {};
@@ -355,7 +357,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     syncCompleted = true;
     setIsSyncing(false);
     notifyListeners();
-    return res.$1;
+    return;
   }
 
   Future getSyncedMemoriesData() async {
