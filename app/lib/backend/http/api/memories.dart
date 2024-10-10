@@ -252,7 +252,7 @@ Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTime
   }
 }
 
-Future<(Map<String, dynamic>?, bool)> syncLocalFiles(List<File> files) async {
+Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/sync-local-files'),
@@ -268,7 +268,7 @@ Future<(Map<String, dynamic>?, bool)> syncLocalFiles(List<File> files) async {
 
     if (response.statusCode == 200) {
       debugPrint('syncLocalFile Response body: ${jsonDecode(response.body)}');
-      return (jsonDecode(response.body) as Map<String, dynamic>, true);
+      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
     } else {
       debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
       throw Exception('Failed to upload sample. Status code: ${response.statusCode}');

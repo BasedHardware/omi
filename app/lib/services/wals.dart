@@ -24,7 +24,7 @@ abstract class IWalService {
 
   void onByteStream(List<int> value);
   void onBytesSync(List<int> value);
-  Future<(Map<String, dynamic>?, bool)> syncAll({IWalSyncProgressListener? progress});
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
   Future<bool> syncWal(Wal wal);
   Future<bool> deleteWal(Wal wal);
   Future<List<Wal>> getMissingWals();
@@ -401,16 +401,17 @@ class WalService implements IWalService, IWalSocketServiceListener {
   }
 
   @override
-  Future<(Map<String, dynamic>?, bool)> syncAll({IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     await _flush();
 
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
       debugPrint("All synced!");
-      return (null, true);
+      return null;
     }
 
-    (Map<String, dynamic>?, bool) res = (null, false);
+    // Empty resp
+    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
 
     var steps = 10;
     for (var i = 0; i < wals.length; i += steps) {
@@ -443,7 +444,12 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
       // Sync
       try {
-        res = await syncLocalFiles(files);
+        var partialRes = await syncLocalFiles(files);
+
+        // Ensure unique
+        resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
+        resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
+            .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
       } catch (e) {
         debugPrint(e.toString());
         continue;
@@ -464,7 +470,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
 
     // Progress
     progress?.onWalSyncedProgress(1.0);
-    return res;
+    return resp;
   }
 
   // *
