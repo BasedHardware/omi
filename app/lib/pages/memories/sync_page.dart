@@ -115,7 +115,7 @@ class _SyncPageState extends State<SyncPage> {
                             textAlign: TextAlign.center,
                           ),
                         )
-                      : memoryProvider.syncCompleted && memoryProvider.syncResult != null
+                      : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers != null
                           ? Column(
                               children: [
                                 const Text(
@@ -125,8 +125,8 @@ class _SyncPageState extends State<SyncPage> {
                                 const SizedBox(
                                   height: 18,
                                 ),
-                                (memoryProvider.syncResult!['new_memories'].isNotEmpty ||
-                                        memoryProvider.syncResult!['updated_memories'].isNotEmpty)
+                                (memoryProvider.syncedMemoriesPointers!['new_memories']!.isNotEmpty ||
+                                        memoryProvider.syncedMemoriesPointers!['updated_memories']!.isNotEmpty)
                                     ? Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                         decoration: BoxDecoration(
