@@ -197,3 +197,20 @@ class ServerMemory {
     }
   }
 }
+
+class SyncLocalFilesResponse {
+  List<String> newMemoryIds = [];
+  List<String> updatedMemoryIds = [];
+
+  SyncLocalFilesResponse({
+    required this.newMemoryIds,
+    required this.updatedMemoryIds,
+  });
+
+  factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
+    return SyncLocalFilesResponse(
+      newMemoryIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      updatedMemoryIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+    );
+  }
+}
