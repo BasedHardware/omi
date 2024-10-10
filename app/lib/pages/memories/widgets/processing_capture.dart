@@ -182,7 +182,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
-    } else if (deviceServiceStateOk && transcriptServiceStateOk) {
+    } else if (deviceServiceStateOk) {
       left = Row(
         children: [
           const Text(
@@ -204,8 +204,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    } else if (isMemoryInProgress &&
-        (!internetConnectionStateOk || !deviceServiceStateOk || !transcriptServiceStateOk)) {
+    } else {
       left = Row(
         children: [
           const Text(
@@ -221,28 +220,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
               'Waiting for device...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      );
-    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
-      left = Row(
-        children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
