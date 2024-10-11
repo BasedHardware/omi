@@ -163,8 +163,11 @@ async def _websocket_util(
         finished_at = datetime.fromisoformat(existing_memory['finished_at'].isoformat())
         seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
         if seconds_since_last_segment >= memory_creation_timeout:
+            print('_websocket_util processing existing_memory', existing_memory['id'], seconds_since_last_segment)
             asyncio.create_task(_create_current_memory())
         else:
+            print('_websocket_util will process', existing_memory['id'], 'in',
+                  memory_creation_timeout - seconds_since_last_segment, 'seconds')
             memory_creation_task = asyncio.create_task(
                 _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment, finished_at)
             )
@@ -205,7 +208,8 @@ async def _websocket_util(
                     await memory_creation_task
                 except asyncio.CancelledError:
                     print("memory_creation_task is cancelled now")
-            memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
+            memory_creation_task = asyncio.create_task(
+                _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
     def stream_transcript(segments, _):
         nonlocal websocket
