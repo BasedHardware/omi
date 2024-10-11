@@ -67,9 +67,7 @@ class DeveloperModeProvider extends BaseProvider {
     );
     savingSettingsLoading = false;
     notifyListeners();
-    AppSnackbar.showSnackbarError(
-      'Settings saved!',
-    );
+    AppSnackbar.showSnackbar('Settings saved!');
   }
 
   void onLocalSyncEnabledChanged(var value) {
