@@ -330,20 +330,14 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                if include_speech_profile and sample_rate == 8000: # don't do for opus 1.0.4 for now
-                    vad_sample_size = 320 if sample_rate == 16000 else 160
-                    vad_sample = data[:vad_sample_size]
-                    if len(vad_sample) < vad_sample_size:
-                        # print('VAD sample is less than 320 bytes', len(vad_sample))
-                        vad_sample = vad_sample + bytes([0x00] * (vad_sample_size - len(vad_sample)))
-                    has_speech = w_vad.is_speech(vad_sample, sample_rate)
-                    if not has_speech:
-                        continue
-
-                # TODO: is the VAD slowing down the STT service? specially soniox?
-                # - but from write data, it feels faster, but the processing is having issues
-                # - and soniox after missingn a couple filtered bytes get's slower
-                # - specially after waiting for like a couple seconds.
+                # if include_speech_profile and sample_rate == 8000:  # don't do for opus 1.0.4 for now
+                #     # vad_sample_size = 320 if sample_rate == 16000 else 160
+                #     # if len(data) < vad_sample_size:
+                #     #     data = data[:vad_sample_size]
+                #     #     data = data + bytes([0x00] * (vad_sample_size - len(data)))
+                #     has_speech = w_vad.is_speech(data, sample_rate)
+                #     if not has_speech:
+                #         continue
 
                 if soniox_socket is not None:
                     await soniox_socket.send(data)
