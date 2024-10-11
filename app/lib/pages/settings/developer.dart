@@ -57,12 +57,17 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
               title: const Text('Developer Settings'),
               actions: [
                 TextButton(
-                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
+                  onPressed: provider.savingSettingsLoading
+                      ? null
+                      : provider.saveSettings,
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4.0),
                     child: Text(
                       'Save',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16),
                     ),
                   ),
                 )
@@ -144,7 +149,8 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Export Memories'),
-                    subtitle: const Text('Export all your memories to a JSON file.'),
+                    subtitle:
+                        const Text('Export all your memories to a JSON file.'),
                     trailing: provider.loadingExportMemories
                         ? const SizedBox(
                             height: 16,
@@ -159,26 +165,34 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                         ? null
                         : () async {
                             if (provider.loadingExportMemories) return;
-                            setState(() => provider.loadingExportMemories = true);
+                            setState(
+                                () => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Memories Export Started. This may take a few seconds, please wait.'),
+                                content: Text(
+                                    'Memories Export Started. This may take a few seconds, please wait.'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
-                            String json = const JsonEncoder.withIndent("     ").convert(memories);
-                            final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/memories.json');
+                            List<ServerMemory> memories = await getMemories(
+                                limit: 10000, offset: 0); // 10k for now
+                            String json = const JsonEncoder.withIndent("     ")
+                                .convert(memories);
+                            final directory =
+                                await getApplicationDocumentsDirectory();
+                            final file =
+                                File('${directory.path}/memories.json');
                             await file.writeAsString(json);
 
-                            final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                            final result = await Share.shareXFiles(
+                                [XFile(file.path)],
+                                text: 'Exported Memories from Friend');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
                             MixpanelManager().exportMemories();
-                            setState(() => provider.loadingExportMemories = false);
+                            setState(
+                                () => provider.loadingExportMemories = false);
                           },
                   ),
                   const SizedBox(height: 16),
@@ -186,7 +200,10 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   const SizedBox(height: 32),
                   const Text(
                     'Google Cloud Bucket',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -200,7 +217,8 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     autocorrect: false,
                     enableSuggestions: false,
                     enabled: true,
-                    decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
+                    decoration:
+                        _getTextFieldDecoration('GCP Credentials (Base64)'),
                     style: const TextStyle(color: Colors.white),
                   ),
                   TextField(
@@ -273,11 +291,15 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     children: [
                       const Text(
                         'Events Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600),
                       ),
                       GestureDetector(
                         onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
+                          launchUrl(Uri.parse(
+                              'https://docs.omi.me/developer/plugins/Integrations/'));
                           MixpanelManager().pageOpened('Advanced Mode Docs');
                         },
                         child: const Padding(
@@ -333,11 +355,30 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Raw Audio WebSocket URL:',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  TextField(
+                    controller: provider.rawAudioWebSocketUrl,
+                    obscureText: false,
+                    autocorrect: false,
+                    enabled: true,
+                    enableSuggestions: false,
+                    decoration:
+                        _getTextFieldDecoration('Raw Audio WebSocket URL'),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
                   const Text(
                     'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -364,7 +405,10 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
     );
   }
 
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
+  _getTextFieldDecoration(String label,
+      {IconButton? suffixIcon,
+      bool canBeDisabled = false,
+      String hintText = ''}) {
     return InputDecoration(
       labelText: label,
       enabled: true && canBeDisabled,
