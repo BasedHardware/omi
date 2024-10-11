@@ -3,6 +3,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/frame_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
+import 'package:friend_private/utils/logger.dart';
 
 enum BleAudioCodec {
   pcm16,
@@ -219,45 +220,48 @@ class BtDevice {
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
-
-    var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
-    if (deviceInformationService != null) {
-      var modelNumberCharacteristic = conn.getCharacteristic(deviceInformationService, modelNumberCharacteristicUuid);
-      if (modelNumberCharacteristic != null) {
-        modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
-      }
-
-      var firmwareRevisionCharacteristic =
-          conn.getCharacteristic(deviceInformationService, firmwareRevisionCharacteristicUuid);
-      if (firmwareRevisionCharacteristic != null) {
-        firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
-      }
-
-      var hardwareRevisionCharacteristic =
-          conn.getCharacteristic(deviceInformationService, hardwareRevisionCharacteristicUuid);
-      if (hardwareRevisionCharacteristic != null) {
-        hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
-      }
-
-      var manufacturerNameCharacteristic =
-          conn.getCharacteristic(deviceInformationService, manufacturerNameCharacteristicUuid);
-      if (manufacturerNameCharacteristic != null) {
-        manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
-      }
-    }
-
     var t = DeviceType.friend;
-    if (type == DeviceType.openglass) {
-      t = DeviceType.openglass;
-    } else {
-      final friendService = await conn.getService(friendServiceUuid);
-      if (friendService != null) {
-        var imageCaptureControlCharacteristic =
-            conn.getCharacteristic(friendService, imageDataStreamCharacteristicUuid);
-        if (imageCaptureControlCharacteristic != null) {
-          t = DeviceType.openglass;
+    try {
+      var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
+      if (deviceInformationService != null) {
+        var modelNumberCharacteristic = conn.getCharacteristic(deviceInformationService, modelNumberCharacteristicUuid);
+        if (modelNumberCharacteristic != null) {
+          modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
+        }
+
+        var firmwareRevisionCharacteristic =
+            conn.getCharacteristic(deviceInformationService, firmwareRevisionCharacteristicUuid);
+        if (firmwareRevisionCharacteristic != null) {
+          firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
+        }
+
+        var hardwareRevisionCharacteristic =
+            conn.getCharacteristic(deviceInformationService, hardwareRevisionCharacteristicUuid);
+        if (hardwareRevisionCharacteristic != null) {
+          hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
+        }
+
+        var manufacturerNameCharacteristic =
+            conn.getCharacteristic(deviceInformationService, manufacturerNameCharacteristicUuid);
+        if (manufacturerNameCharacteristic != null) {
+          manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
         }
       }
+
+      if (type == DeviceType.openglass) {
+        t = DeviceType.openglass;
+      } else {
+        final friendService = await conn.getService(friendServiceUuid);
+        if (friendService != null) {
+          var imageCaptureControlCharacteristic =
+              conn.getCharacteristic(friendService, imageDataStreamCharacteristicUuid);
+          if (imageCaptureControlCharacteristic != null) {
+            t = DeviceType.openglass;
+          }
+        }
+      }
+    } catch (e) {
+      Logger.error('Device Disconnected while getting device info: $e');
     }
 
     return copyWith(
