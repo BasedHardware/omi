@@ -421,18 +421,24 @@ class WalService implements IWalService, IWalSocketServiceListener {
         var wal = wals[j];
         debugPrint("sync id ${wal.id}");
         if (wal.filePath == null) {
-          debugPrint("sync error: file path is not found. wal id ${wal.id}");
+          debugPrint("file path is not found. wal id ${wal.id}");
+          wal.status = WalStatus.corrupted;
           continue;
         }
 
+        debugPrint("sync wal: ${wal.id} file: ${wal.filePath}");
+
         try {
           File file = File(wal.filePath!);
+          if (!file.existsSync()) {
+            debugPrint("file ${wal.filePath} is not exists");
+            wal.status = WalStatus.corrupted;
+            continue;
+          }
           files.add(file);
-          debugPrint("sync wal ${wal.id} file ${wal.filePath}");
         } catch (e) {
           wal.status = WalStatus.corrupted;
           debugPrint(e.toString());
-          continue;
         }
       }
 
