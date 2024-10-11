@@ -199,8 +199,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setConnectedDevice(null);
     setIsConnected(false);
     updateConnectingStatus(false);
-    await captureProvider?.stopStreamDeviceRecording(cleanDevice: true);
-    captureProvider?.setAudioBytesConnected(false);
+
+    captureProvider?.updateRecordingDevice(null);
+
     print('after resetState inside initiateConnectionListener');
 
     InstabugLog.logInfo('Friend Device Disconnected');
