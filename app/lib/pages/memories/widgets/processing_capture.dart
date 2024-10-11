@@ -164,6 +164,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
+    bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -172,14 +173,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     //print(
     //    'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
 
-    // Not ready
-    if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript) {
-      return null;
-    }
-
     // Left
     Widget? left;
-    if (isUsingPhoneMic || SharedPreferencesUtil().btDevice.id.isEmpty) {
+    if (isUsingPhoneMic || !isHavingDesireDevice) {
       left = Center(
         child: getPhoneMicRecordingButton(
           context,
@@ -187,6 +183,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
+    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript) {
+      return null; // not using phone mic, not ready
     } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
@@ -239,7 +237,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     if (deviceServiceStateOk && transcriptServiceStateOk) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
-    } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
+    } else if (isHavingDesireDevice && (!internetConnectionStateOk || !transcriptServiceStateOk)) {
       stateText = "Reconnecting";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
