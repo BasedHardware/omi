@@ -6,20 +6,58 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
+import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/features/calendar.dart';
 
-class MemoryProvider extends ChangeNotifier {
+class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerMemory> memories = [];
   Map<DateTime, List<ServerMemory>> groupedMemories = {};
 
   bool isLoadingMemories = false;
   bool hasNonDiscardedMemories = true;
+  bool showDiscardedMemories = false;
 
   String previousQuery = '';
 
-  List<ServerProcessingMemory> processingMemories = [];
   Timer? _processingMemoryWatchTimer;
+
+  List<ServerMemory> processingMemories = [];
+
+  IWalService get _walService => ServiceManager.instance().wal;
+
+  List<Wal> _missingWals = [];
+  List<Wal> get missingWals => _missingWals;
+  int get missingWalsInSeconds =>
+      _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
+
+  double _walsSyncedProgress = 0.0;
+  double get walsSyncedProgress => _walsSyncedProgress;
+
+  bool isSyncing = false;
+  bool syncCompleted = false;
+  Map<String, List<Record>>? syncedMemoriesPointers;
+
+  MemoryProvider() {
+    _walService.subscribe(this, this);
+    _preload();
+  }
+
+  _preload() async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
+
+  void addProcessingMemory(ServerMemory memory) {
+    processingMemories.add(memory);
+    notifyListeners();
+  }
+
+  void removeProcessingMemory(String memoryId) {
+    processingMemories.removeWhere((m) => m.id == memoryId);
+    notifyListeners();
+  }
 
   void onMemoryTap(int idx) {
     if (idx < 0 || idx > memories.length - 1) {
@@ -38,7 +76,8 @@ class MemoryProvider extends ChangeNotifier {
   void toggleDiscardMemories() {
     MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
     SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
-    filterGroupedMemories('');
+    showDiscardedMemories = SharedPreferencesUtil().showDiscardedMemories;
+    // filterGroupedMemories('');
     notifyListeners();
   }
 
@@ -49,24 +88,23 @@ class MemoryProvider extends ChangeNotifier {
 
   Future getInitialMemories() async {
     memories = await getMemoriesFromServer();
+
+    processingMemories = memories.where((m) => m.status == MemoryStatus.processing).toList();
+
+    memories = memories.where((m) => m.status == MemoryStatus.completed).toList();
     if (memories.isEmpty) {
       memories = SharedPreferencesUtil().cachedMemories;
     } else {
       SharedPreferencesUtil().cachedMemories = memories;
     }
     _groupMemoriesByDateWithoutNotify();
-
-    // Processing memories
-    var pms = await getProcessingMemories();
-    await _setProcessingMemories(pms);
-
     notifyListeners();
   }
 
   void _groupMemoriesByDateWithoutNotify() {
     groupedMemories = {};
     for (var memory in memories) {
-      if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded && !memory.isNew) continue;
+      // if (SharedPreferencesUtil().showDiscardedMemories && memory.discarded && !memory.isNew) continue;
       var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
       if (!groupedMemories.containsKey(date)) {
         groupedMemories[date] = [];
@@ -105,132 +143,9 @@ class MemoryProvider extends ChangeNotifier {
   }
 
   void filterGroupedMemories(String query) {
-    _filterGroupedMemoriesWithoutNotify(query);
+    // _filterGroupedMemoriesWithoutNotify(query);
+    _groupMemoriesByDateWithoutNotify();
     notifyListeners();
-  }
-
-  Future _setProcessingMemories(List<ServerProcessingMemory> pms) async {
-    processingMemories = pms;
-    notifyListeners();
-
-    if (processingMemories.isEmpty) {
-      _processingMemoryWatchTimer?.cancel();
-      return;
-    }
-
-    _trackProcessingMemories();
-    return;
-  }
-
-  Future onNewCapturingMemory(ServerProcessingMemory processingMemory) async {
-    if (processingMemory.status != ServerProcessingMemoryStatus.capturing) {
-      debugPrint("Processing memory status is not capturing");
-      return;
-    }
-
-    // Remove the memory from the main
-    if (processingMemory.memoryId != null) {
-      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
-      if (idx >= 0) {
-        memories.removeAt(idx);
-        filterGroupedMemories('');
-      }
-    }
-
-    // Upsert new processing memory
-    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
-      _updateProcessingMemories([processingMemory]);
-      return;
-    }
-    processingMemories.insert(0, processingMemory);
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  Future onNewProcessingMemory(ServerProcessingMemory processingMemory) async {
-    if (processingMemory.status != ServerProcessingMemoryStatus.processing) {
-      debugPrint("Processing memory status is not processing");
-      return;
-    }
-
-    // Remove the memory from the main
-    if (processingMemory.memoryId != null) {
-      int idx = memories.indexWhere((m) => m.id == processingMemory.memoryId);
-      if (idx >= 0) {
-        memories.removeAt(idx);
-        filterGroupedMemories('');
-      }
-    }
-
-    // Upsert new processing memory
-    if (processingMemories.indexWhere((pm) => pm.id == processingMemory.id) >= 0) {
-      _updateProcessingMemories([processingMemory]);
-      return;
-    }
-    processingMemories.insert(0, processingMemory);
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  Future onProcessingMemoryDone(ServerProcessingMemory pm) async {
-    // Update processing memories
-    _updateProcessingMemories([pm]);
-
-    // Upsert new memory
-    if (pm.memoryId == null) {
-      debugPrint("Processing Memory Id is not found ${pm.id}");
-      return;
-    }
-    var memory = await getMemoryById(pm.memoryId!);
-    if (memory == null) {
-      debugPrint("Memory is not found ${pm.memoryId}");
-      return;
-    }
-
-    // Local labling
-    memory.isNew = true;
-
-    int idx = memories.indexWhere((m) => m.id == memory.id);
-    if (idx < 0) {
-      memories.insert(0, memory);
-    } else {
-      memories[idx] = memory;
-    }
-
-    filterGroupedMemories('');
-  }
-
-  Future _updateProcessingMemories(List<ServerProcessingMemory> pms) async {
-    for (var i = 0; i < processingMemories.length; i++) {
-      var pm = pms.firstWhereOrNull((m) => m.id == processingMemories[i].id);
-      if (pm != null) {
-        processingMemories[i] = pm;
-      }
-    }
-    _setProcessingMemories(List.from(processingMemories));
-  }
-
-  void _trackProcessingMemories() {
-    if (_processingMemoryWatchTimer?.isActive ?? false) {
-      return;
-    }
-    _processingMemoryWatchTimer?.cancel();
-    _processingMemoryWatchTimer = Timer(const Duration(seconds: 7), () async {
-      var filterIds = processingMemories
-          .where((m) =>
-              m.status == ServerProcessingMemoryStatus.processing || m.status == ServerProcessingMemoryStatus.capturing)
-          .map((m) => m.id)
-          .toList();
-      if (filterIds.isEmpty) {
-        return;
-      }
-
-      var pms = await getProcessingMemories(filterIds: filterIds);
-      for (var i = 0; i < pms.length; i++) {
-        if (pms[i].status == ServerProcessingMemoryStatus.done) {
-          onProcessingMemoryDone(pms[i]);
-        }
-      }
-      _updateProcessingMemories(pms);
-    });
   }
 
   Future getMemoriesFromServer() async {
@@ -401,6 +316,140 @@ class MemoryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
+    _walService.unsubscribe(this);
     super.dispose();
+  }
+
+  @override
+  void onNewMissingWal(Wal wal) async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onWalSynced(Wal wal, {ServerMemory? memory}) async {
+    _missingWals = await _walService.getMissingWals();
+    notifyListeners();
+  }
+
+  @override
+  void onStatusChanged(WalServiceStatus status) {}
+
+  @override
+  void onWalSyncedProgress(double percentage) {
+    _walsSyncedProgress = percentage;
+  }
+
+  Future syncWals() async {
+    _walsSyncedProgress = 0.0;
+    setIsSyncing(true);
+    var res = await _walService.syncAll(progress: this);
+    if (res != null) {
+      if (res.newMemoryIds.isNotEmpty || res.updatedMemoryIds.isNotEmpty) {
+        await getSyncedMemoriesData(res);
+      }
+    }
+    syncCompleted = true;
+    setIsSyncing(false);
+    notifyListeners();
+    return;
+  }
+
+  Future getSyncedMemoriesData(SyncLocalFilesResponse syncResult) async {
+    List<dynamic> newMemories = syncResult.newMemoryIds;
+    List<dynamic> updatedMemories = syncResult.updatedMemoryIds;
+
+    List<Future<ServerMemory?>> newMemoriesFutures = newMemories.map((item) => getMemoryDetails(item)).toList();
+
+    List<Future<ServerMemory?>> updatedMemoriesFutures = updatedMemories.map((item) => getMemoryDetails(item)).toList();
+    var syncedMemories = {'new_memories': [], 'updated_memories': []};
+    try {
+      final newMemoriesResponses = await Future.wait(newMemoriesFutures);
+      syncedMemories['new_memories'] = newMemoriesResponses;
+
+      final updatedMemoriesResponses = await Future.wait(updatedMemoriesFutures);
+      syncedMemories['updated_memories'] = updatedMemoriesResponses;
+      addSyncedMemoriesToGroupedMemories(syncedMemories);
+    } catch (e) {
+      print('Error during API calls: $e');
+    }
+  }
+
+  void addSyncedMemoriesToGroupedMemories(Map syncedMemories) {
+    syncedMemoriesPointers = {'new_memories': [], 'updated_memories': []};
+    if (syncedMemories['new_memories'] != []) {
+      for (var memory in syncedMemories['new_memories']!) {
+        if (memory != null && memory.status == MemoryStatus.completed) {
+          addMemory(memory);
+        }
+      }
+    }
+    if (syncedMemories['updated_memories'] != []) {
+      for (var memory in syncedMemories['updated_memories']!) {
+        if (memory != null && memory.status == MemoryStatus.completed) {
+          upsertMemory(memory);
+          syncedMemoriesPointers!['updated_memories']!.add(getMemoryDateAndIndex(memory));
+        }
+      }
+    }
+    for (var memory in syncedMemories['new_memories']!) {
+      if (memory != null && memory.status == MemoryStatus.completed) {
+        syncedMemoriesPointers!['new_memories']!.add(getMemoryDateAndIndex(memory));
+      }
+    }
+    if (syncedMemories['updated_memories'] != []) {
+      for (var memory in syncedMemories['updated_memories']!) {
+        if (memory != null && memory.status == MemoryStatus.completed) {
+          syncedMemoriesPointers!['updated_memories']!.add(getMemoryDateAndIndex(memory));
+        }
+      }
+    }
+  }
+
+  void updateSyncedMemory(ServerMemory memory) {
+    if (syncedMemoriesPointers!['updated_memories'] != null) {
+      var idx = syncedMemoriesPointers!['updated_memories']!.indexWhere((element) {
+        dynamic e = element;
+        return e.$3.id == memory.id;
+      });
+      if (idx != -1) {
+        updateMemory(memory);
+        syncedMemoriesPointers!['updated_memories']![idx] = getMemoryDateAndIndex(memory);
+      }
+    }
+    // if new_memories also include the same memory, update it coz we currently have duplicates
+    if (syncedMemoriesPointers!['new_memories'] != null) {
+      var idx = syncedMemoriesPointers!['new_memories']!.indexWhere((element) {
+        dynamic e = element;
+        return e.$3.id == memory.id;
+      });
+      if (idx != -1) {
+        syncedMemoriesPointers!['new_memories']![idx] = getMemoryDateAndIndex(memory);
+      }
+    }
+  }
+
+  (DateTime, int, ServerMemory) getMemoryDateAndIndex(ServerMemory memory) {
+    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
+    var idx = groupedMemories[date]!.indexWhere((element) => element.id == memory.id);
+    if (idx == -1 && groupedMemories.containsKey(date)) {
+      groupedMemories[date]!.add(memory);
+    }
+    return (date, idx, memory);
+  }
+
+  Future<ServerMemory?> getMemoryDetails(String memoryId) async {
+    var memory = await getMemoryById(memoryId);
+    return memory;
+  }
+
+  void clearSyncResult() {
+    syncCompleted = false;
+    notifyListeners();
+  }
+
+  void setIsSyncing(bool value) {
+    isSyncing = value;
+    notifyListeners();
   }
 }

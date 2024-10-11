@@ -1,12 +1,20 @@
 name: Deploy Backend to Cloud RUN
 
-# TODO: determine if changes to backend folder before pushing
-
 on:
-  push:
-    branches: [ "main", "development" ]
-    paths:
-      - 'backend/**'
+#  push:
+#    branches: [ "main" ]
+#    paths:
+#      - 'backend/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment to deploy to'
+        required: true
+        default: 'development'
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
 
 env:
   SERVICE: backend
@@ -14,13 +22,19 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
       id-token: 'write'
 
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Environment Input
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@v2
 

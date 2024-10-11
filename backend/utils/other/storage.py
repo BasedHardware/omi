@@ -18,6 +18,7 @@ else:
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 
 
 # *******************************************
@@ -150,18 +151,9 @@ def delete_postprocessing_audio(file_path: str):
     blob.delete()
 
 
-def create_signed_postprocessing_audio_url(file_path: str):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
-    return _get_signed_url(blob, 15)
-
-
-def upload_postprocessing_audio_bytes(file_path: str, audio_buffer: bytes):
-    bucket = storage_client.bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
-    blob.upload_from_string(audio_buffer)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
-
+# ***********************************
+# ************* SDCARD **************
+# ***********************************
 
 def upload_sdcard_audio(file_path: str):
     bucket = storage_client.bucket(postprocessing_audio_bucket)
@@ -208,6 +200,32 @@ def delete_all_memory_recordings(uid: str):
     for blob in blobs:
         blob.delete()
 
+
+# ********************************************
+# ************* SYNCING FILES **************
+# ********************************************
+def get_syncing_file_temporal_url(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
+
+def get_syncing_file_temporal_signed_url(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.upload_from_filename(file_path)
+    return _get_signed_url(blob, 15)
+
+
+def delete_syncing_temporal_file(file_path: str):
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    blob.delete()
+
+
+# **********************************
+# ************* UTILS **************
+# **********************************
 
 def _get_signed_url(blob, minutes):
     if cached := get_cached_signed_url(blob.name):

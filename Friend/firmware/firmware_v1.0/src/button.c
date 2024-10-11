@@ -8,7 +8,7 @@
 #include <zephyr/drivers/gpio.h>
 #include "button.h"
 #include "transport.h"
-
+#include "speaker.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
@@ -159,7 +159,7 @@ static inline void notify_long_tap()
     }
 }
 
-#define LONG_PRESS_INTERVAL 50
+#define LONG_PRESS_INTERVAL 25
 #define SINGLE_PRESS_INTERVAL 2
 void check_button_level(struct k_work *work_item) 
 {
@@ -207,7 +207,28 @@ void check_button_level(struct k_work *work_item)
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
                 //turn off herre
+                
                 is_off = !is_off;
+                play_haptic_milli(100);
+                if (is_off)
+                {
+                    bt_disable();
+                    int err = bt_le_adv_stop();
+                    if (err)
+                    {
+                        printk("Failed to stop Bluetooth %d\n",err);
+                    }
+                }
+                else
+                {
+                    int err = bt_enable(NULL);
+                    if (err)
+                    {
+                        printk("Failed to enable Bluetooth %d\n",err);
+                    }
+                    bt_on();
+                    
+                }
                 current_button_state = GRACE;
                 reset_count();
             }
@@ -251,7 +272,28 @@ void check_button_level(struct k_work *work_item)
             if (inc_count_1 > threshold) 
             {
                 notify_long_tap();
+                is_off = !is_off;
                 //Fire the notify and enter a grace period
+                play_haptic_milli(100);
+                if (is_off)
+                {
+                    bt_disable();
+                    int err = bt_le_adv_stop();
+                    if (err)
+                    {
+                        printk("Failed to stop Bluetooth %d\n",err);
+                    }
+                }
+                else
+                {
+                    int err = bt_enable(NULL);
+                    if (err)
+                    {
+                        printk("Failed to enable Bluetooth %d\n",err);
+                    }
+                    bt_on();
+                    
+                }
                 current_button_state = GRACE;
                 reset_count();
             }
@@ -267,7 +309,7 @@ void check_button_level(struct k_work *work_item)
                 notify_unpress();
             }
             inc_count_0++;
-            if (inc_count_0 > 10) 
+            if (inc_count_0 > 1) 
             {
                 current_button_state = IDLE;
                 reset_count();
