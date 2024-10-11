@@ -18,7 +18,7 @@ class BatteryInfoWidget extends StatelessWidget {
       builder: (context, isMemoriesPage, child) {
         return Consumer<DeviceProvider>(
           builder: (context, deviceProvider, child) {
-            if (deviceProvider.connectedDevice != null && deviceProvider.batteryLevel != -1) {
+            if (deviceProvider.connectedDevice != null) {
               return GestureDetector(
                 onTap: deviceProvider.connectedDevice == null
                     ? null
@@ -51,7 +51,9 @@ class BatteryInfoWidget extends StatelessWidget {
                                 ? const Color.fromARGB(255, 0, 255, 8)
                                 : deviceProvider.batteryLevel > 20
                                     ? Colors.yellow.shade700
-                                    : Colors.red,
+                                    : deviceProvider.batteryLevel > 0
+                                        ? Colors.red
+                                        : Colors.grey,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -64,7 +66,7 @@ class BatteryInfoWidget extends StatelessWidget {
                             : const SizedBox.shrink(),
                         isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                         Text(
-                          '${deviceProvider.batteryLevel.toString()}%',
+                          deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ],
