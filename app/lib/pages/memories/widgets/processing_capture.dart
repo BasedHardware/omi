@@ -234,7 +234,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     // Right
     Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
-    if (deviceServiceStateOk && transcriptServiceStateOk) {
+    if (transcriptServiceStateOk) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
     } else if (isHavingDesireDevice && (!internetConnectionStateOk || !transcriptServiceStateOk)) {
