@@ -20,26 +20,6 @@ from utils.stt.streaming import *
 router = APIRouter()
 
 
-# Minor script generate wav from raw audio bytes
-# import wave
-# import os
-#
-# # Parameters for the WAV file
-# sample_rate = 16000  # Assuming a sample rate of 16000 Hz
-# channels = 1  # Mono audio
-# sample_width = 2  # Assuming 16-bit audio (2 bytes per sample)
-#
-# # Read the raw audio data from the file
-# with open("audio.raw", "rb") as raw_file:
-#     raw_audio_data = raw_file.read()
-#
-# if __name__ == '__main__':
-#     with wave.open("output.wav", "wb") as wav_file:
-#         wav_file.setnchannels(channels)  # Set mono/stereo
-#         wav_file.setsampwidth(sample_width)  # Set sample width to 16 bits (2 bytes)
-#         wav_file.setframerate(sample_rate)  # Set sample rate to 16000 Hz
-#         wav_file.writeframes(raw_audio_data)  # Write raw audio data to WAV
-
 class STTService(str, Enum):
     deepgram = "deepgram"
     soniox = "soniox"
@@ -160,7 +140,8 @@ async def _websocket_util(
             return
         await _create_memory(memory)
 
-    memory_creation_task_lock = False
+    # memory_creation_task_lock = False
+    memory_creation_task_lock = asyncio.Lock()
     memory_creation_task = None
     seconds_to_trim = None
     seconds_to_add = None
@@ -208,15 +189,9 @@ async def _websocket_util(
         redis_db.set_in_progress_memory_id(uid, memory.id)
         return memory
 
-    async def create_memory_creation_task():
+    async def create_memory_on_segment_received_task():
         nonlocal memory_creation_task
-        nonlocal memory_creation_task_lock
-
-        if memory_creation_task_lock:
-            return
-
-        memory_creation_task_lock = True
-        try:
+        async with memory_creation_task_lock:
             if memory_creation_task is not None:
                 memory_creation_task.cancel()
                 try:
@@ -224,9 +199,6 @@ async def _websocket_util(
                 except asyncio.CancelledError:
                     print("memory_creation_task is cancelled now")
             memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
-
-        finally:
-            memory_creation_task_lock = False
 
     def stream_transcript(segments, _):
         nonlocal websocket
@@ -239,7 +211,7 @@ async def _websocket_util(
         if seconds_to_trim is None:
             seconds_to_trim = segments[0]["start"]
 
-        asyncio.run_coroutine_threadsafe(create_memory_creation_task(), loop)
+        asyncio.run_coroutine_threadsafe(create_memory_on_segment_received_task(), loop)
 
         # Segments aligning duration seconds.
         if seconds_to_add:
@@ -330,14 +302,14 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
-                # if include_speech_profile and sample_rate == 8000:  # don't do for opus 1.0.4 for now
-                #     # vad_sample_size = 320 if sample_rate == 16000 else 160
-                #     # if len(data) < vad_sample_size:
-                #     #     data = data[:vad_sample_size]
-                #     #     data = data + bytes([0x00] * (vad_sample_size - len(data)))
-                #     has_speech = w_vad.is_speech(data, sample_rate)
-                #     if not has_speech:
-                #         continue
+                if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
+                    vad_sample_size = 320 if sample_rate == 16000 else 160
+                    if len(data) < vad_sample_size:
+                        data = data[:vad_sample_size]
+                        data = data + bytes([0x00] * (vad_sample_size - len(data)))
+                    has_speech = w_vad.is_speech(data, sample_rate)
+                    if not has_speech:
+                        continue
 
                 if soniox_socket is not None:
                     await soniox_socket.send(data)
