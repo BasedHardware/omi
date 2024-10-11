@@ -163,6 +163,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     for (var memory in memories) {
       if (memory.structured.events.isNotEmpty &&
           !memory.structured.events.first.created &&
+          memory.startedAt != null &&
           memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
         _handleCalendarCreation(memory);
       }
