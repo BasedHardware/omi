@@ -5,7 +5,7 @@ import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from models.chat import Message
 from models.facts import Fact
@@ -273,8 +273,11 @@ def retrieve_context_topics(messages: List[Message]) -> List[str]:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(TopicsContext)
-    response: TopicsContext = with_parser.invoke(prompt)
-    topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
+    try:
+        response: TopicsContext = with_parser.invoke(prompt)
+        topics = list(map(lambda x: str(x.value).capitalize(), response.topics))
+    except ValidationError:
+        topics = [CategoryEnum.other.value.capitalize()]
     return topics
 
 
