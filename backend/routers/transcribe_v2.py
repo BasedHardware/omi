@@ -50,7 +50,6 @@ def retrieve_in_progress_memory(uid):
         existing = memories_db.get_in_progress_memory(uid)
     return existing
 
-
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True
@@ -72,6 +71,20 @@ async def _websocket_util(
     # Initiate a separate vad for each websocket
     w_vad = webrtcvad.Vad()
     w_vad.set_mode(1)
+
+    # A  frame must be either 10, 20, or 30 ms in duration
+    def _has_speech(data, sample_rate):
+        sample_size = 320 if sample_rate == 16000 else 160
+        offset = 0
+        while offset < len(data):
+            sample = data[offset:offset+sample_size]
+            if len(sample) < sample_size:
+                sample = sample + bytes([0x00] * (sample_size-len(sample) % sample_size))
+            has_speech = w_vad.is_speech(sample, sample_rate)
+            if has_speech:
+                return True
+            offset += sample_size
+        return False
 
     # Stream transcript
     loop = asyncio.get_event_loop()
@@ -311,11 +324,7 @@ async def _websocket_util(
                     data = decoder.decode(bytes(data), frame_size=160)
 
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
-                    vad_sample_size = 320 if sample_rate == 16000 else 160
-                    if len(data) < vad_sample_size:
-                        data = data[:vad_sample_size]
-                        data = data + bytes([0x00] * (vad_sample_size - len(data)))
-                    has_speech = w_vad.is_speech(data, sample_rate)
+                    has_speech = _has_speech(data, sample_rate)
                     if not has_speech:
                         continue
 
