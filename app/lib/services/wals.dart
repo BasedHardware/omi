@@ -40,6 +40,7 @@ enum WalStatus {
   inProgress,
   miss,
   synced,
+  corrupted,
 }
 
 enum WalStorage {
@@ -236,7 +237,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
       final wal = _wals[i];
 
       if (wal.storage == WalStorage.mem) {
-        final directory = await getTemporaryDirectory();
+        final directory = await getApplicationDocumentsDirectory();
         String filePath = '${directory.path}/${wal.getFileName()}';
         List<int> data = [];
         for (int i = 0; i < wal.data.length; i++) {
@@ -429,6 +430,7 @@ class WalService implements IWalService, IWalSocketServiceListener {
           files.add(file);
           debugPrint("sync wal ${wal.id} file ${wal.filePath}");
         } catch (e) {
+          wal.status = WalStatus.corrupted;
           debugPrint(e.toString());
           continue;
         }
