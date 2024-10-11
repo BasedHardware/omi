@@ -694,6 +694,12 @@ extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
+int bt_on()
+{
+    int err = bt_enable(NULL);
+    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+
+}
 
 int transport_start()
 {

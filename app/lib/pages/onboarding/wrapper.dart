@@ -8,14 +8,12 @@ import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/auth.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
-import 'package:friend_private/pages/onboarding/memory_created_widget.dart';
 import 'package:friend_private/pages/onboarding/name/name_widget.dart';
 import 'package:friend_private/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:friend_private/pages/onboarding/speech_profile_widget.dart';
 import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -37,13 +35,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void initState() {
     //TODO: Change from tab controller to default controller and use provider (part of instabug cleanup) @mdmohsin7
-    _controller = TabController(length: hasSpeechProfile ? 5 : 7, vsync: this);
+    _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (isSignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        _goNext();
+        if (mounted) {
+          context.read<HomeProvider>().setupHasSpeakerProfile();
+          _goNext();
+        }
       }
     });
     super.initState();
@@ -146,23 +146,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       pages.addAll([
         SpeechProfileWidget(
           goNext: () {
-            if (context.read<SpeechProfileProvider>().memory == null) {
-              routeToPage(context, const HomePageWrapper(), replace: true);
-            } else {
-              _goNext();
-            }
+            routeToPage(context, const HomePageWrapper(), replace: true);
+            // if (context.read<SpeechProfileProvider>().memory == null) {
+            // } else {
+            //   _goNext();
+            // }
             MixpanelManager().onboardingStepCompleted('Speech Profile');
           },
           onSkip: () {
             routeToPage(context, const HomePageWrapper(), replace: true);
           },
         ),
-        MemoryCreatedWidget(
-          goNext: () {
-            // _goNext();
-            MixpanelManager().onboardingStepCompleted('Memory Created');
-          },
-        ),
+        // MemoryCreatedWidget(
+        //   goNext: () {
+        //     // _goNext();
+        //     MixpanelManager().onboardingStepCompleted('Memory Created');
+        //   },
+        // ),
       ]);
     }
 
@@ -208,8 +208,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           ),
                     SizedBox(
                       height: (_controller!.index == 5 || _controller!.index == 6 || _controller!.index == 7)
-                          ? max(MediaQuery.of(context).size.height - 500 - 10, maxHeightWithTextScale(context))
-                          : max(MediaQuery.of(context).size.height - 500 - 30, maxHeightWithTextScale(context)),
+                          ? max(MediaQuery.of(context).size.height - 500 - 10,
+                              maxHeightWithTextScale(context, _controller!.index))
+                          : max(MediaQuery.of(context).size.height - 500 - 30,
+                              maxHeightWithTextScale(context, _controller!.index)),
                       child: Padding(
                         padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                         child: TabBarView(
@@ -291,10 +293,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 }
 
-double maxHeightWithTextScale(BuildContext context) {
+double maxHeightWithTextScale(BuildContext context, int index) {
   double textScaleFactor = MediaQuery.of(context).textScaleFactor;
   if (textScaleFactor > 1.0) {
-    return 405;
+    if (index == 0) {
+      return 200;
+    } else {
+      return 405;
+    }
   } else {
     return 305;
   }

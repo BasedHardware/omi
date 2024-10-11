@@ -36,9 +36,7 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
-    return startedAt == null
-        ? dateTimeFormat('h:mm a', createdAt)
-        : '${dateTimeFormat('h:mm a', startedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)}';
   }
 
   @override
@@ -57,7 +55,9 @@ class GetSummaryWidgets extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              memory.source == MemorySource.sdcard ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}' : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
+              memory.source == MemorySource.sdcard
+                  ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}'
+                  : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),
@@ -308,20 +308,20 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
       if (provider.loadingReprocessMemory && provider.reprocessMemoryId == provider.memory.id) {
-        return const Center(
+        return Center(
           child: Padding(
-            padding: EdgeInsets.only(top: 18.0),
+            padding: const EdgeInsets.only(top: 18.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                CircularProgressIndicator(
+                const CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Text(
-                  'Re-summarizing memory...\nThis may take a few seconds',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  '${provider.memory.discarded ? 'Summarizing' : 'Re-summarizing'} memory...\nThis may take a few seconds',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
             ),
@@ -361,7 +361,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Re-summarise', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -939,7 +939,7 @@ class GetSheetMainOptions extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('Re-summarize'),
+                  title: Text(provider.memory.discarded ? 'Summarize' : 'Re-summarize'),
                   leading: provider.loadingReprocessMemory
                       ? const SizedBox(
                           width: 24,

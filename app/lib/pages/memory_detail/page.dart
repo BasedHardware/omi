@@ -9,10 +9,8 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -113,37 +111,21 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                     Expanded(child: Text("${provider.structured.getEmoji()}")),
                     IconButton(
                       onPressed: () async {
-                        if (provider.memory.failed) {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () => Navigator.pop(context),
-                              'Options not available',
-                              'This memory failed when processing. Options are not available yet, please try again later.',
-                              singleButton: true,
-                              okButtonText: 'Ok',
+                        await showModalBottomSheet(
+                          context: context,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
                             ),
-                          );
-                          return;
-                        } else {
-                          await showModalBottomSheet(
-                            context: context,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(16),
-                                topRight: Radius.circular(16),
-                              ),
-                            ),
-                            builder: (context) {
-                              return const ShowOptionsBottomSheet();
-                            },
-                          ).whenComplete(() {
-                            provider.toggleShareOptionsInSheet(false);
-                            provider.toggleDevToolsInSheet(false);
-                          });
-                        }
+                          ),
+                          builder: (context) {
+                            return const ShowOptionsBottomSheet();
+                          },
+                        ).whenComplete(() {
+                          provider.toggleShareOptionsInSheet(false);
+                          provider.toggleDevToolsInSheet(false);
+                        });
                       },
                       icon: const Icon(Icons.more_horiz),
                     ),
@@ -385,45 +367,45 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  !provider.hasAudioRecording
-                      ? GestureDetector(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  Navigator.pop(context);
-                                  routeToPage(context, const RecordingsStoragePermission());
-                                },
-                                'Can\'t be used for speech training',
-                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View',
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text('Can\'t be used for speech training',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .copyWith(decoration: TextDecoration.underline)),
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 12),
-                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox(),
+                  // !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  // !provider.hasAudioRecording
+                  //     ? GestureDetector(
+                  //         onTap: () {
+                  //           showDialog(
+                  //             context: context,
+                  //             builder: (c) => getDialog(
+                  //               context,
+                  //               () => Navigator.pop(context),
+                  //               () {
+                  //                 Navigator.pop(context);
+                  //                 routeToPage(context, const RecordingsStoragePermission());
+                  //               },
+                  //               'Can\'t be used for speech training',
+                  //               'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                  //               okButtonText: 'View',
+                  //             ),
+                  //           );
+                  //         },
+                  //         child: Padding(
+                  //           padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  //           child: Row(
+                  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  //             crossAxisAlignment: CrossAxisAlignment.center,
+                  //             children: [
+                  //               Text('Can\'t be used for speech training',
+                  //                   style: Theme.of(context)
+                  //                       .textTheme
+                  //                       .bodyMedium!
+                  //                       .copyWith(decoration: TextDecoration.underline)),
+                  //               const Padding(
+                  //                 padding: EdgeInsets.only(right: 12),
+                  //                 child: Icon(Icons.info, color: Colors.grey, size: 20),
+                  //               ),
+                  //             ],
+                  //           ),
+                  //         ),
+                  //       )
+                  //     : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),

@@ -104,7 +104,7 @@ from utils.other.storage import get_profile_audio_if_exists
 #
 #
 # def short_transcript(file_path: str, language: str, uid: str, has_speech_profile: bool, sample_rate=8000):
-#     is_english = language == 'en'  # TODO: when will they fix this? Test in bee
+#     is_english = language == 'en'
 #     with SpeechClient() as client:
 #         return transcribe_file_short(
 #             file_path,

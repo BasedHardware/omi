@@ -4,7 +4,7 @@ import time
 from typing import List
 
 import websockets
-from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, ListenWebSocketClient
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
 import database.notifications as notification_db
@@ -94,8 +94,7 @@ deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(o
 
 
 async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int,
-        preseconds: int = 0,
+        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int, preseconds: int = 0,
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -171,12 +170,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             print("Speech Started")
 
         def on_utterance_end(self, utterance_end, **kwargs):
-            print("Utterance End")
-            global is_finals
-            if len(is_finals) > 0:
-                utterance = " ".join(is_finals)
-                print(f"Utterance End: {utterance}")
-                is_finals = []
+            pass
 
         def on_close(self, close, **kwargs):
             print("Connection Closed")
@@ -266,9 +260,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
     try:
         # Connect to Soniox WebSocket
         print("Connecting to Soniox WebSocket...")
-        soniox_socket = await websockets.connect(uri)
+        soniox_socket = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
         print("Connected to Soniox WebSocket.")
-
         # Send the initial request
         await soniox_socket.send(json.dumps(request))
         print(f"Sent initial request: {request}")
@@ -333,6 +326,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
 
         # Start the on_message coroutine
         asyncio.create_task(on_message())
+        asyncio.create_task(soniox_socket.keepalive_ping())
 
         # Return the Soniox WebSocket object
         return soniox_socket
@@ -342,7 +336,8 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         raise  # Re-raise the exception to be handled by the caller
 
 
-async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str, preseconds: int = 0):
+async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str,
+                                     preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
 

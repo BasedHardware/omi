@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -6,7 +8,6 @@ import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 class MemoryCapturingPage extends StatefulWidget {
@@ -25,13 +26,51 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
+  Timer? _timer;
+  int _elapsedTime = 0;
 
   @override
   void initState() {
     _controller = TabController(length: 2, vsync: this, initialIndex: 0);
     _controller!.addListener(() => setState(() {}));
     showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final captureProvider = context.read<CaptureProvider>();
+      if (captureProvider.segments.isNotEmpty) {
+        if (captureProvider.inProgressMemory != null) {
+          setState(() {
+            _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressMemory!.createdAt);
+          });
+        }
+        _startTimer();
+      }
+    });
     super.initState();
+  }
+
+  int convertDateTimeToSeconds(DateTime dateTime) {
+    DateTime now = DateTime.now();
+    Duration difference = now.difference(dateTime);
+
+    return difference.inSeconds;
+  }
+
+  String convertToHHMMSS(int seconds) {
+    int hours = seconds ~/ 3600;
+    int minutes = (seconds % 3600) ~/ 60;
+    int remainingSeconds = seconds % 60;
+
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+
+    return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _elapsedTime++;
+      });
+    });
   }
 
   void _pushNewMemory(BuildContext context, memory) async {
@@ -45,14 +84,20 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
   }
 
   @override
+  dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         // Track memory
-        if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
-            (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
-          _pushNewMemory(context, provider.memoryProvider!.memories.first);
-        }
+        // if ((provider.memoryProvider?.memories ?? []).isNotEmpty &&
+        //     (provider.memoryProvider!.memories.first.id != widget.topMemoryId || widget.topMemoryId == null)) {
+        //   _pushNewMemory(context, provider.memoryProvider!.memories.first);
+        // }
 
         // Memory source
         var memorySource = MemorySource.friend;
@@ -123,11 +168,14 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                     children: [
                                       const SizedBox(height: 80),
                                       Center(
-                                          child: Text(memorySource == MemorySource.friend ? "No transcript" : "Empty")),
+                                        child: Text(
+                                          memorySource == MemorySource.friend ? "No transcript" : "Empty",
+                                        ),
+                                      ),
                                     ],
                                   )
                                 : getTranscriptWidget(
-                                    provider.memoryCreating,
+                                    false,
                                     provider.segments,
                                     [],
                                     deviceProvider.connectedDevice,
@@ -148,7 +196,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                         ? "No summary"
                                         : "Conversation is summarized after 2 minutes of no speech 🤫",
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(fontSize: 16),
+                                    style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                                   ),
                                 ),
                               ),
@@ -174,7 +222,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                         duration: const Duration(milliseconds: 200),
                         height: _controller?.index == 0 ? 0 : 30,
                         child: Text(
-                          provider.segments.isEmpty ? '' : provider.segments.last.getTimestampString().split(' - ')[1],
+                          _elapsedTime > 0 ? convertToHHMMSS(_elapsedTime) : "",
                           style: const TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
@@ -190,7 +238,8 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                           onTap: () {
                             if (provider.segments.isNotEmpty) {
                               if (!showSummarizeConfirmation) {
-                                context.read<CaptureProvider>().createMemory();
+                                context.read<CaptureProvider>().forceProcessingCurrentMemory();
+                                Navigator.of(context).pop();
                                 return;
                               }
                               showDialog(
@@ -217,7 +266,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                           onConfirm: () {
                                             SharedPreferencesUtil().showSummarizeConfirmation =
                                                 showSummarizeConfirmation;
-                                            context.read<CaptureProvider>().createMemory();
+                                            context.read<CaptureProvider>().forceProcessingCurrentMemory();
                                             Navigator.of(context).pop();
                                             Navigator.of(context).pop();
                                           },

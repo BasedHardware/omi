@@ -3,8 +3,10 @@ permissions:
   contents: read
   issues: write
 on:
-  issues:
-    types: [ opened, edited ]
+  workflow_dispatch:
+
+#  issues:
+#    types: [ opened, edited ]
 jobs:
   handle_issues:
     runs-on: ubuntu-latest

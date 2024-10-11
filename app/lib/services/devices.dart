@@ -16,6 +16,8 @@ abstract class IDeviceService {
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
+
+  DateTime? getFirstConnectedAt();
 }
 
 enum DeviceServiceStatus {
@@ -48,6 +50,8 @@ class DeviceService implements IDeviceService {
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
+
+  DateTime? _firstConnectedAt;
 
   @override
   Future<void> discover({
@@ -92,27 +96,6 @@ class DeviceService implements IDeviceService {
   Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
     _bleDevices = results.where((r) => r.device.platformName.isNotEmpty).toList();
     _bleDevices.sort((a, b) => b.rssi.compareTo(a.rssi));
-    // Set devices
-
-    // _devices = _bleDevices.map<BtDevice>((deviceResult) {
-    //   DeviceType? deviceType;
-    //   if (deviceResult.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
-    //     deviceType = DeviceType.friend;
-    //   } else if (deviceResult.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
-    //     deviceType = DeviceType.frame;
-    //   }
-    //   if (deviceType != null) {
-    //     deviceTypeMap[deviceResult.device.remoteId.toString()] = deviceType;
-    //   } else if (deviceTypeMap.containsKey(deviceResult.device.remoteId.toString())) {
-    //     deviceType = deviceTypeMap[deviceResult.device.remoteId.toString()];
-    //   }
-    //   return BtDevice(
-    //     name: deviceResult.device.platformName,
-    //     id: deviceResult.device.remoteId.str,
-    //     rssi: deviceResult.rssi,
-    //     type: deviceType,
-    //   );
-    // }).toList();
     _devices = _bleDevices.map<BtDevice>((e) => BtDevice.fromScanResult(e)).toList();
     onDevices(devices);
 
@@ -249,9 +232,19 @@ class DeviceService implements IDeviceService {
 
       // connect
       await _connectToDevice(deviceId);
+
+      if (_firstConnectedAt == null) {
+        _firstConnectedAt = DateTime.now();
+      }
+
       return _connection;
     } finally {
       mutex = false;
     }
+  }
+
+  @override
+  DateTime? getFirstConnectedAt() {
+    return _firstConnectedAt;
   }
 }
