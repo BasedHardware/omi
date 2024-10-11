@@ -275,7 +275,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
       if (context.read<AuthenticationProvider>().user != null) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        await IntercomManager.instance.intercom.loginIdentifiedUser(
+        IntercomManager.instance.intercom.loginIdentifiedUser(
           userId: FirebaseAuth.instance.currentUser!.uid,
         );
         context.read<MessageProvider>().setMessagesFromCache();
