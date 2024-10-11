@@ -428,10 +428,11 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   void updateSyncedMemory(ServerMemory memory) {
-    syncedMemoriesPointers.where((element) => element.memory.id == memory.id).forEach((e) {
-      updateMemory(memory);
-      e.copyWith(memory: memory);
-    });
+    var id = syncedMemoriesPointers.indexWhere((element) => element.memory.id == memory.id);
+    if (id != -1) {
+      syncedMemoriesPointers[id] = syncedMemoriesPointers[id].copyWith(memory: memory);
+    }
+    notifyListeners();
   }
 
   (DateTime, int) getMemoryDateAndIndex(ServerMemory memory) {
