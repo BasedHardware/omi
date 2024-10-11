@@ -10,7 +10,6 @@ import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_plugins_dropdown_widget.dart';
-import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
@@ -60,7 +59,9 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
-      context.read<PluginProvider>().setSelectedChatPluginId(null);
+      if (mounted) {
+        context.read<PluginProvider>().setSelectedChatPluginId(null);
+      }
     });
     super.initState();
   }
@@ -144,8 +145,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await context.read<HomeProvider>().setUserPeople();
 
         // Start stream recording
-        await Provider.of<CaptureProvider>(context, listen: false)
-            .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
+        if (mounted) {
+          await Provider.of<CaptureProvider>(context, listen: false)
+              .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
+        }
       }
     });
 
