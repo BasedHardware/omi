@@ -3,13 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
@@ -25,15 +24,16 @@ class SpeechProfileProvider extends ChangeNotifier
   bool loading = false;
   BtDevice? device;
 
-  final targetWordsCount = 70;
-  final maxDuration = 90;
+  final targetWordsCount = 30; //TODO: 15 seems way too less
+  final maxDuration = 150;
+
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
   WavBytesUtil audioStorage = WavBytesUtil(codec: BleAudioCodec.opus);
   StreamSubscription? _bleBytesStream;
 
-  TranscripSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _socket;
 
   bool startedRecording = false;
   double percentageCompleted = 0;
@@ -47,7 +47,6 @@ class SpeechProfileProvider extends ChangeNotifier
   String text = '';
   String message = '';
 
-  late bool _isFromOnboarding;
   late Function? _finalizedCallback;
 
   /// only used during onboarding /////
@@ -84,8 +83,7 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> initialise(bool isFromOnboarding, {Function? finalizedCallback}) async {
-    _isFromOnboarding = isFromOnboarding;
+  Future<void> initialise({Function? finalizedCallback}) async {
     _finalizedCallback = finalizedCallback;
     setInitialising(true);
     device = deviceProvider?.connectedDevice;
@@ -145,14 +143,18 @@ class SpeechProfileProvider extends ChangeNotifier
       if (uploadingProfile || profileCompleted) return;
 
       int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-      if (duration < 5 || duration > 120) {
-        notifyError('INVALID_RECORDING');
+      if (duration < 10 || duration > 155) {
+        if (percentageCompleted < 80) {
+          notifyError('NO_SPEECH');
+          return;
+        }
       }
 
       String text = segments.map((e) => e.text).join(' ').trim();
       if (text.split(' ').length < (targetWordsCount / 2)) {
         // 25 words
         notifyError('TOO_SHORT');
+        return;
       }
       uploadingProfile = true;
       notifyListeners();
@@ -169,9 +171,9 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingText('Personalizing your experience...');
       SharedPreferencesUtil().hasSpeakerProfile = true;
-      if (_isFromOnboarding) {
-        await createMemory();
-      }
+      // if (_isFromOnboarding) {
+      //   await createMemory();
+      // }
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -223,7 +225,7 @@ class SpeechProfileProvider extends ChangeNotifier
         },
       );
       debugPrint('speakerToWords: $speakerToWords');
-      if (speakerToWords.values.every((element) => element / segments.length > 0.2)) {
+      if (speakerToWords.values.every((element) => element / segments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
     }
@@ -233,6 +235,8 @@ class SpeechProfileProvider extends ChangeNotifier
     segments.clear();
     streamStartedAtSecond = null;
     audioStorage.clearAudioBytes();
+    text = '';
+    percentageCompleted = 0;
     notifyListeners();
   }
 
@@ -271,21 +275,6 @@ class SpeechProfileProvider extends ChangeNotifier
     profileCompleted = false;
     await _socket?.stop(reason: 'closing');
     notifyListeners();
-  }
-
-  Future<bool?> createMemory({bool forcedCreation = false}) async {
-    debugPrint('_createMemory forcedCreation: $forcedCreation');
-
-    CreateMemoryResponse? result = await createMemoryServer(
-      startedAt: DateTime.now().subtract(Duration(seconds: segments.last.end.toInt())),
-      finishedAt: DateTime.now(),
-      transcriptSegments: segments,
-      geolocation: null, // TODO: include geolocation
-    );
-    if (result == null || result.memory == null) return false;
-    memory = result.memory;
-    notifyListeners();
-    return true;
   }
 
   @override
