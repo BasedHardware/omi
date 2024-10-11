@@ -70,9 +70,6 @@ class CaptureProvider extends ChangeNotifier
 
   bool hasTranscripts = false;
 
-  // bool memoryCreating = false;
-  bool audioBytesConnected = false;
-
   StreamSubscription? _bleBytesStream;
 
   get bleBytesStream => _bleBytesStream;
@@ -104,15 +101,14 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setAudioBytesConnected(bool value) {
-    audioBytesConnected = value;
-    notifyListeners();
-  }
-
   void _updateRecordingDevice(BtDevice? device) {
     debugPrint('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
     notifyListeners();
+  }
+
+  void updateRecordingDevice(BtDevice? device) {
+    _updateRecordingDevice(device);
   }
 
   Future _resetStateVariables() async {
@@ -195,7 +191,6 @@ class CaptureProvider extends ChangeNotifier
         }
       }
     });
-    setAudioBytesConnected(true);
     notifyListeners();
   }
 
@@ -212,7 +207,6 @@ class CaptureProvider extends ChangeNotifier
   void _cleanupCurrentState() {
     closeBleStream();
     cancelMemoryCreationTimer();
-    setAudioBytesConnected(false);
   }
 
   // TODO: use connection directly
@@ -278,14 +272,12 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // Why is the _recordingDevice null at this point?
-    if (!audioBytesConnected) {
-      if (_recordingDevice != null) {
-        await streamAudioToWs(_recordingDevice!.id, codec);
-      } else {
-        // Is the app in foreground when this happens?
-        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
-            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
-      }
+    if (_recordingDevice != null) {
+      await streamAudioToWs(_recordingDevice!.id, codec);
+    } else {
+      // Is the app in foreground when this happens?
+      Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+          message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
     }
 
     notifyListeners();
