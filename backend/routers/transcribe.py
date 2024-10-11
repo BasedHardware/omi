@@ -102,7 +102,7 @@ async def _websocket_util(
     loop = asyncio.get_event_loop()
 
     # Soft timeout, should < MODAL_TIME_OUT - 3m
-    timeout_seconds = 1920  # 32m
+    timeout_seconds = 420  # 7m
     started_at = time.time()
 
     def stream_transcript(segments, stream_id):

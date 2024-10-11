@@ -354,7 +354,7 @@ async def _websocket_util(
 
     # heart beat
     started_at = time.time()
-    timeout_seconds = 1920  # 32m # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
 
     async def send_heartbeat():
