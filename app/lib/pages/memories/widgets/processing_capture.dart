@@ -163,18 +163,19 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    bool isMemoryInProgress = captureProvider.inProgressMemory != null;
+    bool isHavingTranscript = captureProvider.segments.isNotEmpty;
+    bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    // print(
-    //     'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
+    //print(
+    //    'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
 
     // Left
     Widget? left;
-    if (isUsingPhoneMic || SharedPreferencesUtil().btDevice.id.isEmpty) {
+    if (isUsingPhoneMic || !isHavingDesireDevice) {
       left = Center(
         child: getPhoneMicRecordingButton(
           context,
@@ -182,29 +183,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
-    } else if (deviceServiceStateOk) {
-      left = Row(
-        children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              captureProvider.segments.isNotEmpty ? 'In progress...' : 'Say something...',
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      );
-    } else {
+    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript) {
+      return null; // not using phone mic, not ready
+    } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
           const Text(
@@ -226,11 +207,28 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           ),
         ],
       );
-    }
-
-    // Hide
-    if (left == null) {
-      return null;
+    } else {
+      left = Row(
+        children: [
+          const Text(
+            '🎙️',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              isHavingTranscript ? 'In progress...' : 'Say something...',
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+              maxLines: 1,
+            ),
+          ),
+        ],
+      );
     }
 
     // Right
@@ -239,24 +237,13 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     if (deviceServiceStateOk && transcriptServiceStateOk) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
-    } else if (!internetConnectionStateOk) {
-      stateText = "No connection";
-      statusIndicator = const CircularProgressIndicator(
-        strokeWidth: 2.0,
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      );
-    } else if (deviceServiceStateOk && !transcriptServiceStateOk) {
+    } else if (isHavingDesireDevice && (!internetConnectionStateOk || !transcriptServiceStateOk)) {
       stateText = "Reconnecting";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
       );
     }
-    // else if (captureProvider.memoryCreating) {
-    //   stateText = "Processing";
-    //   statusIndicator = const RecordingStatusIndicator();
-    // }
-
     Widget right = stateText.isNotEmpty
         ? Expanded(
             child: Row(
