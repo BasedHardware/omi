@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
@@ -260,7 +261,7 @@ class BtDevice {
           }
         }
       }
-    } catch (e) {
+    } on PlatformException catch (e) {
       Logger.error('Device Disconnected while getting device info: $e');
     }
 
