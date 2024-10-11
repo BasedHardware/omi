@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices.dart';
@@ -142,8 +143,8 @@ class FriendDeviceConnection extends DeviceConnection {
         if (device.isConnected) {
           try {
             await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
-          } catch (e) {
-            Logger.error('Error setting notify value for audio data stream');
+          } on PlatformException catch (e) {
+            Logger.error('Error setting notify value for audio data stream $e');
           }
         } else {
           Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
