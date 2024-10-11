@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
@@ -189,7 +190,8 @@ class _MyAppState extends State<MyApp> {
             textSelectionTheme: const TextSelectionThemeData(
               cursorColor: Colors.white,
               selectionColor: Colors.deepPurple,
-            )),
+            ),
+        ),
         themeMode: ThemeMode.dark,
         home: (SharedPreferencesUtil().onboardingCompleted && widget.isAuth)
             ? const HomePageWrapper()

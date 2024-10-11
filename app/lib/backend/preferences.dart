@@ -177,6 +177,19 @@ class SharedPreferencesUtil {
     saveStringList('subProductList', products);
   }
 
+  /// Subscription plugins get
+  List<String> get activeSubscriptionPluginList {
+    print('------ Get sub -----');
+    print(getStringList('activeSubPluginList'));
+   return getStringList('activeSubPluginList') ?? [];
+  }
+
+  set activeSubscriptionPluginList(List<String> value) {
+    print('value');
+    print(value);
+    saveStringList('activeSubPluginList', value);
+  }
+
   /*List<um.UserMemoriesModel> get pluginMemoriesList {
     final String plugins = getString('pluginMemories') ?? "";
     final List<um.UserMemoriesModel> userMemoriesModels =

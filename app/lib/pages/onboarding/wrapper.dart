@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/home/page.dart';
@@ -12,6 +13,9 @@ import 'package:friend_private/pages/onboarding/welcome/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
+
+import '../../utils/purchase/store_config.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});

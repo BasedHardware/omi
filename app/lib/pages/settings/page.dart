@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -11,9 +12,12 @@ import 'package:friend_private/pages/speaker_id/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../backend/auth.dart';
+import '../onboarding/wrapper.dart';
 import '../plugins_subscription/plugin_sub_list.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -206,6 +210,36 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     );
                   }, icon: Icons.language_outlined, visibility: true),
+                  const SizedBox(height: 32),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'USER SETTINGS',
+                      style: TextStyle(
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  getItemAddOn('Logout', () async {
+                    /// Logout popup......
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (c) => getDialog(
+                        context, () {
+                          Navigator.of(context).pop();
+                        }, () async => {
+                        await signOut(context),
+                        SharedPreferencesUtil().clear(),
+                        routeToPage(context, const OnboardingWrapper(), replace: true),
+                      },
+                        'Logout',
+                        'Are you sure you want to log out?',
+                        singleButton: false,
+                      ),
+                    );
+                  }, icon: Icons.logout_outlined, visibility: true),
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.all(8),

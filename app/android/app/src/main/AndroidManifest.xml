@@ -70,6 +70,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
         <service

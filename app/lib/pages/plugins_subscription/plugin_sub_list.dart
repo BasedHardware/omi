@@ -1,10 +1,14 @@
 import 'dart:convert';
-
+import 'dart:io' as Platform;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/utils/purchase/store_config.dart';
+import 'package:intl/intl.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import '../../backend/preferences.dart';
+import '../../firebase/model/user_subscription_model.dart';
+import '../../firebase/service/user_subsrtiption_fire.dart';
 
 class PluginSubscriptionList extends StatefulWidget {
   const PluginSubscriptionList({super.key});
@@ -20,6 +24,7 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
   @override
   void initState() {
     super.initState();
+    UserSubscriptionFire().getUserSubscriptionList();
     initPlatformState().then((value) {
       fetchData().then((value) {
         setState(() {});
@@ -30,26 +35,31 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
   Future<void> initPlatformState() async {
     await Purchases.setLogLevel(LogLevel.debug);
     PurchasesConfiguration configuration;
+
+    // Retrieve PurchaserInfo and check if the user is subscribed
     configuration = PurchasesConfiguration(StoreConfig.instance.apiKey);
     await Purchases.configure(configuration);
+    // Ensure the same App User ID is used across both devices
+    await Purchases.logIn(SharedPreferencesUtil().email);
     await Purchases.enableAdServicesAttributionTokenCollection();
     final customerInfoTemp = await Purchases.getCustomerInfo();
     Purchases.addReadyForPromotedProductPurchaseListener(
-        (productID, startPurchase) async {
-      debugPrint("Received readyForPromotedProductPurchase event for "
-          "productID: $productID");
-      try {
-        final purchaseResult = await startPurchase.call();
-        debugPrint("Promoted purchase for productID "
-            "${purchaseResult.productIdentifier} completed, or product was "
-            "already purchased. customerInfo returned is:"
-            " ${purchaseResult.customerInfo}");
-      } on PlatformException catch (e) {
-        debugPrint("Error purchasing promoted product: ${e.message}");
-      }
-    });
+            (productID, startPurchase) async {
+          debugPrint("Received readyForPromotedProductPurchase event for "
+              "productID: $productID");
+          try {
+            final purchaseResult = await startPurchase.call();
+            debugPrint("Promoted purchase for productID "
+                "${purchaseResult.productIdentifier} completed, or product was "
+                "already purchased. customerInfo returned is:"
+                " ${purchaseResult.customerInfo}");
+          } on PlatformException catch (e) {
+            debugPrint("Error purchasing promoted product: ${e.message}");
+          }
+        });
 
     debugPrint("customerInfoTemp : $customerInfoTemp");
+    SharedPreferencesUtil().activeSubscriptionPluginList = customerInfoTemp.activeSubscriptions;
     customerInfo = customerInfoTemp;
   }
 
@@ -81,6 +91,28 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
         title: const Text('Plugin Subscriptions'),
         centerTitle: true,
         elevation: 0,
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10.0),
+        child: ElevatedButton(
+          onPressed: () async {
+            await restorePurchases();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepPurple,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+            ),
+          ),
+          child: const Text(
+            'RESTORE SUBSCRIPTION',
+            style: TextStyle(
+              fontWeight: FontWeight.w400,
+              fontSize: 16,
+              color: Colors.white,
+            ),
+          ),
+        ),
       ),
       body: Center(
         child: offering != null
@@ -115,7 +147,7 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
                             const Icon(Icons.error),
                       ),
                       title: Text(
-                        offering!.availablePackages[index].identifier,
+                        offering!.availablePackages[index].storeProduct.title,
                         maxLines: 1,
                         style: const TextStyle(
                             fontWeight: FontWeight.w600,
@@ -128,14 +160,7 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8.0))),
                         onPressed: () async {
-                          try {
-                            CustomerInfo customerInfo =
-                                await Purchases.purchasePackage(
-                                    offering!.availablePackages[index]);
-                            print(customerInfo);
-                          } catch (e) {
-                            print(e);
-                          }
+                          await purchasePluginSubscription(offeringId: offering!.availablePackages[index]);
                         },
                         child: const Text(
                           'Subscribe',
@@ -152,5 +177,107 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
             : const CircularProgressIndicator(strokeWidth: 2, color: Colors.white,),
       ),
     );
+  }
+
+  purchasePluginSubscription({offeringId}) async{
+    try {
+      CustomerInfo customerInfo =
+      await Purchases.purchasePackage(offeringId);
+      print('customerInfo');
+      print(customerInfo);
+      print(customerInfo.entitlements);
+
+      var startDate =  DateTime.parse(customerInfo.allPurchaseDates[offeringId.storeProduct.identifier]!);
+      var expiryDate =  DateTime.parse(customerInfo.allExpirationDates[offeringId.storeProduct.identifier]!);
+      UserSubscriptionModel userSubModel = UserSubscriptionModel(
+        userId: SharedPreferencesUtil().uid,
+        pluginId: offeringId.storeProduct.identifier,
+        transactionId: "",
+        purchaseId: "",
+        productId: offeringId.storeProduct.defaultOption?.productId,
+        isPremium: true,
+        platform: Platform.Platform.operatingSystem,
+        startDate: startDate,
+        expiryDate: expiryDate,
+        createdDate: DateTime.now(),
+        updatedDate: DateTime.now(),
+      );
+      await UserSubscriptionFire().saveUserSubscription(userSubModel);
+
+      /*// Handle successful purchase
+                            if (customerInfo.entitlements.all['pro']!.isActive) {
+                              print("User has purchased the pro entitlement!");
+                              // Unlock premium features for the user
+                            }*/
+    } on PlatformException catch (e) {
+      // Handle error based on RevenueCat error codes
+      var errorCode = PurchasesErrorHelper.getErrorCode(e);
+
+      switch (errorCode) {
+        case PurchasesErrorCode.purchaseCancelledError:
+          scaffoldMessage("User canceled the purchase");
+          break;
+        case PurchasesErrorCode.networkError:
+          scaffoldMessage("Network error occurred during purchase");
+          break;
+        case PurchasesErrorCode.purchaseNotAllowedError:
+          scaffoldMessage("User is not allowed to make purchases");
+          break;
+        case PurchasesErrorCode.purchaseInvalidError:
+          scaffoldMessage("The purchase is invalid");
+          break;
+        default:
+          print("Unknown error occurred: ${e.message}");
+          scaffoldMessage("An unexpected error occurred. Please try again.");
+          break;
+      }
+    } catch (e) {
+      // Handle any other errors
+      scaffoldMessage("An unexpected error occurred. Please try again.");
+    }
+  }
+
+  Future<void> restorePurchases() async {
+   /*await RCPurchaseController().restorePurchases();
+    return;*/
+    try {
+      CustomerInfo restoredInfo = await Purchases.restorePurchases();
+      print('*** restoredInfo ***');
+      print(restoredInfo);
+      print(restoredInfo.entitlements);
+
+    } on PlatformException catch (e) {
+      // Handle errors specific to RevenueCat using PurchasesErrorHelper
+      var errorCode = PurchasesErrorHelper.getErrorCode(e);
+
+      switch (errorCode) {
+        case PurchasesErrorCode.purchaseCancelledError:
+          scaffoldMessage("Restore cancelled by the user.");
+          break;
+        case PurchasesErrorCode.networkError:
+          scaffoldMessage("Network error occurred while restoring purchases.");
+          break;
+        case PurchasesErrorCode.purchaseNotAllowedError:
+          scaffoldMessage("Purchases are not allowed on this device.");
+          break;
+        case PurchasesErrorCode.purchaseInvalidError:
+          scaffoldMessage("Invalid purchase data during restore.");
+          break;
+        case PurchasesErrorCode.unknownError:
+        default:
+          print("An unknown error occurred during restore: ${e.message}");
+          scaffoldMessage("An unexpected error occurred. Please try again.");
+          break;
+      }
+    } catch (e) {
+      // Handle any other unexpected errors
+      print("An unexpected error occurred: $e");
+      scaffoldMessage("An unexpected error occurred. Please try again.");
+    }
+  }
+
+  scaffoldMessage(String message){
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }

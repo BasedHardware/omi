@@ -12,6 +12,8 @@ import 'package:sign_in_button/sign_in_button.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../plugins_subscription/test.dart';
+
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
 
@@ -45,6 +47,31 @@ class _AuthComponentState extends State<AuthComponent> {
             ),
           ),
           const SizedBox(height: 32),
+          /*ElevatedButton(
+            onPressed: () async {
+              //await RCPurchaseController().restorePurchases();
+              //await RCPurchaseController().restorePurchasesFlutterPurchase();
+              RCPurchaseController().initPlatformState().then((value) {
+                RCPurchaseController().restorePurchasesFlutterPurchase().then((value) {
+                  setState(() {});
+                });
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+            ),
+            child: const Text(
+              'RESTORE SUBSCRIPTION',
+              style: TextStyle(
+                fontWeight: FontWeight.w400,
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+          ),*/
           !Platform.isIOS
               ? SignInButton(
                   Buttons.google,
