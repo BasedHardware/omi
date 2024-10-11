@@ -89,10 +89,16 @@ async def _websocket_util(
 
         return False
 
-    async def _trigger_create_memory_with_delay(delay_seconds: int):
+    async def _trigger_create_memory_with_delay(delay_seconds: int, finished_at: datetime):
         # print('memory_creation_timer', delay_seconds)
         try:
             await asyncio.sleep(delay_seconds)
+
+            # recheck session
+            memory = retrieve_in_progress_memory(uid)
+            if not memory or memory['finished_at'] > finished_at:
+                print(f"_trigger_create_memory_with_delay not memory or not last session")
+                return
             await _create_current_memory()
         except asyncio.CancelledError:
             pass
@@ -129,6 +135,7 @@ async def _websocket_util(
 
     async def _create_current_memory():
         print("_create_current_memory")
+
         # Reset state variables
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
@@ -159,7 +166,7 @@ async def _websocket_util(
             asyncio.create_task(_create_current_memory())
         else:
             memory_creation_task = asyncio.create_task(
-                _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment)
+                _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment, finished_at)
             )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
@@ -189,7 +196,7 @@ async def _websocket_util(
         redis_db.set_in_progress_memory_id(uid, memory.id)
         return memory
 
-    async def create_memory_on_segment_received_task():
+    async def create_memory_on_segment_received_task(finished_at: datetime):
         nonlocal memory_creation_task
         async with memory_creation_task_lock:
             if memory_creation_task is not None:
@@ -198,7 +205,7 @@ async def _websocket_util(
                     await memory_creation_task
                 except asyncio.CancelledError:
                     print("memory_creation_task is cancelled now")
-            memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout))
+            memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
     def stream_transcript(segments, _):
         nonlocal websocket
@@ -211,7 +218,8 @@ async def _websocket_util(
         if seconds_to_trim is None:
             seconds_to_trim = segments[0]["start"]
 
-        asyncio.run_coroutine_threadsafe(create_memory_on_segment_received_task(), loop)
+        finished_at = datetime.now(timezone.utc)
+        asyncio.run_coroutine_threadsafe(create_memory_on_segment_received_task(finished_at), loop)
 
         # Segments aligning duration seconds.
         if seconds_to_add:
@@ -229,7 +237,7 @@ async def _websocket_util(
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
-        memories_db.update_memory_finished_at(uid, memory.id, datetime.now(timezone.utc))
+        memories_db.update_memory_finished_at(uid, memory.id, finished_at)
 
         # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
