@@ -214,3 +214,32 @@ class SyncLocalFilesResponse {
     );
   }
 }
+
+enum SyncedMemoryType { newMemory, updatedMemory }
+
+class SyncedMemoryPointer {
+  final SyncedMemoryType type;
+  final int index;
+  final DateTime key;
+  final ServerMemory memory;
+
+  SyncedMemoryPointer({required this.type, required this.index, required this.key, required this.memory});
+
+  factory SyncedMemoryPointer.fromJson(Map<String, dynamic> json) {
+    return SyncedMemoryPointer(
+      type: SyncedMemoryType.values.asNameMap()[json['type']] ?? SyncedMemoryType.newMemory,
+      index: json['index'],
+      key: DateTime.parse(json['key']).toLocal(),
+      memory: ServerMemory.fromJson(json['memory']),
+    );
+  }
+
+  SyncedMemoryPointer copyWith({SyncedMemoryType? type, int? index, DateTime? key, ServerMemory? memory}) {
+    return SyncedMemoryPointer(
+      type: type ?? this.type,
+      index: index ?? this.index,
+      key: key ?? this.key,
+      memory: memory ?? this.memory,
+    );
+  }
+}
