@@ -10,6 +10,9 @@ flutter build apk -t lib/main.dart --release --flavor prod
 flutter build appbundle -t lib/main.dart --release --flavor prod
 export PATH="$PATH:/Volumes/Piyush/SDK/flutter/bin"
 
+cd functions
+firebase deploy --only functions
+
 keytool -list -v -keystore /Volumes/Data/flutter_projects/Omi/app/android/Luca -alias Luca -storepass Luca@85730 -keypass Luca@85730
 
 
