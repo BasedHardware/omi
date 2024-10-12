@@ -125,8 +125,7 @@ class _SyncPageState extends State<SyncPage> {
                                 const SizedBox(
                                   height: 18,
                                 ),
-                                (memoryProvider.syncedMemoriesPointers!['new_memories']!.isNotEmpty ||
-                                        memoryProvider.syncedMemoriesPointers!['updated_memories']!.isNotEmpty)
+                                (memoryProvider.syncedMemoriesPointers.isNotEmpty)
                                     ? Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                         decoration: BoxDecoration(

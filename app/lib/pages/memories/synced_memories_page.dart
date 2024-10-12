@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -22,12 +23,15 @@ class SyncedMemoriesPage extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 MemoriesListWidget(
-                  memories: memoryProvider.syncedMemoriesPointers!['updated_memories'],
+                  memories: memoryProvider.syncedMemoriesPointers
+                      .where((e) => e.type == SyncedMemoryType.updatedMemory)
+                      .toList(),
                   title: 'Updated Memories',
                   showReprocess: true,
                 ),
                 MemoriesListWidget(
-                  memories: memoryProvider.syncedMemoriesPointers!['new_memories'],
+                  memories:
+                      memoryProvider.syncedMemoriesPointers.where((e) => e.type == SyncedMemoryType.newMemory).toList(),
                   title: 'New Memories',
                   showReprocess: false,
                 ),
@@ -41,7 +45,7 @@ class SyncedMemoriesPage extends StatelessWidget {
 }
 
 class MemoriesListWidget extends StatelessWidget {
-  final List<Record>? memories;
+  final List<SyncedMemoryPointer>? memories;
   final String title;
   final bool showReprocess;
   const MemoriesListWidget({super.key, required this.memories, required this.title, required this.showReprocess});
@@ -68,8 +72,9 @@ class MemoriesListWidget extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (ctx, i) {
-            dynamic mem = memories![i];
-            return SyncedMemoryListItem(memory: mem.$3, date: mem.$1, memoryIdx: mem.$2, showReprocess: showReprocess);
+            var mem = memories![i];
+            return SyncedMemoryListItem(
+                memory: mem.memory, date: mem.key, memoryIdx: mem.index, showReprocess: showReprocess);
           },
           separatorBuilder: (ctx, i) {
             return const SizedBox(
