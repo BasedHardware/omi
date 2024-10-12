@@ -170,8 +170,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    //print(
-    //    'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
+    // print(
+    //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
 
     // Left
     Widget? left;
@@ -183,7 +183,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
-    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript) {
+    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
       return null; // not using phone mic, not ready
     } else if (!deviceServiceStateOk) {
       left = Row(
@@ -234,10 +234,12 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     // Right
     Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
-    if (transcriptServiceStateOk) {
+    if (!isHavingDesireDevice && !isUsingPhoneMic) {
+      stateText = "";
+    } else if (transcriptServiceStateOk) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
-    } else if (isHavingDesireDevice && (!internetConnectionStateOk || !transcriptServiceStateOk)) {
+    } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
       stateText = "Reconnecting";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
