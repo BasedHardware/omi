@@ -22,6 +22,22 @@
           }
         },
         {
+          "client_id": "662477620892-asqbat5csf6j1u361d4ovmfv5ahnqqj1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ai.wearable",
+            "certificate_hash": "69b028137736579f9f7aeded57941feefdefbccd"
+          }
+        },
+        {
+          "client_id": "662477620892-lt69h5mujo5es490gbcd4lgh62083pu7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ai.wearable",
+            "certificate_hash": "3b7fdeb550212795a2d48aa150f027321b557099"
+          }
+        },
+        {
           "client_id": "662477620892-p1ga7gcmn1or1p7399i0nrcp059goajl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -47,10 +63,98 @@
               "client_type": 3
             },
             {
-              "client_id": "662477620892-3du2sfdhdjnofkfp9a7gdriame0ia9ds.apps.googleusercontent.com",
+              "client_id": "662477620892-0fvqalue5gmnkhp1bo8r9t4n96gqqjj5.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.ai.wearable"
+                "bundle_id": "com.friend-app-with-wearable.ios12"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:662477620892:android:dcf8b2f1ed1c8628548f59",
+        "android_client_info": {
+          "package_name": "com.friend.ios"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "662477620892-etrdu2eej8pq877vp0cfon4vkmhrqfr8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios",
+            "certificate_hash": "69b028137736579f9f7aeded57941feefdefbccd"
+          }
+        },
+        {
+          "client_id": "662477620892-o5c5tuhdjo1mj8hcqeq7brb4855fvvrg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0gPjIpdkdugLYhe12BFrZQPXFutbA9Vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "662477620892-3qg730qlbkvltursp5jlansnhi7kcch2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "662477620892-0fvqalue5gmnkhp1bo8r9t4n96gqqjj5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:662477620892:android:36da33d89b9e4009548f59",
+        "android_client_info": {
+          "package_name": "com.friend.ios.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "662477620892-9ome07rf83b4sgmlccj2pjqae1k5c2kc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.friend.ios.dev",
+            "certificate_hash": "69b028137736579f9f7aeded57941feefdefbccd"
+          }
+        },
+        {
+          "client_id": "662477620892-o5c5tuhdjo1mj8hcqeq7brb4855fvvrg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0gPjIpdkdugLYhe12BFrZQPXFutbA9Vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "662477620892-3qg730qlbkvltursp5jlansnhi7kcch2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "662477620892-0fvqalue5gmnkhp1bo8r9t4n96gqqjj5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.friend-app-with-wearable.ios12"
               }
             }
           ]
