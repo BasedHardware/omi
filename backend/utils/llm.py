@@ -184,7 +184,7 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     ${conversation_history}
     ```
     """.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
     return llm_mini.invoke(prompt).content
 
 
