@@ -35,8 +35,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
-        context.read<DeviceProvider>().getDeviceInfo();
+      if (context.read<DeviceProvider>().connectedDevice != null) {
+        if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
+          context.read<DeviceProvider>().getDeviceInfo();
+        }
       }
     });
     super.initState();
@@ -183,36 +185,34 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
         ),
       ),
     ),
-  GestureDetector(
-    onTap: () {
-      if (!SharedPreferencesUtil().deviceIsV2) {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () => {},
-            'V2 undetected',
-            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+    GestureDetector(
+      onTap: () {
+        if (!SharedPreferencesUtil().deviceIsV2) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.of(context).pop(),
+              () => {},
+              'V2 undetected',
+              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
               singleButton: true,
             ),
           );
-      }
-      else {
-            var page = const SdCardCapturePage();
-            routeToPage(context, page);
-      }
-  },
-    child: ListTile(
-    title: const Text('SD Card Import'),
-    subtitle: Text(''),
-    trailing: const Icon(
-      Icons.arrow_forward_ios,
-      size: 16,
+        } else {
+          var page = const SdCardCapturePage();
+          routeToPage(context, page);
+        }
+      },
+      child: ListTile(
+        title: const Text('SD Card Import'),
+        subtitle: Text(''),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
+      ),
     ),
-  ),
-  ),
-
     ListTile(
       title: const Text('Hardware Revision'),
       subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
