@@ -62,8 +62,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   void setIndex(int index) {
-    selectedIndex = index;
-    notifyListeners();
+    if (index >= 0 && index <= 2) { // Update this to allow index 2
+      selectedIndex = index;
+      notifyListeners();
+    }
   }
 
   void setIsLoading(bool loading) {

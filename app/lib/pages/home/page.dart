@@ -34,6 +34,7 @@ import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'widgets/battery_info_widget.dart';
+import 'package:friend_private/pages/apps/page.dart';
 
 class HomePageWrapper extends StatefulWidget {
   const HomePageWrapper({super.key});
@@ -253,7 +254,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: DefaultTabController(
-            length: 2,
+            length: 3,
             initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
             child: GestureDetector(
               onTap: () {
@@ -270,6 +271,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       children: const [
                         MemoriesPage(),
                         ChatPage(),
+                        AppsPage(),
                       ],
                     ),
                   ),
@@ -299,7 +301,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             child: TabBar(
                               padding: const EdgeInsets.only(top: 4, bottom: 4),
                               onTap: (index) {
-                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat'][index]);
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
@@ -321,6 +323,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                Tab(
+                                  child: Text(
+                                    'Apps',
+                                    style: TextStyle(
+                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                       fontSize: 16,
                                     ),
                                   ),
