@@ -3,6 +3,9 @@ import 'package:friend_private/backend/http/api/speech_profile.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
+import 'package:flutter/foundation.dart';
+import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/schema/memory.dart'; // Make sure this import is present
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
@@ -102,6 +105,31 @@ class HomeProvider extends ChangeNotifier {
   Future setUserPeople() async {
     SharedPreferencesUtil().cachedPeople = await getAllPeople();
     notifyListeners();
+  }
+
+  Future<List<String>> fetchLatestMemories() async {
+    try {
+      final List<ServerMemory> memories = await getMemories(limit: 10); // Fetch the 10 most recent memories
+      
+      return memories.map((memory) {
+        // Extract the relevant information from the ServerMemory object
+        String memoryContent = '';
+        
+        if (memory.structured.overview.isNotEmpty) {
+          memoryContent += 'Category: ${memory.structured.overview}. ';
+        }
+        
+        // Truncate the content if it's too long
+        if (memoryContent.length > 300) {
+          memoryContent = memoryContent.substring(0, 297) + '...';
+        }
+        
+        return '$memoryContent (${memory.createdAt.toLocal()})';
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching memories: $e');
+      return [];
+    }
   }
 
   @override

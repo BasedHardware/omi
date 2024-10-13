@@ -111,7 +111,6 @@ class AppIcon extends StatelessWidget {
     );
   }
 }
-
 class AppData {
   final String name;
   final IconData icon;
@@ -124,3 +123,4 @@ final List<AppData> dummyApps = [
   AppData(name: 'Discovery', icon: Icons.compass_calibration, color: Colors.blue),
   AppData(name: 'Maps', icon: Icons.map, color: Colors.green),
 ];
+
