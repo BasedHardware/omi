@@ -69,7 +69,7 @@ class AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () {
-        if (app.name == 'Discovery') {
+        if (app.name == 'Discovery Feed') {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const DiscoveryPage()),
@@ -93,18 +93,23 @@ class AppIcon extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: app.color,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(app.icon, color: Colors.white, size: 30),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Icon(app.icon, color: Colors.white, size: 36),
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            app.name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 11, color: Colors.white),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          const SizedBox(height: 4),
+          Flexible(
+            child: Text(
+              app.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10, color: Colors.white),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -120,7 +125,6 @@ class AppData {
 }
 
 final List<AppData> dummyApps = [
-  AppData(name: 'Discovery', icon: Icons.compass_calibration, color: Colors.blue),
+  AppData(name: 'Discovery Feed', icon: Icons.compass_calibration, color: Colors.blue),
   AppData(name: 'Maps', icon: Icons.map, color: Colors.green),
 ];
-

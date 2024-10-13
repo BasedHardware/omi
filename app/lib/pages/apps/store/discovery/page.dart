@@ -43,7 +43,6 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
 
       if (memories.isNotEmpty) {
         final recentMemories = memories.join('\n');
-        // final prompt = "Based on these recent memories: $recentMemories, generate 5 different search queries that would be interesting for the user.";
         final prompt = """
 Based on the following recent memories of the user:
 $recentMemories
@@ -59,10 +58,6 @@ SEARCH QUERY D
 SEARCH QUERY E
 ...
 """;
-        
-        print("@@@@@@@");
-        print(prompt);
-        print("@@@@@@@");
 
         final newMessage = ServerMessage(
           const Uuid().v4(),
@@ -95,18 +90,13 @@ SEARCH QUERY E
             .map((line) => line.replaceFirst(RegExp(r'^\d+\.\s*'), ''))
             .toList();
 
-        print("***************");
-        print(searchPrompts);
-        print("***************");
-
-        // Perform Exa.AI search for each prompt
         final results = await Future.wait(
           searchPrompts.map((prompt) => performExaSearch(prompt))
         );
 
         setState(() {
           searchResults = results.expand((result) => result.results).toList()
-            ..shuffle(); // Shuffle results for variety
+            ..shuffle();
         });
       } else {
         setState(() {
@@ -139,13 +129,12 @@ SEARCH QUERY E
         'type': 'neural',
         'useAutoprompt': true,
         'numResults': 10,
-        // 'excludeDomains': ['en.wikipedia.org'],
-        'category': 'tweet',
+        // 'category': 'tweet',
         'startPublishedDate': '2023-01-01',
         'contents': {
           'text': true,
           'summary': {
-            'query': "Summarize the following website text so it will be presented to a user in a discovery feed. Make it feel like a tweet"
+            'query': "Summarize the following website into a tweet-like format, making it easy to read for a user scrolling through a discovery feed. DO NOT USE EMOJIS. MAKE IT FEEL PROFESSIONAL, YET AUTHENTIC."
           }
         }
       }),
@@ -166,28 +155,33 @@ SEARCH QUERY E
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discover'),
-        backgroundColor: Colors.blue,
+        title: Text('Discovery Feed', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: Colors.black),
       ),
-      body: isLoading
-          ? _buildLoadingView()
-          : RefreshIndicator(
-              onRefresh: generateSearchResults,
-              child: searchResults.isEmpty
-                  ? Center(child: Text('No results found. Pull to refresh.'))
-                  : ListView.builder(
-                      itemCount: searchResults.length,
-                      itemBuilder: (context, index) {
-                        final result = searchResults[index];
-                        return DiscoveryCard(result: result);
-                      },
-                    ),
-            ),
+      body: Container(
+        color: Colors.white,
+        child: isLoading
+            ? _buildLoadingView()
+            : RefreshIndicator(
+                onRefresh: generateSearchResults,
+                child: searchResults.isEmpty
+                    ? Center(child: Text('No results found. Pull to refresh.', style: TextStyle(color: Colors.black)))
+                    : ListView.builder(
+                        itemCount: searchResults.length,
+                        itemBuilder: (context, index) {
+                          final result = searchResults[index];
+                          return DiscoveryCard(result: result);
+                        },
+                      ),
+              ),
+      ),
     );
   }
 
   Widget _buildLoadingView() {
-    final int randomIndex = _random.nextInt(6) + 1; // Generates a random number between 1 and 6
+    final int randomIndex = _random.nextInt(6) + 1;
     final String animationPath = 'assets/lottie_animations/loading/loading$randomIndex.json';
 
     return Center(
@@ -199,18 +193,18 @@ SEARCH QUERY E
             width: 200,
             height: 200,
           ),
-          const SizedBox(height: 20),
-          const Text(
+          SizedBox(height: 20),
+          Text(
             'Crafting Your Personal Discovery Feed',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
           ),
-          const SizedBox(height: 10),
-          const Padding(
+          SizedBox(height: 10),
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 40),
             child: Text(
               'We\'re searching the entire internet to build a custom feed based on your recent memories and interests.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
           ),
         ],
@@ -226,71 +220,69 @@ class DiscoveryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
+      ),
       child: InkWell(
         onTap: () => _launchURL(result.url),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-              child: CachedNetworkImage(
-                imageUrl: result.imageUrl ?? 'https://via.placeholder.com/300x200',
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 200,
-                  color: Colors.grey[300],
-                  child: Center(child: CircularProgressIndicator()),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (result.imageUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: result.imageUrl!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      height: 200,
+                      color: Colors.grey[200],
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      height: 200,
+                      color: Colors.grey[200],
+                      child: Icon(Icons.error, color: Colors.grey[400]),
+                    ),
+                  ),
                 ),
-                errorWidget: (context, url, error) => Container(
-                  height: 200,
-                  color: Colors.grey[300],
-                  child: Icon(Icons.error),
-                ),
+              SizedBox(height: 12),
+              Text(
+                result.title,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              SizedBox(height: 8),
+              Text(
+                result.summary,
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 8),
+              Row(
                 children: [
-                  Text(
-                    result.title,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    result.summary,
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.link, size: 16, color: Colors.blue),
-                      SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          Uri.parse(result.url).host,
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+                  Icon(Icons.link, size: 16, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      Uri.parse(result.url).host,
+                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
