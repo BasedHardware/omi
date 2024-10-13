@@ -178,12 +178,13 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     Remember {user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.
   
-    Output your response in plain text, without markdown.
+    Output your response in plain text, without markdown. No newline character and only use numbers for the action items.
+    The total words in the response should not exceed 50 words.
     ```
     ${conversation_history}
     ```
     """.replace('    ', '').strip()
-    # print(prompt)
+    print(prompt)
     return llm_mini.invoke(prompt).content
 
 
