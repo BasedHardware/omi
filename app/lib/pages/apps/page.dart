@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/pages/apps/store/discovery/page.dart';
+import 'package:friend_private/pages/apps/store/discoveryfeed/page.dart';
 import 'package:friend_private/pages/apps/store/maps/page.dart';
 class AppsPage extends StatelessWidget {
   const AppsPage({super.key});
