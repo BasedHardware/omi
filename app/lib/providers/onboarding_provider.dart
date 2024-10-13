@@ -248,7 +248,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     ServiceManager.instance().device.subscribe(this, this);
 
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (deviceProvider != null && deviceProvider!.isConnected) {
         _findDevicesTimer?.cancel();
         return;
