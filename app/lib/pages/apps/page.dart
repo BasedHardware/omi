@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/pages/apps/store/discoveryfeed/page.dart';
 import 'package:friend_private/pages/apps/store/maps/page.dart';
+import 'package:friend_private/pages/apps/store/myhistorian/page.dart'; // Add this import
+
 class AppsPage extends StatelessWidget {
   const AppsPage({super.key});
 
@@ -79,6 +81,11 @@ class AppIcon extends StatelessWidget {
             context,
             MaterialPageRoute(builder: (context) => const MapsPage()),
           );
+        } else if (app.name == 'My Historian') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyHistorianPage()),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Launching ${app.name}...')),
@@ -116,6 +123,7 @@ class AppIcon extends StatelessWidget {
     );
   }
 }
+
 class AppData {
   final String name;
   final IconData icon;
@@ -127,4 +135,5 @@ class AppData {
 final List<AppData> dummyApps = [
   AppData(name: 'Discovery Feed', icon: Icons.compass_calibration, color: Colors.blue),
   AppData(name: 'Maps', icon: Icons.map, color: Colors.green),
+  AppData(name: 'My Historian', icon: Icons.history, color: Colors.purple),
 ];
