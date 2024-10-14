@@ -98,6 +98,21 @@
         "hardware/DevKit2",
         "hardware/OpenGlass"
       ]
+    },
+    {
+      "group": "Info",
+      "pages": [
+        "info/Support",
+        "info/License",
+        "info/Disclaimer",
+        "info/Privacy",
+        {
+          "group": "Archive",
+          "pages": [
+            "info/archive/launch"
+          ]
+        }
+      ]
     }
   ],
   "footerSocials": {
