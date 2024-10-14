@@ -220,7 +220,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  void onDeviceReconnected(BtDevice device) async {
+  void _onDeviceConnected(BtDevice device) async {
     debugPrint('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
@@ -231,14 +231,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: device);
-    //  initiateBleBatteryListener();
-    // The device is still disconnected for some reason
-    if (connectedDevice != null) {
-      MixpanelManager().deviceConnected();
-      await getDeviceInfo();
-      // SharedPreferencesUtil().btDevice = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice!.name;
-    }
+
+    await getDeviceInfo();
+    SharedPreferencesUtil().deviceName = device.name;
+
     notifyListeners();
   }
 
@@ -251,7 +247,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (connection == null) {
           return;
         }
-        onDeviceReconnected(connection.device);
+        _onDeviceConnected(connection.device);
         break;
       case DeviceConnectionState.disconnected:
         if (deviceId == connectedDevice?.id) {
@@ -278,7 +274,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connection == null) {
       return;
     }
-    connectedDevice = connection.device;
+    _onDeviceConnected(connection.device);
   }
 
   @override
