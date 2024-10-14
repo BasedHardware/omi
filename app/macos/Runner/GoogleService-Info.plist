@@ -3,23 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>890819045836-08qu92kktt9jhp2ttn06h72um9p31p0v.apps.googleusercontent.com</string>
+	<string>1031333818730-a81299nnu9r6bn2hdu6hnh9l71k20n6m.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.890819045836-08qu92kktt9jhp2ttn06h72um9p31p0v</string>
+	<string>com.googleusercontent.apps.1031333818730-a81299nnu9r6bn2hdu6hnh9l71k20n6m</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>890819045836-dpsnuh0t6d3uad4ca8jr8ul701clkv1b.apps.googleusercontent.com</string>
+	<string>1031333818730-cbduoo2lqhk7ufs8m39h32p1rv9db9o6.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyDZFy4GWgaKlQHVu05j6UX1nC8kWpyAKzM</string>
+	<string>AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM</string>
 	<key>GCM_SENDER_ID</key>
-	<string>890819045836</string>
+	<string>1031333818730</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.friend.ios</string>
 	<key>PROJECT_ID</key>
-	<string>deeper-test-1c6d6</string>
+	<string>based-hardware-dev</string>
 	<key>STORAGE_BUCKET</key>
-	<string>deeper-test-1c6d6.appspot.com</string>
+	<string>based-hardware-dev.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:890819045836:ios:ad9a5c6ca512edefb11569</string>
+	<string>1:1031333818730:ios:7475273b3f7ee0fdafb513</string>
 </dict>
 </plist>
