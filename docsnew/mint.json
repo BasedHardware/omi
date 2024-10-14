@@ -16,14 +16,10 @@
     }
   },
   "topbarLinks": [
-    {
-      "name": "Support",
-      "url": "https://github.com/BasedHardware/omi/issues/new/choose"
-    }
   ],
   "topbarCtaButton": {
-    "name": "Dashboard",
-    "url": "https://dashboard.mintlify.com"
+    "name": "Support",
+      "url": "https://github.com/BasedHardware/omi/issues/new/choose"
   },
   "tabs": [
     {
