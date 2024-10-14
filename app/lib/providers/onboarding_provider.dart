@@ -139,12 +139,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   //----------------- Onboarding Permissions -----------------
 
   void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && (_findDevicesTimer?.isActive ?? false)) {
-      _findDevicesTimer!.cancel();
-    }
-    if (connectionStateTimer?.isActive ?? false) {
-      connectionStateTimer?.cancel();
-    }
+    _findDevicesTimer?.cancel();
+    connectionStateTimer?.cancel();
     notifyListeners();
   }
 
@@ -226,6 +222,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  void stopScanDevices() {
+    stopFindDeviceTimer();
+  }
+
   Future<void> scanDevices({
     required VoidCallback onShowDialog,
   }) async {
@@ -248,13 +248,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     ServiceManager.instance().device.subscribe(this, this);
 
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (deviceProvider != null && deviceProvider!.isConnected) {
-        _findDevicesTimer?.cancel();
+    _findDevicesTimer?.cancel();
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (t) async {
+      if (deviceProvider?.isConnected ?? false) {
+        t.cancel();
         return;
-      } else {
-        ServiceManager.instance().device.discover();
       }
+
+      ServiceManager.instance().device.discover();
     });
   }
 
