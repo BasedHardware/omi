@@ -94,7 +94,9 @@
     {
       "group": "Hardware",
       "pages": [
-        "hardware/DevKit1"
+        "hardware/DevKit1",
+        "hardware/DevKit2",
+        "hardware/OpenGlass"
       ]
     }
   ],
