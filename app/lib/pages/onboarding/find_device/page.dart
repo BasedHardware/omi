@@ -38,8 +38,12 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
 
   @override
   dispose() {
-    // context.read<OnboardingProvider>().dispose();
+    _stopScanDevices();
     super.dispose();
+  }
+
+  void _stopScanDevices() {
+    Provider.of<OnboardingProvider>(context, listen: false).stopScanDevices();
   }
 
   Future<void> _scanDevices() async {
