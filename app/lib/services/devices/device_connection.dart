@@ -31,6 +31,11 @@ class DeviceConnectionFactory {
   }
 }
 
+class DeviceConnectionException implements Exception {
+  String cause;
+  DeviceConnectionException(this.cause);
+}
+
 abstract class DeviceConnection {
   BtDevice device;
   BluetoothDevice bleDevice;
@@ -59,7 +64,7 @@ abstract class DeviceConnection {
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
-      throw Exception("Connection already established, please disconnect before start new connection");
+      throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
     }
 
     // Connect
@@ -68,9 +73,13 @@ abstract class DeviceConnection {
       _onBleConnectionStateChanged(state);
     });
 
-    await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
-    await bleDevice.connect();
-    await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
+    try {
+      await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
+      await bleDevice.connect();
+      await bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
+    } on FlutterBluePlusException catch (e) {
+      throw DeviceConnectionException("FlutterBluePlusException: ${e.toString()}");
+    }
 
     // Mtu
     if (Platform.isAndroid && bleDevice.mtuNow < 512) {
@@ -199,11 +208,11 @@ abstract class DeviceConnection {
 
   Future<List<int>> performGetStorageList();
 
-  Future<bool> performWriteToStorage(int numFile, int command,int offset);
+  Future<bool> performWriteToStorage(int numFile, int command, int offset);
 
-  Future<bool> writeToStorage(int numFile, int command,int offset) async {
+  Future<bool> writeToStorage(int numFile, int command, int offset) async {
     if (await isConnected()) {
-      return await performWriteToStorage(numFile, command,offset);
+      return await performWriteToStorage(numFile, command, offset);
     }
     _showDeviceDisconnectedNotification();
     return Future.value(false);
