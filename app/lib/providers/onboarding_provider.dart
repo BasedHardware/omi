@@ -26,7 +26,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String deviceName = '';
   String deviceId = '';
   String? connectingToDeviceId;
-  Timer? connectionStateTimer;
   List<BtDevice> deviceList = [];
   late Timer _didNotMakeItTimer;
   Timer? _findDevicesTimer;
@@ -138,16 +137,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
   //----------------- Onboarding Permissions -----------------
 
-  void stopFindDeviceTimer() {
-    if (_findDevicesTimer != null && (_findDevicesTimer?.isActive ?? false)) {
-      _findDevicesTimer!.cancel();
-    }
-    if (connectionStateTimer?.isActive ?? false) {
-      connectionStateTimer?.cancel();
-    }
-    notifyListeners();
-  }
-
   void setDeviceProvider(DeviceProvider provider) {
     deviceProvider = provider;
   }
@@ -194,7 +183,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      stopFindDeviceTimer();
+      stopScanDevices();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -226,6 +215,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  void stopScanDevices() {
+    _findDevicesTimer?.cancel();
+  }
+
   Future<void> scanDevices({
     required VoidCallback onShowDialog,
   }) async {
@@ -248,13 +241,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     ServiceManager.instance().device.subscribe(this, this);
 
-    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (deviceProvider != null && deviceProvider!.isConnected) {
-        _findDevicesTimer?.cancel();
+    _findDevicesTimer?.cancel();
+    _findDevicesTimer = Timer.periodic(const Duration(seconds: 4), (t) async {
+      if (deviceProvider?.isConnected ?? false) {
+        t.cancel();
         return;
-      } else {
-        ServiceManager.instance().device.discover();
       }
+
+      ServiceManager.instance().device.discover();
     });
   }
 
@@ -267,20 +261,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
-  }
-
   @override
   void dispose() {
-    //TODO: This does not get called when the page is popped
     _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
-    connectionStateTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
