@@ -76,10 +76,6 @@
     {
       "group": "Developer",
       "pages": [
-        "developer/HowItWorks",
-        "developer/Protocol",
-        "developer/Contribution",
-        "developer/savingaudio",
         {
           "group": "Plugins",
           "pages": [
@@ -88,7 +84,11 @@
             "developer/plugins/Integrations",
             "developer/plugins/Submitting"
           ]
-        }
+        },
+        "developer/HowItWorks",
+        "developer/Protocol",
+        "developer/Contribution",
+        "developer/savingaudio"
       ]
     },
     {
