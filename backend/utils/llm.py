@@ -178,7 +178,7 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     Remember {user_name} is busy so this has to be very efficient and concise.
     Respond in at most 50 words.
   
-    Output your response in plain text, without markdown.
+    Output your response in plain text, without markdown. No newline character and only use numbers for the action items.
     ```
     ${conversation_history}
     ```
