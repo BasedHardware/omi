@@ -7,7 +7,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ![Omi](https://github.com/user-attachments/assets/0c757e55-c030-4ae7-a15b-7218950c8ba0)
 
-[![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/ZutWMTJnwA) &ensp;&ensp;&ensp;
+[![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/based-hardware-1192313062041067520) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
 
@@ -48,7 +48,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 * Check out our [contributions guide](https://docs.omi.me/developer/Contribution/).
 * Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
 * Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
-* Join the [Discord](https://discord.gg/ZutWMTJnwA).
+* Join the [Discord](https://discord.gg/based-hardware-1192313062041067520).
 * Build your own [Plugins/Integrations](https://docs.omi.me/developer/plugins/Introduction/).
 
 [//]: # (## More links:)
