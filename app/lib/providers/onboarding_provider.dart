@@ -26,7 +26,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String deviceName = '';
   String deviceId = '';
   String? connectingToDeviceId;
-  Timer? connectionStateTimer;
   List<BtDevice> deviceList = [];
   late Timer _didNotMakeItTimer;
   Timer? _findDevicesTimer;
@@ -138,12 +137,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
   //----------------- Onboarding Permissions -----------------
 
-  void stopFindDeviceTimer() {
-    _findDevicesTimer?.cancel();
-    connectionStateTimer?.cancel();
-    notifyListeners();
-  }
-
   void setDeviceProvider(DeviceProvider provider) {
     deviceProvider = provider;
   }
@@ -190,7 +183,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      stopFindDeviceTimer();
+      stopScanDevices();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -223,7 +216,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   void stopScanDevices() {
-    stopFindDeviceTimer();
+    _findDevicesTimer?.cancel();
   }
 
   Future<void> scanDevices({
@@ -268,20 +261,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
-  }
-
   @override
   void dispose() {
-    //TODO: This does not get called when the page is popped
     _findDevicesTimer?.cancel();
     _didNotMakeItTimer.cancel();
-    connectionStateTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
