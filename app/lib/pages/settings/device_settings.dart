@@ -140,7 +140,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       provider.setIsConnected(false);
                       provider.setConnectedDevice(null);
                       provider.updateConnectingStatus(false);
-                      context.read<OnboardingProvider>().stopFindDeviceTimer();
+                      context.read<OnboardingProvider>().stopScanDevices();
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
