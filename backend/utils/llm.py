@@ -179,7 +179,6 @@ def get_memory_summary(uid: str, memories: List[Memory]) -> str:
     Respond in at most 50 words.
   
     Output your response in plain text, without markdown. No newline character and only use numbers for the action items.
-    The total words in the response should not exceed 50 words.
     ```
     ${conversation_history}
     ```
