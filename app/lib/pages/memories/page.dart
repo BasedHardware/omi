@@ -138,7 +138,10 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (index == 0) const SizedBox(height: 16),
-                          DateListItem(date: date, isFirst: index == 0),
+                          if (memoriesForDate
+                              .where((mem) => memoryProvider.showDiscardedMemories || !mem.discarded || mem.isNew)
+                              .isNotEmpty)
+                            DateListItem(date: date, isFirst: index == 0),
                           ...memoriesForDate
                               .where((mem) => memoryProvider.showDiscardedMemories || !mem.discarded || mem.isNew)
                               .map(
