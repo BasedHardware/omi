@@ -6,118 +6,120 @@ import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:provider/provider.dart';
 
 class PluginListItem extends StatelessWidget {
   final Plugin plugin;
   final int index;
-  final PluginProvider provider;
 
-  const PluginListItem({super.key, required this.plugin, required this.index, required this.provider});
+  const PluginListItem({super.key, required this.plugin, required this.index});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        MixpanelManager().pageOpened('Plugin Detail');
-        await routeToPage(context, PluginDetailPage(plugin: plugin));
-        provider.setPlugins();
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CachedNetworkImage(
-              imageUrl: plugin.getImageUrl(),
-              imageBuilder: (context, imageProvider) => Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.rectangle,
-                  borderRadius: BorderRadius.circular(8),
-                  image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+    return Consumer<PluginProvider>(builder: (context, provider, child) {
+      return GestureDetector(
+        onTap: () async {
+          MixpanelManager().pageOpened('Plugin Detail');
+          await routeToPage(context, PluginDetailPage(plugin: plugin));
+          provider.setPlugins();
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CachedNetworkImage(
+                imageUrl: plugin.getImageUrl(),
+                imageBuilder: (context, imageProvider) => Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.rectangle,
+                    borderRadius: BorderRadius.circular(8),
+                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                  ),
+                ),
+                placeholder: (context, url) => const CircularProgressIndicator(),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      plugin.name,
+                      maxLines: 1,
+                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                    ),
+                    SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        plugin.description,
+                        maxLines: 2,
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ),
+                    plugin.ratingAvg != null
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Text(plugin.getRatingAvg()!),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                const SizedBox(width: 4),
+                                Text('(${plugin.ratingCount})'),
+                              ],
+                            ),
+                          )
+                        : Container(),
+                  ],
                 ),
               ),
-              placeholder: (context, url) => const CircularProgressIndicator(),
-              errorWidget: (context, url, error) => const Icon(Icons.error),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    plugin.name,
-                    maxLines: 1,
-                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                  ),
-                  SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      plugin.description,
-                      maxLines: 2,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+              const SizedBox(width: 16),
+              provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : IconButton(
+                      icon: Icon(
+                        plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: plugin.enabled ? Colors.white : Colors.grey,
+                      ),
+                      onPressed: () {
+                        if (plugin.worksExternally() && !plugin.enabled) {
+                          showDialog(
+                            context: context,
+                            builder: (c) => getDialog(
+                              context,
+                              () => Navigator.pop(context),
+                              () async {
+                                Navigator.pop(context);
+                                await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                provider.setPlugins();
+                              },
+                              'Authorize External Plugin',
+                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              okButtonText: 'Confirm',
+                            ),
+                          );
+                        } else {
+                          provider.togglePlugin(plugin.id.toString(), !plugin.enabled, index);
+                        }
+                      },
                     ),
-                  ),
-                  plugin.ratingAvg != null
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: [
-                              Text(plugin.getRatingAvg()!),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                              const SizedBox(width: 4),
-                              Text('(${plugin.ratingCount})'),
-                            ],
-                          ),
-                        )
-                      : Container(),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : IconButton(
-                    icon: Icon(
-                      plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                      color: plugin.enabled ? Colors.white : Colors.grey,
-                    ),
-                    onPressed: () {
-                      if (plugin.worksExternally() && !plugin.enabled) {
-                        showDialog(
-                          context: context,
-                          builder: (c) => getDialog(
-                            context,
-                            () => Navigator.pop(context),
-                            () async {
-                              Navigator.pop(context);
-                              await routeToPage(context, PluginDetailPage(plugin: plugin));
-                              provider.setPlugins();
-                            },
-                            'Authorize External Plugin',
-                            'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                            okButtonText: 'Confirm',
-                          ),
-                        );
-                      } else {
-                        provider.togglePlugin(plugin.id.toString(), !plugin.enabled, index);
-                      }
-                    },
-                  ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
