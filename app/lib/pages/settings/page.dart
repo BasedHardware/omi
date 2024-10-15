@@ -102,12 +102,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.help_outline_outlined,
                 ),
                 const SizedBox(height: 20),
-                getItemAddOn2(
-                  'Plugins',
-                  () => routeToPage(context, const PluginsPage()),
-                  icon: Icons.integration_instructions,
-                ),
-                const SizedBox(height: 8),
+                // getItemAddOn2(
+                //   'Plugins',
+                //   () => routeToPage(context, const PluginsPage()),
+                //   icon: Icons.integration_instructions,
+                // ),
+                // const SizedBox(height: 8),
                 getItemAddOn2(
                   'Calendar Integration',
                   () => routeToPage(context, const CalendarPage()),
