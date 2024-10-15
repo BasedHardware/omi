@@ -50,6 +50,7 @@ def retrieve_in_progress_memory(uid):
         existing = memories_db.get_in_progress_memory(uid)
     return existing
 
+
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True
@@ -60,6 +61,9 @@ async def _websocket_util(
     if language == 'en' and sample_rate == 16000 and codec == 'opus':
         stt_service = STTService.soniox
     else:
+        stt_service = STTService.deepgram
+
+    if uid in os.getenv('UIDS_USING_DEEPGRAM', ''):
         stt_service = STTService.deepgram
 
     try:
@@ -77,9 +81,9 @@ async def _websocket_util(
         sample_size = 320 if sample_rate == 16000 else 160
         offset = 0
         while offset < len(data):
-            sample = data[offset:offset+sample_size]
+            sample = data[offset:offset + sample_size]
             if len(sample) < sample_size:
-                sample = sample + bytes([0x00] * (sample_size-len(sample) % sample_size))
+                sample = sample + bytes([0x00] * (sample_size - len(sample) % sample_size))
             has_speech = w_vad.is_speech(sample, sample_rate)
             if has_speech:
                 return True
