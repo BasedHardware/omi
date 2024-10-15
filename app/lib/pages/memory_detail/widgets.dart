@@ -396,7 +396,7 @@ class GetPluginsWidgets extends StatelessWidget {
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
                     Text(
-                      'Plugins 🧑‍💻',
+                      'Apps 🧑‍💻',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       textAlign: TextAlign.start,
                     ),
@@ -503,7 +503,7 @@ class GetPluginsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No plugins were triggered\nfor this memory.',
+            'No apps were triggered\nfor this memory.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -532,7 +532,7 @@ class GetPluginsWidgets extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
