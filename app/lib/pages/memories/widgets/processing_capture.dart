@@ -80,7 +80,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
             ),
           );
         });
-        provider.setsdCardReady(false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          provider.setsdCardReady(false);
+        });
       }
 
       // Waiting ready state, 3s for now
