@@ -122,7 +122,7 @@ SEARCH QUERY E
       headers: {
         'accept': 'application/json',
         'content-type': 'application/json',
-        'x-api-key': '33fecc92-af74-4804-81de-f71e88e39b23',
+        'x-api-key': '<INSERT API KEY HERE>',
       },
       body: jsonEncode({
         'query': query,
