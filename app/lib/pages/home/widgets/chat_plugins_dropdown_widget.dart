@@ -31,6 +31,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
               ? GestureDetector(
                   onTap: () {
                     MixpanelManager().pageOpened('Chat Plugins');
+
                     routeToPage(context, const PluginsPage(filterChatOnly: true));
                   },
                   child: const Row(
@@ -38,7 +39,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                       Icon(size: 20, Icons.chat, color: Colors.white),
                       SizedBox(width: 10),
                       Text(
-                        'Enable Plugins',
+                        'Enable Apps',
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
                     ],
@@ -86,7 +87,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
@@ -148,7 +149,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
               child: Icon(Icons.star, color: Colors.purpleAccent),
             ),
             SizedBox(width: 8),
-            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+            Text('Enable Apps   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
           ],
         ),
       ));
