@@ -58,8 +58,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       }
                       if (s == null || s == provider.selectedChatAppId) return;
                       provider.setSelectedChatAppId(s);
-                      var plugin = provider.getSelectedPlugin();
-                      context.read<MessageProvider>().sendInitialPluginMessage(plugin);
+                      var plugin = provider.getSelectedApp();
+                      context.read<MessageProvider>().sendInitialAppMessage(plugin);
                     },
                     icon: Container(),
                     alignment: Alignment.center,

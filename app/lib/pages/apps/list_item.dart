@@ -21,7 +21,7 @@ class AppListItem extends StatelessWidget {
       return GestureDetector(
         onTap: () async {
           MixpanelManager().pageOpened('Plugin Detail');
-          await routeToPage(context, AppDetailPage(plugin: app));
+          await routeToPage(context, AppDetailPage(app: app));
           provider.setApps();
         },
         child: Container(
@@ -113,16 +113,16 @@ class AppListItem extends StatelessWidget {
                               () => Navigator.pop(context),
                               () async {
                                 Navigator.pop(context);
-                                await routeToPage(context, AppDetailPage(plugin: app));
+                                await routeToPage(context, AppDetailPage(app: app));
                                 provider.setApps();
                               },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              'Authorize External App',
+                              'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
                               okButtonText: 'Confirm',
                             ),
                           );
                         } else {
-                          provider.togglePlugin(app.id.toString(), !app.enabled, index);
+                          provider.toggleApp(app.id.toString(), !app.enabled, index);
                         }
                       },
                     ),

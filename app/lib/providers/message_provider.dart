@@ -101,10 +101,10 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendMessageToServer(String message, String? pluginId) async {
+  Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty());
-    var mes = await sendMessageServer(message, appId: pluginId);
+    var mes = await sendMessageServer(message, appId: appId);
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }
@@ -112,19 +112,19 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendInitialPluginMessage(App? plugin) async {
+  Future sendInitialAppMessage(App? app) async {
     setSendingMessage(true);
-    ServerMessage message = await getInitialAppMessage(plugin?.id);
+    ServerMessage message = await getInitialAppMessage(app?.id);
     addMessage(message);
     setSendingMessage(false);
     notifyListeners();
   }
 
-  void checkSelectedPlugins() {
-    var selectedChatPlugin = SharedPreferencesUtil().selectedChatAppId;
-    debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
-    var plugin = appProvider!.apps.firstWhereOrNull((p) => selectedChatPlugin == p.id);
-    if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
+  void checkSelectedApps() {
+    var selectedChatApp = SharedPreferencesUtil().selectedChatAppId;
+    debugPrint('_edgeCaseAppNotAvailable $selectedChatApp');
+    var app = appProvider!.apps.firstWhereOrNull((p) => selectedChatApp == p.id);
+    if (selectedChatApp != 'no_selected' && (app == null || !app.worksWithChat() || !app.enabled)) {
       SharedPreferencesUtil().selectedChatAppId = 'no_selected';
     }
     notifyListeners();

@@ -32,7 +32,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
 
   Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
   ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
-  List<bool> pluginResponseExpanded = [];
+  List<bool> appResponseExpanded = [];
 
   bool editingTitle = false;
   bool editingOverview = false;
@@ -109,7 +109,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
     selectedDate = date;
-    pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
+    appResponseExpanded = List.filled(memory.pluginsResults.length, false);
     notifyListeners();
   }
 
@@ -118,8 +118,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updatePluginResponseExpanded(int index) {
-    pluginResponseExpanded[index] = !pluginResponseExpanded[index];
+  void updateAppResponseExpanded(int index) {
+    appResponseExpanded[index] = !appResponseExpanded[index];
     notifyListeners();
   }
 

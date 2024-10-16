@@ -373,8 +373,8 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-class GetPluginsWidgets extends StatelessWidget {
-  const GetPluginsWidgets({super.key});
+class GetAppsWidgets extends StatelessWidget {
+  const GetAppsWidgets({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -391,7 +391,7 @@ class GetPluginsWidgets extends StatelessWidget {
                   // TODO: include a way to trigger specific plugins
                   if (provider.memory.pluginsResults.isNotEmpty &&
                       !provider.memory.discarded &&
-                      provider.pluginResponseExpanded.isNotEmpty) ...[
+                      provider.appResponseExpanded.isNotEmpty) ...[
                     provider.memory.structured.actionItems.isEmpty
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
@@ -404,7 +404,7 @@ class GetPluginsWidgets extends StatelessWidget {
                     ...provider.memory.pluginsResults.mapIndexed(
                       (i, pluginResponse) {
                         if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                        App? plugin =
+                        App? app =
                             provider.appsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 40),
@@ -412,11 +412,11 @@ class GetPluginsWidgets extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.start,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              plugin != null
+                              app != null
                                   ? ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       leading: CachedNetworkImage(
-                                        imageUrl: plugin.getImageUrl(),
+                                        imageUrl: app.getImageUrl(),
                                         imageBuilder: (context, imageProvider) {
                                           return CircleAvatar(
                                             backgroundColor: Colors.white,
@@ -441,7 +441,7 @@ class GetPluginsWidgets extends StatelessWidget {
                                         ),
                                       ),
                                       title: Text(
-                                        plugin.name,
+                                        app.name,
                                         maxLines: 1,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w600,
@@ -452,7 +452,7 @@ class GetPluginsWidgets extends StatelessWidget {
                                       subtitle: Padding(
                                         padding: const EdgeInsets.only(top: 4.0),
                                         child: Text(
-                                          plugin.description,
+                                          app.description,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(color: Colors.grey, fontSize: 14),
@@ -473,14 +473,14 @@ class GetPluginsWidgets extends StatelessWidget {
                                   : const SizedBox.shrink(),
                               ExpandableTextWidget(
                                 text: pluginResponse.content.decodeSting.trim(),
-                                isExpanded: provider.pluginResponseExpanded[i],
+                                isExpanded: provider.appResponseExpanded[i],
                                 toggleExpand: () {
-                                  print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
-                                  if (!provider.pluginResponseExpanded[i]) {
+                                  print('pluginResponseExpanded: ${provider.appResponseExpanded}');
+                                  if (!provider.appResponseExpanded[i]) {
                                     MixpanelManager()
                                         .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
                                   }
-                                  provider.updatePluginResponseExpanded(i);
+                                  provider.updateAppResponseExpanded(i);
                                 },
                                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                                 maxLines: 6,

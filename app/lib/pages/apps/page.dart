@@ -58,7 +58,7 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                   child: TabBarView(children: [
                     CustomScrollView(
                       slivers: [
-                        const EmptyPluginsWidget(),
+                        const EmptyAppsWidget(),
                         const SectionTitleWidget(
                           title: 'External Apps',
                           explainer:
@@ -67,16 +67,16 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                         ),
                         Selector<AppProvider, List<App>>(
                             selector: (context, provider) => provider.apps.where((p) => p.worksExternally()).toList(),
-                            builder: (context, memoryIntegrationPlugins, child) {
+                            builder: (context, memoryIntegrationApps, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
                                     return AppListItem(
-                                      app: memoryIntegrationPlugins[index],
+                                      app: memoryIntegrationApps[index],
                                       index: index,
                                     );
                                   },
-                                  childCount: memoryIntegrationPlugins.length,
+                                  childCount: memoryIntegrationApps.length,
                                 ),
                               );
                             }),
@@ -91,16 +91,16 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                         ),
                         Selector<AppProvider, List<App>>(
                             selector: (context, provider) => provider.apps.where((p) => p.worksWithMemories()).toList(),
-                            builder: (context, memoryPromptPlugins, child) {
+                            builder: (context, memoryPromptApps, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
                                     return AppListItem(
-                                      app: memoryPromptPlugins[index],
+                                      app: memoryPromptApps[index],
                                       index: index,
                                     );
                                   },
-                                  childCount: memoryPromptPlugins.length,
+                                  childCount: memoryPromptApps.length,
                                 ),
                               );
                             }),
@@ -108,7 +108,7 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                     ),
                     CustomScrollView(
                       slivers: [
-                        const EmptyPluginsWidget(),
+                        const EmptyAppsWidget(),
                         const SectionTitleWidget(
                           title: 'Personalities',
                           explainer: 'Personalities for your chat.',
@@ -116,16 +116,16 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                         ),
                         Selector<AppProvider, List<App>>(
                             selector: (context, provider) => provider.apps.where((p) => p.worksWithChat()).toList(),
-                            builder: (context, chatPromptPlugins, child) {
+                            builder: (context, chatPromptApps, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
                                     return AppListItem(
-                                      app: chatPromptPlugins[index],
+                                      app: chatPromptApps[index],
                                       index: index,
                                     );
                                   },
-                                  childCount: chatPromptPlugins.length,
+                                  childCount: chatPromptApps.length,
                                 ),
                               );
                             }),
@@ -143,8 +143,8 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
   bool get wantKeepAlive => true;
 }
 
-class EmptyPluginsWidget extends StatelessWidget {
-  const EmptyPluginsWidget({super.key});
+class EmptyAppsWidget extends StatelessWidget {
+  const EmptyAppsWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
