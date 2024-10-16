@@ -33,9 +33,9 @@ Future<List<ServerMessage>> clearChatServer() async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
+Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: jsonEncode({'text': text}),
@@ -49,9 +49,9 @@ Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
   });
 }
 
-Future<ServerMessage> getInitialPluginMessage(String? pluginId) {
+Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',

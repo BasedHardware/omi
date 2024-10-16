@@ -1,7 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_dialog.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -14,26 +14,26 @@ class AppProvider extends BaseProvider {
   bool filterExternal = true;
   String searchQuery = '';
 
-  List<bool> pluginLoading = [];
+  List<bool> appLoading = [];
 
-  String selectedChatPluginId = 'no_selected';
+  String selectedChatAppId = 'no_selected';
 
-  void setSelectedChatPluginId(String? pluginId) {
-    if (pluginId == null) {
-      selectedChatPluginId = SharedPreferencesUtil().selectedChatPluginId;
+  void setSelectedChatAppId(String? appId) {
+    if (appId == null) {
+      selectedChatAppId = SharedPreferencesUtil().selectedChatAppId;
     } else {
-      selectedChatPluginId = pluginId;
-      SharedPreferencesUtil().selectedChatPluginId = pluginId;
+      selectedChatAppId = appId;
+      SharedPreferencesUtil().selectedChatAppId = appId;
     }
     notifyListeners();
   }
 
   App? getSelectedPlugin() {
-    return apps.firstWhereOrNull((p) => p.id == selectedChatPluginId);
+    return apps.firstWhereOrNull((p) => p.id == selectedChatAppId);
   }
 
-  void setPluginLoading(int index, bool value) {
-    pluginLoading[index] = value;
+  void setAppLoading(int index, bool value) {
+    appLoading[index] = value;
     notifyListeners();
   }
 
@@ -42,27 +42,27 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future getPlugins() async {
+  Future getApps() async {
     setLoadingState(true);
     apps = await retrieveApps();
-    updatePrefPlugins();
-    setPlugins();
+    updatePrefApps();
+    setApps();
     setLoadingState(false);
     notifyListeners();
   }
 
-  void setPluginsFromCache() {
+  void setAppsFromCache() {
     if (SharedPreferencesUtil().appsList.isNotEmpty) {
       apps = SharedPreferencesUtil().appsList;
     }
     notifyListeners();
   }
 
-  void updatePrefPlugins() {
+  void updatePrefApps() {
     SharedPreferencesUtil().appsList = apps;
   }
 
-  void setPlugins() {
+  void setApps() {
     apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
@@ -73,15 +73,15 @@ class AppProvider extends BaseProvider {
       filterMemories = false;
       filterExternal = false;
     }
-    pluginLoading = List.filled(apps.length, false);
+    appLoading = List.filled(apps.length, false);
 
-    getPlugins();
+    getApps();
     notifyListeners();
   }
 
   Future<void> togglePlugin(String pluginId, bool isEnabled, int idx) async {
-    if (pluginLoading[idx]) return;
-    pluginLoading[idx] = true;
+    if (appLoading[idx]) return;
+    appLoading[idx] = true;
     notifyListeners();
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
@@ -93,19 +93,19 @@ class AppProvider extends BaseProvider {
           singleButton: true,
         );
 
-        pluginLoading[idx] = false;
+        appLoading[idx] = false;
         notifyListeners();
 
         return;
       }
-      prefs.enablePlugin(pluginId);
+      prefs.enableApp(pluginId);
       MixpanelManager().pluginEnabled(pluginId);
     } else {
       await disableAppServer(pluginId);
-      prefs.disablePlugin(pluginId);
+      prefs.disableApp(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
-    pluginLoading[idx] = false;
+    appLoading[idx] = false;
     apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }

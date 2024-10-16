@@ -8,7 +8,7 @@ import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -313,9 +313,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String message) async {
     context.read<MessageProvider>().setSendingMessage(true);
-    String? pluginId = SharedPreferencesUtil().selectedChatPluginId == 'no_selected'
-        ? null
-        : SharedPreferencesUtil().selectedChatPluginId;
+    String? pluginId =
+        SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
     var newMessage = ServerMessage(
         const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, pluginId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
@@ -327,10 +326,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     context.read<MessageProvider>().setSendingMessage(false);
   }
 
-  sendInitialPluginMessage(App? plugin) async {
+  sendInitialPluginMessage(App? app) async {
     context.read<MessageProvider>().setSendingMessage(true);
     scrollToBottom();
-    ServerMessage message = await getInitialPluginMessage(plugin?.id);
+    ServerMessage message = await getInitialAppMessage(app?.id);
     if (mounted) {
       context.read<MessageProvider>().addMessage(message);
     }

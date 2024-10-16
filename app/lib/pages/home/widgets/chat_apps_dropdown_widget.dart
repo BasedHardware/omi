@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -49,15 +49,15 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: DropdownButton<String>(
                     menuMaxHeight: 350,
-                    value: provider.selectedChatPluginId,
+                    value: provider.selectedChatAppId,
                     onChanged: (s) async {
                       if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
                         routeToPage(context, const AppsPage(filterChatOnly: true));
                         MixpanelManager().pageOpened('Chat Plugins');
                         return;
                       }
-                      if (s == null || s == provider.selectedChatPluginId) return;
-                      provider.setSelectedChatPluginId(s);
+                      if (s == null || s == provider.selectedChatAppId) return;
+                      provider.setSelectedChatAppId(s);
                       var plugin = provider.getSelectedPlugin();
                       context.read<MessageProvider>().sendInitialPluginMessage(plugin);
                     },
