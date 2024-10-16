@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 import opuslib
+import requests
 import webrtcvad
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -11,8 +12,10 @@ from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
 from database import redis_db
+from database.redis_db import get_user_webhook_db
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
 from models.message_event import MemoryEvent, MessageEvent
+from routers.users import WebhookType
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
@@ -309,11 +312,29 @@ async def _websocket_util(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
+    async def send_audio_bytes_developer_webhook(data: bytearray):
+        webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
+        if not webhook_url:
+            print('No developer webhook url')
+            return
+        # regex webhook url is valid
+        # matches = re.match(r'^https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+$', webhook_url)
+        # if matches:
+        #     print('Invalid developer webhook url')
+        #     return
+        webhook_url += f'sample_rate={sample_rate}'
+        try:
+            response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'})
+            print('Developer webhook response', response.status_code)
+        except Exception as e:
+            print(f"Error sending audio bytes to developer webhook: {e}")
+
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
 
         timer_start = time.time()
+        audiobuffer = bytearray()
         # f = open("audio.bin", "ab")
         try:
             while websocket_active:
@@ -325,6 +346,8 @@ async def _websocket_util(
 
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
+
+                audiobuffer.extend(data)
 
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
                     has_speech = _has_speech(data, sample_rate)
@@ -347,6 +370,10 @@ async def _websocket_util(
                             dg_socket2 = None
                     else:
                         dg_socket2.send(data)
+
+                if len(audiobuffer) > sample_rate * 5 * 2:  # 5 seconds
+                    asyncio.create_task(send_audio_bytes_developer_webhook(audiobuffer.copy()))
+                    audiobuffer = bytearray()
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
