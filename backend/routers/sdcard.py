@@ -62,8 +62,6 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 offset = 0
                 while True:
                     current_packet_size = socket_segments[offset]
-
-                    print()
                     if (current_packet_size + offset > max_packet_size_idx):
                         break
                     elif (current_packet_size + offset == max_packet_size_idx):
