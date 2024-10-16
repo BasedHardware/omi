@@ -332,6 +332,20 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 16),
+                  const Text(
+                    'Real-time audio bytes:',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  TextField(
+                    controller: provider.webhookAudioBytes,
+                    obscureText: false,
+                    autocorrect: false,
+                    enabled: true,
+                    enableSuggestions: false,
+                    decoration: _getTextFieldDecoration('Endpoint URL'),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
                   const Text(
