@@ -231,12 +231,14 @@ class DeviceService implements IDeviceService {
       }
 
       // connect
-      await _connectToDevice(deviceId);
-
-      if (_firstConnectedAt == null) {
-        _firstConnectedAt = DateTime.now();
+      try {
+        await _connectToDevice(deviceId);
+      } on DeviceConnectionException catch (e) {
+        debugPrint(e.toString());
+        return null;
       }
 
+      _firstConnectedAt ??= DateTime.now();
       return _connection;
     } finally {
       mutex = false;
