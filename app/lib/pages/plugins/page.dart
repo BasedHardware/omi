@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/list_item.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class PluginsPage extends StatefulWidget {
@@ -28,15 +29,13 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
     super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: widget.filterChatOnly
-          ? AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              automaticallyImplyLeading: true,
-              title: const Text('Apps'),
-              centerTitle: true,
-              elevation: 0,
-            )
-          : null,
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticallyImplyLeading: true,
+        title: const Text('Plugins'),
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: DefaultTabController(
@@ -58,7 +57,12 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                     CustomScrollView(
                       slivers: [
                         const EmptyPluginsWidget(),
-                        const SectionTitleWidget(title: 'External Apps', emoji: '🚀'),
+                        const SectionTitleWidget(
+                          title: 'External Apps',
+                          explainer:
+                              'When a memory gets created you can use these plugins to send data to external apps like Notion, Zapier, and more.',
+                          emoji: '🚀',
+                        ),
                         Selector<PluginProvider, List<Plugin>>(
                             selector: (context, provider) =>
                                 provider.plugins.where((p) => p.worksExternally()).toList(),
@@ -78,7 +82,12 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                         context.read<PluginProvider>().plugins.isNotEmpty
                             ? SliverToBoxAdapter(child: Divider(color: Colors.grey.shade800, thickness: 1))
                             : const SliverToBoxAdapter(child: SizedBox.shrink()),
-                        const SectionTitleWidget(title: 'Prompts', emoji: '📝'),
+                        const SectionTitleWidget(
+                          title: 'Prompts',
+                          explainer:
+                              'When a memory gets created you can use these plugins to extract more information about each memory.',
+                          emoji: '📝',
+                        ),
                         Selector<PluginProvider, List<Plugin>>(
                             selector: (context, provider) =>
                                 provider.plugins.where((p) => p.worksWithMemories()).toList(),
@@ -100,7 +109,11 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                     CustomScrollView(
                       slivers: [
                         const EmptyPluginsWidget(),
-                        const SectionTitleWidget(title: 'Personalities', emoji: '🤖'),
+                        const SectionTitleWidget(
+                          title: 'Personalities',
+                          explainer: 'Personalities for your chat.',
+                          emoji: '🤖',
+                        ),
                         Selector<PluginProvider, List<Plugin>>(
                             selector: (context, provider) => provider.plugins.where((p) => p.worksWithChat()).toList(),
                             builder: (context, chatPromptPlugins, child) {
@@ -130,37 +143,6 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
   bool get wantKeepAlive => true;
 }
 
-class SectionTitleWidget extends StatelessWidget {
-  final String title;
-  final String emoji;
-  const SectionTitleWidget({super.key, required this.title, required this.emoji});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<PluginProvider>(builder: (context, provider, child) {
-      return provider.plugins.isNotEmpty
-          ? SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 32),
-                child: GestureDetector(
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
-                        const SizedBox(width: 12),
-                        Text(emoji, style: const TextStyle(fontSize: 18)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            )
-          : const SliverToBoxAdapter(child: SizedBox.shrink());
-    });
-  }
-}
-
 class EmptyPluginsWidget extends StatelessWidget {
   const EmptyPluginsWidget({super.key});
 
@@ -178,6 +160,52 @@ class EmptyPluginsWidget extends StatelessWidget {
                         : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                     textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            )
+          : const SliverToBoxAdapter(child: SizedBox.shrink());
+    });
+  }
+}
+
+class SectionTitleWidget extends StatelessWidget {
+  final String title;
+  final String emoji;
+  final String explainer;
+  const SectionTitleWidget({super.key, required this.title, required this.emoji, required this.explainer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<PluginProvider>(builder: (context, provider, child) {
+      return provider.plugins.isNotEmpty
+          ? SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 32),
+                child: GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () => Navigator.pop(context),
+                        '$title $emoji',
+                        explainer,
+                        singleButton: true,
+                        okButtonText: 'Got it!',
+                      ),
+                    );
+                  },
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                        const SizedBox(width: 12),
+                        Text(emoji, style: const TextStyle(fontSize: 18)),
+                      ],
+                    ),
                   ),
                 ),
               ),
