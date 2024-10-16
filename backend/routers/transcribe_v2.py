@@ -313,15 +313,11 @@ async def _websocket_util(
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
     async def send_audio_bytes_developer_webhook(data: bytearray):
+        # TODO: add a lock, send shorter segments, validate regex.
         webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
         if not webhook_url:
             print('No developer webhook url')
             return
-        # regex webhook url is valid
-        # matches = re.match(r'^https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+$', webhook_url)
-        # if matches:
-        #     print('Invalid developer webhook url')
-        #     return
         webhook_url += f'sample_rate={sample_rate}'
         try:
             response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'})
