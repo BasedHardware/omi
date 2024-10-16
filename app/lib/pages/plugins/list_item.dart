@@ -39,7 +39,13 @@ class PluginListItem extends StatelessWidget {
                   image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
-              placeholder: (context, url) => const CircularProgressIndicator(),
+              placeholder: (context, url) => const SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
               errorWidget: (context, url, error) => const Icon(Icons.error),
             ),
             const SizedBox(width: 16),
@@ -62,16 +68,36 @@ class PluginListItem extends StatelessWidget {
                       style: const TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   ),
-                  plugin.ratingAvg != null
+                  plugin.ratingAvg != null || plugin.installs > 0
                       ? Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
-                              Text(plugin.getRatingAvg()!),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                              const SizedBox(width: 4),
-                              Text('(${plugin.ratingCount})'),
+                              plugin.ratingAvg != null
+                                  ? Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Text(plugin.getRatingAvg()!),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                        const SizedBox(width: 4),
+                                        Text('(${plugin.ratingCount})'),
+                                        const SizedBox(width: 16),
+                                      ],
+                                    )
+                                  : const SizedBox(),
+                              plugin.installs > 0
+                                  ? Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.download_rounded, size: 16, color: Colors.grey.shade300),
+                                        const SizedBox(width: 4),
+                                        Text('${plugin.installs}'),
+                                      ],
+                                    )
+                                  : Container(),
                             ],
                           ),
                         )
@@ -81,11 +107,14 @@ class PluginListItem extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
                     ),
                   )
                 : IconButton(
