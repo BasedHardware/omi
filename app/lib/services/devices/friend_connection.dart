@@ -32,7 +32,7 @@ class FriendDeviceConnection extends DeviceConnection {
     _friendService = await getService(friendServiceUuid);
     if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
-      throw Exception("Friend ble service is not found");
+      throw DeviceConnectionException("Friend ble service is not found");
     }
 
     _batteryService = await getService(batteryServiceUuid);
@@ -227,7 +227,7 @@ class FriendDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
     if (_storageService == null) {
-      logServiceNotFoundError('Friend', deviceId);
+      logServiceNotFoundError('Storage', deviceId);
       return Future.value(<int>[]);
     }
 

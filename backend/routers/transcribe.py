@@ -77,6 +77,7 @@ async def _websocket_util(
         await websocket.accept()
     except RuntimeError as e:
         print(e)
+        websocket.close(code=1011, message="Dirty state")
         return
 
     session_id = str(uuid.uuid4())
