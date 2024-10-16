@@ -204,10 +204,10 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
           routeToPage(context, page);
         }
       },
-      child: ListTile(
-        title: const Text('SD Card Import'),
-        subtitle: Text(''),
-        trailing: const Icon(
+      child: const ListTile(
+        title: Text('SD Card Sync'),
+        subtitle: Text('Import auido files from SD Card'),
+        trailing: Icon(
           Icons.arrow_forward_ios,
           size: 16,
         ),
