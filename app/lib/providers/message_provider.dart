@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
@@ -104,7 +104,7 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? pluginId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty());
-    var mes = await sendMessageServer(message, pluginId: pluginId);
+    var mes = await sendMessageServer(message, appId: pluginId);
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }
@@ -114,18 +114,18 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendInitialPluginMessage(App? plugin) async {
     setSendingMessage(true);
-    ServerMessage message = await getInitialPluginMessage(plugin?.id);
+    ServerMessage message = await getInitialAppMessage(plugin?.id);
     addMessage(message);
     setSendingMessage(false);
     notifyListeners();
   }
 
   void checkSelectedPlugins() {
-    var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
+    var selectedChatPlugin = SharedPreferencesUtil().selectedChatAppId;
     debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
     var plugin = appProvider!.apps.firstWhereOrNull((p) => selectedChatPlugin == p.id);
     if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
-      SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
+      SharedPreferencesUtil().selectedChatAppId = 'no_selected';
     }
     notifyListeners();
   }

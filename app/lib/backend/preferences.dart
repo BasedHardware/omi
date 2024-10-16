@@ -1,12 +1,11 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -149,38 +148,38 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  int get enabledPluginsCount => appsList.where((element) => element.enabled).length;
+  int get enabledAppsCount => appsList.where((element) => element.enabled).length;
 
-  int get enabledPluginsIntegrationsCount =>
+  int get enabledAppsIntegrationsCount =>
       appsList.where((element) => element.enabled && element.worksExternally()).length;
 
   List<App> get appsList {
-    final List<String> plugins = getStringList('pluginsList') ?? [];
-    return App.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
+    final List<String> apps = getStringList('appsList') ?? [];
+    return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
   }
 
   set appsList(List<App> value) {
-    final List<String> plugins = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('pluginsList', plugins);
+    final List<String> apps = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('appsList', apps);
   }
 
-  enablePlugin(String value) {
-    final List<App> plugins = appsList;
-    final plugin = plugins.firstWhere((element) => element.id == value);
-    plugin.enabled = true;
-    appsList = plugins;
+  enableApp(String value) {
+    final List<App> apps = appsList;
+    final app = apps.firstWhere((element) => element.id == value);
+    app.enabled = true;
+    appsList = apps;
   }
 
-  disablePlugin(String value) {
-    final List<App> plugins = appsList;
-    final plugin = plugins.firstWhere((element) => element.id == value);
-    plugin.enabled = false;
-    appsList = plugins;
+  disableApp(String value) {
+    final List<App> apps = appsList;
+    final app = apps.firstWhere((element) => element.id == value);
+    app.enabled = false;
+    appsList = apps;
   }
 
-  String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';
+  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
 
-  set selectedChatPluginId(String value) => saveString('selectedChatPluginId2', value);
+  set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
   List<TranscriptSegment> get transcriptSegments {
     final List<String> segments = getStringList('transcriptSegments') ?? [];
