@@ -383,13 +383,12 @@ class GetAppsWidgets extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment:
-              provider.memory.pluginsResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: provider.memory.pluginsResults.isEmpty
+          crossAxisAlignment: provider.memory.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: provider.memory.appResults.isEmpty
               ? [child!]
               : [
                   // TODO: include a way to trigger specific plugins
-                  if (provider.memory.pluginsResults.isNotEmpty &&
+                  if (provider.memory.appResults.isNotEmpty &&
                       !provider.memory.discarded &&
                       provider.appResponseExpanded.isNotEmpty) ...[
                     provider.memory.structured.actionItems.isEmpty
@@ -401,7 +400,7 @@ class GetAppsWidgets extends StatelessWidget {
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 24),
-                    ...provider.memory.pluginsResults.mapIndexed(
+                    ...provider.memory.appResults.mapIndexed(
                       (i, pluginResponse) {
                         if (pluginResponse.content.length < 5) return const SizedBox.shrink();
                         App? app =
