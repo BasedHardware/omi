@@ -4,7 +4,7 @@ from typing import List, Optional
 import requests
 
 from database.chat import add_plugin_message
-from database.redis_db import get_enabled_plugins, get_plugin_reviews
+from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin
@@ -38,6 +38,7 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     for plugin in data:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
+        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
         if include_reviews:
             reviews = get_plugin_reviews(plugin['id'])
             sorted_reviews = reviews.values()
