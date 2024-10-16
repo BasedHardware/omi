@@ -26,7 +26,6 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -514,28 +513,28 @@ class CaptureProvider extends ChangeNotifier
     sdCardIsDownloading = value;
     notifyListeners();
   }
-  
-   Future<void> updateStorageList() async {
-     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-     if (currentStorageFiles.isEmpty) {
-       debugPrint('No storage files found');
-       SharedPreferencesUtil().deviceIsV2 = false;
-       debugPrint('Device is not V2');
 
-       return;
-     }
-     totalStorageFileBytes = currentStorageFiles[0];
-     var storageOffset = currentStorageFiles[1];
-     totalBytesReceived = storageOffset;
-     notifyListeners();
-   }
+  Future<void> updateStorageList() async {
+    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
+      debugPrint('No storage files found');
+      SharedPreferencesUtil().deviceIsV2 = false;
+      debugPrint('Device is not V2');
+
+      return;
+    }
+    totalStorageFileBytes = currentStorageFiles[0];
+    var storageOffset = currentStorageFiles[1];
+    totalBytesReceived = storageOffset;
+    notifyListeners();
+  }
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
 
     if (_recordingDevice == null) return;
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty) {
+    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
@@ -551,7 +550,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('storageOffset: $storageOffset');
     // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     //check if new or old file
-    if (totalStorageFileBytes < previousStorageBytes) {
+    if (totalStorageFileBytes < SharedPreferencesUtil().previousStorageBytes) {
       totalBytesReceived = 0;
       SharedPreferencesUtil().currentStorageBytes = 0;
     } else {
@@ -566,7 +565,7 @@ class CaptureProvider extends ChangeNotifier
         ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
     sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
+    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $SharedPreferencesUtil().previousStorageBytes');
     btConnectedTime = DateTime.now().toUtc().toString();
     sdCardSocket.setupSdCardWebSocket(
       //replace
@@ -638,7 +637,8 @@ class CaptureProvider extends ChangeNotifier
           //bad bit
           debugPrint('Error bit returned');
         }
-      } else if (value.length >= 80) { //enforce a min packet size, large
+      } else if (value.length >= 80) {
+        //enforce a min packet size, large
         if (value.length == 83) {
           totalBytesReceived += 80;
         } else {
@@ -731,7 +731,6 @@ class CaptureProvider extends ChangeNotifier
     }
     return connection.getStorageList();
   }
-
 
   void setsdCardReady(bool value) {
     sdCardReady = value;
