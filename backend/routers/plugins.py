@@ -3,10 +3,11 @@ from typing import List
 import requests
 from fastapi import APIRouter, HTTPException, Depends
 
+from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
+    decrease_plugin_installs_count
 from models.plugin import Plugin
 from utils.other import endpoints as auth
 from utils.plugins import get_plugins_data, get_plugin_by_id
-from database.redis_db import set_plugin_review, enable_plugin, disable_plugin
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
         print('enable_plugin_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='Plugin setup is not completed')
-
+    increase_plugin_installs_count(plugin_id)
     enable_plugin(uid, plugin_id)
     return {'status': 'ok'}
 
@@ -32,6 +33,7 @@ def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     disable_plugin(uid, plugin_id)
+    decrease_plugin_installs_count(plugin_id)
     return {'status': 'ok'}
 
 
