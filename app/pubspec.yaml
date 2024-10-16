@@ -95,6 +95,7 @@ dependencies:
   markdown: ^7.2.2
   purchases_flutter: ^8.1.4
   in_app_purchase: ^3.2.0
+  in_app_purchase_storekit: ^0.3.18+1
 
 dependency_overrides:
   http: ^1.2.1

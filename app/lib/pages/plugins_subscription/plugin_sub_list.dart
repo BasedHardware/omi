@@ -1,11 +1,17 @@
 import 'dart:convert';
 import 'dart:io' as Platform;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/pages/plugins_subscription/test.dart';
 import 'package:friend_private/utils/purchase/store_config.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:intl/intl.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../backend/preferences.dart';
 import '../../firebase/model/user_subscription_model.dart';
 import '../../firebase/service/user_subsrtiption_fire.dart';
@@ -44,22 +50,23 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
     await Purchases.enableAdServicesAttributionTokenCollection();
     final customerInfoTemp = await Purchases.getCustomerInfo();
     Purchases.addReadyForPromotedProductPurchaseListener(
-            (productID, startPurchase) async {
-          debugPrint("Received readyForPromotedProductPurchase event for "
-              "productID: $productID");
-          try {
-            final purchaseResult = await startPurchase.call();
-            debugPrint("Promoted purchase for productID "
-                "${purchaseResult.productIdentifier} completed, or product was "
-                "already purchased. customerInfo returned is:"
-                " ${purchaseResult.customerInfo}");
-          } on PlatformException catch (e) {
-            debugPrint("Error purchasing promoted product: ${e.message}");
-          }
-        });
+        (productID, startPurchase) async {
+      debugPrint("Received readyForPromotedProductPurchase event for "
+          "productID: $productID");
+      try {
+        final purchaseResult = await startPurchase.call();
+        debugPrint("Promoted purchase for productID "
+            "${purchaseResult.productIdentifier} completed, or product was "
+            "already purchased. customerInfo returned is:"
+            " ${purchaseResult.customerInfo}");
+      } on PlatformException catch (e) {
+        debugPrint("Error purchasing promoted product: ${e.message}");
+      }
+    });
 
     debugPrint("customerInfoTemp : $customerInfoTemp");
-    SharedPreferencesUtil().activeSubscriptionPluginList = customerInfoTemp.activeSubscriptions;
+    SharedPreferencesUtil().activeSubscriptionPluginList =
+        customerInfoTemp.activeSubscriptions;
     customerInfo = customerInfoTemp;
   }
 
@@ -101,7 +108,7 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.deepPurple,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
+              borderRadius: BorderRadius.circular(8.0),
             ),
           ),
           child: const Text(
@@ -160,7 +167,8 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8.0))),
                         onPressed: () async {
-                          await purchasePluginSubscription(offeringId: offering!.availablePackages[index]);
+                          await purchasePluginSubscription(
+                              offeringId: offering!.availablePackages[index]);
                         },
                         child: const Text(
                           'Subscribe',
@@ -174,21 +182,71 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
                   );
                 },
               )
-            : const CircularProgressIndicator(strokeWidth: 2, color: Colors.white,),
+            : const CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
       ),
     );
   }
 
-  purchasePluginSubscription({offeringId}) async{
+  purchasePluginSubscription({required Package offeringId}) async {
+
     try {
-      CustomerInfo customerInfo =
-      await Purchases.purchasePackage(offeringId);
+      debugPrint("SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
+      debugPrint(
+          "offeringId.storeProduct.identifier :- ${offeringId.storeProduct.defaultOption?.productId}");
+      RCPurchaseController rCPurchaseController = RCPurchaseController();
+      var data = await rCPurchaseController.onPurchase(
+          productId: offeringId.storeProduct.defaultOption?.productId ?? "");
+
+      if (data is String) {
+        /// error
+        debugPrint("dadadxgacgafcgh -> $data");
+        scaffoldMessage(data);
+      } else if (data is PurchaseDetails) {
+        // todo api
+
+        var mainHeaders = {"Content-Type": "application/json; charset=UTF-8"};
+
+        debugPrint("SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
+
+        Map<String, dynamic> passDate = {
+          'userId': SharedPreferencesUtil().uid,
+          'receipt': data.verificationData.serverVerificationData,
+          'platform': "android",
+          'productId': data.productID,
+          'purchaseId': data.purchaseID,
+          'pluginId': offeringId.identifier
+        };
+
+        debugPrint("-????????? $passDate");
+
+        var response = await makeApiCall(
+          url:
+              "https://us-central1-ai-wearable.cloudfunctions.net/purchaseComplete",
+          method: 'POST',
+          headers: mainHeaders,
+          body: json.encode(passDate),
+        );
+
+        debugPrint("response response :- ${response?.body}");
+
+        debugPrint("data :- ${data.purchaseID}");
+        debugPrint("data :- ${data.verificationData.serverVerificationData}");
+      }
+
+      return;
+
+      CustomerInfo customerInfo = await Purchases.purchasePackage(offeringId);
       print('customerInfo');
       print(customerInfo);
       print(customerInfo.entitlements);
 
-      var startDate =  DateTime.parse(customerInfo.allPurchaseDates[offeringId.storeProduct.identifier]!);
-      var expiryDate =  DateTime.parse(customerInfo.allExpirationDates[offeringId.storeProduct.identifier]!);
+      var startDate = DateTime.parse(
+          customerInfo.allPurchaseDates[offeringId.storeProduct.identifier]!);
+      var expiryDate = DateTime.parse(
+          customerInfo.allExpirationDates[offeringId.storeProduct.identifier]!);
       UserSubscriptionModel userSubModel = UserSubscriptionModel(
         userId: SharedPreferencesUtil().uid,
         pluginId: offeringId.storeProduct.identifier,
@@ -238,14 +296,13 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
   }
 
   Future<void> restorePurchases() async {
-   /*await RCPurchaseController().restorePurchases();
+    /*await RCPurchaseController().restorePurchases();
     return;*/
     try {
       CustomerInfo restoredInfo = await Purchases.restorePurchases();
       print('*** restoredInfo ***');
       print(restoredInfo);
       print(restoredInfo.entitlements);
-
     } on PlatformException catch (e) {
       // Handle errors specific to RevenueCat using PurchasesErrorHelper
       var errorCode = PurchasesErrorHelper.getErrorCode(e);
@@ -276,7 +333,7 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
     }
   }
 
-  scaffoldMessage(String message){
+  scaffoldMessage(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }

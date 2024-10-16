@@ -27,7 +27,12 @@ exports.purchaseComplete = functions.https.onRequest((request, response) => {
     var purchaseId = request.body.purchaseId;
     var pluginId = request.body.pluginId;
 
-    console.log(request.body);
+    console.log("test request userId ",userId);
+    console.log("test request receipt ",receipt);
+    console.log("test request platform ",platform);
+    console.log("test request productId ",productId);
+    console.log("test request purchaseId ",purchaseId);
+    console.log("test request pluginId ",pluginId);
 
     if (userId === undefined || receipt === undefined || userId === "" || receipt === "", platform === undefined || platform === "") {
         response.send({ status: false, message: "Missing required parameters" });
