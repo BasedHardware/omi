@@ -68,16 +68,36 @@ class PluginListItem extends StatelessWidget {
                       style: const TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   ),
-                  plugin.ratingAvg != null
+                  plugin.ratingAvg != null || plugin.installs > 0
                       ? Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
-                              Text(plugin.getRatingAvg()!),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                              const SizedBox(width: 4),
-                              Text('(${plugin.ratingCount})'),
+                              plugin.ratingAvg != null
+                                  ? Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Text(plugin.getRatingAvg()!),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                        const SizedBox(width: 4),
+                                        Text('(${plugin.ratingCount})'),
+                                        const SizedBox(width: 16),
+                                      ],
+                                    )
+                                  : const SizedBox(),
+                              plugin.installs > 0
+                                  ? Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.download_rounded, size: 16, color: Colors.grey.shade300),
+                                        const SizedBox(width: 4),
+                                        Text('${plugin.installs}'),
+                                      ],
+                                    )
+                                  : Container(),
                             ],
                           ),
                         )
