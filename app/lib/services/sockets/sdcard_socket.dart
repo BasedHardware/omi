@@ -12,6 +12,7 @@ enum WebsocketConnectionStatus { notConnected, connected, failed, closed, error 
 
 
 
+// TODO: Implement from pure socket
 class SdCardSocketService {
 
     IOWebSocketChannel? sdCardChannel;
