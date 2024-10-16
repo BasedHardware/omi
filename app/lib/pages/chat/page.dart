@@ -38,7 +38,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   var prefs = SharedPreferencesUtil();
-  late List<App> plugins;
+  late List<App> apps;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -47,7 +47,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
-    plugins = prefs.appsList;
+    apps = prefs.appsList;
     scrollController = ScrollController();
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -217,7 +217,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             message: message,
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,
-                                            pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                                            appSender: apps.firstWhereOrNull((e) => e.id == message.pluginId),
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
                                             },
@@ -313,20 +313,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String message) async {
     context.read<MessageProvider>().setSendingMessage(true);
-    String? pluginId =
+    String? appId =
         SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
     var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, pluginId, false, []);
+        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
     scrollToBottom();
     textController.clear();
-    await context.read<MessageProvider>().sendMessageToServer(message, pluginId);
+    await context.read<MessageProvider>().sendMessageToServer(message, appId);
     // TODO: restore streaming capabilities, with initial empty message
     scrollToBottom();
     context.read<MessageProvider>().setSendingMessage(false);
   }
 
-  sendInitialPluginMessage(App? app) async {
+  sendInitialAppMessage(App? app) async {
     context.read<MessageProvider>().setSendingMessage(true);
     scrollToBottom();
     ServerMessage message = await getInitialAppMessage(app?.id);

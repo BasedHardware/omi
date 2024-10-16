@@ -1,5 +1,5 @@
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/base_provider.dart';
@@ -28,7 +28,7 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  App? getSelectedPlugin() {
+  App? getSelectedApp() {
     return apps.firstWhereOrNull((p) => p.id == selectedChatAppId);
   }
 
@@ -79,17 +79,17 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future<void> togglePlugin(String pluginId, bool isEnabled, int idx) async {
+  Future<void> toggleApp(String appId, bool isEnabled, int idx) async {
     if (appLoading[idx]) return;
     appLoading[idx] = true;
     notifyListeners();
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
-      var enabled = await enableAppServer(pluginId);
+      var enabled = await enableAppServer(appId);
       if (!enabled) {
         AppDialog.show(
-          title: 'Error activating the plugin',
-          content: 'If this is an integration plugin, make sure the setup is completed.',
+          title: 'Error activating the app',
+          content: 'If this is an integration app, make sure the setup is completed.',
           singleButton: true,
         );
 
@@ -98,12 +98,12 @@ class AppProvider extends BaseProvider {
 
         return;
       }
-      prefs.enableApp(pluginId);
-      MixpanelManager().pluginEnabled(pluginId);
+      prefs.enableApp(appId);
+      MixpanelManager().pluginEnabled(appId);
     } else {
-      await disableAppServer(pluginId);
-      prefs.disableApp(pluginId);
-      MixpanelManager().pluginDisabled(pluginId);
+      await disableAppServer(appId);
+      prefs.disableApp(appId);
+      MixpanelManager().pluginDisabled(appId);
     }
     appLoading[idx] = false;
     apps = SharedPreferencesUtil().appsList;
