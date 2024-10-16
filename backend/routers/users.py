@@ -1,11 +1,12 @@
 import threading
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from database.redis_db import cache_user_geolocation
+from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db
 from database.users import *
 from models.memory import Geolocation
 from models.other import Person, CreatePerson
@@ -33,6 +34,21 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
     cache_user_geolocation(uid, geolocation.dict())
     return {'status': 'ok'}
+
+
+class WebhookType(str, Enum):
+    audio_bytes = 'audio_bytes'
+
+
+@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    set_user_webhook_db(uid, wtype, data['url'])
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
+    return {'url': get_user_webhook_db(uid, wtype)}
 
 
 # *************************************************
