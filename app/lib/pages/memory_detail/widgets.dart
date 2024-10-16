@@ -36,7 +36,7 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
-    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
   @override
@@ -401,10 +401,9 @@ class GetAppsWidgets extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     ...provider.memory.appResults.mapIndexed(
-                      (i, pluginResponse) {
-                        if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                        App? app =
-                            provider.appsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+                      (i, appResponse) {
+                        if (appResponse.content.length < 5) return const SizedBox.shrink();
+                        App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 40),
                           child: Column(
@@ -460,7 +459,7 @@ class GetAppsWidgets extends StatelessWidget {
                                       trailing: IconButton(
                                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                                         onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
+                                          Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
                                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                             content: Text('Plugin response copied to clipboard'),
                                           ));
@@ -471,13 +470,12 @@ class GetAppsWidgets extends StatelessWidget {
                                     )
                                   : const SizedBox.shrink(),
                               ExpandableTextWidget(
-                                text: pluginResponse.content.decodeSting.trim(),
+                                text: appResponse.content.decodeSting.trim(),
                                 isExpanded: provider.appResponseExpanded[i],
                                 toggleExpand: () {
-                                  print('pluginResponseExpanded: ${provider.appResponseExpanded}');
+                                  debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
                                   if (!provider.appResponseExpanded[i]) {
-                                    MixpanelManager()
-                                        .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
+                                    MixpanelManager().pluginResultExpanded(provider.memory, appResponse.appId ?? '');
                                   }
                                   provider.updateAppResponseExpanded(i);
                                 },
