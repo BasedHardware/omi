@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/plugins/list_item.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class PluginsPage extends StatefulWidget {
@@ -60,7 +61,13 @@ class _PluginsPageState extends State<PluginsPage> {
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle(context, provider, 'External Apps', '🚀'),
+                          _getSectionTitle(
+                            context,
+                            provider,
+                            'External Apps',
+                            '🚀',
+                            'When a memory gets created you can use these plugins to send data to external apps like Notion, Zapier, and more.',
+                          ),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -76,7 +83,8 @@ class _PluginsPageState extends State<PluginsPage> {
                           provider.plugins.isNotEmpty
                               ? SliverToBoxAdapter(child: Divider(color: Colors.grey.shade800, thickness: 1))
                               : const SliverToBoxAdapter(child: SizedBox.shrink()),
-                          _getSectionTitle(context, provider, 'Prompts', '📝'),
+                          _getSectionTitle(context, provider, 'Prompts', '📝',
+                              'When a memory gets created you can use these plugins to extract more information about each memory.'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -94,7 +102,7 @@ class _PluginsPageState extends State<PluginsPage> {
                       CustomScrollView(
                         slivers: [
                           _emptyPluginsWidget(provider),
-                          _getSectionTitle(context, provider, 'Personalities', '🤖'),
+                          _getSectionTitle(context, provider, 'Personalities', '🤖', 'Personalities for your chat.'),
                           SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
@@ -118,26 +126,26 @@ class _PluginsPageState extends State<PluginsPage> {
     });
   }
 
-  _getSectionTitle(BuildContext context, PluginProvider provider, String title, String emoji) {
+  _getSectionTitle(BuildContext context, PluginProvider provider, String title, String emoji, String explainer) {
     return provider.plugins.isNotEmpty
         ? SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(top: 32),
               child: GestureDetector(
-                // onTap: () {
-                //   showDialog(
-                //     context: context,
-                //     builder: getDialog(
-                //       context,
-                //       () => Navigator.pop(context),
-                //       () => Navigator.pop(context),
-                //       'asd',
-                //       'asd',
-                //       singleButton: true,
-                //       okButtonText: 'Ok',
-                //     ),
-                //   );
-                // },
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (c) => getDialog(
+                      context,
+                      () => Navigator.pop(context),
+                      () => Navigator.pop(context),
+                      '$title $emoji',
+                      explainer,
+                      singleButton: true,
+                      okButtonText: 'Got it!',
+                    ),
+                  );
+                },
                 child: Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
