@@ -18,8 +18,6 @@ class BatteryInfoWidget extends StatelessWidget {
       builder: (context, isMemoriesPage, child) {
         return Consumer<DeviceProvider>(
           builder: (context, deviceProvider, child) {
-            debugPrint(
-                "Device ${deviceProvider.connectedDevice?.name} - device name ${SharedPreferencesUtil().deviceName}");
             if (deviceProvider.connectedDevice != null) {
               return GestureDetector(
                 onTap: deviceProvider.connectedDevice == null
