@@ -641,7 +641,7 @@
     "capabilities": [
         "memories"
     ],
-    "memory_prompt": "Please transform the following sentence into Gen Z/Gen Alpha slang, incorporating as many of the following terms as possible (and more): *bet, fax, W, vibe, bussin', rizz, lit, drip, mid, cap, salty, slay, extra, flex, yeet, mood, glow up, big L, bop, Gucci, period, sus, sheesh, lowkey, snack, snatched, stan, thirsty, tea, ghost, cringe, delulu, fire, basic, GOAT, ick, peep, sleeper, low-vibrational, it's giving,* and *vibin'*, cooked. The goal is to maintain the original meaning of the sentence but make it sound as if it's being spoken by a Gen Z or Gen Alpha person. Feel free to get creative with the slang, keeping it short and casual, while giving the sentence that trendy, social-media-ready vibe. Also, ensure the use of terms fits contextually and naturally into the sentence.",
+    "memory_prompt": "Please transform the following sentence into Gen Z/Gen Alpha slang, incorporating as many of the following terms as possible (and more): *bet, fax, W, vibe, bussin', rizz, lit, drip, mid, cap, salty, slay, extra, flex, yeet, mood, glow up, big L, bop, Gucci, period, sus, sheesh, lowkey, snack, snatched, stan, thirsty, tea, ghost, cringe, delulu, fire, basic, GOAT, ick, peep, sleeper, low-vibrational, it's giving,* and *vibin'*, cooked. The goal is to maintain the original meaning of the sentence but make it sound as if it's being spoken by a Gen Z or Gen Alpha person. Feel free to get creative with the slang, keeping it short and casual, while giving the sentence that trendy, social-media-ready vibe. Also, ensure the use of terms fits contextually and naturally into the sentence. Only respond with the translated sentance.",
     "deleted": false
 }
 ]
