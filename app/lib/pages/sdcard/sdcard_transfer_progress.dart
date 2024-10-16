@@ -1,11 +1,18 @@
 import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class SdCardTransferProgress extends StatefulWidget {
   final double progress;
   final String displayPercentage;
+  final String secondsRemaining;
 
-  const SdCardTransferProgress({super.key, required this.progress, required this.displayPercentage});
+  const SdCardTransferProgress({
+    super.key,
+    required this.progress,
+    required this.displayPercentage,
+    required this.secondsRemaining,
+  });
 
   @override
   _SdCardTransferProgressState createState() => _SdCardTransferProgressState();
@@ -52,8 +59,8 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
           alignment: Alignment.center,
           children: [
             SizedBox(
-              width: MediaQuery.sizeOf(context).height * 0.32,
-              height: MediaQuery.sizeOf(context).height * 0.32,
+              width: MediaQuery.sizeOf(context).height * 0.34,
+              height: MediaQuery.sizeOf(context).height * 0.34,
               child: Padding(
                 padding: const EdgeInsets.all(50.0),
                 child: CircularProgressIndicator(
@@ -64,44 +71,61 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
                 ),
               ),
             ),
-            const Icon(
-              Icons.sd_card,
-              size: 64,
-              color: Colors.white,
+            TweenAnimationBuilder(
+              tween: Tween<double>(
+                begin: 0.0,
+                end: widget.progress > 0.01 ? 1.0 : 0.0,
+              ),
+              duration: const Duration(milliseconds: 800),
+              builder: (context, double value, child) {
+                final angle = value * pi; // Rotate from 0 to 180 degrees
+                return Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.rotationY(angle),
+                  child: value < 0.5
+                      ? const Icon(
+                          Icons.sd_card,
+                          size: 68,
+                          color: Colors.white,
+                        )
+                      : Transform.flip(
+                          flipX: true,
+                          child: Column(
+                            children: [
+                              Text(
+                                '${widget.displayPercentage}%',
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                secondsToHumanReadable(widget.secondsRemaining),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const Text('Remaining', style: TextStyle(fontSize: 16, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                );
+              },
             ),
             if (_transferComplete) ..._buildParticles(),
           ],
         ),
-        const SizedBox(height: 20),
-        Text(
-          _transferComplete ? 'Transfer Complete!' : '${widget.displayPercentage}%',
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(3, (index) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.progress > index / 3 ? Colors.white : Colors.grey[800],
-                ),
-              ),
-            );
-          }),
-        ),
       ],
     );
   }
 
   List<Widget> _buildParticles() {
     return List.generate(60, (index) {
-      final random = Random();
+      final random = math.Random();
       final size = random.nextDouble() * 10 + 5;
       final angle = random.nextDouble() * 2 * pi;
       const radius = 100.0;
@@ -140,4 +164,26 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
       );
     });
   }
+}
+
+String secondsToHumanReadable(String seconds) {
+  final intSeconds = int.parse(seconds.split('.')[0]);
+  final int hours = intSeconds ~/ 3600;
+  final int minutes = (intSeconds % 3600) ~/ 60;
+  final int remainingSeconds = intSeconds % 60;
+
+  final List<String> parts = [];
+  if (hours > 0) {
+    parts.add('${hours}h');
+  }
+
+  if (minutes > 0) {
+    parts.add('${minutes}m');
+  }
+
+  if (remainingSeconds > 0) {
+    parts.add('${remainingSeconds}s');
+  }
+
+  return parts.join(' ');
 }
