@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/plugins/instructions.dart';
+import 'package:friend_private/pages/apps/instructions.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -15,16 +15,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/schema/plugin.dart';
 
-class PluginDetailPage extends StatefulWidget {
-  final Plugin plugin;
+class AppDetailPage extends StatefulWidget {
+  final App plugin;
 
-  const PluginDetailPage({super.key, required this.plugin});
+  const AppDetailPage({super.key, required this.plugin});
 
   @override
-  State<PluginDetailPage> createState() => _PluginDetailPageState();
+  State<AppDetailPage> createState() => _AppDetailPageState();
 }
 
-class _PluginDetailPageState extends State<PluginDetailPage> {
+class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool pluginLoading = false;
@@ -312,10 +312,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           review: '',
                           score: rating,
                         );
-                        var pluginsList = SharedPreferencesUtil().pluginsList;
+                        var pluginsList = SharedPreferencesUtil().appsList;
                         var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
                         pluginsList[index] = widget.plugin;
-                        SharedPreferencesUtil().pluginsList = pluginsList;
+                        SharedPreferencesUtil().appsList = pluginsList;
                         MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
                         debugPrint('Refreshed plugins list.');
                         // TODO: refresh ratings on plugin
@@ -404,7 +404,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
     var prefs = SharedPreferencesUtil();
     setState(() => pluginLoading = true);
     if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
+      var enabled = await enableAppServer(pluginId);
       if (!enabled) {
         if (mounted) {
           showDialog(
@@ -428,7 +428,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       MixpanelManager().pluginEnabled(pluginId);
     } else {
       prefs.disablePlugin(pluginId);
-      await enablePluginServer(pluginId);
+      await enableAppServer(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
     setState(() => widget.plugin.enabled = isEnabled);

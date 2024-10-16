@@ -38,7 +38,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   var prefs = SharedPreferencesUtil();
-  late List<Plugin> plugins;
+  late List<App> plugins;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -47,7 +47,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
-    plugins = prefs.pluginsList;
+    plugins = prefs.appsList;
     scrollController = ScrollController();
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -327,7 +327,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     context.read<MessageProvider>().setSendingMessage(false);
   }
 
-  sendInitialPluginMessage(Plugin? plugin) async {
+  sendInitialPluginMessage(App? plugin) async {
     context.read<MessageProvider>().setSendingMessage(true);
     scrollToBottom();
     ServerMessage message = await getInitialPluginMessage(plugin?.id);

@@ -4,10 +4,10 @@ import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
-  PluginProvider? pluginProvider;
+  AppProvider? appProvider;
   List<ServerMessage> messages = [];
 
   bool isLoadingMessages = false;
@@ -18,8 +18,8 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
-  void updatePluginProvider(PluginProvider p) {
-    pluginProvider = p;
+  void updateAppProvider(AppProvider p) {
+    appProvider = p;
   }
 
   void setHasCachedMessages(bool value) {
@@ -112,7 +112,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future sendInitialPluginMessage(Plugin? plugin) async {
+  Future sendInitialPluginMessage(App? plugin) async {
     setSendingMessage(true);
     ServerMessage message = await getInitialPluginMessage(plugin?.id);
     addMessage(message);
@@ -123,7 +123,7 @@ class MessageProvider extends ChangeNotifier {
   void checkSelectedPlugins() {
     var selectedChatPlugin = SharedPreferencesUtil().selectedChatPluginId;
     debugPrint('_edgeCasePluginNotAvailable $selectedChatPlugin');
-    var plugin = pluginProvider!.plugins.firstWhereOrNull((p) => selectedChatPlugin == p.id);
+    var plugin = appProvider!.apps.firstWhereOrNull((p) => selectedChatPlugin == p.id);
     if (selectedChatPlugin != 'no_selected' && (plugin == null || !plugin.worksWithChat() || !plugin.enabled)) {
       SharedPreferencesUtil().selectedChatPluginId = 'no_selected';
     }

@@ -7,13 +7,13 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
-  PluginProvider? pluginProvider;
+  AppProvider? appProvider;
   MemoryProvider? memoryProvider;
   // late ServerMemory memory;
 
@@ -28,7 +28,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
-  List<Plugin> pluginsList = [];
+  List<App> appsList = [];
 
   Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
   ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
@@ -80,9 +80,9 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void setProviders(PluginProvider provider, MemoryProvider memoryProvider) {
+  void setProviders(AppProvider provider, MemoryProvider memoryProvider) {
     this.memoryProvider = memoryProvider;
-    pluginProvider = provider;
+    appProvider = provider;
     notifyListeners();
   }
 
@@ -137,7 +137,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       //   hasAudioRecording = value;
       // });
     }
-    pluginsList = pluginProvider!.plugins;
+    appsList = appProvider!.apps;
     // updateLoadingState(false);
     notifyListeners();
   }
