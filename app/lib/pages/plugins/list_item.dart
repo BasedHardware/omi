@@ -39,7 +39,13 @@ class PluginListItem extends StatelessWidget {
                   image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
-              placeholder: (context, url) => const CircularProgressIndicator(),
+              placeholder: (context, url) => const SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
               errorWidget: (context, url, error) => const Icon(Icons.error),
             ),
             const SizedBox(width: 16),
@@ -81,11 +87,14 @@ class PluginListItem extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
                     ),
                   )
                 : IconButton(

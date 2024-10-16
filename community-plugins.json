@@ -313,7 +313,7 @@
       "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md",
       "auth_steps": [
         {
-          "name": "Connect Notion",
+          "name": "Auhtorize Notion Account",
           "url": "https://based-hardware--plugins-api.modal.run/setup-notion-crm"
         }
       ]
@@ -537,7 +537,7 @@
       "setup_instructions_file_path": "/plugins/instructions/zapier/README.md",
       "auth_steps": [
         {
-          "name": "Authorize Zapier",
+          "name": "Setup Zapier Integration",
           "url": "https://zapier.com/developer/public-invite/209831/fdb4140323d1870eb9f72c76c864c8e0/"
         },
         {

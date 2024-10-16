@@ -34,17 +34,40 @@ class PluginReview {
   }
 }
 
+class AuthStep {
+  String name;
+  String url;
+
+  AuthStep({
+    required this.name,
+    required this.url,
+  });
+
+  factory AuthStep.fromJson(Map<String, dynamic> json) {
+    return AuthStep(
+      name: json['name'],
+      url: json['url'],
+    );
+  }
+
+  toJson() {
+    return {'name': name, 'url': url};
+  }
+}
+
 class ExternalIntegration {
   String triggersOn;
   String webhookUrl;
   String? setupCompletedUrl;
   String setupInstructionsFilePath;
+  List<AuthStep> authSteps;
 
   ExternalIntegration({
     required this.triggersOn,
     required this.webhookUrl,
     required this.setupCompletedUrl,
     required this.setupInstructionsFilePath,
+    this.authSteps = const [],
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -53,6 +76,7 @@ class ExternalIntegration {
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
       setupInstructionsFilePath: json['setup_instructions_file_path'],
+      authSteps: json['auth_steps'] == null ? [] : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
     );
   }
 
@@ -73,6 +97,7 @@ class ExternalIntegration {
       'webhook_url': webhookUrl,
       'setup_completed_url': setupCompletedUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
+      'auth_steps': authSteps.map((e) => e.toJson()).toList(),
     };
   }
 }
