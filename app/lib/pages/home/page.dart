@@ -136,6 +136,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     SharedPreferencesUtil().onboardingCompleted = true;
     _controller = PageController();
     WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiatePlugins();
       // ForegroundUtil.requestPermissions();
