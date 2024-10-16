@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/plugins/list_item.dart';
+import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
-class PluginsPage extends StatefulWidget {
+class AppsPage extends StatefulWidget {
   final bool filterChatOnly;
 
-  const PluginsPage({super.key, this.filterChatOnly = false});
+  const AppsPage({super.key, this.filterChatOnly = false});
 
   @override
-  State<PluginsPage> createState() => _PluginsPageState();
+  State<AppsPage> createState() => _AppsPageState();
 }
 
-class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClientMixin {
+class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PluginProvider>().initialize(widget.filterChatOnly);
+      context.read<AppProvider>().initialize(widget.filterChatOnly);
     });
     super.initState();
   }
@@ -29,13 +29,15 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
     super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticallyImplyLeading: true,
-        title: const Text('Plugins'),
-        centerTitle: true,
-        elevation: 0,
-      ),
+      appBar: widget.filterChatOnly
+          ? AppBar(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              automaticallyImplyLeading: true,
+              title: const Text('Apps'),
+              centerTitle: true,
+              elevation: 0,
+            )
+          : null,
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: DefaultTabController(
@@ -60,18 +62,17 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                         const SectionTitleWidget(
                           title: 'External Apps',
                           explainer:
-                              'When a memory gets created you can use these plugins to send data to external apps like Notion, Zapier, and more.',
+                              'When a memory gets created you can use these apps to send data to external apps like Notion, Zapier, and more.',
                           emoji: '🚀',
                         ),
-                        Selector<PluginProvider, List<Plugin>>(
-                            selector: (context, provider) =>
-                                provider.plugins.where((p) => p.worksExternally()).toList(),
+                        Selector<AppProvider, List<App>>(
+                            selector: (context, provider) => provider.apps.where((p) => p.worksExternally()).toList(),
                             builder: (context, memoryIntegrationPlugins, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
-                                    return PluginListItem(
-                                      plugin: memoryIntegrationPlugins[index],
+                                    return AppListItem(
+                                      app: memoryIntegrationPlugins[index],
                                       index: index,
                                     );
                                   },
@@ -79,24 +80,23 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                                 ),
                               );
                             }),
-                        context.read<PluginProvider>().plugins.isNotEmpty
+                        context.read<AppProvider>().apps.isNotEmpty
                             ? SliverToBoxAdapter(child: Divider(color: Colors.grey.shade800, thickness: 1))
                             : const SliverToBoxAdapter(child: SizedBox.shrink()),
                         const SectionTitleWidget(
                           title: 'Prompts',
                           explainer:
-                              'When a memory gets created you can use these plugins to extract more information about each memory.',
+                              'When a memory gets created you can use these apps to extract more information about each memory.',
                           emoji: '📝',
                         ),
-                        Selector<PluginProvider, List<Plugin>>(
-                            selector: (context, provider) =>
-                                provider.plugins.where((p) => p.worksWithMemories()).toList(),
+                        Selector<AppProvider, List<App>>(
+                            selector: (context, provider) => provider.apps.where((p) => p.worksWithMemories()).toList(),
                             builder: (context, memoryPromptPlugins, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
-                                    return PluginListItem(
-                                      plugin: memoryPromptPlugins[index],
+                                    return AppListItem(
+                                      app: memoryPromptPlugins[index],
                                       index: index,
                                     );
                                   },
@@ -114,14 +114,14 @@ class _PluginsPageState extends State<PluginsPage> with AutomaticKeepAliveClient
                           explainer: 'Personalities for your chat.',
                           emoji: '🤖',
                         ),
-                        Selector<PluginProvider, List<Plugin>>(
-                            selector: (context, provider) => provider.plugins.where((p) => p.worksWithChat()).toList(),
+                        Selector<AppProvider, List<App>>(
+                            selector: (context, provider) => provider.apps.where((p) => p.worksWithChat()).toList(),
                             builder: (context, chatPromptPlugins, child) {
                               return SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
-                                    return PluginListItem(
-                                      plugin: chatPromptPlugins[index],
+                                    return AppListItem(
+                                      app: chatPromptPlugins[index],
                                       index: index,
                                     );
                                   },
@@ -148,8 +148,8 @@ class EmptyPluginsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PluginProvider>(builder: (context, provider, child) {
-      return provider.plugins.isEmpty
+    return Consumer<AppProvider>(builder: (context, provider, child) {
+      return provider.apps.isEmpty
           ? SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
@@ -177,8 +177,8 @@ class SectionTitleWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PluginProvider>(builder: (context, provider, child) {
-      return provider.plugins.isNotEmpty
+    return Consumer<AppProvider>(builder: (context, provider, child) {
+      return provider.apps.isNotEmpty
           ? SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 32),

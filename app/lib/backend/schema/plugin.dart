@@ -76,7 +76,9 @@ class ExternalIntegration {
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
       setupInstructionsFilePath: json['setup_instructions_file_path'],
-      authSteps: json['auth_steps'] == null ? [] : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
+      authSteps: json['auth_steps'] == null
+          ? []
+          : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
     );
   }
 
@@ -102,7 +104,7 @@ class ExternalIntegration {
   }
 }
 
-class Plugin {
+class App {
   String id;
   String name;
   String author;
@@ -124,7 +126,7 @@ class Plugin {
   bool enabled;
   bool deleted;
 
-  Plugin({
+  App({
     required this.id,
     required this.name,
     required this.author,
@@ -152,8 +154,8 @@ class Plugin {
 
   bool worksExternally() => hasCapability('external_integration');
 
-  factory Plugin.fromJson(Map<String, dynamic> json) {
-    return Plugin(
+  factory App.fromJson(Map<String, dynamic> json) {
+    return App(
       id: json['id'],
       name: json['name'],
       author: json['author'],
@@ -195,5 +197,5 @@ class Plugin {
     };
   }
 
-  static List<Plugin> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Plugin.fromJson(e)).toList();
+  static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
 }

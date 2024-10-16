@@ -1,16 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
-class ChatPluginsDropdownWidget extends StatelessWidget {
-  const ChatPluginsDropdownWidget({super.key});
+class ChatAppsDropdownWidget extends StatelessWidget {
+  const ChatAppsDropdownWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,15 +24,15 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
         }
         return child!;
       },
-      child: Consumer<PluginProvider>(builder: (context, provider, child) {
+      child: Consumer<AppProvider>(builder: (context, provider, child) {
         return Padding(
           padding: const EdgeInsets.only(left: 0),
-          child: provider.plugins.where((p) => p.enabled).isEmpty
+          child: provider.apps.where((p) => p.enabled).isEmpty
               ? GestureDetector(
                   onTap: () {
                     MixpanelManager().pageOpened('Chat Plugins');
 
-                    routeToPage(context, const PluginsPage(filterChatOnly: true));
+                    routeToPage(context, const AppsPage(filterChatOnly: true));
                   },
                   child: const Row(
                     children: [
@@ -51,8 +51,8 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                     menuMaxHeight: 350,
                     value: provider.selectedChatPluginId,
                     onChanged: (s) async {
-                      if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                        routeToPage(context, const PluginsPage(filterChatOnly: true));
+                      if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
+                        routeToPage(context, const AppsPage(filterChatOnly: true));
                         MixpanelManager().pageOpened('Chat Plugins');
                         return;
                       }
@@ -77,7 +77,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
     );
   }
 
-  _getPluginsDropdownItems(BuildContext context, PluginProvider provider) {
+  _getPluginsDropdownItems(BuildContext context, AppProvider provider) {
     var items = [
           DropdownMenuItem<String>(
             value: 'no_selected',
@@ -87,14 +87,14 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
+                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           )
         ] +
-        provider.plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
+        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((App plugin) {
           return DropdownMenuItem<String>(
             value: plugin.id,
             child: Row(
@@ -137,7 +137,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
             ),
           );
         }).toList();
-    if (provider.plugins.where((p) => p.enabled).isNotEmpty) {
+    if (provider.apps.where((p) => p.enabled).isNotEmpty) {
       items.add(const DropdownMenuItem<String>(
         value: 'enable',
         child: Row(

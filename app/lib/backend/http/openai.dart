@@ -12,7 +12,7 @@ import 'package:tuple/tuple.dart';
 
 class SummaryResult {
   final Structured structured;
-  final List<Tuple2<Plugin, String>> pluginsResponse;
+  final List<Tuple2<App, String>> pluginsResponse;
 
   SummaryResult(this.structured, this.pluginsResponse);
 }

@@ -12,7 +12,7 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_plugins_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/memories/page.dart';
-import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -21,7 +21,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -61,7 +61,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
       if (mounted) {
-        context.read<PluginProvider>().setSelectedChatPluginId(null);
+        context.read<AppProvider>().setSelectedChatPluginId(null);
       }
     });
     super.initState();
@@ -90,7 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PageController? _controller;
 
   void _initiatePlugins() {
-    context.read<PluginProvider>().getPlugins();
+    context.read<AppProvider>().getPlugins();
   }
 
   @override
@@ -271,7 +271,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       children: const [
                         MemoriesPage(),
                         ChatPage(),
-                        PluginsPage(),
+                        AppsPage(),
                       ],
                     ),
                   ),
@@ -388,7 +388,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
-                      return const ChatPluginsDropdownWidget();
+                      return const ChatAppsDropdownWidget();
                     } else if (provider.selectedIndex == 2) {
                       return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
                     } else {

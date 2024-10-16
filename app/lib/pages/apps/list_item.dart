@@ -1,26 +1,27 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/plugins/plugin_detail.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
-class PluginListItem extends StatelessWidget {
-  final Plugin plugin;
+import 'app_detail.dart';
+
+class AppListItem extends StatelessWidget {
+  final App app;
   final int index;
 
-  const PluginListItem({super.key, required this.plugin, required this.index});
+  const AppListItem({super.key, required this.app, required this.index});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PluginProvider>(builder: (context, provider, child) {
+    return Consumer<AppProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
           MixpanelManager().pageOpened('Plugin Detail');
-          await routeToPage(context, PluginDetailPage(plugin: plugin));
+          await routeToPage(context, AppDetailPage(plugin: app));
           provider.setPlugins();
         },
         child: Container(
@@ -30,7 +31,7 @@ class PluginListItem extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CachedNetworkImage(
-                imageUrl: plugin.getImageUrl(),
+                imageUrl: app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
                   width: 48,
                   height: 48,
@@ -56,29 +57,29 @@ class PluginListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      plugin.name,
+                      app.name,
                       maxLines: 1,
                       style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                     ),
-                    SizedBox(height: plugin.ratingAvg != null ? 4 : 0),
+                    SizedBox(height: app.ratingAvg != null ? 4 : 0),
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        plugin.description,
+                        app.description,
                         maxLines: 2,
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                     ),
-                    plugin.ratingAvg != null
+                    app.ratingAvg != null
                         ? Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Row(
                               children: [
-                                Text(plugin.getRatingAvg()!),
+                                Text(app.getRatingAvg()!),
                                 const SizedBox(width: 4),
                                 const Icon(Icons.star, color: Colors.deepPurple, size: 16),
                                 const SizedBox(width: 4),
-                                Text('(${plugin.ratingCount})'),
+                                Text('(${app.ratingCount})'),
                               ],
                             ),
                           )
@@ -100,11 +101,11 @@ class PluginListItem extends StatelessWidget {
                     )
                   : IconButton(
                       icon: Icon(
-                        plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: plugin.enabled ? Colors.white : Colors.grey,
+                        app.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: app.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
-                        if (plugin.worksExternally() && !plugin.enabled) {
+                        if (app.worksExternally() && !app.enabled) {
                           showDialog(
                             context: context,
                             builder: (c) => getDialog(
@@ -112,7 +113,7 @@ class PluginListItem extends StatelessWidget {
                               () => Navigator.pop(context),
                               () async {
                                 Navigator.pop(context);
-                                await routeToPage(context, PluginDetailPage(plugin: plugin));
+                                await routeToPage(context, AppDetailPage(plugin: app));
                                 provider.setPlugins();
                               },
                               'Authorize External Plugin',
@@ -121,7 +122,7 @@ class PluginListItem extends StatelessWidget {
                             ),
                           );
                         } else {
-                          provider.togglePlugin(plugin.id.toString(), !plugin.enabled, index);
+                          provider.togglePlugin(app.id.toString(), !app.enabled, index);
                         }
                       },
                     ),

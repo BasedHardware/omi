@@ -27,7 +27,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
@@ -156,11 +156,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ListenableProvider(create: (context) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => MemoryProvider()),
-          ListenableProvider(create: (context) => PluginProvider()),
-          ChangeNotifierProxyProvider<PluginProvider, MessageProvider>(
+          ListenableProvider(create: (context) => AppProvider()),
+          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updatePluginProvider(value)) ?? MessageProvider(),
+                (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
           ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
@@ -183,10 +183,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, device, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
-          ChangeNotifierProxyProvider2<PluginProvider, MemoryProvider, MemoryDetailProvider>(
+          ChangeNotifierProxyProvider2<AppProvider, MemoryProvider, MemoryDetailProvider>(
             create: (context) => MemoryDetailProvider(),
-            update: (BuildContext context, plugin, memory, MemoryDetailProvider? previous) =>
-                (previous?..setProviders(plugin, memory)) ?? MemoryDetailProvider(),
+            update: (BuildContext context, app, memory, MemoryDetailProvider? previous) =>
+                (previous?..setProviders(app, memory)) ?? MemoryDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
         ],
@@ -279,7 +279,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           userId: FirebaseAuth.instance.currentUser!.uid,
         );
         context.read<MessageProvider>().setMessagesFromCache();
-        context.read<PluginProvider>().setPluginsFromCache();
+        context.read<AppProvider>().setPluginsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
         await IntercomManager.instance.intercom.loginUnidentifiedUser();
