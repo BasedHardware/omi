@@ -10,7 +10,7 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_BLOCK_SIZE   10000 //24000 * 2
+#define MAX_BLOCK_SIZE   20000 //24000 * 2
 
 #define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
@@ -104,7 +104,7 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
             for (int i = 0; i < (int)(len/2); i++) 
             {
                 *ptr2++ = ((int16_t *)buf)[i];  
-                ptr2++;
+                *ptr2++ = ((int16_t *)buf)[i]; 
             }
             offset = offset + len;
         }
@@ -118,17 +118,29 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
             for (int i = 0; i < len/2; i++) 
             {
                 *ptr2++ = ((int16_t *)buf)[i];  
-                ptr2++;
+                *ptr2++ = ((int16_t *)buf)[i];  
             }
             offset = offset + len;
             LOG_INF("offset: %u", offset);
-            
-            i2s_write(audio_speaker, rx_buffer,  MAX_BLOCK_SIZE);
-            i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking       
-	        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-
+            offset = 0;
+            int res= i2s_write(audio_speaker, rx_buffer,  MAX_BLOCK_SIZE);
+            if (res < 0)
+            {
+                printk("Failed to write I2S data: %d\n", res);
+            }
+            i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking   
+            if (res != 0) 
+            {
+                printk("Failed to drain I2S transmission: %d\n", res);
+            }    
+	        res =  i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+            if (res != 0) 
+            {
+                printk("Failed to drain I2S transmission: %d\n", res);
+            }
             //clear the buffer
             k_sleep(K_MSEC(4000));
+
             memset(clear_ptr, 0, MAX_BLOCK_SIZE);
 
         }
@@ -181,7 +193,7 @@ int play_boot_sound(void)
         LOG_ERR("Failed to start I2S transmission: %d", ret);
         return ret;
     }  
-    k_sleep(K_MSEC(500));  
+
 
     ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (ret != 0) 
@@ -189,6 +201,7 @@ int play_boot_sound(void)
         LOG_ERR("Failed to drain I2S transmission: %d", ret);
         return ret;
     }
+    k_sleep(K_MSEC(3000));  
 
     return 0;
 }
