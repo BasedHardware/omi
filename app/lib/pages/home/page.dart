@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   PageController? _controller;
 
-  void _initiatePlugins() {
+  void _initiateApps() {
     context.read<AppProvider>().getApps();
   }
 
@@ -138,7 +138,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _controller = PageController();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initiatePlugins();
+      _initiateApps();
       // ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();

@@ -17,7 +17,7 @@ Future<List<App>> retrieveApps() async {
   );
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
-      log('plugins: ${response.body}');
+      log('apps: ${response.body}');
       var apps = App.fromJsonList(jsonDecode(response.body));
       apps = apps.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().appsList = apps;
@@ -39,7 +39,7 @@ Future<bool> enableAppServer(String appId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePluginServer: $appId ${response.body}');
+  debugPrint('enableAppServer: $appId ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -51,7 +51,7 @@ Future<bool> disableAppServer(String appId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('disablePluginServer: ${response.body}');
+  debugPrint('disableAppServer: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -62,7 +62,7 @@ Future<void> reviewApp(String appId, double score, {String review = ''}) async {
     method: 'POST',
     body: jsonEncode({'score': score, review: review}),
   );
-  debugPrint('reviewPlugin: ${response?.body}');
+  debugPrint('reviewApp: ${response?.body}');
 }
 
 Future<String> getAppMarkdown(String appMarkdownPath) async {
