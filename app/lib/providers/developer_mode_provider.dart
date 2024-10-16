@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/http/cloud_storage.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
@@ -10,6 +11,7 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController gcpBucketNameController = TextEditingController();
   final TextEditingController webhookOnMemoryCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
+  final TextEditingController webhookAudioBytes = TextEditingController();
 
   bool savingSettingsLoading = false;
 
@@ -24,6 +26,10 @@ class DeveloperModeProvider extends BaseProvider {
     webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
+
+    getUserWebhookUrl(type: 'audio_bytes').then((url) {
+      webhookAudioBytes.text = url;
+    });
 
     notifyListeners();
   }
@@ -55,7 +61,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
     prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
     prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
-
+    await setUserWebhookUrl(type: 'audio_bytes', url: webhookAudioBytes.text.trim());
     // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
 
