@@ -30,8 +30,8 @@ class MixpanelManager {
   setPeopleValues() {
     setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
     setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
-    setUserProperty('Plugins Integrations Enabled Count', _preferences.enabledPluginsIntegrationsCount);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledAppsCount);
+    setUserProperty('Plugins Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
@@ -99,12 +99,12 @@ class MixpanelManager {
 
   void pluginEnabled(String pluginId) {
     track('Plugin Enabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledAppsCount);
   }
 
   void pluginDisabled(String pluginId) {
     track('Plugin Disabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+    setUserProperty('Plugins Enabled Count', _preferences.enabledAppsCount);
   }
 
   void pluginRated(String pluginId, double rating) {

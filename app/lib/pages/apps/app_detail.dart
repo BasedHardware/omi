@@ -13,7 +13,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../backend/schema/plugin.dart';
+import '../../backend/schema/app.dart';
 
 class AppDetailPage extends StatefulWidget {
   final App plugin;
@@ -31,7 +31,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   checkSetupCompleted() {
     // TODO: move check to backend
-    isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
+    isAppSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
       }
@@ -41,7 +41,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     if (widget.plugin.worksExternally()) {
-      getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
+      getAppMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
           '](assets/',
           '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.plugin.id}/assets/',
@@ -303,10 +303,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     onRatingUpdate: (rating) {
                       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                       if (connectivityProvider.isConnected) {
-                        reviewPlugin(widget.plugin.id, rating);
+                        reviewApp(widget.plugin.id, rating);
                         bool hadReview = widget.plugin.userReview != null;
                         if (!hadReview) widget.plugin.ratingCount += 1;
-                        widget.plugin.userReview = PluginReview(
+                        widget.plugin.userReview = AppReview(
                           uid: SharedPreferencesUtil().uid,
                           ratedAt: DateTime.now(),
                           review: '',
@@ -424,10 +424,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
         return;
       }
 
-      prefs.enablePlugin(pluginId);
+      prefs.enableApp(pluginId);
       MixpanelManager().pluginEnabled(pluginId);
     } else {
-      prefs.disablePlugin(pluginId);
+      prefs.disableApp(pluginId);
       await enableAppServer(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }

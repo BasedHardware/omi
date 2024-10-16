@@ -279,7 +279,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
           userId: FirebaseAuth.instance.currentUser!.uid,
         );
         context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setPluginsFromCache();
+        context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
       } else {
         await IntercomManager.instance.intercom.loginUnidentifiedUser();

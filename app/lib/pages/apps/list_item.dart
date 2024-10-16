@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -22,7 +22,7 @@ class AppListItem extends StatelessWidget {
         onTap: () async {
           MixpanelManager().pageOpened('Plugin Detail');
           await routeToPage(context, AppDetailPage(plugin: app));
-          provider.setPlugins();
+          provider.setApps();
         },
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
@@ -88,7 +88,7 @@ class AppListItem extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              provider.pluginLoading.isNotEmpty && provider.pluginLoading[index]
+              provider.appLoading.isNotEmpty && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),
                       child: SizedBox(
@@ -114,7 +114,7 @@ class AppListItem extends StatelessWidget {
                               () async {
                                 Navigator.pop(context);
                                 await routeToPage(context, AppDetailPage(plugin: app));
-                                provider.setPlugins();
+                                provider.setApps();
                               },
                               'Authorize External Plugin',
                               'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
