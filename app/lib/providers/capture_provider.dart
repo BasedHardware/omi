@@ -514,6 +514,21 @@ class CaptureProvider extends ChangeNotifier
     sdCardIsDownloading = value;
     notifyListeners();
   }
+  
+   Future<void> updateStorageList() async {
+     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+     if (currentStorageFiles.isEmpty) {
+       debugPrint('No storage files found');
+       SharedPreferencesUtil().deviceIsV2 = false;
+       debugPrint('Device is not V2');
+
+       return;
+     }
+     totalStorageFileBytes = currentStorageFiles[0];
+     var storageOffset = currentStorageFiles[1];
+     totalBytesReceived = storageOffset;
+     notifyListeners();
+   }
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
@@ -531,8 +546,9 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('Device is V2');
     debugPrint('Device model name: ${_recordingDevice!.name}');
     debugPrint('Storage files: $currentStorageFiles');
-    totalStorageFileBytes = currentStorageFiles.fold(0, (sum, fileSize) => sum + fileSize);
-    var previousStorageBytes = SharedPreferencesUtil().previousStorageBytes;
+    totalStorageFileBytes = currentStorageFiles[0];
+    var storageOffset = currentStorageFiles[1];
+    debugPrint('storageOffset: $storageOffset');
     // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     //check if new or old file
     if (totalStorageFileBytes < previousStorageBytes) {
@@ -544,10 +560,11 @@ class CaptureProvider extends ChangeNotifier
     if (totalBytesReceived > totalStorageFileBytes) {
       totalBytesReceived = 0;
     }
+    totalBytesReceived = storageOffset;
     SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     sdCardSecondsTotal =
         ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
-
+    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
     debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
     btConnectedTime = DateTime.now().toUtc().toString();
@@ -621,8 +638,12 @@ class CaptureProvider extends ChangeNotifier
           //bad bit
           debugPrint('Error bit returned');
         }
-      } else if (value.length == 83) {
-        totalBytesReceived += 80;
+      } else if (value.length >= 80) { //enforce a min packet size, large
+        if (value.length == 83) {
+          totalBytesReceived += 80;
+        } else {
+          totalBytesReceived += value.length;
+        }
         if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
           debugPrint('websocket provider state: ${sdCardSocket.sdCardConnectionState}');
           //means we are disconnected, stop all transmission. attempt reconnection
@@ -710,6 +731,7 @@ class CaptureProvider extends ChangeNotifier
     }
     return connection.getStorageList();
   }
+
 
   void setsdCardReady(bool value) {
     sdCardReady = value;
