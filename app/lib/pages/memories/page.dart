@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/local_sync.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
 import 'package:friend_private/pages/memories/widgets/sd_card.dart';
@@ -10,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_memories.dart';
-import 'widgets/memory_list_item.dart';
+import 'widgets/memories_group_widget.dart';
 
 String secondsToHumanReadable(int seconds) {
   if (seconds < 60) {
@@ -140,16 +139,12 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (index == 0) const SizedBox(height: 16),
-                          DateListItem(date: date, isFirst: index == 0),
-                          ...memoriesForDate
-                              .where((mem) => memoryProvider.showDiscardedMemories || !mem.discarded || mem.isNew)
-                              .map(
-                                (memory) => MemoryListItem(
-                                  memory: memory,
-                                  memoryIdx: memoryProvider.groupedMemories[date]!.indexOf(memory),
-                                  date: date,
-                                ),
-                              ),
+                          MemoriesGroupWidget(
+                            memories: memoriesForDate
+                                .where((mem) => memoryProvider.showDiscardedMemories || !mem.discarded || mem.isNew)
+                                .toList(),
+                            date: date,
+                          ),
                         ],
                       );
                     }
