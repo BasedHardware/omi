@@ -53,17 +53,12 @@ def retrieve_in_progress_memory(uid):
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
     # Not when comes from the phone, and only Friend's with 1.0.4
-    if language == 'en' and sample_rate == 16000 and codec == 'opus':
-        stt_service = STTService.soniox
-    else:
-        stt_service = STTService.deepgram
-
-    if uid in os.getenv('UIDS_USING_DEEPGRAM', ''):
+    if stt_service == STTService.soniox and language not in soniox_valid_languages:
         stt_service = STTService.deepgram
 
     try:
@@ -424,6 +419,6 @@ async def _websocket_util(
 @router.websocket("/v2/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True,
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, include_speech_profile)
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
