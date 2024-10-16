@@ -87,7 +87,7 @@ class ServerMemory {
   final Geolocation? geolocation;
   final List<MemoryPhoto> photos;
 
-  final List<PluginResponse> pluginsResults;
+  final List<AppResponse> appResults;
   final MemorySource? source;
   final String? language; // applies to Friend only
 
@@ -107,7 +107,7 @@ class ServerMemory {
     this.startedAt,
     this.finishedAt,
     this.transcriptSegments = const [],
-    this.pluginsResults = const [],
+    this.appResults = const [],
     this.geolocation,
     this.photos = const [],
     this.discarded = false,
@@ -128,8 +128,8 @@ class ServerMemory {
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
-      pluginsResults:
-          ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => PluginResponse.fromJson(result)).toList(),
+      appResults:
+          ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
@@ -151,7 +151,7 @@ class ServerMemory {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'plugins_results': pluginsResults.map((result) => result.toJson()).toList(),
+      'plugins_results': appResults.map((result) => result.toJson()).toList(),
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,

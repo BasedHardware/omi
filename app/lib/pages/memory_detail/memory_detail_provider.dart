@@ -109,7 +109,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
     selectedDate = date;
-    appResponseExpanded = List.filled(memory.pluginsResults.length, false);
+    appResponseExpanded = List.filled(memory.appResults.length, false);
     notifyListeners();
   }
 
