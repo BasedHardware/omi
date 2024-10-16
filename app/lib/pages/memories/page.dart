@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/local_sync.dart';
 import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
+import 'package:friend_private/pages/memories/widgets/sd_card.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -76,6 +77,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
         },
         child: CustomScrollView(
           slivers: [
+            const SliverToBoxAdapter(child: SdCardBannerWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 26)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
