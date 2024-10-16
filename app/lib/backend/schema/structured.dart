@@ -105,18 +105,18 @@ class ActionItem {
   toJson() => {'description': description, 'completed': completed};
 }
 
-class PluginResponse {
+class AppResponse {
   int id = 0;
 
   String? pluginId;
   String content;
 
-  PluginResponse(this.content, {this.id = 0, this.pluginId});
+  AppResponse(this.content, {this.id = 0, this.pluginId});
 
   toJson() => {'pluginId': pluginId, 'content': content};
 
-  factory PluginResponse.fromJson(Map<String, dynamic> json) {
-    return PluginResponse(json['content'], pluginId: json['pluginId'] ?? json['plugin_id']);
+  factory AppResponse.fromJson(Map<String, dynamic> json) {
+    return AppResponse(json['content'], pluginId: json['pluginId'] ?? json['plugin_id']);
   }
 }
 
