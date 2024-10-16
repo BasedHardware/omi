@@ -8,7 +8,7 @@ import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-Future<List<Plugin>> retrievePlugins() async {
+Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/plugins',
     headers: {},
@@ -18,20 +18,20 @@ Future<List<Plugin>> retrievePlugins() async {
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
       log('plugins: ${response.body}');
-      var plugins = Plugin.fromJsonList(jsonDecode(response.body));
+      var plugins = App.fromJsonList(jsonDecode(response.body));
       plugins = plugins.where((p) => !p.deleted).toList();
-      SharedPreferencesUtil().pluginsList = plugins;
+      SharedPreferencesUtil().appsList = plugins;
       return plugins;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);
-      return SharedPreferencesUtil().pluginsList;
+      return SharedPreferencesUtil().appsList;
     }
   }
-  return SharedPreferencesUtil().pluginsList;
+  return SharedPreferencesUtil().appsList;
 }
 
-Future<bool> enablePluginServer(String pluginId) async {
+Future<bool> enableAppServer(String pluginId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$pluginId',
     headers: {},
@@ -43,7 +43,7 @@ Future<bool> enablePluginServer(String pluginId) async {
   return response.statusCode == 200;
 }
 
-Future<bool> disablePluginServer(String pluginId) async {
+Future<bool> disableAppServer(String pluginId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$pluginId',
     headers: {},

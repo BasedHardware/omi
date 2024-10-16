@@ -24,7 +24,7 @@ class AIMessage extends StatefulWidget {
   final ServerMessage message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final Plugin? pluginSender;
+  final App? pluginSender;
   final Function(ServerMemory) updateMemory;
 
   const AIMessage({
@@ -112,7 +112,7 @@ class _AIMessageState extends State<AIMessage> {
 }
 
 Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, bool showTypingIndicator,
-    bool displayOptions, Plugin? pluginSender, Function(ServerMemory) updateMemory) {
+    bool displayOptions, App? pluginSender, Function(ServerMemory) updateMemory) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,

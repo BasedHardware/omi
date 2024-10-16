@@ -10,7 +10,7 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
-import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -404,8 +404,8 @@ class GetPluginsWidgets extends StatelessWidget {
                     ...provider.memory.pluginsResults.mapIndexed(
                       (i, pluginResponse) {
                         if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                        Plugin? plugin =
-                            provider.pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+                        App? plugin =
+                            provider.appsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 40),
                           child: Column(
@@ -526,7 +526,7 @@ class GetPluginsWidgets extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () {
-                    routeToPage(context, const PluginsPage());
+                    routeToPage(context, const AppsPage());
                     MixpanelManager().pageOpened('Memory Detail Plugins');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

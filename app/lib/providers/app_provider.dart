@@ -6,8 +6,8 @@ import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_dialog.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
-class PluginProvider extends BaseProvider {
-  List<Plugin> plugins = [];
+class AppProvider extends BaseProvider {
+  List<App> apps = [];
 
   bool filterChat = true;
   bool filterMemories = true;
@@ -28,8 +28,8 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Plugin? getSelectedPlugin() {
-    return plugins.firstWhereOrNull((p) => p.id == selectedChatPluginId);
+  App? getSelectedPlugin() {
+    return apps.firstWhereOrNull((p) => p.id == selectedChatPluginId);
   }
 
   void setPluginLoading(int index, bool value) {
@@ -44,7 +44,7 @@ class PluginProvider extends BaseProvider {
 
   Future getPlugins() async {
     setLoadingState(true);
-    plugins = await retrievePlugins();
+    apps = await retrieveApps();
     updatePrefPlugins();
     setPlugins();
     setLoadingState(false);
@@ -52,18 +52,18 @@ class PluginProvider extends BaseProvider {
   }
 
   void setPluginsFromCache() {
-    if (SharedPreferencesUtil().pluginsList.isNotEmpty) {
-      plugins = SharedPreferencesUtil().pluginsList;
+    if (SharedPreferencesUtil().appsList.isNotEmpty) {
+      apps = SharedPreferencesUtil().appsList;
     }
     notifyListeners();
   }
 
   void updatePrefPlugins() {
-    SharedPreferencesUtil().pluginsList = plugins;
+    SharedPreferencesUtil().appsList = apps;
   }
 
   void setPlugins() {
-    plugins = SharedPreferencesUtil().pluginsList;
+    apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
 
@@ -73,7 +73,7 @@ class PluginProvider extends BaseProvider {
       filterMemories = false;
       filterExternal = false;
     }
-    pluginLoading = List.filled(plugins.length, false);
+    pluginLoading = List.filled(apps.length, false);
 
     getPlugins();
     notifyListeners();
@@ -85,7 +85,7 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
+      var enabled = await enableAppServer(pluginId);
       if (!enabled) {
         AppDialog.show(
           title: 'Error activating the plugin',
@@ -101,12 +101,12 @@ class PluginProvider extends BaseProvider {
       prefs.enablePlugin(pluginId);
       MixpanelManager().pluginEnabled(pluginId);
     } else {
-      await disablePluginServer(pluginId);
+      await disableAppServer(pluginId);
       prefs.disablePlugin(pluginId);
       MixpanelManager().pluginDisabled(pluginId);
     }
     pluginLoading[idx] = false;
-    plugins = SharedPreferencesUtil().pluginsList;
+    apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
 

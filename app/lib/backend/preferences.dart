@@ -149,33 +149,33 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  int get enabledPluginsCount => pluginsList.where((element) => element.enabled).length;
+  int get enabledPluginsCount => appsList.where((element) => element.enabled).length;
 
   int get enabledPluginsIntegrationsCount =>
-      pluginsList.where((element) => element.enabled && element.worksExternally()).length;
+      appsList.where((element) => element.enabled && element.worksExternally()).length;
 
-  List<Plugin> get pluginsList {
+  List<App> get appsList {
     final List<String> plugins = getStringList('pluginsList') ?? [];
-    return Plugin.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
+    return App.fromJsonList(plugins.map((e) => jsonDecode(e)).toList());
   }
 
-  set pluginsList(List<Plugin> value) {
+  set appsList(List<App> value) {
     final List<String> plugins = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('pluginsList', plugins);
   }
 
   enablePlugin(String value) {
-    final List<Plugin> plugins = pluginsList;
+    final List<App> plugins = appsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = true;
-    pluginsList = plugins;
+    appsList = plugins;
   }
 
   disablePlugin(String value) {
-    final List<Plugin> plugins = pluginsList;
+    final List<App> plugins = appsList;
     final plugin = plugins.firstWhere((element) => element.id == value);
     plugin.enabled = false;
-    pluginsList = plugins;
+    appsList = plugins;
   }
 
   String get selectedChatPluginId => getString('selectedChatPluginId2') ?? 'no_selected';
