@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from database._client import get_users_uid
 
-load_dotenv('../.dev.env')
+load_dotenv('../../.dev.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 firebase_admin.initialize_app()
 

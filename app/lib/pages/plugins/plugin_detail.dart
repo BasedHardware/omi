@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/schema/plugin.dart';
 
@@ -57,6 +59,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
     bool isMemoryPrompt = widget.plugin.worksWithMemories();
     bool isChatPrompt = widget.plugin.worksWithChat();
     bool isIntegration = widget.plugin.worksExternally();
+    bool hasSetupInstructions =
+        isIntegration && widget.plugin.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
+    bool hasAuthSteps = isIntegration && widget.plugin.externalIntegration?.authSteps.isNotEmpty == true;
+    int stepsCount = widget.plugin.externalIntegration?.authSteps.length ?? 0;
 
     return Scaffold(
         appBar: AppBar(
@@ -92,39 +98,17 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     widget.plugin.description,
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
-                  SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
-                  widget.plugin.ratingAvg != null
-                      ? Row(
-                          children: [
-                            Text(widget.plugin.getRatingAvg()!),
-                            const SizedBox(width: 4),
-                            RatingBar.builder(
-                              initialRating: widget.plugin.ratingAvg!,
-                              minRating: 1,
-                              ignoreGestures: true,
-                              direction: Axis.horizontal,
-                              allowHalfRating: true,
-                              itemCount: 5,
-                              itemSize: 16,
-                              tapOnlyMode: false,
-                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                              maxRating: 5.0,
-                              onRatingUpdate: (rating) {},
-                            ),
-                            const SizedBox(width: 4),
-                            Text('(${widget.plugin.ratingCount})'),
-                          ],
-                        )
-                      : Container(),
                 ],
               ),
               trailing: pluginLoading
-                  ? const SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ? const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
                       ),
                     )
                   : IconButton(
@@ -160,6 +144,55 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         }
                       },
                     ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (widget.plugin.ratingAvg != null)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(widget.plugin.getRatingAvg()!),
+                        const SizedBox(width: 4),
+                        RatingBar.builder(
+                          initialRating: widget.plugin.ratingAvg!,
+                          minRating: 1,
+                          ignoreGestures: true,
+                          direction: Axis.horizontal,
+                          allowHalfRating: true,
+                          itemCount: 5,
+                          itemSize: 20,
+                          tapOnlyMode: false,
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          maxRating: 5.0,
+                          onRatingUpdate: (rating) {},
+                        ),
+                        const SizedBox(width: 4),
+                        Text('(${widget.plugin.ratingCount})'),
+                      ],
+                    ),
+                  widget.plugin.installs > 0
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${widget.plugin.installs} Install${widget.plugin.installs == 1 ? "" : "s"}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.download_rounded, size: 20, color: Colors.grey.shade300),
+                          ],
+                        )
+                      : Container(),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             isMemoryPrompt
@@ -199,8 +232,50 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            isIntegration && widget.plugin.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true
+            // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            (hasAuthSteps && stepsCount > 0)
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Setup Steps',
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
+                        setupCompleted
+                            ? const Padding(
+                                padding: EdgeInsets.only(right: 12.0),
+                                child: Text(
+                                  '✅',
+                                  style: TextStyle(color: Colors.grey, fontSize: 18),
+                                ),
+                              )
+                            : SizedBox(),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            ...(hasAuthSteps
+                ? widget.plugin.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
+                    String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
+                    // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
+                    return ListTile(
+                        title: Text(
+                          title,
+                          style: const TextStyle(fontSize: 17),
+                        ),
+                        onTap: () async {
+                          await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                          checkSetupCompleted();
+                        },
+                        trailing: const Padding(
+                          padding: EdgeInsets.only(right: 12.0),
+                          child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                        ));
+                  }).toList()
+                : <Widget>[const SizedBox.shrink()]),
+            !hasAuthSteps && hasSetupInstructions
                 ? ListTile(
                     onTap: () async {
                       await routeToPage(
@@ -219,18 +294,13 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     ),
                   )
                 : const SizedBox.shrink(),
-            isIntegration && widget.plugin.externalIntegration?.setupCompletedUrl != null
-                ? CheckboxListTile(
-                    title: const Text('Setup Completed ?'),
-                    contentPadding: const EdgeInsets.only(left: 16, right: 18),
-                    value: setupCompleted,
-                    checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    onChanged: (s) {},
-                    enabled: false,
-                  )
-                : const SizedBox.shrink(),
             // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 80),
+            Divider(
+              color: Colors.grey.shade300,
+              height: 1,
+            ),
+            const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -238,7 +308,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    widget.plugin.userReview?.score == null ? 'Rate it:' : 'Your rating:',
+                    widget.plugin.userReview?.score == null ? 'Rate Plugin:' : 'Your rating:',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                   ),
                 ),
@@ -285,19 +355,19 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               ],
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18.0),
               child: RichText(
                   text: TextSpan(children: [
-                const TextSpan(text: 'By: ', style: TextStyle(fontSize: 16)),
+                const TextSpan(text: 'Developed by: ', style: TextStyle(fontSize: 16)),
                 TextSpan(
-                  text: '${widget.plugin.author}.',
+                  text: '   ${widget.plugin.author}.',
                   style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
                 ),
               ])),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
