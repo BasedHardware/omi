@@ -618,7 +618,7 @@
     "name": "MUN Assistant",
     "author": "AbeNaws",
     "description": "An assistant to help summarize countries' positions at Model United Nations events",
-    "image": "/plugins/logos/mun-assistant.jpg",
+    "image": "/plugins/logos/mun-assistant.png",
     "capabilities": [
       "memories"
     ],
