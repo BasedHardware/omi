@@ -58,5 +58,28 @@ def execute():
         set_plugin_installs_count(pid, count)
 
 
+def execute2():
+    uids = get_users_uid()
+    data = defaultdict(int)
+
+    threads = []
+    for uid in uids:
+        # - get memories of all
+        # - count plugins count on memories
+        # - redis store triggers counter (memory_creation ~ , chat_message ~ personality)
+        # - then do for messages
+        threads.append(threading.Thread(target=single, args=(uid, data,)))
+
+    count = 20
+    chunks = [threads[i:i + count] for i in range(0, len(threads), count)]
+    for i, chunk in enumerate(chunks):
+        [thread.start() for thread in chunk]
+        [thread.join() for thread in chunk]
+
+    print(json.dumps(data, indent=2))
+    for pid, count in data.items():
+        set_plugin_installs_count(pid, count)
+
+
 if __name__ == '__main__':
     execute()
