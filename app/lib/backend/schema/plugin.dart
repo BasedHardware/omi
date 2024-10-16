@@ -76,7 +76,9 @@ class ExternalIntegration {
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
       setupInstructionsFilePath: json['setup_instructions_file_path'],
-      authSteps: json['auth_steps'] == null ? [] : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
+      authSteps: json['auth_steps'] == null
+          ? []
+          : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
     );
   }
 
@@ -120,6 +122,7 @@ class Plugin {
   PluginReview? userReview;
   double? ratingAvg;
   int ratingCount;
+  int installs;
 
   bool enabled;
   bool deleted;
@@ -137,6 +140,7 @@ class Plugin {
     this.reviews = const [],
     this.userReview,
     this.ratingAvg,
+    this.installs = 0,
     required this.ratingCount,
     required this.enabled,
     required this.deleted,
@@ -170,6 +174,7 @@ class Plugin {
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
+      installs: json['installs'] ?? 0,
     );
   }
 
@@ -192,6 +197,7 @@ class Plugin {
       'rating_count': ratingCount,
       'deleted': deleted,
       'enabled': enabled,
+      'installs': installs,
     };
   }
 

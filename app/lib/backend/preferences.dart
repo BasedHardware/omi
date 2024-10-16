@@ -89,9 +89,9 @@ class SharedPreferencesUtil {
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
 
-  String get transcriptionModel => getString('transcriptionModel2') ?? 'deepgram';
+  String get transcriptionModel => getString('transcriptionModel3') ?? 'soniox';
 
-  set transcriptionModel(String value) => saveString('transcriptionModel2', value);
+  set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
   bool get useFriendApiKeys => getBool('useFriendApiKeys') ?? true;
 
