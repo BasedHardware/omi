@@ -30,7 +30,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           child: provider.apps.where((p) => p.enabled).isEmpty
               ? GestureDetector(
                   onTap: () {
-                    MixpanelManager().pageOpened('Chat Plugins');
+                    MixpanelManager().pageOpened('Chat Apps');
 
                     routeToPage(context, const AppsPage(filterChatOnly: true));
                   },
@@ -53,13 +53,13 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     onChanged: (s) async {
                       if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
                         routeToPage(context, const AppsPage(filterChatOnly: true));
-                        MixpanelManager().pageOpened('Chat Plugins');
+                        MixpanelManager().pageOpened('Chat Apps');
                         return;
                       }
                       if (s == null || s == provider.selectedChatAppId) return;
                       provider.setSelectedChatAppId(s);
-                      var plugin = provider.getSelectedApp();
-                      context.read<MessageProvider>().sendInitialAppMessage(plugin);
+                      var app = provider.getSelectedApp();
+                      context.read<MessageProvider>().sendInitialAppMessage(app);
                     },
                     icon: Container(),
                     alignment: Alignment.center,
@@ -69,7 +69,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     isExpanded: false,
                     itemHeight: 48,
                     padding: EdgeInsets.zero,
-                    items: _getPluginsDropdownItems(context, provider),
+                    items: _getAppsDropdownItems(context, provider),
                   ),
                 ),
         );
@@ -77,7 +77,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     );
   }
 
-  _getPluginsDropdownItems(BuildContext context, AppProvider provider) {
+  _getAppsDropdownItems(BuildContext context, AppProvider provider) {
     var items = [
           DropdownMenuItem<String>(
             value: 'no_selected',
@@ -94,15 +94,15 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             ),
           )
         ] +
-        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((App plugin) {
+        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((App app) {
           return DropdownMenuItem<String>(
-            value: plugin.id,
+            value: app.id,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 CachedNetworkImage(
-                  imageUrl: plugin.getImageUrl(),
+                  imageUrl: app.getImageUrl(),
                   imageBuilder: (context, imageProvider) {
                     return CircleAvatar(
                       backgroundColor: Colors.white,
@@ -128,9 +128,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  plugin.name.length > 18
-                      ? '${plugin.name.substring(0, 18)}...'
-                      : plugin.name + ' ' * (18 - plugin.name.length),
+                  app.name.length > 18 ? '${app.name.substring(0, 18)}...' : app.name + ' ' * (18 - app.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],

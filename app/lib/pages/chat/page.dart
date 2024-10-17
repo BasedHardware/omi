@@ -217,7 +217,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             message: message,
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,
-                                            appSender: apps.firstWhereOrNull((e) => e.id == message.pluginId),
+                                            appSender: apps.firstWhereOrNull((e) => e.id == message.appId),
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
                                             },

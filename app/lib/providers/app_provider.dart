@@ -99,11 +99,11 @@ class AppProvider extends BaseProvider {
         return;
       }
       prefs.enableApp(appId);
-      MixpanelManager().pluginEnabled(appId);
+      MixpanelManager().appEnabled(appId);
     } else {
       await disableAppServer(appId);
       prefs.disableApp(appId);
-      MixpanelManager().pluginDisabled(appId);
+      MixpanelManager().appDisabled(appId);
     }
     appLoading[idx] = false;
     apps = SharedPreferencesUtil().appsList;
