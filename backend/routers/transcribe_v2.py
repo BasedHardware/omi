@@ -68,7 +68,7 @@ async def _websocket_util(
         await websocket.accept()
     except RuntimeError as e:
         print(e)
-        websocket.close(code=1011, reason="Dirty state")
+        await websocket.close(code=1011, reason="Dirty state")
         return
 
     # Initiate a separate vad for each websocket
