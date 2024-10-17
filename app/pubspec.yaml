@@ -156,6 +156,12 @@ flutter:
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
+    - assets/lottie_animations/loading/loading1.json
+    - assets/lottie_animations/loading/loading2.json
+    - assets/lottie_animations/loading/loading3.json
+    - assets/lottie_animations/loading/loading4.json
+    - assets/lottie_animations/loading/loading5.json
+    - assets/lottie_animations/loading/loading6.json
   fonts:
     - family: 'SF Pro Display'
       fonts:
