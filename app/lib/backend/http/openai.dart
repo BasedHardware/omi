@@ -6,15 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:tuple/tuple.dart';
 
 class SummaryResult {
   final Structured structured;
-  final List<Tuple2<Plugin, String>> pluginsResponse;
+  final List<Tuple2<App, String>> appsResponse;
 
-  SummaryResult(this.structured, this.pluginsResponse);
+  SummaryResult(this.structured, this.appsResponse);
 }
 
 Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
