@@ -340,7 +340,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         var index = appsList.indexWhere((element) => element.id == widget.app.id);
                         appsList[index] = widget.app;
                         SharedPreferencesUtil().appsList = appsList;
-                        MixpanelManager().pluginRated(widget.app.id.toString(), rating);
+                        MixpanelManager().appRated(widget.app.id.toString(), rating);
                         debugPrint('Refreshed apps list.');
                         // TODO: refresh ratings on app
                         setState(() {});
@@ -449,11 +449,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       prefs.enableApp(appId);
-      MixpanelManager().pluginEnabled(appId);
+      MixpanelManager().appEnabled(appId);
     } else {
       prefs.disableApp(appId);
       await enableAppServer(appId);
-      MixpanelManager().pluginDisabled(appId);
+      MixpanelManager().appDisabled(appId);
     }
     setState(() => widget.app.enabled = isEnabled);
     setState(() => appLoading = false);

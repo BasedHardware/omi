@@ -387,7 +387,7 @@ class GetAppsWidgets extends StatelessWidget {
           children: provider.memory.appResults.isEmpty
               ? [child!]
               : [
-                  // TODO: include a way to trigger specific plugins
+                  // TODO: include a way to trigger specific apps
                   if (provider.memory.appResults.isNotEmpty &&
                       !provider.memory.discarded &&
                       provider.appResponseExpanded.isNotEmpty) ...[
@@ -461,10 +461,10 @@ class GetAppsWidgets extends StatelessWidget {
                                         onPressed: () {
                                           Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
                                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text('Plugin response copied to clipboard'),
+                                            content: Text('App response copied to clipboard'),
                                           ));
                                           MixpanelManager()
-                                              .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
+                                              .copiedMemoryDetails(provider.memory, source: 'App Response');
                                         },
                                       ),
                                     )
@@ -475,7 +475,7 @@ class GetAppsWidgets extends StatelessWidget {
                                 toggleExpand: () {
                                   debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
                                   if (!provider.appResponseExpanded[i]) {
-                                    MixpanelManager().pluginResultExpanded(provider.memory, appResponse.appId ?? '');
+                                    MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
                                   }
                                   provider.updateAppResponseExpanded(i);
                                 },
@@ -524,7 +524,7 @@ class GetAppsWidgets extends StatelessWidget {
                 child: MaterialButton(
                   onPressed: () {
                     routeToPage(context, const AppsPage());
-                    MixpanelManager().pageOpened('Memory Detail Plugins');
+                    MixpanelManager().pageOpened('Memory Detail Apps');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
@@ -660,11 +660,11 @@ class GetDevToolsOptions extends StatefulWidget {
 }
 
 class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
-  bool loadingPluginIntegrationTest = false;
+  bool loadingAppIntegrationTest = false;
 
-  void changeLoadingPluginIntegrationTest(bool value) {
+  void changeLoadingAppIntegrationTest(bool value) {
     setState(() {
-      loadingPluginIntegrationTest = value;
+      loadingAppIntegrationTest = value;
     });
   }
 
@@ -675,7 +675,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
           title: const Text('Trigger Memory Created Integration'),
-          leading: loadingPluginIntegrationTest
+          leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
                   width: 24,
@@ -685,7 +685,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 )
               : const Icon(Icons.send_to_mobile_outlined),
           onTap: () {
-            changeLoadingPluginIntegrationTest(true);
+            changeLoadingAppIntegrationTest(true);
             // TODO: if not set, show dialog to set URL or take them to settings.
 
             webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
@@ -701,7 +701,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                   singleButton: true,
                 ),
               );
-              changeLoadingPluginIntegrationTest(false);
+              changeLoadingAppIntegrationTest(false);
             });
           },
         ),
