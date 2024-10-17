@@ -4,11 +4,11 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-Future<List<Plugin>> retrievePlugins() async {
+Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/plugins',
     headers: {},
@@ -17,57 +17,57 @@ Future<List<Plugin>> retrievePlugins() async {
   );
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
-      log('plugins: ${response.body}');
-      var plugins = Plugin.fromJsonList(jsonDecode(response.body));
-      plugins = plugins.where((p) => !p.deleted).toList();
-      SharedPreferencesUtil().pluginsList = plugins;
-      return plugins;
+      log('apps: ${response.body}');
+      var apps = App.fromJsonList(jsonDecode(response.body));
+      apps = apps.where((p) => !p.deleted).toList();
+      SharedPreferencesUtil().appsList = apps;
+      return apps;
     } catch (e, stackTrace) {
       debugPrint(e.toString());
       CrashReporting.reportHandledCrash(e, stackTrace);
-      return SharedPreferencesUtil().pluginsList;
+      return SharedPreferencesUtil().appsList;
     }
   }
-  return SharedPreferencesUtil().pluginsList;
+  return SharedPreferencesUtil().appsList;
 }
 
-Future<bool> enablePluginServer(String pluginId) async {
+Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enablePluginServer: $pluginId ${response.body}');
+  debugPrint('enableAppServer: $appId ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> disablePluginServer(String pluginId) async {
+Future<bool> disableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('disablePluginServer: ${response.body}');
+  debugPrint('disableAppServer: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<void> reviewPlugin(String pluginId, double score, {String review = ''}) async {
+Future<void> reviewApp(String appId, double score, {String review = ''}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$appId',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'score': score, review: review}),
   );
-  debugPrint('reviewPlugin: ${response?.body}');
+  debugPrint('reviewApp: ${response?.body}');
 }
 
-Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
+Future<String> getAppMarkdown(String appMarkdownPath) async {
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$pluginMarkdownPath',
+    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$appMarkdownPath',
     method: 'GET',
     headers: {},
     body: '',
@@ -75,9 +75,9 @@ Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
   return response?.body ?? '';
 }
 
-Future<bool> isPluginSetupCompleted(String? url) async {
+Future<bool> isAppSetupCompleted(String? url) async {
   if (url == null || url.isEmpty) return true;
-  print('isPluginSetupCompleted: $url');
+  print('isAppSetupCompleted: $url');
   var response = await makeApiCall(
     url: '$url?uid=${SharedPreferencesUtil().uid}',
     method: 'GET',

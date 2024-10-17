@@ -7,10 +7,10 @@ import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
-import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -36,7 +36,7 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
-    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
   @override
@@ -373,8 +373,8 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-class GetPluginsWidgets extends StatelessWidget {
-  const GetPluginsWidgets({super.key});
+class GetAppsWidgets extends StatelessWidget {
+  const GetAppsWidgets({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -383,40 +383,38 @@ class GetPluginsWidgets extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment:
-              provider.memory.pluginsResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: provider.memory.pluginsResults.isEmpty
+          crossAxisAlignment: provider.memory.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: provider.memory.appResults.isEmpty
               ? [child!]
               : [
-                  // TODO: include a way to trigger specific plugins
-                  if (provider.memory.pluginsResults.isNotEmpty &&
+                  // TODO: include a way to trigger specific apps
+                  if (provider.memory.appResults.isNotEmpty &&
                       !provider.memory.discarded &&
-                      provider.pluginResponseExpanded.isNotEmpty) ...[
+                      provider.appResponseExpanded.isNotEmpty) ...[
                     provider.memory.structured.actionItems.isEmpty
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
                     Text(
-                      'Plugins 🧑‍💻',
+                      'Apps 🧑‍💻',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 24),
-                    ...provider.memory.pluginsResults.mapIndexed(
-                      (i, pluginResponse) {
-                        if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                        Plugin? plugin =
-                            provider.pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
+                    ...provider.memory.appResults.mapIndexed(
+                      (i, appResponse) {
+                        if (appResponse.content.length < 5) return const SizedBox.shrink();
+                        App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 40),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.start,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              plugin != null
+                              app != null
                                   ? ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       leading: CachedNetworkImage(
-                                        imageUrl: plugin.getImageUrl(),
+                                        imageUrl: app.getImageUrl(),
                                         imageBuilder: (context, imageProvider) {
                                           return CircleAvatar(
                                             backgroundColor: Colors.white,
@@ -441,7 +439,7 @@ class GetPluginsWidgets extends StatelessWidget {
                                         ),
                                       ),
                                       title: Text(
-                                        plugin.name,
+                                        app.name,
                                         maxLines: 1,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w600,
@@ -452,7 +450,7 @@ class GetPluginsWidgets extends StatelessWidget {
                                       subtitle: Padding(
                                         padding: const EdgeInsets.only(top: 4.0),
                                         child: Text(
-                                          plugin.description,
+                                          app.description,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(color: Colors.grey, fontSize: 14),
@@ -461,26 +459,25 @@ class GetPluginsWidgets extends StatelessWidget {
                                       trailing: IconButton(
                                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                                         onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
+                                          Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
                                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text('Plugin response copied to clipboard'),
+                                            content: Text('App response copied to clipboard'),
                                           ));
                                           MixpanelManager()
-                                              .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
+                                              .copiedMemoryDetails(provider.memory, source: 'App Response');
                                         },
                                       ),
                                     )
                                   : const SizedBox.shrink(),
                               ExpandableTextWidget(
-                                text: pluginResponse.content.decodeSting.trim(),
-                                isExpanded: provider.pluginResponseExpanded[i],
+                                text: appResponse.content.decodeSting.trim(),
+                                isExpanded: provider.appResponseExpanded[i],
                                 toggleExpand: () {
-                                  print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
-                                  if (!provider.pluginResponseExpanded[i]) {
-                                    MixpanelManager()
-                                        .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
+                                  debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
+                                  if (!provider.appResponseExpanded[i]) {
+                                    MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
                                   }
-                                  provider.updatePluginResponseExpanded(i);
+                                  provider.updateAppResponseExpanded(i);
                                 },
                                 style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                                 maxLines: 6,
@@ -503,7 +500,7 @@ class GetPluginsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No plugins were triggered\nfor this memory.',
+            'No apps were triggered\nfor this memory.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -526,13 +523,13 @@ class GetPluginsWidgets extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () {
-                    routeToPage(context, const PluginsPage());
-                    MixpanelManager().pageOpened('Memory Detail Plugins');
+                    routeToPage(context, const AppsPage());
+                    MixpanelManager().pageOpened('Memory Detail Apps');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -663,11 +660,11 @@ class GetDevToolsOptions extends StatefulWidget {
 }
 
 class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
-  bool loadingPluginIntegrationTest = false;
+  bool loadingAppIntegrationTest = false;
 
-  void changeLoadingPluginIntegrationTest(bool value) {
+  void changeLoadingAppIntegrationTest(bool value) {
     setState(() {
-      loadingPluginIntegrationTest = value;
+      loadingAppIntegrationTest = value;
     });
   }
 
@@ -678,7 +675,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
           title: const Text('Trigger Memory Created Integration'),
-          leading: loadingPluginIntegrationTest
+          leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
                   width: 24,
@@ -688,7 +685,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 )
               : const Icon(Icons.send_to_mobile_outlined),
           onTap: () {
-            changeLoadingPluginIntegrationTest(true);
+            changeLoadingAppIntegrationTest(true);
             // TODO: if not set, show dialog to set URL or take them to settings.
 
             webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
@@ -704,7 +701,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                   singleButton: true,
                 ),
               );
-              changeLoadingPluginIntegrationTest(false);
+              changeLoadingAppIntegrationTest(false);
             });
           },
         ),

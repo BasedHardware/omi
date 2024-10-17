@@ -83,7 +83,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
               ),
               const ListTile(
                 leading: Icon(Icons.person_pin_outlined),
-                title: Text("Your plugins and integrations will be disconnected effectively immediately."),
+                title: Text("Your Apps and Integrations will be disconnected effectively immediately."),
               ),
               const ListTile(
                 leading: Icon(Icons.upload_file_outlined),

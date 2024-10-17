@@ -194,7 +194,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
           ),
           Expanded(
             child: isNew
-                ? Align(
+                ? const Align(
                     alignment: Alignment.centerRight,
                     child: MemoryNewStatusIndicator(text: "New 🚀"),
                   )
@@ -212,8 +212,8 @@ class _MemoryListItemState extends State<MemoryListItem> {
 }
 
 class MemoryNewStatusIndicator extends StatefulWidget {
-  String text;
-  MemoryNewStatusIndicator({super.key, required this.text});
+  final String text;
+  const MemoryNewStatusIndicator({super.key, required this.text});
 
   @override
   _MemoryNewStatusIndicatorState createState() => _MemoryNewStatusIndicatorState();

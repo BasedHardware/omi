@@ -3,16 +3,16 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class PluginSetupInstructions extends StatefulWidget {
+class AppSetupInstructions extends StatefulWidget {
   final String markdown;
 
-  const PluginSetupInstructions({super.key, required this.markdown});
+  const AppSetupInstructions({super.key, required this.markdown});
 
   @override
-  State<PluginSetupInstructions> createState() => _PluginSetupInstructionsState();
+  State<AppSetupInstructions> createState() => _AppSetupInstructionsState();
 }
 
-class _PluginSetupInstructionsState extends State<PluginSetupInstructions> {
+class _AppSetupInstructionsState extends State<AppSetupInstructions> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(

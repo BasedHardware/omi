@@ -9,9 +9,10 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/page.dart';
-import 'package:friend_private/pages/home/widgets/chat_plugins_dropdown_widget.dart';
+import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -20,7 +21,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart' as mp;
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -60,7 +61,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
       await context.read<mp.MemoryProvider>().getInitialMemories();
       if (mounted) {
-        context.read<PluginProvider>().setSelectedChatPluginId(null);
+        context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
     super.initState();
@@ -88,8 +89,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   PageController? _controller;
 
-  void _initiatePlugins() {
-    context.read<PluginProvider>().getPlugins();
+  void _initiateApps() {
+    context.read<AppProvider>().getApps();
   }
 
   @override
@@ -138,7 +139,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initiatePlugins();
+      _initiateApps();
       // ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
@@ -254,7 +255,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: DefaultTabController(
-            length: 2,
+            length: 3,
             initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
             child: GestureDetector(
               onTap: () {
@@ -271,6 +272,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       children: const [
                         MemoriesPage(),
                         ChatPage(),
+                        AppsPage(),
                       ],
                     ),
                   ),
@@ -300,7 +302,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             child: TabBar(
                               padding: const EdgeInsets.only(top: 4, bottom: 4),
                               onTap: (index) {
-                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat'][index]);
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
@@ -322,6 +324,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                Tab(
+                                  child: Text(
+                                    'Apps',
+                                    style: TextStyle(
+                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                       fontSize: 16,
                                     ),
                                   ),
@@ -377,28 +388,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 const BatteryInfoWidget(),
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
-                    if (provider.selectedIndex != 0) {
-                      return const ChatPluginsDropdownWidget();
-                    }
-                    return Flexible(
-                      child: Row(
-                        children: [
-                          const Spacer(),
-                          SpeechLanguageSheet(
-                            recordingLanguage: provider.recordingLanguage,
-                            setRecordingLanguage: (language) {
-                              provider.setRecordingLanguage(language);
+                    if (provider.selectedIndex == 1) {
+                      return const ChatAppsDropdownWidget();
+                    } else if (provider.selectedIndex == 2) {
+                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
+                    } else {
+                      return Flexible(
+                        child: Row(
+                          children: [
+                            const Spacer(),
+                            SpeechLanguageSheet(
+                              recordingLanguage: provider.recordingLanguage,
+                              setRecordingLanguage: (language) {
+                                provider.setRecordingLanguage(language);
 
-                              // Notify capture provider
-                              if (context.mounted) {
-                                context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                              }
-                            },
-                            availableLanguages: provider.availableLanguages,
-                          ),
-                        ],
-                      ),
-                    );
+                                // Notify capture provider
+                                if (context.mounted) {
+                                  context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                                }
+                              },
+                              availableLanguages: provider.availableLanguages,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                   },
                 ),
                 Row(

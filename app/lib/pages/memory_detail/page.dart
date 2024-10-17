@@ -228,7 +228,7 @@ class SummaryTab extends StatelessWidget {
           shrinkWrap: true,
           children: [
             const GetSummaryWidgets(),
-            isDiscaarded ? const ReprocessDiscardedWidget() : const GetPluginsWidgets(),
+            isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
             const GetGeolocationWidgets(),
           ],
         );

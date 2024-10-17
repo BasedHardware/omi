@@ -1,18 +1,18 @@
-class PluginReview {
+class AppReview {
   String uid;
   DateTime ratedAt;
   double score;
   String review;
 
-  PluginReview({
+  AppReview({
     required this.uid,
     required this.ratedAt,
     required this.score,
     required this.review,
   });
 
-  factory PluginReview.fromJson(Map<String, dynamic> json) {
-    return PluginReview(
+  factory AppReview.fromJson(Map<String, dynamic> json) {
+    return AppReview(
       uid: json['uid'],
       ratedAt: DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
@@ -29,8 +29,8 @@ class PluginReview {
     };
   }
 
-  static List<PluginReview> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => PluginReview.fromJson(e)).toList();
+  static List<AppReview> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => AppReview.fromJson(e)).toList();
   }
 }
 
@@ -104,7 +104,7 @@ class ExternalIntegration {
   }
 }
 
-class Plugin {
+class App {
   String id;
   String name;
   String author;
@@ -118,8 +118,8 @@ class Plugin {
 
   // can be used for
 
-  List<PluginReview> reviews;
-  PluginReview? userReview;
+  List<AppReview> reviews;
+  AppReview? userReview;
   double? ratingAvg;
   int ratingCount;
   int installs;
@@ -127,7 +127,7 @@ class Plugin {
   bool enabled;
   bool deleted;
 
-  Plugin({
+  App({
     required this.id,
     required this.name,
     required this.author,
@@ -156,8 +156,8 @@ class Plugin {
 
   bool worksExternally() => hasCapability('external_integration');
 
-  factory Plugin.fromJson(Map<String, dynamic> json) {
-    return Plugin(
+  factory App.fromJson(Map<String, dynamic> json) {
+    return App(
       id: json['id'],
       name: json['name'],
       author: json['author'],
@@ -167,8 +167,8 @@ class Plugin {
       memoryPrompt: json['memory_prompt'],
       externalIntegration:
           json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
-      reviews: PluginReview.fromJsonList(json['reviews'] ?? []),
-      userReview: json['user_review'] != null ? PluginReview.fromJson(json['user_review']) : null,
+      reviews: AppReview.fromJsonList(json['reviews'] ?? []),
+      userReview: json['user_review'] != null ? AppReview.fromJson(json['user_review']) : null,
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
@@ -201,5 +201,5 @@ class Plugin {
     };
   }
 
-  static List<Plugin> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Plugin.fromJson(e)).toList();
+  static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
 }

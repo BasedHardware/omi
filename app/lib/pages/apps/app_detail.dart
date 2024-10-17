@@ -2,9 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/plugins/instructions.dart';
+import 'package:friend_private/pages/apps/instructions.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -13,25 +13,25 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../backend/schema/plugin.dart';
+import '../../backend/schema/app.dart';
 
-class PluginDetailPage extends StatefulWidget {
-  final Plugin plugin;
+class AppDetailPage extends StatefulWidget {
+  final App app;
 
-  const PluginDetailPage({super.key, required this.plugin});
+  const AppDetailPage({super.key, required this.app});
 
   @override
-  State<PluginDetailPage> createState() => _PluginDetailPageState();
+  State<AppDetailPage> createState() => _AppDetailPageState();
 }
 
-class _PluginDetailPageState extends State<PluginDetailPage> {
+class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
-  bool pluginLoading = false;
+  bool appLoading = false;
 
   checkSetupCompleted() {
     // TODO: move check to backend
-    isPluginSetupCompleted(widget.plugin.externalIntegration!.setupCompletedUrl).then((value) {
+    isAppSetupCompleted(widget.app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
       }
@@ -40,11 +40,11 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
   @override
   void initState() {
-    if (widget.plugin.worksExternally()) {
-      getPluginMarkdown(widget.plugin.externalIntegration!.setupInstructionsFilePath).then((value) {
+    if (widget.app.worksExternally()) {
+      getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.plugin.id}/assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.app.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
@@ -56,17 +56,17 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool isMemoryPrompt = widget.plugin.worksWithMemories();
-    bool isChatPrompt = widget.plugin.worksWithChat();
-    bool isIntegration = widget.plugin.worksExternally();
+    bool isMemoryPrompt = widget.app.worksWithMemories();
+    bool isChatPrompt = widget.app.worksWithChat();
+    bool isIntegration = widget.app.worksExternally();
     bool hasSetupInstructions =
-        isIntegration && widget.plugin.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
-    bool hasAuthSteps = isIntegration && widget.plugin.externalIntegration?.authSteps.isNotEmpty == true;
-    int stepsCount = widget.plugin.externalIntegration?.authSteps.length ?? 0;
+        isIntegration && widget.app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
+    bool hasAuthSteps = isIntegration && widget.app.externalIntegration?.authSteps.isNotEmpty == true;
+    int stepsCount = widget.app.externalIntegration?.authSteps.length ?? 0;
 
     return Scaffold(
         appBar: AppBar(
-          title: Text(widget.plugin.name),
+          title: Text(widget.app.name),
           backgroundColor: Theme.of(context).colorScheme.primary,
           elevation: 0,
         ),
@@ -76,7 +76,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
             const SizedBox(height: 32),
             ListTile(
               leading: CachedNetworkImage(
-                imageUrl: widget.plugin.getImageUrl(),
+                imageUrl: widget.app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
                   width: 56,
                   height: 56,
@@ -93,14 +93,14 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: widget.plugin.ratingAvg != null ? 4 : 0),
+                  SizedBox(height: widget.app.ratingAvg != null ? 4 : 0),
                   Text(
-                    widget.plugin.description,
+                    widget.app.description,
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                 ],
               ),
-              trailing: pluginLoading
+              trailing: appLoading
                   ? const Padding(
                       padding: EdgeInsets.all(10),
                       child: SizedBox(
@@ -113,18 +113,18 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     )
                   : IconButton(
                       icon: Icon(
-                        widget.plugin.enabled ? Icons.check : Icons.arrow_downward_rounded,
-                        color: widget.plugin.enabled ? Colors.white : Colors.grey,
+                        widget.app.enabled ? Icons.check : Icons.arrow_downward_rounded,
+                        color: widget.app.enabled ? Colors.white : Colors.grey,
                       ),
                       onPressed: () {
                         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                         if (!connectivityProvider.isConnected) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text("Can't enable plugin without internet connection."),
+                            content: Text("Can't enable app without internet connection."),
                           ));
                           return;
                         }
-                        if (widget.plugin.worksExternally() && !widget.plugin.enabled) {
+                        if (widget.app.worksExternally() && !widget.app.enabled) {
                           showDialog(
                             context: context,
                             builder: (c) => getDialog(
@@ -132,15 +132,15 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                               () => Navigator.pop(context),
                               () {
                                 Navigator.pop(context);
-                                _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                                _toggleApp(widget.app.id.toString(), !widget.app.enabled);
                               },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                              'Authorize External App',
+                              'Do you allow this app to access your memories, transcripts, and recordings? Your data will be sent to the app\'s server for processing.',
                               okButtonText: 'Confirm',
                             ),
                           );
                         } else {
-                          _togglePlugin(widget.plugin.id.toString(), !widget.plugin.enabled);
+                          _toggleApp(widget.app.id.toString(), !widget.app.enabled);
                         }
                       },
                     ),
@@ -151,14 +151,14 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (widget.plugin.ratingAvg != null)
+                  if (widget.app.ratingAvg != null)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(widget.plugin.getRatingAvg()!),
+                        Text(widget.app.getRatingAvg()!),
                         const SizedBox(width: 4),
                         RatingBar.builder(
-                          initialRating: widget.plugin.ratingAvg!,
+                          initialRating: widget.app.ratingAvg!,
                           minRating: 1,
                           ignoreGestures: true,
                           direction: Axis.horizontal,
@@ -172,15 +172,15 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                           onRatingUpdate: (rating) {},
                         ),
                         const SizedBox(width: 4),
-                        Text('(${widget.plugin.ratingCount})'),
+                        Text('(${widget.app.ratingCount})'),
                       ],
                     ),
-                  widget.plugin.installs > 0
+                  widget.app.installs > 0
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
-                              '${widget.plugin.installs} Install${widget.plugin.installs == 1 ? "" : "s"}',
+                              '${widget.app.installs} Install${widget.app.installs == 1 ? "" : "s"}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 decoration: TextDecoration.underline,
@@ -208,7 +208,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      (widget.plugin.memoryPrompt ?? '').decodeSting,
+                      (widget.app.memoryPrompt ?? '').decodeSting,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -227,7 +227,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.plugin.chatPrompt ?? '',
+                      widget.app.chatPrompt ?? '',
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -257,7 +257,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   )
                 : const SizedBox.shrink(),
             ...(hasAuthSteps
-                ? widget.plugin.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
+                ? widget.app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
                     String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
                     // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
                     return ListTile(
@@ -280,7 +280,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     onTap: () async {
                       await routeToPage(
                         context,
-                        PluginSetupInstructions(markdown: instructionsMarkdown ?? ''),
+                        AppSetupInstructions(markdown: instructionsMarkdown ?? ''),
                       );
                       checkSetupCompleted();
                     },
@@ -308,14 +308,14 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    widget.plugin.userReview?.score == null ? 'Rate Plugin:' : 'Your rating:',
+                    widget.app.userReview?.score == null ? 'Rate App:' : 'Your rating:',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 0),
                   child: RatingBar.builder(
-                    initialRating: widget.plugin.userReview?.score ?? 0,
+                    initialRating: widget.app.userReview?.score ?? 0,
                     minRating: 1,
                     direction: Axis.horizontal,
                     allowHalfRating: true,
@@ -327,26 +327,26 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                     onRatingUpdate: (rating) {
                       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                       if (connectivityProvider.isConnected) {
-                        reviewPlugin(widget.plugin.id, rating);
-                        bool hadReview = widget.plugin.userReview != null;
-                        if (!hadReview) widget.plugin.ratingCount += 1;
-                        widget.plugin.userReview = PluginReview(
+                        reviewApp(widget.app.id, rating);
+                        bool hadReview = widget.app.userReview != null;
+                        if (!hadReview) widget.app.ratingCount += 1;
+                        widget.app.userReview = AppReview(
                           uid: SharedPreferencesUtil().uid,
                           ratedAt: DateTime.now(),
                           review: '',
                           score: rating,
                         );
-                        var pluginsList = SharedPreferencesUtil().pluginsList;
-                        var index = pluginsList.indexWhere((element) => element.id == widget.plugin.id);
-                        pluginsList[index] = widget.plugin;
-                        SharedPreferencesUtil().pluginsList = pluginsList;
-                        MixpanelManager().pluginRated(widget.plugin.id.toString(), rating);
-                        debugPrint('Refreshed plugins list.');
-                        // TODO: refresh ratings on plugin
+                        var appsList = SharedPreferencesUtil().appsList;
+                        var index = appsList.indexWhere((element) => element.id == widget.app.id);
+                        appsList[index] = widget.app;
+                        SharedPreferencesUtil().appsList = appsList;
+                        MixpanelManager().appRated(widget.app.id.toString(), rating);
+                        debugPrint('Refreshed apps list.');
+                        // TODO: refresh ratings on app
                         setState(() {});
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text("Can't rate plugin without internet connection."),
+                          content: Text("Can't rate app without internet connection."),
                         ));
                       }
                     },
@@ -362,7 +362,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                   text: TextSpan(children: [
                 const TextSpan(text: 'Developed by: ', style: TextStyle(fontSize: 16)),
                 TextSpan(
-                  text: '   ${widget.plugin.author}.',
+                  text: '   ${widget.app.author}.',
                   style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
                 ),
               ])),
@@ -424,11 +424,11 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
         ));
   }
 
-  Future<void> _togglePlugin(String pluginId, bool isEnabled) async {
+  Future<void> _toggleApp(String appId, bool isEnabled) async {
     var prefs = SharedPreferencesUtil();
-    setState(() => pluginLoading = true);
+    setState(() => appLoading = true);
     if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
+      var enabled = await enableAppServer(appId);
       if (!enabled) {
         if (mounted) {
           showDialog(
@@ -437,25 +437,25 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the plugin',
-              'If this is an integration plugin, make sure the setup is completed.',
+              'Error activating the app',
+              'If this is an integration app, make sure the setup is completed.',
               singleButton: true,
             ),
           );
         }
 
-        setState(() => pluginLoading = false);
+        setState(() => appLoading = false);
         return;
       }
 
-      prefs.enablePlugin(pluginId);
-      MixpanelManager().pluginEnabled(pluginId);
+      prefs.enableApp(appId);
+      MixpanelManager().appEnabled(appId);
     } else {
-      prefs.disablePlugin(pluginId);
-      await enablePluginServer(pluginId);
-      MixpanelManager().pluginDisabled(pluginId);
+      prefs.disableApp(appId);
+      await enableAppServer(appId);
+      MixpanelManager().appDisabled(appId);
     }
-    setState(() => widget.plugin.enabled = isEnabled);
-    setState(() => pluginLoading = false);
+    setState(() => widget.app.enabled = isEnabled);
+    setState(() => appLoading = false);
   }
 }
