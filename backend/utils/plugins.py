@@ -93,7 +93,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
             print('Plugin integration failed', plugin.id, 'result:', response.content)
             return
 
-        record_plugin_usage(uid, memory.id, plugin.id, UsageHistoryType.memory_created_external_integration)
+        record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration, memory_id=memory.id)
 
         print('response', response.json())
         if message := response.json().get('message', ''):
