@@ -109,7 +109,7 @@ def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
         if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
             memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
             if not is_reprocess:
-                record_plugin_usage(uid, memory.id, plugin.id, UsageHistoryType.memory_created_prompt)
+                record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
