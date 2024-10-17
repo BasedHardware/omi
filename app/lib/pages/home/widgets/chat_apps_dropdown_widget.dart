@@ -1,16 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
-import 'package:friend_private/pages/plugins/page.dart';
+import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
-class ChatPluginsDropdownWidget extends StatelessWidget {
-  const ChatPluginsDropdownWidget({super.key});
+class ChatAppsDropdownWidget extends StatelessWidget {
+  const ChatAppsDropdownWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,21 +24,22 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
         }
         return child!;
       },
-      child: Consumer<PluginProvider>(builder: (context, provider, child) {
+      child: Consumer<AppProvider>(builder: (context, provider, child) {
         return Padding(
           padding: const EdgeInsets.only(left: 0),
-          child: provider.plugins.where((p) => p.enabled).isEmpty
+          child: provider.apps.where((p) => p.enabled).isEmpty
               ? GestureDetector(
                   onTap: () {
-                    MixpanelManager().pageOpened('Chat Plugins');
-                    routeToPage(context, const PluginsPage(filterChatOnly: true));
+                    MixpanelManager().pageOpened('Chat Apps');
+
+                    routeToPage(context, const AppsPage(filterChatOnly: true));
                   },
                   child: const Row(
                     children: [
                       Icon(size: 20, Icons.chat, color: Colors.white),
                       SizedBox(width: 10),
                       Text(
-                        'Enable Plugins',
+                        'Enable Apps',
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                       ),
                     ],
@@ -48,17 +49,17 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: DropdownButton<String>(
                     menuMaxHeight: 350,
-                    value: provider.selectedChatPluginId,
+                    value: provider.selectedChatAppId,
                     onChanged: (s) async {
-                      if ((s == 'no_selected' && provider.plugins.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                        routeToPage(context, const PluginsPage(filterChatOnly: true));
-                        MixpanelManager().pageOpened('Chat Plugins');
+                      if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
+                        routeToPage(context, const AppsPage(filterChatOnly: true));
+                        MixpanelManager().pageOpened('Chat Apps');
                         return;
                       }
-                      if (s == null || s == provider.selectedChatPluginId) return;
-                      provider.setSelectedChatPluginId(s);
-                      var plugin = provider.getSelectedPlugin();
-                      context.read<MessageProvider>().sendInitialPluginMessage(plugin);
+                      if (s == null || s == provider.selectedChatAppId) return;
+                      provider.setSelectedChatAppId(s);
+                      var app = provider.getSelectedApp();
+                      context.read<MessageProvider>().sendInitialAppMessage(app);
                     },
                     icon: Container(),
                     alignment: Alignment.center,
@@ -68,7 +69,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                     isExpanded: false,
                     itemHeight: 48,
                     padding: EdgeInsets.zero,
-                    items: _getPluginsDropdownItems(context, provider),
+                    items: _getAppsDropdownItems(context, provider),
                   ),
                 ),
         );
@@ -76,7 +77,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
     );
   }
 
-  _getPluginsDropdownItems(BuildContext context, PluginProvider provider) {
+  _getAppsDropdownItems(BuildContext context, AppProvider provider) {
     var items = [
           DropdownMenuItem<String>(
             value: 'no_selected',
@@ -86,22 +87,22 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                 const Icon(size: 20, Icons.chat, color: Colors.white),
                 const SizedBox(width: 10),
                 Text(
-                  provider.plugins.where((p) => p.enabled).isEmpty ? 'Enable Plugins   ' : 'Select a plugin',
+                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           )
         ] +
-        provider.plugins.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((Plugin plugin) {
+        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((App app) {
           return DropdownMenuItem<String>(
-            value: plugin.id,
+            value: app.id,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 CachedNetworkImage(
-                  imageUrl: plugin.getImageUrl(),
+                  imageUrl: app.getImageUrl(),
                   imageBuilder: (context, imageProvider) {
                     return CircleAvatar(
                       backgroundColor: Colors.white,
@@ -127,16 +128,14 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  plugin.name.length > 18
-                      ? '${plugin.name.substring(0, 18)}...'
-                      : plugin.name + ' ' * (18 - plugin.name.length),
+                  app.name.length > 18 ? '${app.name.substring(0, 18)}...' : app.name + ' ' * (18 - app.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
             ),
           );
         }).toList();
-    if (provider.plugins.where((p) => p.enabled).isNotEmpty) {
+    if (provider.apps.where((p) => p.enabled).isNotEmpty) {
       items.add(const DropdownMenuItem<String>(
         value: 'enable',
         child: Row(
@@ -148,7 +147,7 @@ class ChatPluginsDropdownWidget extends StatelessWidget {
               child: Icon(Icons.star, color: Colors.purpleAccent),
             ),
             SizedBox(width: 8),
-            Text('Enable Plugins   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
+            Text('Enable Apps   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
           ],
         ),
       ));

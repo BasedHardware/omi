@@ -1,39 +1,39 @@
 import 'package:collection/collection.dart';
-import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_dialog.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
-class PluginProvider extends BaseProvider {
-  List<Plugin> plugins = [];
+class AppProvider extends BaseProvider {
+  List<App> apps = [];
 
   bool filterChat = true;
   bool filterMemories = true;
   bool filterExternal = true;
   String searchQuery = '';
 
-  List<bool> pluginLoading = [];
+  List<bool> appLoading = [];
 
-  String selectedChatPluginId = 'no_selected';
+  String selectedChatAppId = 'no_selected';
 
-  void setSelectedChatPluginId(String? pluginId) {
-    if (pluginId == null) {
-      selectedChatPluginId = SharedPreferencesUtil().selectedChatPluginId;
+  void setSelectedChatAppId(String? appId) {
+    if (appId == null) {
+      selectedChatAppId = SharedPreferencesUtil().selectedChatAppId;
     } else {
-      selectedChatPluginId = pluginId;
-      SharedPreferencesUtil().selectedChatPluginId = pluginId;
+      selectedChatAppId = appId;
+      SharedPreferencesUtil().selectedChatAppId = appId;
     }
     notifyListeners();
   }
 
-  Plugin? getSelectedPlugin() {
-    return plugins.firstWhereOrNull((p) => p.id == selectedChatPluginId);
+  App? getSelectedApp() {
+    return apps.firstWhereOrNull((p) => p.id == selectedChatAppId);
   }
 
-  void setPluginLoading(int index, bool value) {
-    pluginLoading[index] = value;
+  void setAppLoading(int index, bool value) {
+    appLoading[index] = value;
     notifyListeners();
   }
 
@@ -42,28 +42,28 @@ class PluginProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future getPlugins() async {
+  Future getApps() async {
     setLoadingState(true);
-    plugins = await retrievePlugins();
-    updatePrefPlugins();
-    setPlugins();
+    apps = await retrieveApps();
+    updatePrefApps();
+    setApps();
     setLoadingState(false);
     notifyListeners();
   }
 
-  void setPluginsFromCache() {
-    if (SharedPreferencesUtil().pluginsList.isNotEmpty) {
-      plugins = SharedPreferencesUtil().pluginsList;
+  void setAppsFromCache() {
+    if (SharedPreferencesUtil().appsList.isNotEmpty) {
+      apps = SharedPreferencesUtil().appsList;
     }
     notifyListeners();
   }
 
-  void updatePrefPlugins() {
-    SharedPreferencesUtil().pluginsList = plugins;
+  void updatePrefApps() {
+    SharedPreferencesUtil().appsList = apps;
   }
 
-  void setPlugins() {
-    plugins = SharedPreferencesUtil().pluginsList;
+  void setApps() {
+    apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
 
@@ -73,40 +73,40 @@ class PluginProvider extends BaseProvider {
       filterMemories = false;
       filterExternal = false;
     }
-    pluginLoading = List.filled(plugins.length, false);
+    appLoading = List.filled(apps.length, false);
 
-    getPlugins();
+    getApps();
     notifyListeners();
   }
 
-  Future<void> togglePlugin(String pluginId, bool isEnabled, int idx) async {
-    if (pluginLoading[idx]) return;
-    pluginLoading[idx] = true;
+  Future<void> toggleApp(String appId, bool isEnabled, int idx) async {
+    if (appLoading[idx]) return;
+    appLoading[idx] = true;
     notifyListeners();
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
-      var enabled = await enablePluginServer(pluginId);
+      var enabled = await enableAppServer(appId);
       if (!enabled) {
         AppDialog.show(
-          title: 'Error activating the plugin',
-          content: 'If this is an integration plugin, make sure the setup is completed.',
+          title: 'Error activating the app',
+          content: 'If this is an integration app, make sure the setup is completed.',
           singleButton: true,
         );
 
-        pluginLoading[idx] = false;
+        appLoading[idx] = false;
         notifyListeners();
 
         return;
       }
-      prefs.enablePlugin(pluginId);
-      MixpanelManager().pluginEnabled(pluginId);
+      prefs.enableApp(appId);
+      MixpanelManager().appEnabled(appId);
     } else {
-      await disablePluginServer(pluginId);
-      prefs.disablePlugin(pluginId);
-      MixpanelManager().pluginDisabled(pluginId);
+      await disableAppServer(appId);
+      prefs.disableApp(appId);
+      MixpanelManager().appDisabled(appId);
     }
-    pluginLoading[idx] = false;
-    plugins = SharedPreferencesUtil().pluginsList;
+    appLoading[idx] = false;
+    apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
 

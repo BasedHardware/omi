@@ -8,7 +8,7 @@ import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -38,7 +38,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool isScrollingDown = false;
 
   var prefs = SharedPreferencesUtil();
-  late List<Plugin> plugins;
+  late List<App> apps;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -47,7 +47,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
-    plugins = prefs.pluginsList;
+    apps = prefs.appsList;
     scrollController = ScrollController();
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -217,7 +217,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             message: message,
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,
-                                            pluginSender: plugins.firstWhereOrNull((e) => e.id == message.pluginId),
+                                            appSender: apps.firstWhereOrNull((e) => e.id == message.appId),
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
                                             },
@@ -313,24 +313,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String message) async {
     context.read<MessageProvider>().setSendingMessage(true);
-    String? pluginId = SharedPreferencesUtil().selectedChatPluginId == 'no_selected'
-        ? null
-        : SharedPreferencesUtil().selectedChatPluginId;
+    String? appId =
+        SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
     var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, pluginId, false, []);
+        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
     scrollToBottom();
     textController.clear();
-    await context.read<MessageProvider>().sendMessageToServer(message, pluginId);
+    await context.read<MessageProvider>().sendMessageToServer(message, appId);
     // TODO: restore streaming capabilities, with initial empty message
     scrollToBottom();
     context.read<MessageProvider>().setSendingMessage(false);
   }
 
-  sendInitialPluginMessage(Plugin? plugin) async {
+  sendInitialAppMessage(App? app) async {
     context.read<MessageProvider>().setSendingMessage(true);
     scrollToBottom();
-    ServerMessage message = await getInitialPluginMessage(plugin?.id);
+    ServerMessage message = await getInitialAppMessage(app?.id);
     if (mounted) {
       context.read<MessageProvider>().addMessage(message);
     }
