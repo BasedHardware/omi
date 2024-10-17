@@ -85,7 +85,7 @@ def count_memory_prompt_plugins_trigger():
         for message in messages:
             if pid := message.get('plugin_id'):
                 record_plugin_usage(
-                    uid, pid, UsageHistoryType.memory_created_prompt, message_id=message['id'],
+                    uid, pid, UsageHistoryType.chat_message_sent, message_id=message['id'],
                     timestamp=message['created_at']
                 )
 
