@@ -24,7 +24,7 @@ class SpeechProfileProvider extends ChangeNotifier
   bool loading = false;
   BtDevice? device;
 
-  final targetWordsCount = 30; //TODO: 15 seems way too less
+  final targetWordsCount = 70;
   final maxDuration = 150;
 
   StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
