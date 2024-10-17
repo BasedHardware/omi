@@ -432,7 +432,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
                 ),
               ),
-            )
+            ),
+            const SizedBox(height: 16),
           ],
         ));
   }
