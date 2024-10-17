@@ -317,12 +317,12 @@ async def _websocket_util(
         # TODO: add a lock, send shorter segments, validate regex.
         webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
         if not webhook_url:
-            print('No developer webhook url')
+            #print('No developer webhook url')
             return
         webhook_url += f'sample_rate={sample_rate}'
         try:
             response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'})
-            print('Developer webhook response', response.status_code)
+            #print('Developer webhook response', response.status_code)
         except Exception as e:
             print(f"Error sending audio bytes to developer webhook: {e}")
 
