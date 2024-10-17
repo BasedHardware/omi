@@ -7,7 +7,14 @@ import 'memory_list_item.dart';
 class MemoriesGroupWidget extends StatelessWidget {
   final List<ServerMemory> memories;
   final DateTime date;
-  const MemoriesGroupWidget({super.key, required this.memories, required this.date});
+  final bool showDiscardedMemories;
+  final bool hasDiscardedMemories;
+  const MemoriesGroupWidget(
+      {super.key,
+      required this.memories,
+      required this.date,
+      required this.showDiscardedMemories,
+      required this.hasDiscardedMemories});
 
   @override
   Widget build(BuildContext context) {
@@ -15,8 +22,16 @@ class MemoriesGroupWidget extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DateListItem(date: date, isFirst: true),
+          if (showDiscardedMemories && hasDiscardedMemories)
+            DateListItem(date: date, isFirst: true)
+          else if (!showDiscardedMemories)
+            DateListItem(date: date, isFirst: true)
+          else
+            const SizedBox.shrink(),
           ...memories.map((memory) {
+            if (!showDiscardedMemories && memory.discarded) {
+              return const SizedBox.shrink();
+            }
             return MemoryListItem(memory: memory, memoryIdx: memories.indexOf(memory), date: date);
           }),
           const SizedBox(height: 16),
