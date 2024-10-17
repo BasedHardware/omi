@@ -57,7 +57,7 @@ def send_message(
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if plugin_id:
-        record_plugin_usage(uid, None, plugin.id, UsageHistoryType.chat_message_sent)
+        record_plugin_usage(uid, plugin.id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     return ai_message
 

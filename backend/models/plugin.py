@@ -86,7 +86,6 @@ class UsageHistoryType(str, Enum):
 
 
 class UsageHistoryItem(BaseModel):
-    id: str
     uid: str
     memory_id: Optional[str] = None
     timestamp: datetime
