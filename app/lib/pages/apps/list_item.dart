@@ -70,16 +70,36 @@ class AppListItem extends StatelessWidget {
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                     ),
-                    app.ratingAvg != null
+                    app.ratingAvg != null || app.installs > 0
                         ? Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                Text(app.getRatingAvg()!),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                                const SizedBox(width: 4),
-                                Text('(${app.ratingCount})'),
+                                app.ratingAvg != null
+                                    ? Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          Text(app.getRatingAvg()!),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                          const SizedBox(width: 4),
+                                          Text('(${app.ratingCount})'),
+                                          const SizedBox(width: 16),
+                                        ],
+                                      )
+                                    : const SizedBox(),
+                                app.installs > 0
+                                    ? Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.download_rounded, size: 16, color: Colors.grey.shade300),
+                                          const SizedBox(width: 4),
+                                          Text('${app.installs}'),
+                                        ],
+                                      )
+                                    : Container(),
                               ],
                             ),
                           )

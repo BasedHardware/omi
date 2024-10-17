@@ -93,4 +93,6 @@ int clear_audio_file(uint8_t num);
  */
 int clear_audio_directory();
 
+int save_offset(uint32_t offset);
+int get_offset();
 #endif

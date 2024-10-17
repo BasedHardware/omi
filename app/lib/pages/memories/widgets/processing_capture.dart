@@ -24,6 +24,7 @@ class MemoryCaptureWidget extends StatefulWidget {
   State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
 }
 
+
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   bool _isReady = false;
   Timer? _readyStateTimer;
@@ -52,36 +53,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-
-      /// Friend V2 SD CARD functionality
-      String totalsdCardSecondsRemainingString =
-          (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
-
-      if (provider.sdCardReady) {
-        var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
-        Future.delayed(Duration.zero, () {
-          ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-          ScaffoldMessenger.of(context).showMaterialBanner(
-            MaterialBanner(
-              content: Text(banner),
-              backgroundColor: Colors.green,
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                    routeToPage(context, const SdCardCapturePage());
-                  },
-                  child: const Text('Click here'),
-                ),
-              ],
-              onVisible: () => Future.delayed(const Duration(seconds: 15), () {
-                ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-              }),
-            ),
-          );
-        });
-        provider.setsdCardReady(false);
-      }
 
       // Waiting ready state, 3s for now
       if (!_isReady) {
