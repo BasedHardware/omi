@@ -26,6 +26,33 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   return false;
 }
 
+Future<bool> setUserWebhookUrl({required String type, required String url}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'url': url}),
+  );
+  if (response == null) return false;
+  if (response.statusCode == 200) return true;
+  return false;
+}
+
+Future<String> getUserWebhookUrl({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  if (response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    return (jsonResponse['url'] as String?) ?? '';
+  }
+  return '';
+}
+
 Future<bool> deleteAccount() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/delete-account',

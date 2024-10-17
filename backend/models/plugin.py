@@ -51,6 +51,7 @@ class Plugin(BaseModel):
     enabled: bool = False
     deleted: bool = False
     trigger_workflow_memories: bool = True  # default true
+    installs: int = 0
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
