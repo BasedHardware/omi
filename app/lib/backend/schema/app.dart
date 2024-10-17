@@ -122,6 +122,7 @@ class App {
   AppReview? userReview;
   double? ratingAvg;
   int ratingCount;
+  int installs;
 
   bool enabled;
   bool deleted;
@@ -139,6 +140,7 @@ class App {
     this.reviews = const [],
     this.userReview,
     this.ratingAvg,
+    this.installs = 0,
     required this.ratingCount,
     required this.enabled,
     required this.deleted,
@@ -172,6 +174,7 @@ class App {
       capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
+      installs: json['installs'] ?? 0,
     );
   }
 
@@ -194,6 +197,7 @@ class App {
       'rating_count': ratingCount,
       'deleted': deleted,
       'enabled': enabled,
+      'installs': installs,
     };
   }
 

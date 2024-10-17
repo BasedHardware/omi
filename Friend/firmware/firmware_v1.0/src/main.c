@@ -38,6 +38,8 @@ void bt_ctlr_assert_handle(char *name, int type)
 	LOG_INF("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
 }
 
+
+
 bool is_connected = false;
 bool is_charging = false;
 extern bool is_off;
@@ -84,6 +86,10 @@ void set_led_state()
         {
             set_led_green(false);
         }
+    }
+    else
+    {
+        set_led_green(false);
     }
     if(is_off)
     {
@@ -157,7 +163,7 @@ int main(void)
     {
         LOG_ERR("Failed to initialize haptic pin: %d", err);
     }
-    play_haptic_milli(500);
+
     set_led_blue(true);
     set_codec_callback(codec_handler);
     err = codec_start();
@@ -173,6 +179,7 @@ int main(void)
         set_led_blue(false);
         return err;
     }
+    play_haptic_milli(500);
     set_led_blue(false);
 
     // Indicate microphone initialization
@@ -197,6 +204,8 @@ int main(void)
     }
     set_led_red(false);
     set_led_green(false);
+
+    // save_offset(200);
     // // Initialize NFC first
     // LOG_INF("Initializing NFC...");
     // err = nfc_init();

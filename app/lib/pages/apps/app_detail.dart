@@ -98,31 +98,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     widget.app.description,
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
-                  SizedBox(height: widget.app.ratingAvg != null ? 4 : 0),
-                  widget.app.ratingAvg != null
-                      ? Row(
-                          children: [
-                            Text(widget.app.getRatingAvg()!),
-                            const SizedBox(width: 4),
-                            RatingBar.builder(
-                              initialRating: widget.app.ratingAvg!,
-                              minRating: 1,
-                              ignoreGestures: true,
-                              direction: Axis.horizontal,
-                              allowHalfRating: true,
-                              itemCount: 5,
-                              itemSize: 16,
-                              tapOnlyMode: false,
-                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                              maxRating: 5.0,
-                              onRatingUpdate: (rating) {},
-                            ),
-                            const SizedBox(width: 4),
-                            Text('(${widget.app.ratingCount})'),
-                          ],
-                        )
-                      : Container(),
                 ],
               ),
               trailing: appLoading
@@ -169,6 +144,55 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         }
                       },
                     ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (widget.app.ratingAvg != null)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(widget.app.getRatingAvg()!),
+                        const SizedBox(width: 4),
+                        RatingBar.builder(
+                          initialRating: widget.app.ratingAvg!,
+                          minRating: 1,
+                          ignoreGestures: true,
+                          direction: Axis.horizontal,
+                          allowHalfRating: true,
+                          itemCount: 5,
+                          itemSize: 20,
+                          tapOnlyMode: false,
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          maxRating: 5.0,
+                          onRatingUpdate: (rating) {},
+                        ),
+                        const SizedBox(width: 4),
+                        Text('(${widget.app.ratingCount})'),
+                      ],
+                    ),
+                  widget.app.installs > 0
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${widget.app.installs} Install${widget.app.installs == 1 ? "" : "s"}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.download_rounded, size: 20, color: Colors.grey.shade300),
+                          ],
+                        )
+                      : Container(),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             isMemoryPrompt
