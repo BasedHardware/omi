@@ -4,10 +4,11 @@ from typing import List, Optional
 import requests
 
 from database.chat import add_plugin_message
+from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
-from models.plugin import Plugin
+from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
 
 
@@ -91,6 +92,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if response.status_code != 200:
             print('Plugin integration failed', plugin.id, 'result:', response.content)
             return
+
+        record_plugin_usage(uid, memory.id, plugin.id, UsageHistoryType.memory_created_external_integration)
 
         print('response', response.json())
         if message := response.json().get('message', ''):

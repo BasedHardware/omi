@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Set
 
 from pydantic import BaseModel
@@ -76,3 +77,17 @@ class Plugin(BaseModel):
 
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
+
+
+class UsageHistoryType(str, Enum):
+    memory_created_external_integration = 'memory_created_external_integration'
+    memory_created_prompt = 'memory_created_prompt'
+    chat_message_sent = 'chat_message_sent'
+
+
+class UsageHistoryItem(BaseModel):
+    id: str
+    uid: str
+    memory_id: Optional[str] = None
+    timestamp: datetime
+    type: UsageHistoryType
