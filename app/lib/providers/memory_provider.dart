@@ -432,6 +432,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     if (id != -1) {
       syncedMemoriesPointers[id] = syncedMemoriesPointers[id].copyWith(memory: memory);
     }
+    updateMemoryInSortedList(memory);
     notifyListeners();
   }
 

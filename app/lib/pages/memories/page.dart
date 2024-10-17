@@ -134,16 +134,17 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                     } else {
                       var date = memoryProvider.groupedMemories.keys.elementAt(index);
                       List<ServerMemory> memoriesForDate = memoryProvider.groupedMemories[date]!;
+                      bool hasDiscarded = memoriesForDate.any((element) => element.discarded);
 
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (index == 0) const SizedBox(height: 16),
                           MemoriesGroupWidget(
-                            memories: memoriesForDate
-                                .where((mem) => memoryProvider.showDiscardedMemories || !mem.discarded || mem.isNew)
-                                .toList(),
+                            memories: memoriesForDate,
                             date: date,
+                            showDiscardedMemories: memoryProvider.showDiscardedMemories,
+                            hasDiscardedMemories: hasDiscarded,
                           ),
                         ],
                       );
