@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from database.plugins import get_plugin_usage_history
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
-from models.plugin import Plugin, UsageHistoryItem
+from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
 from utils.other import endpoints as auth
 from utils.plugins import get_plugins_data, get_plugin_by_id
 
@@ -85,3 +85,27 @@ def get_plugin_usage(plugin_id: str):
     data = [{'date': k, 'count': v} for k, v in by_date.items()]
     data = sorted(data, key=lambda x: x['date'])
     return data
+
+
+@router.get('/v1/plugins/{plugin_id}/money', tags=['v1'])
+def get_plugin_money_made(plugin_id: str):
+    plugin = get_plugin_by_id(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    usage = get_plugin_usage_history(plugin_id)
+    usage = [UsageHistoryItem(**x) for x in usage]
+    type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
+    type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
+    type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
+
+    # tbd based on current prod stats
+    t1multiplier = 0.5
+    t2multiplier = 0.01
+    t3multiplier = 0.005
+
+    return {
+        'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),
+        'type1': type1,
+        'type2': type2,
+        'type3': type3
+    }
