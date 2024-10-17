@@ -1,7 +1,5 @@
 FROM python:3.11 as builder
 
-RUN apt-get update && apt-get -y install ffmpeg
-
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
@@ -12,6 +10,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
+
+RUN apt-get update && \
+    apt-get -y install curl unzip ffmpeg & \
+    apt-get clean
 
 COPY backend/ .
 COPY --from=builder /opt/venv /opt/venv
