@@ -20,7 +20,7 @@ class AppListItem extends StatelessWidget {
     return Consumer<AppProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
-          MixpanelManager().pageOpened('Plugin Detail');
+          MixpanelManager().pageOpened('App Detail');
           await routeToPage(context, AppDetailPage(app: app));
           provider.setApps();
         },
