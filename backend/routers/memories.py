@@ -6,7 +6,6 @@ from database.vector_db import delete_vector
 from models.memory import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_memory
-from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists, \
@@ -21,36 +20,6 @@ def _get_memory_by_id(uid: str, memory_id: str) -> dict:
     if memory is None or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail="Memory not found")
     return memory
-
-
-# DEPRECATED
-@router.post("/v1/memories", response_model=CreateMemoryResponse, tags=['memories'])
-def create_memory(
-        create_memory: CreateMemory, trigger_integrations: bool, language_code: Optional[str] = None,
-        source: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    if not create_memory.transcript_segments and not create_memory.photos:
-        raise HTTPException(status_code=400, detail="Transcript segments or photos are required")
-
-    if geolocation := create_memory.geolocation:
-        create_memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-
-    if not language_code:
-        language_code = create_memory.language
-    else:
-        create_memory.language = language_code
-
-    memory = process_memory(uid, language_code, create_memory, force_process=source == 'speech_profile_onboarding')
-    if not trigger_integrations:
-        return CreateMemoryResponse(memory=memory, messages=[])
-
-    if not memory.discarded:
-        memories_db.set_postprocessing_status(uid, memory.id, PostProcessingStatus.not_started)
-        memory.postprocessing = MemoryPostProcessing(status=PostProcessingStatus.not_started,
-                                                     model=PostProcessingModel.fal_whisperx)
-
-    messages = trigger_external_integrations(uid, memory)
-    return CreateMemoryResponse(memory=memory, messages=messages)
 
 
 @router.post("/v2/memories", response_model=CreateMemoryResponse, tags=['memories'])
@@ -77,7 +46,7 @@ def reprocess_memory(
     Whenever a user wants to reprocess a memory, or wants to force process a discarded one
     :return: The updated memory after reprocessing.
     """
-    print('')
+
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -85,7 +54,7 @@ def reprocess_memory(
     if not language_code:
         language_code = memory.language or 'en'
 
-    return process_memory(uid, language_code, memory, force_process=True)
+    return process_memory(uid, language_code, memory, force_process=True, is_reprocess=True)
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])

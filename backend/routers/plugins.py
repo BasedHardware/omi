@@ -1,11 +1,13 @@
+from collections import defaultdict
 from typing import List
 
 import requests
 from fastapi import APIRouter, HTTPException, Depends
 
+from database.plugins import get_plugin_usage_history
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
-from models.plugin import Plugin
+from models.plugin import Plugin, UsageHistoryItem
 from utils.other import endpoints as auth
 from utils.plugins import get_plugins_data, get_plugin_by_id
 
@@ -65,3 +67,21 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     review = data.get('review', '')
     set_plugin_review(plugin_id, uid, score, review)
     return {'status': 'ok'}
+
+
+@router.get('/v1/plugins/{plugin_id}/usage', tags=['v1'])
+def get_plugin_usage(plugin_id: str):
+    plugin = get_plugin_by_id(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    usage = get_plugin_usage_history(plugin_id)
+    usage = [UsageHistoryItem(**x) for x in usage]
+    # return usage by date grouped count
+    by_date = defaultdict(int)
+    for item in usage:
+        date = item.timestamp.date()
+        by_date[date] += 1
+
+    data = [{'date': k, 'count': v} for k, v in by_date.items()]
+    data = sorted(data, key=lambda x: x['date'])
+    return data
