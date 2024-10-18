@@ -100,8 +100,8 @@ class DeviceService implements IDeviceService {
     onDevices(devices);
 
     // Check desirable device
-    if (desirableDeviceId != null) {
-      await _connectToDevice(desirableDeviceId);
+    if (desirableDeviceId != null && desirableDeviceId.isNotEmpty) {
+      await ensureConnection(desirableDeviceId);
     }
   }
 
