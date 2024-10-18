@@ -173,9 +173,9 @@ Future<void> migrateUserServer(String prevUid, String newUid) async {
 
 Future<String> getPluginMarkdown(String pluginMarkdownPath) async {
   // Construct the complete URL
-  // https://raw.githubusercontent.com/BasedHardware/Friend/main/assets/external_plugins_instructions/notion-conversations-crm.md
+  // https://raw.githubusercontent.com/maxwell882000/shopify-components/main/assets/external_plugins_instructions/notion-conversations-crm.md
   final url =
-      'https://raw.githubusercontent.com/BasedHardware/Friend/main$pluginMarkdownPath';
+      'https://raw.githubusercontent.com/maxwell882000/shopify-components/main$pluginMarkdownPath';
 
   // Log the request details
   print('getPluginMarkdown Request URL: $url');

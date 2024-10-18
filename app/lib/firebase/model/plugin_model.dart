@@ -50,7 +50,7 @@ class PluginModel {
         prompt: json["prompt"],
         image: json["image"] == null
             ? ""
-            : "https://raw.githubusercontent.com/BasedHardware/Friend/main${json["image"]}",
+            : "https://raw.githubusercontent.com/maxwell882000/shopify-components/main${json["image"]}",
         memories: json["memories"],
         chat: json["chat"],
         comment: json["_comment"],

@@ -159,7 +159,7 @@ class Plugin {
   }
 
   String getImageUrl() =>
-      'https://raw.githubusercontent.com/maxwell882000/shopify-components/main/$image';
+      'https://raw.githubusercontent.com/maxwell882000/shopify-components/main$image';
 
   Map<String, dynamic> toJson() {
     return {

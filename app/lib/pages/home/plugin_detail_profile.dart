@@ -39,7 +39,7 @@ class _PluginDetailProfilePageState extends State<PluginDetailProfilePage> {
           .then((value) {
         value = value.replaceAll(
           '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Friend/main/plugins/instructions/${widget.pluginModel.id}/assets/',
+          '](https://raw.githubusercontent.com/maxwell882000/shopify-components/main/plugins/instructions/${widget.pluginModel.id}/assets/',
         );
         setState(() => instructionsMarkdown = value);
       });
