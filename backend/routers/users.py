@@ -1,7 +1,6 @@
 import threading
 import uuid
 from datetime import datetime, timezone
-from enum import Enum
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +9,7 @@ from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_u
 from database.users import *
 from models.memory import Geolocation
 from models.other import Person, CreatePerson
+from models.users import WebhookType
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
@@ -36,8 +36,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
     return {'status': 'ok'}
 
 
-class WebhookType(str, Enum):
-    audio_bytes = 'audio_bytes'
+# ***********************************************
+# ************* DEVELOPER WEBHOOKS **************
+# ***********************************************
 
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
