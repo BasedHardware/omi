@@ -167,7 +167,7 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 def cache_user_geolocation(uid: str, geolocation: dict):
     r.set(f'users:{uid}:geolocation', str(geolocation))
-    r.expire(f'users:{uid}:geolocation', 60 * 10)
+    r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
 def get_cached_user_geolocation(uid: str):
