@@ -1,20 +1,16 @@
 import 'dart:convert';
-import 'dart:io' as Platform;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/pages/plugins_subscription/test.dart';
+import 'package:friend_private/pages/plugins_subscription/subscription_handler.dart';
 import 'package:friend_private/utils/purchase/store_config.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:intl/intl.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../backend/preferences.dart';
-import '../../firebase/model/user_subscription_model.dart';
-import '../../firebase/service/user_subsrtiption_fire.dart';
 
 class PluginSubscriptionList extends StatefulWidget {
   const PluginSubscriptionList({super.key});
@@ -30,7 +26,6 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
   @override
   void initState() {
     super.initState();
-    UserSubscriptionFire().getUserSubscriptionList();
     initPlatformState().then((value) {
       fetchData().then((value) {
         setState(() {});
@@ -191,9 +186,9 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
   }
 
   purchasePluginSubscription({required Package offeringId}) async {
-
     try {
-      debugPrint("SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
+      debugPrint(
+          "SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
       debugPrint(
           "offeringId.storeProduct.identifier :- ${offeringId.storeProduct.defaultOption?.productId}");
       RCPurchaseController rCPurchaseController = RCPurchaseController();
@@ -209,7 +204,8 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
 
         var mainHeaders = {"Content-Type": "application/json; charset=UTF-8"};
 
-        debugPrint("SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
+        debugPrint(
+            "SharedPreferencesUtil().uid :- ${SharedPreferencesUtil().uid} -? ${FirebaseAuth.instance.currentUser?.uid}");
 
         Map<String, dynamic> passDate = {
           'userId': SharedPreferencesUtil().uid,
@@ -235,38 +231,6 @@ class _PluginSubscriptionListState extends State<PluginSubscriptionList> {
         debugPrint("data :- ${data.purchaseID}");
         debugPrint("data :- ${data.verificationData.serverVerificationData}");
       }
-
-      return;
-
-      CustomerInfo customerInfo = await Purchases.purchasePackage(offeringId);
-      print('customerInfo');
-      print(customerInfo);
-      print(customerInfo.entitlements);
-
-      var startDate = DateTime.parse(
-          customerInfo.allPurchaseDates[offeringId.storeProduct.identifier]!);
-      var expiryDate = DateTime.parse(
-          customerInfo.allExpirationDates[offeringId.storeProduct.identifier]!);
-      UserSubscriptionModel userSubModel = UserSubscriptionModel(
-        userId: SharedPreferencesUtil().uid,
-        pluginId: offeringId.storeProduct.identifier,
-        transactionId: "",
-        purchaseId: "",
-        productId: offeringId.storeProduct.defaultOption?.productId,
-        isPremium: true,
-        platform: Platform.Platform.operatingSystem,
-        startDate: startDate,
-        expiryDate: expiryDate,
-        createdDate: DateTime.now(),
-        updatedDate: DateTime.now(),
-      );
-      await UserSubscriptionFire().saveUserSubscription(userSubModel);
-
-      /*// Handle successful purchase
-                            if (customerInfo.entitlements.all['pro']!.isActive) {
-                              print("User has purchased the pro entitlement!");
-                              // Unlock premium features for the user
-                            }*/
     } on PlatformException catch (e) {
       // Handle error based on RevenueCat error codes
       var errorCode = PurchasesErrorHelper.getErrorCode(e);

@@ -12,8 +12,6 @@ import 'package:sign_in_button/sign_in_button.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../plugins_subscription/test.dart';
-
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
 
@@ -75,8 +73,10 @@ class _AuthComponentState extends State<AuthComponent> {
           !Platform.isIOS
               ? SignInButton(
                   Buttons.google,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   onPressed: loading
                       ? () {}
                       : () async {
@@ -108,7 +108,9 @@ class _AuthComponentState extends State<AuthComponent> {
                 TextSpan(
                   text: 'Terms of service',
                   style: const TextStyle(decoration: TextDecoration.underline),
-                  recognizer: TapGestureRecognizer()..onTap = () => _launchUrl('https://basedhardware.com/terms'),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap =
+                        () => _launchUrl('https://basedhardware.com/terms'),
                 ),
                 const TextSpan(text: ' and '),
                 TextSpan(
@@ -136,7 +138,8 @@ class _AuthComponentState extends State<AuthComponent> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Failed to retrieve firebase token, please try again.'),
       ));
-      CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+      CrashReporting.reportHandledCrash(e, stackTrace,
+          level: NonFatalExceptionLevel.error);
       return;
     }
     debugPrint('Token: $token');
@@ -146,9 +149,11 @@ class _AuthComponentState extends State<AuthComponent> {
         user = FirebaseAuth.instance.currentUser!;
       } catch (e, stackTrace) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Unexpected error signing in, Firebase error, please try again.'),
+          content: Text(
+              'Unexpected error signing in, Firebase error, please try again.'),
         ));
-        CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+        CrashReporting.reportHandledCrash(e, stackTrace,
+            level: NonFatalExceptionLevel.error);
         return;
       }
       String newUid = user.uid;

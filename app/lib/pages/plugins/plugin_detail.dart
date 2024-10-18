@@ -1,20 +1,31 @@
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/plugins.dart';
+import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/firebase/service/user_subsrtiption_fire.dart';
 import 'package:friend_private/pages/plugins/instructions.dart';
+import 'package:friend_private/pages/plugins_subscription/subscription_handler.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/connectivity_controller.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
 class PluginDetailPage extends StatefulWidget {
   final Plugin plugin;
-
-  const PluginDetailPage({super.key, required this.plugin});
+  final Function() onGetSubscriptionList;
+  final UserSubscriptionFire userSubscriptionFire;
+  const PluginDetailPage(
+      {super.key,
+      required this.plugin,
+      required this.onGetSubscriptionList,
+      required this.userSubscriptionFire});
 
   @override
   State<PluginDetailPage> createState() => _PluginDetailPageState();
@@ -50,6 +61,8 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
 
     super.initState();
   }
+
+  RCPurchaseController rcPurchaseController = RCPurchaseController();
 
   @override
   Widget build(BuildContext context) {
@@ -129,46 +142,48 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : IconButton(
-                      icon: Icon(
-                        widget.plugin.enabled
-                            ? Icons.check
-                            : Icons.arrow_downward_rounded,
-                        color:
-                            widget.plugin.enabled ? Colors.white : Colors.grey,
-                      ),
-                      onPressed: () {
-                        if (!ConnectivityController().isConnected.value) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(const SnackBar(
-                            content: Text(
-                                "Can't enable plugin without internet connection."),
-                          ));
-                          return;
-                        }
-                        if (widget.plugin.worksExternally() &&
-                            !widget.plugin.enabled) {
-                          showDialog(
-                            context: context,
-                            builder: (c) => getDialog(
-                              context,
-                              () => Navigator.pop(context),
-                              () {
-                                Navigator.pop(context);
-                                _togglePlugin(widget.plugin.id.toString(),
-                                    !widget.plugin.enabled);
-                              },
-                              'Authorize External Plugin',
-                              'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
-                              okButtonText: 'Confirm',
-                            ),
-                          );
-                        } else {
-                          _togglePlugin(widget.plugin.id.toString(),
-                              !widget.plugin.enabled);
-                        }
-                      },
-                    ),
+                  : (subscriptionWidget() ??
+                      IconButton(
+                        icon: Icon(
+                          widget.plugin.enabled
+                              ? Icons.check
+                              : Icons.arrow_downward_rounded,
+                          color: widget.plugin.enabled
+                              ? Colors.white
+                              : Colors.grey,
+                        ),
+                        onPressed: () {
+                          if (!ConnectivityController().isConnected.value) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(const SnackBar(
+                              content: Text(
+                                  "Can't enable plugin without internet connection."),
+                            ));
+                            return;
+                          }
+                          if (widget.plugin.worksExternally() &&
+                              !widget.plugin.enabled) {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  _togglePlugin(widget.plugin.id.toString(),
+                                      !widget.plugin.enabled);
+                                },
+                                'Authorize External Plugin',
+                                'Do you allow this plugin to access your memories, transcripts, and recordings? Your data will be sent to the plugin\'s server for processing.',
+                                okButtonText: 'Confirm',
+                              ),
+                            );
+                          } else {
+                            _togglePlugin(widget.plugin.id.toString(),
+                                !widget.plugin.enabled);
+                          }
+                        },
+                      )),
             ),
             const SizedBox(height: 16),
             widget.plugin.worksWithMemories()
@@ -437,5 +452,66 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
     }
     setState(() => widget.plugin.enabled = isEnabled);
     setState(() => pluginLoading = false);
+  }
+
+  Widget? subscriptionWidget() {
+    bool isPremiumUser = false;
+    for (var element in widget.userSubscriptionFire.userSubscriptionList) {
+      if (element.pluginId == widget.plugin.id) {
+        isPremiumUser = element.isPremium ?? false;
+      }
+    }
+    if (widget.plugin.name == "Eva English Teacher" && isPremiumUser == false) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepPurple,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0))),
+        onPressed: () => manageSubscription(context: context),
+        child: const Text(
+          'Subscribe',
+          style: TextStyle(
+              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+        ),
+      );
+    }
+
+    return null;
+  }
+
+  Future<void> manageSubscription({required BuildContext context}) async {
+    debugPrint("widget.plugin.id widget.plugin.id :- ${widget.plugin.id}");
+    var data =
+        await rcPurchaseController.onPurchase(productId: widget.plugin.id);
+    if (data is String) {
+      debugPrint("error -> $data");
+    } else if (data is PurchaseDetails) {
+      Map<String, dynamic> passDate = {
+        'userId': SharedPreferencesUtil().uid,
+        'receipt': data.verificationData.serverVerificationData,
+        'platform': "android",
+        'productId': data.productID,
+        'purchaseId': data.purchaseID,
+        'pluginId': widget.plugin.id
+      };
+
+      var mainHeaders = {"Content-Type": "application/json; charset=UTF-8"};
+
+      var response = await makeApiCall(
+        url:
+            "https://us-central1-ai-wearable.cloudfunctions.net/purchaseComplete",
+        method: 'POST',
+        headers: mainHeaders,
+        body: json.encode(passDate),
+      );
+
+      if (response?.statusCode == 200) {
+        widget.userSubscriptionFire.userSubscriptionList = [];
+        widget.userSubscriptionFire.userSubscriptionList
+            .addAll(await widget.userSubscriptionFire.getUserSubscription());
+        setState(() {});
+      }
+      debugPrint("response response :- ${response?.body}");
+    }
   }
 }
