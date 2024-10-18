@@ -516,15 +516,14 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> updateStorageList() async {
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
+    if (currentStorageFiles.isEmpty) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
-
       return;
     }
     totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
     totalBytesReceived = storageOffset;
     notifyListeners();
   }
@@ -534,11 +533,10 @@ class CaptureProvider extends ChangeNotifier
 
     if (_recordingDevice == null) return;
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
+    if (currentStorageFiles.isEmpty) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
-
       return;
     }
     SharedPreferencesUtil().deviceIsV2 = true;
@@ -546,7 +544,7 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('Device model name: ${_recordingDevice!.name}');
     debugPrint('Storage files: $currentStorageFiles');
     totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
     debugPrint('storageOffset: $storageOffset');
     // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     //check if new or old file
@@ -565,7 +563,8 @@ class CaptureProvider extends ChangeNotifier
         ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
     sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $SharedPreferencesUtil().previousStorageBytes');
+    debugPrint(
+        'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
     btConnectedTime = DateTime.now().toUtc().toString();
     sdCardSocket.setupSdCardWebSocket(
       //replace
