@@ -76,14 +76,6 @@ class SharedPreferencesUtil {
 
   set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
 
-  String get webhookOnMemoryCreated => getString('webhookUrl') ?? '';
-
-  set webhookOnMemoryCreated(String value) => saveString('webhookUrl', value);
-
-  String get webhookOnTranscriptReceived => getString('transcriptServerUrl') ?? '';
-
-  set webhookOnTranscriptReceived(String value) => saveString('transcriptServerUrl', value);
-
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);
