@@ -12,6 +12,8 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookOnMemoryCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
   final TextEditingController webhookAudioBytes = TextEditingController();
+  final TextEditingController webhookAudioBytesDelay = TextEditingController();
+  final TextEditingController webhookWsAudioBytes = TextEditingController();
 
   bool savingSettingsLoading = false;
 
@@ -25,9 +27,19 @@ class DeveloperModeProvider extends BaseProvider {
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
 
-    getUserWebhookUrl(type: 'audio_bytes').then((url) => webhookAudioBytes.text = url);
+    getUserWebhookUrl(type: 'audio_bytes').then((url) {
+      List<dynamic> parts = url.split(',');
+      if (parts.length == 2) {
+        webhookAudioBytes.text = parts[0].toString();
+        webhookAudioBytesDelay.text = parts[1].toString();
+      } else {
+        webhookAudioBytes.text = url;
+        webhookAudioBytesDelay.text = '5';
+      }
+    });
     getUserWebhookUrl(type: 'realtime_transcript').then((url) => webhookOnTranscriptReceived.text = url);
     getUserWebhookUrl(type: 'memory_created').then((url) => webhookOnMemoryCreated.text = url);
+    // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
 
     notifyListeners();
   }
@@ -38,6 +50,14 @@ class DeveloperModeProvider extends BaseProvider {
         r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|'
         r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63}(:[0-9]+)?(\/.*)?$';
     return RegExp(urlPattern).hasMatch(url);
+  }
+
+  bool isValidWebSocketUrl(String url) {
+    const webSocketPattern = r'^(wss?:\/\/)?([a-zA-Z0-9.-]+(:[a-zA-Z0-9.&%$-]+)*@)?'
+        r'((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}'
+        r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|'
+        r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63}(:[0-9]+)?(\/.*)?$';
+    return RegExp(webSocketPattern).hasMatch(url);
   }
 
   void saveSettings() async {
@@ -72,6 +92,9 @@ class DeveloperModeProvider extends BaseProvider {
       notifyListeners();
       return;
     }
+    if (webhookAudioBytes.text.isNotEmpty && webhookAudioBytesDelay.text.isEmpty) {
+      webhookAudioBytesDelay.text = '5';
+    }
     if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
       AppSnackbar.showSnackbarError('Invalid realtime transcript webhook URL');
       savingSettingsLoading = false;
@@ -85,9 +108,20 @@ class DeveloperModeProvider extends BaseProvider {
       return;
     }
 
-    var w1 = setUserWebhookUrl(type: 'audio_bytes', url: webhookAudioBytes.text.trim());
+    // if (webhookWsAudioBytes.text.isNotEmpty && !isValidWebSocketUrl(webhookWsAudioBytes.text)) {
+    //   AppSnackbar.showSnackbarError('Invalid audio bytes websocket URL');
+    //   savingSettingsLoading = false;
+    //   notifyListeners();
+    //   return;
+    // }
+
+    var w1 = setUserWebhookUrl(
+      type: 'audio_bytes',
+      url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
+    );
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnMemoryCreated.text.trim());
+    // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     await Future.wait([w1, w2, w3]);
 
     // Experimental

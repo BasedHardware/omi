@@ -298,11 +298,6 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     'On memory created:',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
-                  // const SizedBox(height: 4),
-                  // const Text(
-                  //   'Triggered when FRIEND creates a new memory.',
-                  //   style: TextStyle(color: Colors.white, fontSize: 14),
-                  // ),
                   TextField(
                     controller: provider.webhookOnMemoryCreated,
                     obscureText: false,
@@ -317,11 +312,6 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     'Real-time transcript received:',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
-                  // const SizedBox(height: 4),
-                  // const Text(
-                  //   'Triggered as the transcript is being received.',
-                  //   style: TextStyle(color: Colors.white, fontSize: 14),
-                  // ),
                   TextField(
                     controller: provider.webhookOnTranscriptReceived,
                     obscureText: false,
@@ -333,7 +323,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Real-time audio bytes:',
+                    'Realtime audio bytes:',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   TextField(
@@ -345,6 +335,30 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     decoration: _getTextFieldDecoration('Endpoint URL'),
                     style: const TextStyle(color: Colors.white),
                   ),
+                  TextField(
+                    controller: provider.webhookAudioBytesDelay,
+                    obscureText: false,
+                    autocorrect: false,
+                    enabled: true,
+                    enableSuggestions: false,
+                    keyboardType: TextInputType.number,
+                    decoration: _getTextFieldDecoration('Every x seconds'),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  // const Text(
+                  //   'Websocket Real-time audio bytes:',
+                  //   style: TextStyle(color: Colors.white, fontSize: 16),
+                  // ),
+                  // TextField(
+                  //   controller: provider.webhookAudioBytes,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enabled: true,
+                  //   enableSuggestions: false,
+                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
