@@ -570,17 +570,6 @@ class CaptureProvider extends ChangeNotifier
     debugPrint(
         'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
     btConnectedTime = DateTime.now().toUtc().toString();
-    sdCardSocket.setupSdCardWebSocket(
-      //replace
-      onMessageReceived: () {
-        debugPrint('onMessageReceived');
-        memoryProvider?.getMemoriesFromServer();
-        notifyListeners();
-        _notifySdCardComplete();
-        return;
-      },
-      btConnectedTime: btConnectedTime,
-    );
 
     if (totalStorageFileBytes > 100) {
       sdCardReady = true;
@@ -595,6 +584,17 @@ class CaptureProvider extends ChangeNotifier
     if (totalStorageFileBytes == 0) {
       return;
     }
+    await sdCardSocket.setupSdCardWebSocket(
+      //replace
+      onMessageReceived: () {
+        debugPrint('onMessageReceived');
+        memoryProvider?.getMemoriesFromServer();
+        notifyListeners();
+        _notifySdCardComplete();
+        return;
+      },
+      btConnectedTime: btConnectedTime,
+    );
     if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
       sdCardSocket.sdCardChannel?.sink.close();
       await sdCardSocket.setupSdCardWebSocket(
