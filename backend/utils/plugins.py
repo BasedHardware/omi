@@ -73,10 +73,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if not plugin.external_integration.webhook_url:
             return
 
-        memory_dict = memory.dict()
-        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
-        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
-        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        memory_dict = memory.as_dict_cleaned_dates()
 
         # Ignore external data on workflow
         if memory.source == MemorySource.workflow and 'external_data' in memory_dict:
