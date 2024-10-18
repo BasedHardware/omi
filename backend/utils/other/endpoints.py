@@ -1,6 +1,9 @@
 import json
 import os
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import Header, HTTPException
 from fastapi import Request
@@ -9,22 +12,27 @@ from firebase_admin.auth import InvalidIdTokenError
 
 
 def get_current_user_uid(authorization: str = Header(None)):
-    if os.getenv('ADMIN_KEY') in authorization:
-        return authorization.split(os.getenv('ADMIN_KEY'))[1]
+    print("authorization", authorization)
 
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
-    elif len(str(authorization).split(' ')) != 2:
+
+    if os.getenv("ADMIN_KEY") in authorization:
+        return authorization.split()[1]
+
+    print("admin key not found")
+
+    if len(str(authorization).split(" ")) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     try:
-        token = authorization.split(' ')[1]
+        token = authorization.split(" ")[1]
         decoded_token = auth.verify_id_token(token)
         # print('get_current_user_uid', decoded_token['uid'])
-        return decoded_token['uid']
+        return decoded_token["uid"]
     except InvalidIdTokenError as e:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
-            return '123'
+        if os.getenv("LOCAL_DEVELOPMENT") == "true":
+            return "123"
         print(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
@@ -32,7 +40,9 @@ def get_current_user_uid(authorization: str = Header(None)):
 cached = {}
 
 
-def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int, window_seconds: int):
+def rate_limit_custom(
+    endpoint: str, request: Request, requests_per_window: int, window_seconds: int
+):
     ip = request.client.host
     key = f"rate_limit:{endpoint}:{ip}"
 
@@ -66,7 +76,9 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
 
 
 # Dependency to enforce custom rate limiting for specific endpoints
-def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60):
+def rate_limit_dependency(
+    endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60
+):
     def rate_limit(request: Request):
         return rate_limit_custom(endpoint, request, requests_per_window, window_seconds)
 
@@ -81,8 +93,10 @@ def timeit(func):
     def measure_time(*args, **kw):
         start_time = time.time()
         result = func(*args, **kw)
-        print("Processing time of %s(): %.2f seconds."
-              % (func.__qualname__, time.time() - start_time))
+        print(
+            "Processing time of %s(): %.2f seconds."
+            % (func.__qualname__, time.time() - start_time)
+        )
         return result
 
     return measure_time

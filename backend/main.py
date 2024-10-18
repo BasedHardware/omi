@@ -3,13 +3,30 @@ import os
 
 import firebase_admin
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from modal import Image, App, asgi_app, Secret, Cron
-from routers import workflow, chat, firmware, plugins, memories, transcribe, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
+from routers import (
+    workflow,
+    chat,
+    firmware,
+    plugins,
+    memories,
+    transcribe,
+    transcribe_v2,
+    notifications,
+    speech_profile,
+    agents,
+    facts,
+    users,
+    processing_memories,
+    trends,
+    sdcard,
+    sync,
+)
 from utils.other.notifications import start_cron_job
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
+if os.environ.get("SERVICE_ACCOUNT_JSON"):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(credentials)
@@ -37,14 +54,23 @@ app.include_router(firmware.router)
 app.include_router(sdcard.router)
 app.include_router(sync.router)
 
-modal_app = App(
-    name='backend',
-    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+modal_app = App(
+    name="backend",
+    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name("envs")],
+)
+
 image = (
     Image.debian_slim()
-    .apt_install('ffmpeg', 'git', 'unzip')
-    .pip_install_from_requirements('requirements.txt')
+    .apt_install("ffmpeg", "git", "unzip")
+    .pip_install_from_requirements("requirements.txt")
 )
 
 
@@ -61,42 +87,43 @@ def api():
     return app
 
 
-paths = ['_temp', '_samples', '_segments', '_speech_profiles']
+paths = ["_temp", "_samples", "_segments", "_speech_profiles"]
 for path in paths:
     if not os.path.exists(path):
         os.makedirs(path)
 
 
-@modal_app.function(image=image, schedule=Cron('* * * * *'))
+@modal_app.function(image=image, schedule=Cron("* * * * *"))
 async def notifications_cronjob():
     await start_cron_job()
 
 
-@app.post('/webhook')
+@app.post("/webhook")
 async def webhook(data: dict):
-    diarization = data['output']['diarization']
+    diarization = data["output"]["diarization"]
     joined = []
     for speaker in diarization:
         if not joined:
             joined.append(speaker)
         else:
-            if speaker['speaker'] == joined[-1]['speaker']:
-                joined[-1]['end'] = speaker['end']
+            if speaker["speaker"] == joined[-1]["speaker"]:
+                joined[-1]["end"] = speaker["end"]
             else:
                 joined.append(speaker)
 
-    print(data['jobId'], json.dumps(joined))
+    print(data["jobId"], json.dumps(joined))
     # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
-    with open('scripts/stt/diarization.json', 'r') as f:
+    with open("scripts/stt/diarization.json", "r") as f:
         diarization_data = json.loads(f.read())
 
-    memory_id = diarization_data.get(data['jobId'])
+    memory_id = diarization_data.get(data["jobId"])
     if memory_id:
         diarization_data[memory_id] = joined
-        del diarization_data[data['jobId']]
-        with open('scripts/stt/diarization.json', 'w') as f:
+        del diarization_data[data["jobId"]]
+        with open("scripts/stt/diarization.json", "w") as f:
             json.dump(diarization_data, f, indent=2)
-    return 'ok'
+    return "ok"
+
 
 # opuslib not found? brew install opus &
 # DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH

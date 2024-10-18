@@ -95,6 +95,7 @@ class Plugin {
   PluginReview? userReview;
   double? ratingAvg;
   int ratingCount;
+  int? downloads;
 
   bool enabled;
   bool deleted;
@@ -113,6 +114,7 @@ class Plugin {
     this.userReview,
     this.ratingAvg,
     required this.ratingCount,
+    this.downloads,
     required this.enabled,
     required this.deleted,
   });
@@ -136,19 +138,25 @@ class Plugin {
       image: json['image'],
       chatPrompt: json['chat_prompt'],
       memoryPrompt: json['memory_prompt'],
-      externalIntegration:
-          json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
+      externalIntegration: json['external_integration'] != null
+          ? ExternalIntegration.fromJson(json['external_integration'])
+          : null,
       reviews: PluginReview.fromJsonList(json['reviews'] ?? []),
-      userReview: json['user_review'] != null ? PluginReview.fromJson(json['user_review']) : null,
+      userReview: json['user_review'] != null
+          ? PluginReview.fromJson(json['user_review'])
+          : null,
       ratingAvg: json['rating_avg'],
       ratingCount: json['rating_count'] ?? 0,
-      capabilities: ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
+      downloads: json['downloads'] ?? 0,
+      capabilities:
+          ((json['capabilities'] ?? []) as List).cast<String>().toSet(),
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+  String getImageUrl() =>
+      'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
 
   Map<String, dynamic> toJson() {
     return {
@@ -170,5 +178,6 @@ class Plugin {
     };
   }
 
-  static List<Plugin> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Plugin.fromJson(e)).toList();
+  static List<Plugin> fromJsonList(List<dynamic> jsonList) =>
+      jsonList.map((e) => Plugin.fromJson(e)).toList();
 }

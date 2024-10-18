@@ -6,12 +6,20 @@ from typing import List, Union
 
 import redis
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 r = redis.Redis(
-    host=os.getenv('REDIS_DB_HOST'),
-    port=int(os.getenv('REDIS_DB_PORT')) if os.getenv('REDIS_DB_PORT') is not None else 6379,
-    username='default',
-    password=os.getenv('REDIS_DB_PASSWORD'),
-    health_check_interval=30
+    host=os.getenv("REDIS_DB_HOST"),
+    port=(
+        int(os.getenv("REDIS_DB_PORT"))
+        if os.getenv("REDIS_DB_PORT") is not None
+        else 6379
+    ),
+    username="default",
+    password=os.getenv("REDIS_DB_PASSWORD"),
+    health_check_interval=30,
 )
 
 
@@ -20,7 +28,7 @@ def try_catch_decorator(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f'Error calling {func.__name__}', e)
+            print(f"Error calling {func.__name__}", e)
             return None
 
     return wrapper
@@ -28,131 +36,162 @@ def try_catch_decorator(func):
 
 @try_catch_decorator
 def get_generic_cache(path: str):
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
+    key = base64.b64encode(f"{path}".encode("utf-8"))
+    key = key.decode("utf-8")
 
-    data = r.get(f'cache:{key}')
+    data = r.get(f"cache:{key}")
     return json.loads(data) if data else None
 
 
 @try_catch_decorator
 def set_generic_cache(path: str, data: Union[dict, list], ttl: int = None):
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
+    key = base64.b64encode(f"{path}".encode("utf-8"))
+    key = key.decode("utf-8")
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    r.set(f"cache:{key}", json.dumps(data, default=str))
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.expire(f"cache:{key}", ttl)
 
 
 @try_catch_decorator
 def delete_generic_cache(path: str):
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
-    r.delete(f'cache:{key}')
+    key = base64.b64encode(f"{path}".encode("utf-8"))
+    key = key.decode("utf-8")
+    r.delete(f"cache:{key}")
 
 
-def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
-    reviews = r.get(f'plugins:{plugin_id}:reviews')
+def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ""):
+    reviews = r.get(f"plugins:{plugin_id}:reviews")
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid}
-    r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+    reviews[uid] = {
+        "score": score,
+        "review": review,
+        "rated_at": datetime.now(timezone.utc).isoformat(),
+        "uid": uid,
+    }
+    r.set(f"plugins:{plugin_id}:reviews", str(reviews))
 
 
 def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
-    for key in r.scan_iter(f'plugins:*:reviews'):
-        plugin_id = key.decode().split(':')[1]
+    for key in r.scan_iter(f"plugins:*:reviews"):
+        plugin_id = key.decode().split(":")[1]
         reviews = r.get(key)
         if not reviews:
             continue
         reviews = eval(reviews)
         if prev_uid in reviews:
             reviews[new_uid] = reviews.pop(prev_uid)
-            reviews[new_uid]['uid'] = new_uid
-            r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+            reviews[new_uid]["uid"] = new_uid
+            r.set(f"plugins:{plugin_id}:reviews", str(reviews))
 
 
 def enable_plugin(uid: str, plugin_id: str):
-    r.sadd(f'users:{uid}:enabled_plugins', plugin_id)
+    r.sadd(f"users:{uid}:enabled_plugins", plugin_id)
+    r.incr(f"plugins:{plugin_id}:downloads")
 
 
 def disable_plugin(uid: str, plugin_id: str):
-    r.srem(f'users:{uid}:enabled_plugins', plugin_id)
+    r.srem(f"users:{uid}:enabled_plugins", plugin_id)
+    r.decr(f"plugins:{plugin_id}:downloads")
 
 
 def get_enabled_plugins(uid: str):
-    val = r.smembers(f'users:{uid}:enabled_plugins')
+    val = r.smembers(f"users:{uid}:enabled_plugins")
     if not val:
         return []
     return [x.decode() for x in val]
 
 
 def get_plugin_reviews(plugin_id: str) -> dict:
-    reviews = r.get(f'plugins:{plugin_id}:reviews')
+    reviews = r.get(f"plugins:{plugin_id}:reviews")
     if not reviews:
         return {}
     return eval(reviews)
 
 
+def get_plugin_downloads(plugin_id: str):
+    return r.get(f"plugins:{plugin_id}:downloads")
+
+
+def update_plugin_run_count(plugin_id: str):
+    r.incr(f"plugins:{plugin_id}:runs")
+
+
+def get_plugin_run_count(plugin_id: str):
+    count = r.get(f"plugins:{plugin_id}:runs")
+    return int(count) if count else 0
+
+
+def update_plugin_comp_count(plugin_id: str, custom_value: float = 0):
+    r.set(f"plugins:{plugin_id}:comps", custom_value)
+
+
+def get_plugin_comp_count(plugin_id: str):
+    count = r.get(f"plugins:{plugin_id}:comps")
+    return float(count) if count else 0
+
+
 def set_user_has_soniox_speech_profile(uid: str):
-    r.set(f'users:{uid}:has_soniox_speech_profile', '1')
+    r.set(f"users:{uid}:has_soniox_speech_profile", "1")
 
 
 def get_user_has_soniox_speech_profile(uid: str) -> bool:
-    return r.exists(f'users:{uid}:has_soniox_speech_profile')
+    return r.exists(f"users:{uid}:has_soniox_speech_profile")
 
 
 def remove_user_soniox_speech_profile(uid: str):
-    r.delete(f'users:{uid}:has_soniox_speech_profile')
+    r.delete(f"users:{uid}:has_soniox_speech_profile")
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    r.set(f"users:{uid}:name", name)
+    r.expire(f"users:{uid}:name", ttl)
 
 
 def get_cached_user_name(uid: str) -> str:
-    name = r.get(f'users:{uid}:name')
+    name = r.get(f"users:{uid}:name")
     if not name:
-        return 'User'
+        return "User"
     return name.decode()
 
 
 # TODO: cache facts if speed improves dramatically
 def cache_facts(uid: str, facts: List[dict]):
-    r.set(f'users:{uid}:facts', str(facts))
-    r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
+    r.set(f"users:{uid}:facts", str(facts))
+    r.expire(
+        f"users:{uid}:facts", 60 * 60
+    )  # 1 hour, most people chat during a few minutes
 
 
 def get_cached_facts(uid: str) -> List[dict]:
-    facts = r.get(f'users:{uid}:facts')
+    facts = r.get(f"users:{uid}:facts")
     if not facts:
         return []
     return eval(facts)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f"urls:{blob_path}", signed_url)
+    r.expire(f"urls:{blob_path}", ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
-    signed_url = r.get(f'urls:{blob_path}')
+    signed_url = r.get(f"urls:{blob_path}")
     if not signed_url:
-        return ''
+        return ""
     return signed_url.decode()
 
 
 def cache_user_geolocation(uid: str, geolocation: dict):
-    r.set(f'users:{uid}:geolocation', str(geolocation))
-    r.expire(f'users:{uid}:geolocation', 60 * 10)
+    r.set(f"users:{uid}:geolocation", str(geolocation))
+    r.expire(f"users:{uid}:geolocation", 60 * 10)
 
 
 def get_cached_user_geolocation(uid: str):
-    geolocation = r.get(f'users:{uid}:geolocation')
+    geolocation = r.get(f"users:{uid}:geolocation")
     if not geolocation:
         return None
     return eval(geolocation)
@@ -160,46 +199,46 @@ def get_cached_user_geolocation(uid: str):
 
 # VISIIBILTIY OF MEMORIES
 def store_memory_to_uid(memory_id: str, uid: str):
-    r.set(f'memories-visibility:{memory_id}', uid)
+    r.set(f"memories-visibility:{memory_id}", uid)
 
 
 def remove_memory_to_uid(memory_id: str):
-    r.delete(f'memories-visibility:{memory_id}')
+    r.delete(f"memories-visibility:{memory_id}")
 
 
 def get_memory_uid(memory_id: str) -> str:
-    uid = r.get(f'memories-visibility:{memory_id}')
+    uid = r.get(f"memories-visibility:{memory_id}")
     if not uid:
-        return ''
+        return ""
     return uid.decode()
 
 
 def add_public_memory(memory_id: str):
-    r.sadd('public-memories', memory_id)
+    r.sadd("public-memories", memory_id)
 
 
 def remove_public_memory(memory_id: str):
-    r.srem('public-memories', memory_id)
+    r.srem("public-memories", memory_id)
 
 
 def get_public_memories() -> List[str]:
-    val = r.smembers('public-memories')
+    val = r.smembers("public-memories")
     if not val:
         return []
     return [x.decode() for x in val]
 
 
 def set_in_progress_memory_id(uid: str, memory_id: str, ttl: int = 150):
-    r.set(f'users:{uid}:in_progress_memory_id', memory_id)
-    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+    r.set(f"users:{uid}:in_progress_memory_id", memory_id)
+    r.expire(f"users:{uid}:in_progress_memory_id", ttl)
 
 
 def remove_in_progress_memory_id(uid: str):
-    r.delete(f'users:{uid}:in_progress_memory_id')
+    r.delete(f"users:{uid}:in_progress_memory_id")
 
 
 def get_in_progress_memory_id(uid: str) -> str:
-    memory_id = r.get(f'users:{uid}:in_progress_memory_id')
+    memory_id = r.get(f"users:{uid}:in_progress_memory_id")
     if not memory_id:
-        return ''
+        return ""
     return memory_id.decode()
