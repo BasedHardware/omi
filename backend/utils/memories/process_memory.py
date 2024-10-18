@@ -12,10 +12,11 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
+from database.plugins import record_plugin_usage
 from database.vector_db import upsert_vector
 from models.facts import FactDB
 from models.memory import *
-from models.plugin import Plugin
+from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from utils.llm import obtain_emotional_message
@@ -98,7 +99,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-def _trigger_plugins(uid: str, memory: Memory):
+def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     memory.plugins_results = []
@@ -107,6 +108,8 @@ def _trigger_plugins(uid: str, memory: Memory):
     def execute_plugin(plugin):
         if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
             memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+            if not is_reprocess:
+                record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
@@ -132,15 +135,17 @@ def _extract_trends(memory: Memory):
     trends_db.save_trends(memory, parsed)
 
 
-def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
-                   force_process: bool = False) -> Memory:
+def process_memory(
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        force_process: bool = False, is_reprocess: bool = False
+) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
 
     if not discarded:
         vector = generate_embedding(str(structured))
         upsert_vector(uid, memory, vector)
-        _trigger_plugins(uid, memory)
+        _trigger_plugins(uid, memory, is_reprocess=is_reprocess)
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
     memory.status = MemoryStatus.completed

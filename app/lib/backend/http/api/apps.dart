@@ -97,3 +97,37 @@ Future<bool> isAppSetupCompleted(String? url) async {
     return false;
   }
 }
+
+Future<List<AppUsageHistory>> retrieveAppUsageHistory(String pluginId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/usage',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    log('retrieveAppUsageHistory: ${response!.body}');
+    return AppUsageHistory.fromJsonList(jsonDecode(response.body));
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
+
+Future<double> getAppMoneyMade(String pluginId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/money',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    log('retrieveAppUsageHistory: ${response!.body}');
+    return jsonDecode(response.body)['money'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return 0;
+  }
+}
