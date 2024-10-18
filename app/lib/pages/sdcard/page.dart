@@ -56,15 +56,17 @@ class _SdCardCapturePageState extends State<SdCardCapturePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
+              SizedBox(
                 height: MediaQuery.sizeOf(context).height * 0.365,
                 child: SdCardTransferProgress(
                   displayPercentage: provider.totalStorageFileBytes == 0
                       ? '0.0'
-                      : (provider.totalBytesReceived / provider.totalStorageFileBytes * 100).toStringAsFixed(2),
-                  progress: provider.sdCardSecondsReceived /
+                      : ((provider.currentTotalBytesReceived) / provider.totalStorageFileBytes * 100)
+                          .toStringAsFixed(2),
+                  progress: provider.currentSdCardSecondsReceived /
                       (provider.sdCardSecondsTotal == 0 ? 1 : provider.sdCardSecondsTotal),
-                  secondsRemaining: (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2),
+                  secondsRemaining:
+                      (provider.sdCardSecondsTotal - provider.currentSdCardSecondsReceived).toStringAsFixed(2),
                 ),
               ),
               provider.sdCardIsDownloading || provider.sdCardDownloadDone
