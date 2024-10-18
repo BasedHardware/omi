@@ -41,14 +41,14 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Google Auth
         id: auth
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -76,4 +76,3 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
-
