@@ -3,24 +3,22 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 import opuslib
-import requests
 import webrtcvad
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
-from database.redis_db import get_cached_user_geolocation
 import database.memories as memories_db
 from database import redis_db
-from database.redis_db import get_user_webhook_db
+from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent
-from routers.users import WebhookType
-from utils.memories.process_memory import process_memory
 from utils.memories.location import get_google_maps_location
+from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
+from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook
 
 router = APIRouter()
 
@@ -262,10 +260,12 @@ async def _websocket_util(
                 segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
+        asyncio.create_task(realtime_transcript_webhook(uid, segments))
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+
 
         # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
@@ -321,19 +321,6 @@ async def _websocket_util(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
-    async def send_audio_bytes_developer_webhook(data: bytearray):
-        # TODO: add a lock, send shorter segments, validate regex.
-        webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
-        if not webhook_url:
-            #print('No developer webhook url')
-            return
-        webhook_url += f'sample_rate={sample_rate}'
-        try:
-            response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'})
-            #print('Developer webhook response', response.status_code)
-        except Exception as e:
-            print(f"Error sending audio bytes to developer webhook: {e}")
-
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
@@ -377,7 +364,7 @@ async def _websocket_util(
                         dg_socket2.send(data)
 
                 if len(audiobuffer) > sample_rate * 5 * 2:  # 5 seconds
-                    asyncio.create_task(send_audio_bytes_developer_webhook(audiobuffer.copy()))
+                    asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
                     audiobuffer = bytearray()
 
         except WebSocketDisconnect:
