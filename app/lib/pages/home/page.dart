@@ -45,9 +45,12 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../../utils/purchase/store_config.dart';
 
 class HomePageWrapper extends StatefulWidget {
   const HomePageWrapper({super.key});
@@ -77,6 +80,8 @@ class _HomePageWrapperState extends State<HomePageWrapper>
   BTDeviceStruct? _device;
 
   List<Plugin> plugins = [];
+
+  //List<Product> subProducts = [];
 
   List<UserMemoriesModel>? userMemoriesModels = [];
   List<PluginModel>? pluginsModels = [];
@@ -250,6 +255,24 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     InstabugLog.logInfo(event);
   }
 
+  Future<void> initActiveSubscription() async {
+    //await Purchases.setLogLevel(LogLevel.debug);
+    PurchasesConfiguration configuration;
+    configuration = PurchasesConfiguration(StoreConfig.instance.apiKey);
+    await Purchases.configure(configuration);
+    // Ensure the same App User ID is used across both devices
+    await Purchases.logIn(SharedPreferencesUtil().email);
+    await Purchases.enableAdServicesAttributionTokenCollection();
+    final customerInfoTemp = await Purchases.getCustomerInfo();
+
+    debugPrint("customerInfoTemp : $customerInfoTemp");
+    debugPrint("customerInfoTemp : ${customerInfoTemp.activeSubscriptions}");
+
+    /// add active subscription plugins in the local storage
+    SharedPreferencesUtil().activeSubscriptionPluginList =
+        customerInfoTemp.activeSubscriptions;
+  }
+
   _migrationScripts() async {
     setState(() => scriptsInProgress = true);
     await scriptMigrateMemoriesToBack();
@@ -269,7 +292,7 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     connectivityController.init();
     SharedPreferencesUtil().pageToShowFromNotification = 1;
     SharedPreferencesUtil().onboardingCompleted = true;
-
+    initActiveSubscription();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       ForegroundUtil.requestPermissions();
@@ -284,7 +307,6 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     if (SharedPreferencesUtil().deviceId.isNotEmpty) {
       scanAndConnectDevice().then(_onConnected);
     }
-
     _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
       final subPageRoute =
@@ -299,6 +321,10 @@ class _HomePageWrapperState extends State<HomePageWrapper>
       });
       SharedPreferencesUtil().subPageToShowFromNotification = '';
     }
+    debugPrint("++++++++++++++++++");
+    debugPrint(SharedPreferencesUtil().email);
+    debugPrint(SharedPreferencesUtil().fullName);
+    debugPrint(SharedPreferencesUtil().givenName);
     super.initState();
   }
 
@@ -380,92 +406,92 @@ class _HomePageWrapperState extends State<HomePageWrapper>
   @override
   Widget build(BuildContext context) {
     return WithForegroundTask(
-        child: MyUpgradeAlert(
-      upgrader: _upgrader,
-      dialogStyle: Platform.isIOS
-          ? UpgradeDialogStyle.cupertino
-          : UpgradeDialogStyle.material,
-      child: ValueListenableBuilder(
-          valueListenable: connectivityController.isConnected,
-          builder: (context, isConnected, child) {
-            previousConnection ??= true;
-            if (previousConnection != isConnected) {
-              previousConnection = isConnected;
-              if (!isConnected) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                          'No internet connection. Please check your connection.'),
-                      backgroundColor: Colors.red,
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context)
-                                .hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss'),
-                        ),
-                      ],
-                    ),
-                  );
-                });
-              } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  ScaffoldMessenger.of(context).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text('Internet connection is restored.'),
-                      backgroundColor: Colors.green,
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context)
-                                .hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss'),
-                        ),
-                      ],
-                      onVisible: () =>
-                          Future.delayed(const Duration(seconds: 3), () {
-                        ScaffoldMessenger.of(context)
-                            .hideCurrentMaterialBanner();
-                      }),
-                    ),
-                  );
+      child: MyUpgradeAlert(
+        upgrader: _upgrader,
+        dialogStyle: Platform.isIOS
+            ? UpgradeDialogStyle.cupertino
+            : UpgradeDialogStyle.material,
+        child: ValueListenableBuilder(
+            valueListenable: connectivityController.isConnected,
+            builder: (context, isConnected, child) {
+              previousConnection ??= true;
+              if (previousConnection != isConnected) {
+                previousConnection = isConnected;
+                if (!isConnected) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ScaffoldMessenger.of(context).showMaterialBanner(
+                      MaterialBanner(
+                        content: const Text(
+                            'No internet connection. Please check your connection.'),
+                        backgroundColor: Colors.red,
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context)
+                                  .hideCurrentMaterialBanner();
+                            },
+                            child: const Text('Dismiss'),
+                          ),
+                        ],
+                      ),
+                    );
+                  });
+                } else {
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    ScaffoldMessenger.of(context).showMaterialBanner(
+                      MaterialBanner(
+                        content: const Text('Internet connection is restored.'),
+                        backgroundColor: Colors.green,
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context)
+                                  .hideCurrentMaterialBanner();
+                            },
+                            child: const Text('Dismiss'),
+                          ),
+                        ],
+                        onVisible: () =>
+                            Future.delayed(const Duration(seconds: 3), () {
+                          ScaffoldMessenger.of(context)
+                              .hideCurrentMaterialBanner();
+                        }),
+                      ),
+                    );
 
-                  if (memories.isEmpty) {
-                    _initiateMemories();
-                  }
-                  if (messages.isEmpty) {
-                    _refreshMessages();
-                  }
-                });
+                    if (memories.isEmpty) {
+                      _initiateMemories();
+                    }
+                    if (messages.isEmpty) {
+                      _refreshMessages();
+                    }
+                  });
+                }
               }
-            }
 
-            return PopScope(
-              onPopInvoked: (didPop) {
-                if (FocusScope.of(context).hasFocus) {
-                  debugPrint("onPopInvoked called..");
-                  FocusScope.of(context).unfocus();
-                }
-                if (didPop) {
-                  return;
-                }
-                Navigator.of(context).pop();
-              },
-              child: Scaffold(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                body: GestureDetector(
-                  onTap: () {
+              return PopScope(
+                onPopInvoked: (didPop) {
+                  if (FocusScope.of(context).hasFocus) {
+                    debugPrint("onPopInvoked called..");
                     FocusScope.of(context).unfocus();
-                    chatTextFieldFocusNode.unfocus();
-                    memoriesTextFieldFocusNode.unfocus();
-                  },
-                  child: (_controller != null)
-                      ? Stack(
-                          children: [
-                            /*IndexedStack(
+                  }
+                  if (didPop) {
+                    return;
+                  }
+                  Navigator.of(context).pop();
+                },
+                child: Scaffold(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  body: GestureDetector(
+                    onTap: () {
+                      FocusScope.of(context).unfocus();
+                      chatTextFieldFocusNode.unfocus();
+                      memoriesTextFieldFocusNode.unfocus();
+                    },
+                    child: (_controller != null)
+                        ? Stack(
+                            children: [
+                              /*IndexedStack(
                               index: _controller!.index,
                               children: [
                                 MemoriesPage(
@@ -547,162 +573,171 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                                 ),
                               ],
                             ),*/
-                            Center(
-                              child: TabBarView(
-                                controller: _controller,
-                                physics: const NeverScrollableScrollPhysics(),
-                                children: [
-                                  MemoriesPage(
-                                    memories: memories,
-                                    updateMemory:
-                                        (ServerMemory memory, int index) {
-                                      var memoriesCopy =
-                                          List<ServerMemory>.from(memories);
-                                      memoriesCopy[index] = memory;
-                                      setState(() => memories = memoriesCopy);
-                                    },
-                                    deleteMemory:
-                                        (ServerMemory memory, int index) {
-                                      var memoriesCopy =
-                                          List<ServerMemory>.from(memories);
-                                      memoriesCopy.removeAt(index);
-                                      setState(() => memories = memoriesCopy);
-                                    },
-                                    loadMoreMemories: () async {
-                                      if (memories.length % 50 != 0) return;
-                                      if (loadingNewMemories) return;
-                                      setState(() => loadingNewMemories = true);
-                                      var newMemories = await getMemories(
-                                          offset: memories.length);
-                                      memories.addAll(newMemories);
-                                      loadingNewMemories = false;
-                                      setState(() {});
-                                    },
-                                    loadingNewMemories: loadingNewMemories,
-                                    textFieldFocusNode:
-                                        memoriesTextFieldFocusNode,
-                                  ),
-                                  (userMemoriesModels == null ||
-                                          userMemoriesModels!.isEmpty ||
-                                          userMemoriesModels!
-                                              .where((t) => t.deleted == false)
-                                              .toList()
-                                              .isEmpty)
-                                      ? RefreshIndicator(
-                                          color: Colors.white,
-                                          backgroundColor: Colors.deepPurple,
-                                          onRefresh: _initiatePlugins,
-                                          child: (!isPluginLoading)
-                                              ? const Center(
-                                                  child:
-                                                      Text("No record found"))
-                                              : const Center(
-                                                  child:
-                                                      CupertinoActivityIndicator()))
-                                      : RefreshIndicator(
-                                          color: Colors.white,
-                                          backgroundColor: Colors.deepPurple,
-                                          onRefresh: _initiatePlugins,
-                                          child: (!isPluginLoading)
-                                              ? PluginsTabPage(
-                                                  userMemoriesModels:
-                                                      userMemoriesModels!,
-                                                  pluginsModels: pluginsModels!)
-                                              : const Center(
-                                                  child:
-                                                      CupertinoActivityIndicator())),
-                                  ChatPage(
-                                    key: chatPageKey,
-                                    textFieldFocusNode: chatTextFieldFocusNode,
-                                    messages: messages,
-                                    isLoadingMessages: loadingNewMessages,
-                                    addMessage: (ServerMessage message) {
-                                      var messagesCopy =
-                                          List<ServerMessage>.from(messages);
-                                      messagesCopy.insert(0, message);
-                                      setState(() => messages = messagesCopy);
-                                    },
-                                    updateMemory: (ServerMemory memory) {
-                                      var memoriesCopy =
-                                          List<ServerMemory>.from(memories);
-                                      var index = memoriesCopy
-                                          .indexWhere((m) => m.id == memory.id);
-                                      if (index != -1) {
+                              Center(
+                                child: TabBarView(
+                                  controller: _controller,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  children: [
+                                    MemoriesPage(
+                                      memories: memories,
+                                      updateMemory:
+                                          (ServerMemory memory, int index) {
+                                        var memoriesCopy =
+                                            List<ServerMemory>.from(memories);
                                         memoriesCopy[index] = memory;
                                         setState(() => memories = memoriesCopy);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (chatTextFieldFocusNode.hasFocus ||
-                                memoriesTextFieldFocusNode.hasFocus)
-                              const SizedBox.shrink()
-                            else
-                              Align(
-                                alignment: Alignment.bottomCenter,
-                                child: Container(
-                                  margin:
-                                      const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius:
-                                        BorderRadius.all(Radius.circular(16)),
-                                    border: GradientBoxBorder(
-                                      gradient: LinearGradient(colors: [
-                                        Color.fromARGB(127, 208, 208, 208),
-                                        Color.fromARGB(127, 188, 99, 121),
-                                        Color.fromARGB(127, 86, 101, 182),
-                                        Color.fromARGB(127, 126, 190, 236)
-                                      ]),
-                                      width: 2,
+                                      },
+                                      deleteMemory:
+                                          (ServerMemory memory, int index) {
+                                        var memoriesCopy =
+                                            List<ServerMemory>.from(memories);
+                                        memoriesCopy.removeAt(index);
+                                        setState(() => memories = memoriesCopy);
+                                      },
+                                      loadMoreMemories: () async {
+                                        if (memories.length % 50 != 0) return;
+                                        if (loadingNewMemories) return;
+                                        setState(
+                                            () => loadingNewMemories = true);
+                                        var newMemories = await getMemories(
+                                            offset: memories.length);
+                                        memories.addAll(newMemories);
+                                        loadingNewMemories = false;
+                                        setState(() {});
+                                      },
+                                      loadingNewMemories: loadingNewMemories,
+                                      textFieldFocusNode:
+                                          memoriesTextFieldFocusNode,
                                     ),
-                                    shape: BoxShape.rectangle,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () => _tabChange(0),
-                                          child: Container(
-                                            padding: const EdgeInsets.only(
-                                                top: 20, bottom: 20),
-                                            child: Text('Memories',
-                                                maxLines: 1,
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                    color:
-                                                        _controller!.index == 0
-                                                            ? Colors.white
-                                                            : Colors.grey,
-                                                    fontSize: 16)),
-                                          ),
-                                        ),
+                                    (userMemoriesModels == null ||
+                                            userMemoriesModels!.isEmpty ||
+                                            userMemoriesModels!
+                                                .where(
+                                                    (t) => t.deleted == false)
+                                                .toList()
+                                                .isEmpty)
+                                        ? RefreshIndicator(
+                                            color: Colors.white,
+                                            backgroundColor: Colors.deepPurple,
+                                            onRefresh: _initiatePlugins,
+                                            child: (!isPluginLoading)
+                                                ? const Center(
+                                                    child:
+                                                        Text("No record found"))
+                                                : const Center(
+                                                    child:
+                                                        CupertinoActivityIndicator()))
+                                        : RefreshIndicator(
+                                            color: Colors.white,
+                                            backgroundColor: Colors.deepPurple,
+                                            onRefresh: _initiatePlugins,
+                                            child: (!isPluginLoading)
+                                                ? PluginsTabPage(
+                                                    userMemoriesModels:
+                                                        userMemoriesModels!,
+                                                    pluginsModels:
+                                                        pluginsModels!)
+                                                : const Center(
+                                                    child:
+                                                        CupertinoActivityIndicator())),
+                                    ChatPage(
+                                      key: chatPageKey,
+                                      textFieldFocusNode:
+                                          chatTextFieldFocusNode,
+                                      messages: messages,
+                                      isLoadingMessages: loadingNewMessages,
+                                      addMessage: (ServerMessage message) {
+                                        var messagesCopy =
+                                            List<ServerMessage>.from(messages);
+                                        messagesCopy.insert(0, message);
+                                        setState(() => messages = messagesCopy);
+                                      },
+                                      updateMemory: (ServerMemory memory) {
+                                        var memoriesCopy =
+                                            List<ServerMemory>.from(memories);
+                                        var index = memoriesCopy.indexWhere(
+                                            (m) => m.id == memory.id);
+                                        if (index != -1) {
+                                          memoriesCopy[index] = memory;
+                                          setState(
+                                              () => memories = memoriesCopy);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (chatTextFieldFocusNode.hasFocus ||
+                                  memoriesTextFieldFocusNode.hasFocus)
+                                const SizedBox.shrink()
+                              else
+                                Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    margin: const EdgeInsets.fromLTRB(
+                                        16, 16, 16, 20),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius:
+                                          BorderRadius.all(Radius.circular(16)),
+                                      border: GradientBoxBorder(
+                                        gradient: LinearGradient(colors: [
+                                          Color.fromARGB(127, 208, 208, 208),
+                                          Color.fromARGB(127, 188, 99, 121),
+                                          Color.fromARGB(127, 86, 101, 182),
+                                          Color.fromARGB(127, 126, 190, 236)
+                                        ]),
+                                        width: 2,
                                       ),
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () => _tabChange(1),
-                                          child: Container(
-                                            padding: const EdgeInsets.only(
-                                              top: 20,
-                                              bottom: 20,
+                                      shape: BoxShape.rectangle,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: InkWell(
+                                            onTap: () => _tabChange(0),
+                                            child: Container(
+                                              padding: const EdgeInsets.only(
+                                                  top: 20, bottom: 20),
+                                              child: Text('Memories',
+                                                  maxLines: 1,
+                                                  textAlign: TextAlign.center,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      color:
+                                                          _controller!.index ==
+                                                                  0
+                                                              ? Colors.white
+                                                              : Colors.grey,
+                                                      fontSize: 16)),
                                             ),
-                                            child: Text('Plugin',
-                                                maxLines: 1,
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                    color:
-                                                        _controller!.index == 1
-                                                            ? Colors.white
-                                                            : Colors.grey,
-                                                    fontSize: 16)),
                                           ),
                                         ),
-                                      ),
-                                      /*InkWell(
+                                        Expanded(
+                                          child: InkWell(
+                                            onTap: () => _tabChange(1),
+                                            child: Container(
+                                              padding: const EdgeInsets.only(
+                                                top: 20,
+                                                bottom: 20,
+                                              ),
+                                              child: Text('Plugin',
+                                                  maxLines: 1,
+                                                  textAlign: TextAlign.center,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      color:
+                                                          _controller!.index ==
+                                                                  1
+                                                              ? Colors.white
+                                                              : Colors.grey,
+                                                      fontSize: 16)),
+                                            ),
+                                          ),
+                                        ),
+                                        /*InkWell(
                                         onTap: () => _tabChange(2),
                                         child: Container(
                                           padding: const EdgeInsets.only(
@@ -719,327 +754,336 @@ class _HomePageWrapperState extends State<HomePageWrapper>
                                                   fontSize: 16)),
                                         ),
                                       ),*/
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () => _tabChange(2),
-                                          child: Container(
-                                            padding: const EdgeInsets.only(
-                                                top: 20, bottom: 20),
-                                            child: Text('Chat',
-                                                maxLines: 1,
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                    color:
-                                                        _controller!.index == 2
-                                                            ? Colors.white
-                                                            : Colors.grey,
-                                                    fontSize: 16)),
+                                        Expanded(
+                                          child: InkWell(
+                                            onTap: () => _tabChange(2),
+                                            child: Container(
+                                              padding: const EdgeInsets.only(
+                                                  top: 20, bottom: 20),
+                                              child: Text('Chat',
+                                                  maxLines: 1,
+                                                  textAlign: TextAlign.center,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      color:
+                                                          _controller!.index ==
+                                                                  2
+                                                              ? Colors.white
+                                                              : Colors.grey,
+                                                      fontSize: 16)),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            if (scriptsInProgress)
-                              Center(
-                                child: Container(
-                                  height: 150,
-                                  width: 250,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                        color: Colors.white, width: 2),
+                              if (scriptsInProgress)
+                                Center(
+                                  child: Container(
+                                    height: 150,
+                                    width: 250,
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                    child: const Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CircularProgressIndicator(
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.white),
+                                        ),
+                                        SizedBox(height: 16),
+                                        Center(
+                                            child: Text(
+                                          'Running migration, please wait! 🚨',
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16),
+                                          textAlign: TextAlign.center,
+                                        )),
+                                      ],
+                                    ),
                                   ),
-                                  child: const Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      CircularProgressIndicator(
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
+                                )
+                              else
+                                const SizedBox.shrink(),
+                            ],
+                          )
+                        : const Center(
+                            child: CupertinoActivityIndicator(),
+                          ),
+                  ),
+                  appBar: AppBar(
+                    automaticallyImplyLeading: false,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _device != null && batteryLevel != -1
+                            ? GestureDetector(
+                                onTap: _device == null
+                                    ? null
+                                    : () {
+                                        Navigator.of(context)
+                                            .push(MaterialPageRoute(
+                                                builder: (c) => ConnectedDevice(
+                                                      device: _device!,
+                                                      batteryLevel:
+                                                          batteryLevel,
+                                                    )));
+                                        MixpanelManager()
+                                            .batteryIndicatorClicked();
+                                      },
+                                child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: Colors.grey,
+                                        width: 1,
                                       ),
-                                      SizedBox(height: 16),
-                                      Center(
-                                          child: Text(
-                                        'Running migration, please wait! 🚨',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 16),
-                                        textAlign: TextAlign.center,
-                                      )),
-                                    ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: batteryLevel > 75
+                                                ? const Color.fromARGB(
+                                                    255, 0, 255, 8)
+                                                : batteryLevel > 20
+                                                    ? Colors.yellow.shade700
+                                                    : Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8.0),
+                                        Text(
+                                          '${batteryLevel.toString()}%',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    )),
+                              )
+                            : TextButton(
+                                onPressed: () async {
+                                  if (SharedPreferencesUtil()
+                                      .deviceId
+                                      .isEmpty) {
+                                    routeToPage(
+                                        context, const ConnectDevicePage());
+                                    MixpanelManager().connectFriendClicked();
+                                  } else {
+                                    await routeToPage(
+                                        context,
+                                        const ConnectedDevice(
+                                            device: null, batteryLevel: 0));
+                                  }
+                                  setState(() {});
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  backgroundColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: const BorderSide(
+                                        color: Colors.white, width: 1),
+                                  ),
+                                ),
+                                child: Image.asset(
+                                    'assets/images/logo_transparent.png',
+                                    width: 25,
+                                    height: 25),
+                              ),
+                        _controller != null && _controller!.index == 2
+                            ? Expanded(
+                                child: Container(
+                                  // decoration: BoxDecoration(
+                                  //   border: Border.all(color: Colors.grey),
+                                  //   borderRadius: BorderRadius.circular(30),
+                                  // ),
+                                  width: MediaQuery.of(context).size.width,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  child: DropdownButton<String>(
+                                    menuMaxHeight: 350,
+                                    value: SharedPreferencesUtil()
+                                        .selectedChatPluginId,
+                                    onChanged: (s) async {
+                                      if ((s == 'no_selected' &&
+                                              plugins
+                                                  .where((p) => p.enabled)
+                                                  .isEmpty) ||
+                                          s == 'enable') {
+                                        await routeToPage(
+                                            context,
+                                            const PluginsPage(
+                                                filterChatOnly: true));
+                                        plugins =
+                                            SharedPreferencesUtil().pluginsList;
+                                        setState(() {});
+                                        return;
+                                      }
+                                      debugPrint(
+                                          'Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
+                                      if (s == null ||
+                                          s ==
+                                              SharedPreferencesUtil()
+                                                  .selectedChatPluginId) return;
+
+                                      SharedPreferencesUtil()
+                                          .selectedChatPluginId = s;
+                                      var plugin = plugins
+                                          .firstWhereOrNull((p) => p.id == s);
+                                      chatPageKey.currentState
+                                          ?.sendInitialPluginMessage(plugin);
+                                      setState(() {});
+                                    },
+                                    icon: Container(),
+                                    alignment: Alignment.center,
+                                    dropdownColor: Colors.black,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 16),
+                                    underline: Container(
+                                        height: 0, color: Colors.transparent),
+                                    isExpanded: true,
+                                    itemHeight: 48,
+                                    padding: EdgeInsets.zero,
+                                    items: _getPluginsDropdownItems(context),
                                   ),
                                 ),
                               )
-                            else
-                              const SizedBox.shrink(),
-                          ],
-                        )
-                      : const Center(
-                          child: CupertinoActivityIndicator(),
-                        ),
-                ),
-                appBar: AppBar(
-                  automaticallyImplyLeading: false,
-                  backgroundColor: Theme.of(context).colorScheme.surface,
-                  title: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _device != null && batteryLevel != -1
-                          ? GestureDetector(
-                              onTap: _device == null
-                                  ? null
-                                  : () {
+                            : const SizedBox.shrink(),
+                        _controller != null && _controller!.index == 1
+                            ? GestureDetector(
+                                onTap: () async {
+                                  //updateCommunityPluginsData();
+                                  String header = "";
+                                  header = await getAuthHeader();
+                                  Clipboard.setData(
+                                      ClipboardData(text: header));
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  child: const Text('Plugins'),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                        (_controller != null &&
+                                (_controller!.index == 0 ||
+                                    _controller!.index == 1 ||
+                                    _controller!.index == 2))
+                            ? Row(
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
                                       Navigator.of(context)
                                           .push(MaterialPageRoute(
-                                              builder: (c) => ConnectedDevice(
-                                                    device: _device!,
-                                                    batteryLevel: batteryLevel,
+                                              builder: (c) => CapturePage(
+                                                    key: capturePageKey,
+                                                    device: _device,
+                                                    addMemory:
+                                                        (ServerMemory memory) {
+                                                      var memoriesCopy = List<
+                                                              ServerMemory>.from(
+                                                          memories);
+                                                      memoriesCopy.insert(
+                                                          0, memory);
+                                                      setState(() => memories =
+                                                          memoriesCopy);
+                                                    },
+                                                    addMessage: (ServerMessage
+                                                        message) {
+                                                      var messagesCopy = List<
+                                                              ServerMessage>.from(
+                                                          messages);
+                                                      messagesCopy.insert(
+                                                          0, message);
+                                                      setState(() => messages =
+                                                          messagesCopy);
+                                                    },
                                                   )));
-                                      MixpanelManager()
-                                          .batteryIndicatorClicked();
                                     },
-                              child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: Colors.grey,
-                                      width: 1,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Image.asset(
+                                          'assets/images/ic_lock.png',
+                                          height: 22),
                                     ),
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: batteryLevel > 75
-                                              ? const Color.fromARGB(
-                                                  255, 0, 255, 8)
-                                              : batteryLevel > 20
-                                                  ? Colors.yellow.shade700
-                                                  : Colors.red,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8.0),
-                                      Text(
-                                        '${batteryLevel.toString()}%',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  )),
-                            )
-                          : TextButton(
-                              onPressed: () async {
-                                if (SharedPreferencesUtil().deviceId.isEmpty) {
-                                  routeToPage(
-                                      context, const ConnectDevicePage());
-                                  MixpanelManager().connectFriendClicked();
-                                } else {
-                                  await routeToPage(
-                                      context,
-                                      const ConnectedDevice(
-                                          device: null, batteryLevel: 0));
-                                }
-                                setState(() {});
-                              },
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                backgroundColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  side: const BorderSide(
-                                      color: Colors.white, width: 1),
-                                ),
-                              ),
-                              child: Image.asset(
-                                  'assets/images/logo_transparent.png',
-                                  width: 25,
-                                  height: 25),
-                            ),
-                      _controller != null && _controller!.index == 2
-                          ? Expanded(
-                              child: Container(
-                                // decoration: BoxDecoration(
-                                //   border: Border.all(color: Colors.grey),
-                                //   borderRadius: BorderRadius.circular(30),
-                                // ),
-                                width: MediaQuery.of(context).size.width,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                child: DropdownButton<String>(
-                                  menuMaxHeight: 350,
-                                  value: SharedPreferencesUtil()
-                                      .selectedChatPluginId,
-                                  onChanged: (s) async {
-                                    if ((s == 'no_selected' &&
-                                            plugins
-                                                .where((p) => p.enabled)
-                                                .isEmpty) ||
-                                        s == 'enable') {
+                                  IconButton(
+                                    icon: const Icon(Icons.settings,
+                                        color: Colors.white, size: 30),
+                                    onPressed: () async {
+                                      MixpanelManager().settingsOpened();
+                                      String language = SharedPreferencesUtil()
+                                          .recordingsLanguage;
+                                      bool hasSpeech = SharedPreferencesUtil()
+                                          .hasSpeakerProfile;
                                       await routeToPage(
-                                          context,
-                                          const PluginsPage(
-                                              filterChatOnly: true));
+                                          context, const SettingsPage());
+                                      // TODO: this fails like 10 times, connects reconnects, until it finally works.
+                                      if (language !=
+                                              SharedPreferencesUtil()
+                                                  .recordingsLanguage ||
+                                          hasSpeech !=
+                                              SharedPreferencesUtil()
+                                                  .hasSpeakerProfile) {
+                                        capturePageKey.currentState
+                                            ?.restartWebSocket();
+                                      }
                                       plugins =
                                           SharedPreferencesUtil().pluginsList;
                                       setState(() {});
-                                      return;
-                                    }
-                                    debugPrint(
-                                        'Selected: $s prefs: ${SharedPreferencesUtil().selectedChatPluginId}');
-                                    if (s == null ||
-                                        s ==
-                                            SharedPreferencesUtil()
-                                                .selectedChatPluginId) return;
-
-                                    SharedPreferencesUtil()
-                                        .selectedChatPluginId = s;
-                                    var plugin = plugins
-                                        .firstWhereOrNull((p) => p.id == s);
-                                    chatPageKey.currentState
-                                        ?.sendInitialPluginMessage(plugin);
-                                    setState(() {});
-                                  },
-                                  icon: Container(),
-                                  alignment: Alignment.center,
-                                  dropdownColor: Colors.black,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 16),
-                                  underline: Container(
-                                      height: 0, color: Colors.transparent),
-                                  isExpanded: true,
-                                  itemHeight: 48,
-                                  padding: EdgeInsets.zero,
-                                  items: _getPluginsDropdownItems(context),
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                      _controller != null && _controller!.index == 1
-                          ? GestureDetector(
-                              onTap: () async {
-                                //updateCommunityPluginsData();
-                                String header = "";
-                                header = await getAuthHeader();
-                                Clipboard.setData(ClipboardData(text: header));
-                              },
-                              child: Container(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                child: const Text('Plugins'),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                      (_controller != null &&
-                              (_controller!.index == 0 ||
-                                  _controller!.index == 1 ||
-                                  _controller!.index == 2))
-                          ? Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.of(context)
-                                        .push(MaterialPageRoute(
-                                            builder: (c) => CapturePage(
-                                                  key: capturePageKey,
-                                                  device: _device,
-                                                  addMemory:
-                                                      (ServerMemory memory) {
-                                                    var memoriesCopy =
-                                                        List<ServerMemory>.from(
-                                                            memories);
-                                                    memoriesCopy.insert(
-                                                        0, memory);
-                                                    setState(() => memories =
-                                                        memoriesCopy);
-                                                  },
-                                                  addMessage:
-                                                      (ServerMessage message) {
-                                                    var messagesCopy = List<
-                                                            ServerMessage>.from(
-                                                        messages);
-                                                    messagesCopy.insert(
-                                                        0, message);
-                                                    setState(() => messages =
-                                                        messagesCopy);
-                                                  },
-                                                )));
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Image.asset(
-                                        'assets/images/ic_lock.png',
-                                        height: 22),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.settings,
-                                      color: Colors.white, size: 30),
-                                  onPressed: () async {
-                                    MixpanelManager().settingsOpened();
-                                    String language = SharedPreferencesUtil()
-                                        .recordingsLanguage;
-                                    bool hasSpeech = SharedPreferencesUtil()
-                                        .hasSpeakerProfile;
-                                    await routeToPage(
-                                        context, const SettingsPage());
-                                    // TODO: this fails like 10 times, connects reconnects, until it finally works.
-                                    if (language !=
-                                            SharedPreferencesUtil()
-                                                .recordingsLanguage ||
-                                        hasSpeech !=
-                                            SharedPreferencesUtil()
-                                                .hasSpeakerProfile) {
-                                      capturePageKey.currentState
-                                          ?.restartWebSocket();
-                                    }
-                                    plugins =
-                                        SharedPreferencesUtil().pluginsList;
-                                    setState(() {});
-                                  },
-                                )
-                              ],
-                            )
-                          : TextButton(
-                              onPressed: () {
-                                launchUrl(Uri.parse(
-                                    'https://basedhardware.com/plugins'));
-                              },
-                              child: const Row(
-                                children: [
-                                  Text(
-                                    'Create Yours',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
+                                    },
+                                  )
                                 ],
-                              )),
-                    ],
+                              )
+                            : TextButton(
+                                onPressed: () {
+                                  launchUrl(Uri.parse(
+                                      'https://basedhardware.com/plugins'));
+                                },
+                                child: const Row(
+                                  children: [
+                                    Text(
+                                      'Create Yours',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    SizedBox(
+                                      width: 8,
+                                    ),
+                                  ],
+                                )),
+                      ],
+                    ),
+                    elevation: 0,
+                    centerTitle: true,
                   ),
-                  elevation: 0,
-                  centerTitle: true,
                 ),
-              ),
-            );
-          }),
-    ));
+              );
+            }),
+      ),
+    );
   }
 
   _getPluginsDropdownItems(BuildContext context) {
@@ -1127,7 +1171,8 @@ class _HomePageWrapperState extends State<HomePageWrapper>
     WidgetsBinding.instance.removeObserver(this);
     _connectionStateListener?.cancel();
     _bleBatteryLevelListener?.cancel();
-    connectivityController.isConnected.dispose();
+    /// I comment below code because: When I logout and login again, the app is found issue.
+    //connectivityController.isConnected.dispose();
     _controller?.dispose();
     ForegroundUtil.stopForegroundTask();
     super.dispose();

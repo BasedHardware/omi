@@ -86,6 +86,8 @@ class MixpanelManager {
 
   void pluginsOpened() => track('Plugins Opened');
 
+  void pluginsSubscriptionOpened() => track('Plugins Subscription Opened');
+
   void pluginEnabled(String pluginId) {
     track('Plugin Enabled', properties: {'plugin_id': pluginId});
     // setUserProperty('Plugins Enabled Count', _preferences.pluginsEnabled.length);

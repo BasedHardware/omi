@@ -109,5 +109,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSUserTrackingUsageDescription</key>
+    <string>We use your data to enhance your experience.</string>
 </dict>
 </plist>

@@ -17,12 +17,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
 if (flutterVersionCode == null) {
-    flutterVersionCode = '7'
+    flutterVersionCode = '9'
 }
 
 def flutterVersionName = localProperties.getProperty('flutter.versionName')
 if (flutterVersionName == null) {
-    flutterVersionName = '1.0.6'
+    flutterVersionName = '1.0.7'
 }
 
 def keystoreProperties = new Properties()
@@ -99,6 +99,7 @@ android {
             shrinkResources false
         }
         debug{
+            productFlavors.prod.signingConfig signingConfigs.debug
             minifyEnabled true
         }
     }

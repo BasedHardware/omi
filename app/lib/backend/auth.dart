@@ -88,8 +88,11 @@ Future<UserCredential?> signInWithGoogle() async {
       idToken: googleAuth?.idToken,
     );
 
+    debugPrint('------------ credential ------------ $credential');
+
     // Once signed in, return the UserCredential
     var result = await FirebaseAuth.instance.signInWithCredential(credential);
+    debugPrint('------------ result ------------ $result');
     var givenName = result.additionalUserInfo?.profile?['given_name'] ?? '';
     var familyName = result.additionalUserInfo?.profile?['family_name'] ?? '';
     var email = result.additionalUserInfo?.profile?['email'] ?? '';

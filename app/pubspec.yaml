@@ -2,7 +2,7 @@ name: friend_private
 description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.0.6+7
+version: 1.0.7+9
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -93,6 +93,9 @@ dependencies:
   firebase_remote_config: ^5.0.4
   cloud_firestore: ^5.4.0
   markdown: ^7.2.2
+  purchases_flutter: ^8.1.4
+  in_app_purchase: ^3.2.0
+  in_app_purchase_storekit: ^0.3.18+1
 
 dependency_overrides:
   http: ^1.2.1

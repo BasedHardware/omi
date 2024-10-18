@@ -45,11 +45,38 @@ class _AuthComponentState extends State<AuthComponent> {
             ),
           ),
           const SizedBox(height: 32),
+          /*ElevatedButton(
+            onPressed: () async {
+              //await RCPurchaseController().restorePurchases();
+              //await RCPurchaseController().restorePurchasesFlutterPurchase();
+              RCPurchaseController().initPlatformState().then((value) {
+                RCPurchaseController().restorePurchasesFlutterPurchase().then((value) {
+                  setState(() {});
+                });
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+            ),
+            child: const Text(
+              'RESTORE SUBSCRIPTION',
+              style: TextStyle(
+                fontWeight: FontWeight.w400,
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+          ),*/
           !Platform.isIOS
               ? SignInButton(
                   Buttons.google,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   onPressed: loading
                       ? () {}
                       : () async {
@@ -81,7 +108,9 @@ class _AuthComponentState extends State<AuthComponent> {
                 TextSpan(
                   text: 'Terms of service',
                   style: const TextStyle(decoration: TextDecoration.underline),
-                  recognizer: TapGestureRecognizer()..onTap = () => _launchUrl('https://basedhardware.com/terms'),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap =
+                        () => _launchUrl('https://basedhardware.com/terms'),
                 ),
                 const TextSpan(text: ' and '),
                 TextSpan(
@@ -109,7 +138,8 @@ class _AuthComponentState extends State<AuthComponent> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Failed to retrieve firebase token, please try again.'),
       ));
-      CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+      CrashReporting.reportHandledCrash(e, stackTrace,
+          level: NonFatalExceptionLevel.error);
       return;
     }
     debugPrint('Token: $token');
@@ -119,9 +149,11 @@ class _AuthComponentState extends State<AuthComponent> {
         user = FirebaseAuth.instance.currentUser!;
       } catch (e, stackTrace) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Unexpected error signing in, Firebase error, please try again.'),
+          content: Text(
+              'Unexpected error signing in, Firebase error, please try again.'),
         ));
-        CrashReporting.reportHandledCrash(e, stackTrace, level: NonFatalExceptionLevel.error);
+        CrashReporting.reportHandledCrash(e, stackTrace,
+            level: NonFatalExceptionLevel.error);
         return;
       }
       String newUid = user.uid;
