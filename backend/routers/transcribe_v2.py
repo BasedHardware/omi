@@ -364,7 +364,7 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
-                if len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
+                if audio_bytes_webhook_delay_seconds and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
                     asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
                     audiobuffer = bytearray()
 
