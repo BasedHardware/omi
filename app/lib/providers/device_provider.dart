@@ -124,7 +124,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     int timeoutCounter = 0;
     while (true) {
       if (timeout && timeoutCounter >= 10) return null;
-      await ServiceManager.instance().device.discover();
+      await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
       if (connectedDevice != null) {
         return connectedDevice;
       }
@@ -259,26 +259,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   @override
-  void onDevices(List<BtDevice> devices) async {
-    if (connectedDevice != null) {
-      return;
-    }
-
-    if (devices.length <= 0) {
-      return;
-    }
-
-    // Connect to first founded device
-    var force = devices.first.id == SharedPreferencesUtil().btDevice.id;
-    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id, force: force);
-    if (connection == null) {
-      return;
-    }
-    _onDeviceConnected(connection.device);
-  }
+  void onDevices(List<BtDevice> devices) async {}
 
   @override
-  void onStatusChanged(DeviceServiceStatus status) {
-    // TODO: implement onStatusChanged
-  }
+  void onStatusChanged(DeviceServiceStatus status) {}
 }

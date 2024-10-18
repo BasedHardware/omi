@@ -150,11 +150,13 @@ def process_segments(uid: str, segments: list[dict]):
     token = notification_db.get_token_only(uid)  # TODO: don't retrieve token before knowing if to notify
     trigger_realtime_integrations(uid, token, segments)
 
+
 # Calculate backoff with jitter
 def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
     jitter = random.random() * base_delay
     backoff = min(((2 ** attempt) * base_delay) + jitter, max_delay)
     return backoff
+
 
 def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, retries=3):
     print("connect_to_deepgram_with_backoff")
