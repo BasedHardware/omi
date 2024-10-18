@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/logger.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class MapsPage extends StatelessWidget {
   const MapsPage({Key? key}) : super(key: key);
@@ -12,50 +13,11 @@ class MapsPage extends StatelessWidget {
         backgroundColor: Colors.green,
       ),
       body: ErrorHandler(
-        child: Stack(
-          children: [
-            // Simulated map background
-            Container(
-              color: Colors.grey[300],
-              child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 15,
-                ),
-                itemBuilder: (context, index) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[400]!),
-                    ),
-                  );
-                },
-              ),
-            ),
-            // Simulated map markers
-            Center(
-              child: Icon(Icons.location_on, color: Colors.red, size: 50),
-            ),
-            Positioned(
-              top: 100,
-              left: 100,
-              child: Icon(Icons.location_on, color: Colors.blue, size: 30),
-            ),
-            Positioned(
-              bottom: 150,
-              right: 120,
-              child: Icon(Icons.location_on, color: Colors.green, size: 30),
-            ),
-          ],
+        child: WebViewWidget(
+          controller: WebViewController()
+            ..setJavaScriptMode(JavaScriptMode.unrestricted)
+            ..loadRequest(Uri.parse('https://omi-map-notes.vercel.app/')),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Centering map...')),
-          );
-        },
-        child: const Icon(Icons.center_focus_strong),
       ),
     );
   }
