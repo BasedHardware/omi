@@ -35,6 +35,7 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
+
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -43,11 +44,23 @@ jobs:
         uses: 'google-github-actions/auth@v0'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - run: gcloud auth configure-docker
+      
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and Push Docker image
-        run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f backend/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v0
@@ -59,3 +72,4 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
