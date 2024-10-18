@@ -24,7 +24,6 @@ import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/utils/memories/integrations.dart';
 import 'package:friend_private/utils/memories/process.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -45,12 +44,15 @@ class CaptureProvider extends ChangeNotifier
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
   IWalService get _walService => ServiceManager.instance().wal;
+
   IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
+
   bool get isWalSupported => _isWalSupported;
 
   StreamSubscription<InternetStatus>? _internetStatusListener;
   InternetStatus? _internetStatus;
+
   get internetStatus => _internetStatus;
 
   CaptureProvider() {
@@ -454,8 +456,6 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
     if (memory == null) return;
-
-    processMemoryContent(memory: memory, messages: messages, sendMessageToChat: messageProvider?.addMessage);
     memoryProvider?.upsertMemory(memory);
     MixpanelManager().memoryCreated(memory);
   }
@@ -470,9 +470,6 @@ class CaptureProvider extends ChangeNotifier
       _loadInProgressMemory();
     }
     TranscriptSegment.combineSegments(segments, newSegments);
-    triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
-      messageProvider?.addMessage(v);
-    });
     hasTranscripts = true;
     notifyListeners();
   }
