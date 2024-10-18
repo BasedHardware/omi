@@ -19,13 +19,16 @@ Before you start, make sure you have the following:
     - **Modal: [optional]**  For serverless deployment ([modal.com](https://modal.com/))
     - **Hugging Face:** For voice activity detection ([huggingface.co](https://huggingface.co/))
     - **GitHub:[optional]** For firmware updates ([github.com](https://github.com/))
-- **Google Maps API Key:** 🗺️ (Optional) For location features
+    - **Google Maps API Key:** 🗺️ (Optional) For location features
+    
+**Note:** If you are not very experienced in backend development, we recommend installing [Homebrew](https://docs.brew.sh/Installation) (for macOS or Linux) or [Chocolatey](https://chocolatey.org/install) (for Windows).
 
 ## I. Setting Up Google Cloud & Firebase ☁️
 
 1. **Install Google Cloud SDK:**
     - **Mac (using brew):** `brew install google-cloud-sdk`
     - **Nix Envdir:** The SDK is usually pre-installed
+    - **Windows (using choco):** `choco install gcloudsdk`
 
 2. **Enable Necessary APIs: 🔧**
     - Go to the [Google Cloud Console](https://console.cloud.google.com/)
@@ -50,12 +53,16 @@ Before you start, make sure you have the following:
 1. **Install Python & Dependencies: 🐍**
     - **Mac (using brew):** `brew install python`
     - **Nix Envdir:** Python is pre-installed
+    - **Windows (using choco):** `choco install python`
     - **Install pip (if not present):**
-        - **Mac:** Use `easy_install pip`
-        - **Other Systems:**  Follow instructions on [https://pip.pypa.io/en/stable/installation/](https://pip.pypa.io/en/stable/installation/)
+        - Follow instructions on [https://pip.pypa.io/en/stable/installation/](https://pip.pypa.io/en/stable/installation/)
     - **Install Git and FFmpeg:**
         - **Mac (using brew):** `brew install git ffmpeg`
         - **Nix Envdir:** Git and FFmpeg are pre-installed
+        - **Windows (using choco):** `choco install git.install ffmpeg`
+    - **Install opus:**
+        - **Mac (using brew):** `brew install opus`
+        - **Windows:** You should already have it installed if you are on Windows 10 version 1903 and above
 
 2. **Clone the Backend Repository: 📂**
     - Open your terminal and navigate to your desired directory
@@ -76,7 +83,7 @@ Before you start, make sure you have the following:
         - **Deepgram API Key:** Obtained from your Deepgram account
         - **Redis Credentials:**  Host, port, username, and password for your Redis instance
         - **Modal API Key:**  Obtained from your Modal account
-        - **`ADMIN_KEY`:** Set to a temporary value (e.g., `123`) for local development
+        - **ADMIN_KEY:** Set to a temporary value (e.g., `123`) for local development
         - **Other API Keys:** Fill in any other API keys required by your integrations (e.g., Google Maps API key)
 
 4. **Install Python Dependencies: 📚**
