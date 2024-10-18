@@ -1,4 +1,4 @@
-FROM python:3.11 as builder
+FROM python:3.11 AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
