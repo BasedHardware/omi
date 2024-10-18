@@ -11,9 +11,7 @@ FROM python:3.11-slim
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN apt-get update && \
-    apt-get -y install curl unzip ffmpeg & \
-    apt-get clean
+RUN apt-get update && apt-get -y install ffmpeg curl unzip
 
 COPY backend/ .
 COPY --from=builder /opt/venv /opt/venv
