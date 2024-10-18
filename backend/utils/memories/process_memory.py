@@ -27,6 +27,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.plugins import get_plugins_data
 from utils.retrieval.rag import retrieve_rag_memory_context
+from utils.webhooks import memory_created_webhook
 
 
 def _get_structured(
@@ -150,6 +151,12 @@ def process_memory(
 
     memory.status = MemoryStatus.completed
     memories_db.upsert_memory(uid, memory.dict())
+
+    if not is_reprocess:
+        threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
+
+    # TODO: trigger external integrations here too
+
     print('process_memory completed memory.id=', memory.id)
     return memory
 
