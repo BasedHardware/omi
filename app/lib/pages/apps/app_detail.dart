@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/apps/analytics.dart';
 import 'package:friend_private/pages/apps/instructions.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -419,7 +420,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              child: GestureDetector(
+                onTap: (){
+                  routeToPage(context, AppAnalytics(app: widget.app));
+                },
+                child: const Text(
+                  'App Analytics',
+                  style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
         ));
   }
