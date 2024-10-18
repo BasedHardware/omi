@@ -9,12 +9,16 @@ class MemoriesGroupWidget extends StatelessWidget {
   final DateTime date;
   final bool showDiscardedMemories;
   final bool hasDiscardedMemories;
+  final bool hasNonDiscardedMemories;
+  final bool isFirst;
   const MemoriesGroupWidget(
       {super.key,
       required this.memories,
       required this.date,
+      required this.hasNonDiscardedMemories,
       required this.showDiscardedMemories,
-      required this.hasDiscardedMemories});
+      required this.hasDiscardedMemories,
+      required this.isFirst});
 
   @override
   Widget build(BuildContext context) {
@@ -22,19 +26,20 @@ class MemoriesGroupWidget extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showDiscardedMemories && hasDiscardedMemories)
-            DateListItem(date: date, isFirst: true)
-          else if (!showDiscardedMemories)
-            DateListItem(date: date, isFirst: true)
+          if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
+            const SizedBox.shrink()
           else
-            const SizedBox.shrink(),
+            DateListItem(date: date, isFirst: isFirst),
           ...memories.map((memory) {
             if (!showDiscardedMemories && memory.discarded) {
               return const SizedBox.shrink();
             }
             return MemoryListItem(memory: memory, memoryIdx: memories.indexOf(memory), date: date);
           }),
-          const SizedBox(height: 16),
+          if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
+            const SizedBox.shrink()
+          else
+            const SizedBox(height: 16),
         ],
       );
     } else {
