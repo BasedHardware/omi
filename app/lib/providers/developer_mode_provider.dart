@@ -23,15 +23,21 @@ class DeveloperModeProvider extends BaseProvider {
   void initialize() {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
-    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
-    webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
 
-    getUserWebhookUrl(type: 'audio_bytes').then((url) {
-      webhookAudioBytes.text = url;
-    });
+    getUserWebhookUrl(type: 'audio_bytes').then((url) => webhookAudioBytes.text = url);
+    getUserWebhookUrl(type: 'realtime_transcript').then((url) => webhookOnTranscriptReceived.text = url);
+    getUserWebhookUrl(type: 'memory_created').then((url) => webhookOnMemoryCreated.text = url);
 
     notifyListeners();
+  }
+
+  bool isValidUrl(String url) {
+    const urlPattern = r'^(https?:\/\/)?([a-zA-Z0-9.-]+(:[a-zA-Z0-9.&%$-]+)*@)?'
+        r'((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}'
+        r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|'
+        r'([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63}(:[0-9]+)?(\/.*)?$';
+    return RegExp(urlPattern).hasMatch(url);
   }
 
   void saveSettings() async {
@@ -59,17 +65,37 @@ class DeveloperModeProvider extends BaseProvider {
 
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
-    prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text.trim();
-    prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text.trim();
-    await setUserWebhookUrl(type: 'audio_bytes', url: webhookAudioBytes.text.trim());
+
+    if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
+      AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
+      savingSettingsLoading = false;
+      notifyListeners();
+      return;
+    }
+    if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
+      AppSnackbar.showSnackbarError('Invalid realtime transcript webhook URL');
+      savingSettingsLoading = false;
+      notifyListeners();
+      return;
+    }
+    if (webhookOnMemoryCreated.text.isNotEmpty && !isValidUrl(webhookOnMemoryCreated.text)) {
+      AppSnackbar.showSnackbarError('Invalid memory created webhook URL');
+      savingSettingsLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    var w1 = setUserWebhookUrl(type: 'audio_bytes', url: webhookAudioBytes.text.trim());
+    var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
+    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnMemoryCreated.text.trim());
+    await Future.wait([w1, w2, w3]);
+
     // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
 
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
       hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
-      hasWebhookMemoryCreated: prefs.webhookOnMemoryCreated.isNotEmpty,
-      hasWebhookTranscriptReceived: prefs.webhookOnTranscriptReceived.isNotEmpty,
     );
     savingSettingsLoading = false;
     notifyListeners();
