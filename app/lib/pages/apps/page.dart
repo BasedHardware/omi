@@ -104,6 +104,11 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                                 ),
                               );
                             }),
+                        const SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: 120,
+                          ),
+                        ),
                       ],
                     ),
                     CustomScrollView(
@@ -129,6 +134,11 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                                 ),
                               );
                             }),
+                        const SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: 120,
+                          ),
+                        ),
                       ],
                     ),
                   ]),
