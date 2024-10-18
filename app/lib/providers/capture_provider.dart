@@ -495,6 +495,11 @@ class CaptureProvider extends ChangeNotifier
   List<int> currentStorageFiles = <int>[];
   int sdCardFileNum = 1;
 
+// To show the progress of the download in the UI
+  int currentTotalBytesReceived = 0;
+  double currentSdCardSecondsReceived = 0.0;
+//--------------------------------------------
+
   int totalStorageFileBytes = 0; // how much in storage
   int totalBytesReceived = 0; // how much already received
   double sdCardSecondsTotal = 0.0; // time to send the next chunk
@@ -512,15 +517,14 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> updateStorageList() async {
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
+    if (currentStorageFiles.isEmpty) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
-
       return;
     }
     totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
     totalBytesReceived = storageOffset;
     notifyListeners();
   }
@@ -530,11 +534,10 @@ class CaptureProvider extends ChangeNotifier
 
     if (_recordingDevice == null) return;
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
-    if (currentStorageFiles.isEmpty || currentStorageFiles.length < 2) {
+    if (currentStorageFiles.isEmpty) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
-
       return;
     }
     SharedPreferencesUtil().deviceIsV2 = true;
@@ -542,26 +545,30 @@ class CaptureProvider extends ChangeNotifier
     debugPrint('Device model name: ${_recordingDevice!.name}');
     debugPrint('Storage files: $currentStorageFiles');
     totalStorageFileBytes = currentStorageFiles[0];
-    var storageOffset = currentStorageFiles[1];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
     debugPrint('storageOffset: $storageOffset');
     // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     //check if new or old file
     if (totalStorageFileBytes < SharedPreferencesUtil().previousStorageBytes) {
       totalBytesReceived = 0;
+      currentTotalBytesReceived = 0;
       SharedPreferencesUtil().currentStorageBytes = 0;
     } else {
       totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
     }
     if (totalBytesReceived > totalStorageFileBytes) {
       totalBytesReceived = 0;
+      currentTotalBytesReceived = 0;
     }
     totalBytesReceived = storageOffset;
     SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     sdCardSecondsTotal =
         ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
     sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
+    currentSdCardSecondsReceived = 0.0;
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $SharedPreferencesUtil().previousStorageBytes');
+    debugPrint(
+        'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
     btConnectedTime = DateTime.now().toUtc().toString();
     sdCardSocket.setupSdCardWebSocket(
       //replace
@@ -637,8 +644,10 @@ class CaptureProvider extends ChangeNotifier
         //enforce a min packet size, large
         if (value.length == 83) {
           totalBytesReceived += 80;
+          currentTotalBytesReceived += 80;
         } else {
           totalBytesReceived += value.length;
+          currentTotalBytesReceived += value.length;
         }
         if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
           debugPrint('websocket provider state: ${sdCardSocket.sdCardConnectionState}');
@@ -676,6 +685,7 @@ class CaptureProvider extends ChangeNotifier
 
         sdCardSocket.sdCardChannel?.sink.add(value);
         sdCardSecondsReceived = ((totalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
+        currentSdCardSecondsReceived = ((currentTotalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
         SharedPreferencesUtil().currentStorageBytes = totalBytesReceived;
       }
       notifyListeners();
