@@ -18,7 +18,8 @@ from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
-from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook
+from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
+    get_audio_bytes_webhook_seconds
 
 router = APIRouter()
 
@@ -260,12 +261,11 @@ async def _websocket_util(
                 segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
-        asyncio.create_task(realtime_transcript_webhook(uid, segments))
+        asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, finished_at)
-
 
         # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
@@ -320,6 +320,7 @@ async def _websocket_util(
     decoder = opuslib.Decoder(sample_rate, 1)
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
@@ -363,7 +364,7 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
-                if len(audiobuffer) > sample_rate * 5 * 2:  # 5 seconds
+                if len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
                     asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
                     audiobuffer = bytearray()
 
