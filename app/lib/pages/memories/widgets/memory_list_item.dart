@@ -8,6 +8,7 @@ import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class MemoryListItem extends StatefulWidget {
@@ -127,7 +128,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.title,
+                              structured.title.decodeSting,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
@@ -135,7 +136,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.overview,
+                              structured.overview.decodeSting,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium!

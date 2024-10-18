@@ -49,7 +49,7 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title,
+              memory.discarded ? 'Discarded Memory' : memory.structured.title.decodeSting,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
@@ -103,7 +103,9 @@ class GetSummaryWidgets extends StatelessWidget {
                       IconButton(
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
-                              text: '- ${memory.structured.actionItems.map((e) => e.description).join('\n- ')}'));
+                            text:
+                                '- ${memory.structured.actionItems.map((e) => e.description.decodeSting).join('\n- ')}',
+                          ));
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                             content: Text('Action items copied to clipboard'),
                             duration: Duration(seconds: 2),
@@ -128,7 +130,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     Expanded(
                       child: SelectionArea(
                         child: Text(
-                          item.description,
+                          item.description.decodeSting,
                           style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
                         ),
                       ),
