@@ -1,5 +1,3 @@
-# - P3
-# - Include speechmatics to the game
 import json
 import os
 import threading
@@ -9,7 +7,7 @@ from dotenv import load_dotenv
 
 from models.plugin import UsageHistoryType
 
-load_dotenv('../../.dev.env')
+load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 import firebase_admin
