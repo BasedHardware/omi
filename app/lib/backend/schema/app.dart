@@ -104,6 +104,34 @@ class ExternalIntegration {
   }
 }
 
+class AppUsageHistory {
+  DateTime date;
+  int count;
+
+  AppUsageHistory({
+    required this.date,
+    required this.count,
+  });
+
+  factory AppUsageHistory.fromJson(Map<String, dynamic> json) {
+    return AppUsageHistory(
+      date: DateTime.parse(json['date']).toLocal(),
+      count: json['count'],
+    );
+  }
+
+  static List<AppUsageHistory> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => AppUsageHistory.fromJson(e)).toList();
+  }
+
+  toJson() {
+    return {
+      'date': date.toUtc().toIso8601String(),
+      'count': count,
+    };
+  }
+}
+
 class App {
   String id;
   String name;

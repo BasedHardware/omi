@@ -85,7 +85,11 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                       _getMemoryHeader(),
                       const SizedBox(height: 16),
                       memory.discarded
-                          ? const SizedBox.shrink()
+                          ? Text(
+                              '${memory.transcriptSegments.first.text} ${memory.transcriptSegments[1].text}',
+                              style: Theme.of(context).textTheme.titleLarge,
+                              maxLines: 1,
+                            )
                           : Text(
                               memory.structured.title,
                               style: Theme.of(context).textTheme.titleLarge,

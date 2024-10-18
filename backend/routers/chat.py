@@ -5,7 +5,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.chat as chat_db
+from database.plugins import record_plugin_usage
 from models.chat import Message, SendMessageRequest, MessageSender
+from models.plugin import UsageHistoryType
 from utils.llm import qa_rag, initial_chat_message
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
@@ -54,6 +56,9 @@ def send_message(
     )
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
+    if plugin_id:
+        record_plugin_usage(uid, plugin.id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+
     return ai_message
 
 
