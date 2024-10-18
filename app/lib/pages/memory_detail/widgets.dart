@@ -671,41 +671,41 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      Card(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        child: ListTile(
-          title: const Text('Trigger Memory Created Integration'),
-          leading: loadingAppIntegrationTest
-              ? const SizedBox(
-                  height: 24,
-                  width: 24,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Icon(Icons.send_to_mobile_outlined),
-          onTap: () {
-            changeLoadingAppIntegrationTest(true);
-            // TODO: if not set, show dialog to set URL or take them to settings.
-
-            webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
-              showDialog(
-                context: context,
-                builder: (c) => getDialog(
-                  context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  'Result:',
-                  response,
-                  okButtonText: 'Ok',
-                  singleButton: true,
-                ),
-              );
-              changeLoadingAppIntegrationTest(false);
-            });
-          },
-        ),
-      ),
+      // Card(
+      //   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+      //   child: ListTile(
+      //     title: const Text('Trigger Memory Created Integration'),
+      //     leading: loadingAppIntegrationTest
+      //         ? const SizedBox(
+      //             height: 24,
+      //             width: 24,
+      //             child: CircularProgressIndicator(
+      //               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      //             ),
+      //           )
+      //         : const Icon(Icons.send_to_mobile_outlined),
+      //     onTap: () {
+      //       changeLoadingAppIntegrationTest(true);
+      //       // TODO: if not set, show dialog to set URL or take them to settings.
+      //  is anyone using it? does anyone complain later?
+      //       webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+      //         showDialog(
+      //           context: context,
+      //           builder: (c) => getDialog(
+      //             context,
+      //             () => Navigator.pop(context),
+      //             () => Navigator.pop(context),
+      //             'Result:',
+      //             response,
+      //             okButtonText: 'Ok',
+      //             singleButton: true,
+      //           ),
+      //         );
+      //         changeLoadingAppIntegrationTest(false);
+      //       });
+      //     },
+      //   ),
+      // ),
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
