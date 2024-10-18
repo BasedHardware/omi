@@ -75,7 +75,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
     prompt = ChatPromptTemplate.from_messages([(
         'system',
         '''Your task is to provide structure and clarity to the recording transcription of a conversation.
-        The conversation language is {language_code}. Use English for your response.
+        The conversation language is {language_code}. Use the same language {language_code} for your response.
         
         For the title, use the main topic of the conversation.
         For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
