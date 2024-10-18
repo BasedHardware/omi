@@ -1,6 +1,8 @@
 import asyncio
 import os
 import time
+import math
+import random
 from typing import List
 
 import websockets
@@ -90,8 +92,7 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file', time.time() - start)
 
 
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true"}))
-
+deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect":"true"}))
 
 async def process_audio_dg(
         stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int, preseconds: int = 0,
@@ -142,12 +143,33 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels)
 
 
 def process_segments(uid: str, segments: list[dict]):
     token = notification_db.get_token_only(uid)  # TODO: don't retrieve token before knowing if to notify
     trigger_realtime_integrations(uid, token, segments)
+
+# Calculate backoff with jitter
+def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
+    jitter = random.random() * base_delay
+    backoff = min(((2 ** attempt) * base_delay) + jitter, max_delay)
+    return backoff
+
+def connect_to_deepgram_with_backoff(on_message, on_error, language: str, sample_rate: int, channels: int, retries=3):
+    print("connect_to_deepgram_with_backoff")
+    for attempt in range(retries):
+        try:
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels)
+        except Exception as error:
+            print(f'An error occurred: {error}')
+            if attempt == retries - 1:  # Last attempt
+                raise
+        backoff_delay = calculate_backoff_with_jitter(attempt)
+        print(f"Waiting {backoff_delay:.0f}ms before next retry...")
+        time.sleep(backoff_delay / 1000)  # Convert ms to seconds for sleep
+
+    raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
 def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int):
@@ -203,6 +225,8 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
         return dg_connection
+    except websockets.exceptions.WebSocketException as e:
+        raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
 
