@@ -188,6 +188,13 @@ class Memory(BaseModel):
         # Warn: missing transcript for workflow source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
+    def as_dict_cleaned_dates(self):
+        memory_dict = self.dict()
+        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
+        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
+        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        return memory_dict
+
 
 class CreateMemory(BaseModel):
     started_at: datetime
