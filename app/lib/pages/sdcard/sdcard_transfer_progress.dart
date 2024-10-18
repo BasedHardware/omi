@@ -74,7 +74,7 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
             TweenAnimationBuilder(
               tween: Tween<double>(
                 begin: 0.0,
-                end: widget.progress > 0.01 ? 1.0 : 0.0,
+                end: widget.progress > 0.0 ? 1.0 : 0.0,
               ),
               duration: const Duration(milliseconds: 800),
               builder: (context, double value, child) {
