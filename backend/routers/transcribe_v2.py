@@ -10,13 +10,15 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
+from database.redis_db import get_cached_user_geolocation
 import database.memories as memories_db
 from database import redis_db
 from database.redis_db import get_user_webhook_db
-from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
+from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent
 from routers.users import WebhookType
 from utils.memories.process_memory import process_memory
+from utils.memories.location import get_google_maps_location
 from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 
@@ -127,6 +129,12 @@ async def _websocket_util(
             memory.status = MemoryStatus.processing
 
         try:
+            # Geolocation
+            geolocation = get_cached_user_geolocation(uid)
+            if geolocation:
+                geolocation = Geolocation(**geolocation)
+                memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
             memory = process_memory(uid, language, memory)
             messages = trigger_external_integrations(uid, memory)
         except Exception as e:
