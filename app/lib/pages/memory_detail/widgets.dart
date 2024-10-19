@@ -206,7 +206,7 @@ class EventsListWidget extends StatelessWidget {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
-                      '${dateTimeFormat('MMM d, yyyy', utcToLocal(event.startsAt))} at ${dateTimeFormat('h:mm a', utcToLocal(event.startsAt))} ~ ${minutesConversion(event.duration)}.',
+                      '${dateTimeFormat('MMM d, yyyy', utcToLocal(event.startsAt))} at ${dateTimeFormat('h:mm a', utcToLocal(event.startsAt))} ~ ${minutesConversion(event.duration)}',
                       style: const TextStyle(color: Colors.grey, fontSize: 15),
                     ),
                   ),
@@ -263,9 +263,17 @@ String minutesConversion(int minutes) {
   if (minutes < 60) {
     return '$minutes minutes';
   } else if (minutes < 1440) {
-    return '${minutes / 60} hours';
+    var hrs = minutes / 60;
+    if (hrs % 1 == 0) {
+      return '${hrs.toInt()} hours';
+    }
+    return '${minutes / 60} hour${hrs > 1 ? 's' : ''}';
   } else {
-    return '${minutes / 1440} days';
+    var days = minutes / 1440;
+    if (days % 1 == 0) {
+      return '${days.toInt()} days';
+    }
+    return '${minutes / 1440} day${days > 1 ? 's' : ''}';
   }
 }
 
