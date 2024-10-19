@@ -629,5 +629,32 @@
       "setup_instructions_file_path": "/plugins/instructions/map-notes/README.md"
     },
     "deleted": false
+  },
+  {
+    "id": "ahda",
+    "name": "AHDA",
+    "author": "Neo",
+    "description": "Control your PC with your voice",
+    "image": "/plugins/logos/AHDA.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://based-hardware--plugins-api.modal.run/ahda/send-webhook",
+      "setup_completed_url": null,
+      "setup_instructions_file_path": "/plugins/instructions/ahda/README.md",
+      "auth_steps": [
+        {
+          "name": "Set up and install AHDA on your PC",
+          "url": "https://github.com/ActuallyAdvanced/OMI-AHDA/blob/main/README.md"
+        },
+        {
+          "name": "Enter URL into OMI",
+          "url": "https://based-hardware--plugins-api.modal.run/ahda/index"
+        }
+      ]
+    },
+    "deleted": false
   }
 ]
