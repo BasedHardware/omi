@@ -35,7 +35,7 @@ Step 4: Deploy it to any of your preferred cloud providers like GCP, AWS, Digita
 Step 5: While deploying, ensure the following environment variables are set:
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Your GCP credentials, encoded in base64.
 - `GCS_BUCKET_NAME`: The name of your GCP storage bucket.
-Step 6: Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes.
+Step 6: Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes. The endpoint should be the URL where you deployed the example + `/audio`.
 Step 7: You should now see audio files being saved in your GCP bucket every x seconds, where x is the value you set in the `Every x seconds` field.
 
 ## Contributing 🤝
