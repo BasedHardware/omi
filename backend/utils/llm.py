@@ -71,7 +71,7 @@ def should_discard_memory(transcript: str) -> bool:
         return False
 
 
-def get_transcript_structure(transcript: str, started_at: datetime, language_code: str) -> Structured:
+def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str) -> Structured:
     prompt = ChatPromptTemplate.from_messages([(
         'system',
         '''Your task is to provide structure and clarity to the recording transcription of a conversation.
@@ -81,7 +81,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
         For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
         For the category, classify the conversation into one of the available categories.
-        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. Use UTC timezone strictly
+        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
             
         Transcript: ```{transcript}```
 
@@ -94,7 +94,9 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'started_at': started_at.isoformat(),
+        'tz': tz,
     })
+    print(response)
 
     for event in (response.events or []):
         if event.duration > 180:
