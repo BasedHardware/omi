@@ -81,7 +81,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
         For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
         For the category, classify the conversation into one of the available categories.
-        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}.
+        For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. Use UTC timezone strictly
             
         Transcript: ```{transcript}```
 
@@ -100,7 +100,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         if event.duration > 180:
             event.duration = 180
         event.created = False
-
+        
     return response
 
 
