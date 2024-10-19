@@ -235,8 +235,7 @@ class EventsListWidget extends StatelessWidget {
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text(
-                                    'Event added to calendar! It may take a few minutes to reflect in your calendar 📆'),
+                                content: Text('Event added! It may take a few minutes to show up in your calendar. 📆'),
                               ),
                             );
                           },
