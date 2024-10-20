@@ -278,6 +278,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                   Consumer<HomeProvider>(
                     builder: (context, home, child) {
+                      print(MediaQuery.sizeOf(context).width);
                       if (home.chatFieldFocusNode.hasFocus || home.memoryFieldFocusNode.hasFocus) {
                         return const SizedBox.shrink();
                       } else {
@@ -315,7 +316,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Memories',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),
@@ -324,7 +325,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),
@@ -333,7 +334,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Apps',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),
