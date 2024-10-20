@@ -178,37 +178,39 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = false);
                           },
                   ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Google Cloud Bucket',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Export new memories audio to Google Cloud Storage.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextField(
-                    controller: provider.gcpCredentialsController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    enabled: true,
-                    decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  TextField(
-                    controller: provider.gcpBucketNameController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('GCP Bucket Name'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                  // -------------------------- Comment GCS ------------------
+                  // const SizedBox(height: 16),
+                  // Divider(color: Colors.grey.shade500),
+                  // const SizedBox(height: 32),
+                  // const Text(
+                  //   'Google Cloud Bucket',
+                  //   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  // ),
+                  // const SizedBox(height: 8),
+                  // Text(
+                  //   'Export new memories audio to Google Cloud Storage.',
+                  //   style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  // ),
+                  // const SizedBox(height: 16.0),
+                  // TextField(
+                  //   controller: provider.gcpCredentialsController,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enableSuggestions: false,
+                  //   enabled: true,
+                  //   decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
+                  // TextField(
+                  //   controller: provider.gcpBucketNameController,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enabled: true,
+                  //   enableSuggestions: false,
+                  //   decoration: _getTextFieldDecoration('GCP Bucket Name'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
+                  // ----------------------- Comment GCS --------------------
                   // KEEP ME?
                   // ListTile(
                   //   title: const Text('Import Memories'),
