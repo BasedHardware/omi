@@ -49,7 +49,7 @@ class Structured {
         if (event.isEmpty) continue;
         structured.events.add(Event(
           event['title'],
-          DateTime.parse(event['startsAt'] ?? event['start']),
+          DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
           event['duration'],
           description: event['description'] ?? '',
           created: event['created'] ?? false,
