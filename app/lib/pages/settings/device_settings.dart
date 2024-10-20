@@ -34,12 +34,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<DeviceProvider>().connectedDevice != null) {
-        if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
-          context.read<DeviceProvider>().getDeviceInfo();
-        }
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<DeviceProvider>().getDeviceInfo();
     });
     super.initState();
   }
@@ -102,7 +98,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await IntercomManager().displayChargingArticle();
+                  await IntercomManager().displayChargingArticle('Omi DevKit 2');
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
