@@ -64,6 +64,8 @@ class SharedPreferencesUtil {
 
   bool get locationEnabled => getBool('locationEnabled') ?? false;
 
+  //---------------------- Developer Settings ---------------------------------//
+
   String get gcpCredentials => getString('gcpCredentials') ?? '';
 
   set gcpCredentials(String value) => saveString('gcpCredentials', value);
@@ -71,6 +73,26 @@ class SharedPreferencesUtil {
   String get gcpBucketName => getString('gcpBucketName') ?? '';
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
+
+  String get webhookOnMemoryCreated => getString('webhookOnMemoryCreated') ?? '';
+
+  set webhookOnMemoryCreated(String value) => saveString('webhookOnMemoryCreated', value);
+
+  String get webhookOnTranscriptReceived => getString('webhookOnTranscriptReceived') ?? '';
+
+  set webhookOnTranscriptReceived(String value) => saveString('webhookOnTranscriptReceived', value);
+
+  String get webhookAudioBytes => getString('webhookAudioBytes') ?? '';
+
+  set webhookAudioBytes(String value) => saveString('webhookAudioBytes', value);
+
+  String get webhookAudioBytesDelay => getString('webhookAudioBytesDelay') ?? '';
+
+  set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
+
+  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
+
+  bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
 
   bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
 
@@ -397,8 +419,4 @@ class SharedPreferencesUtil {
     final List<String> value = getStringList('wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
-
-  set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
-
-  bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
 }
