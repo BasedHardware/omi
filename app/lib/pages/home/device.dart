@@ -9,6 +9,8 @@ import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
+import '../settings/device_settings.dart';
+
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
 
@@ -34,6 +36,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         appBar: AppBar(
           title: Text(provider.connectedDevice != null ? 'Connected Device' : 'Paired Device'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DeviceSettings(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings),
+            )
+          ],
         ),
         body: Column(
           children: [
