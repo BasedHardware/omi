@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Form, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
-from db import get_ahda_url, store_ahda_url
+from db import get_ahda_url, store_ahda, get_ahda_os
 import os
 import requests
 from models import RealtimePluginRequest, EndpointResponse
@@ -111,8 +111,9 @@ async def send_ahda_webhook(data: RealtimePluginRequest, background_tasks: Backg
 
 async def call_chatgpt_to_generate_code(command, uid):
     try:
+        ahda_os = get_ahda_os(uid)
         messages = [
-            ("system", prompt),
+            ("system", prompt.replace("{os_name}",ahda_os)),
             ("human", command),
         ]
         ai_msg = chat.invoke(messages)
@@ -128,9 +129,9 @@ async def get_ahda_index(request: Request, uid: str = Query(None)):
     return FileResponse(INDEX_PATH)
 
 @router.post('/ahda/configure', tags=['ahda'])
-def configure_ahda(uid: str = Form(...), url: str = Form(...)):
+def configure_ahda(uid: str = Form(...), url: str = Form(...), os: str = Form(...)):
     if not uid or not url:
-        raise HTTPException(status_code=400, detail="Both UID and URL are required")
+        raise HTTPException(status_code=400, detail="Both UID, URL AND OS are required")
 
-    store_ahda_url(uid, url)
-    return {'message': 'AHDA URL configured successfully'}
+    store_ahda(uid, url, os)
+    return {'message': 'AHDA configured successfully'}
