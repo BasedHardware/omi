@@ -23,7 +23,8 @@ class DeveloperModeProvider extends BaseProvider {
 
   bool localSyncEnabled = false;
 
-  void initialize() {
+  Future initialize() async {
+    setIsLoading(true);
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
@@ -32,28 +33,30 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
 
-    getUserWebhookUrl(type: 'audio_bytes').then((url) {
-      List<dynamic> parts = url.split(',');
-      if (parts.length == 2) {
-        webhookAudioBytes.text = parts[0].toString();
-        webhookAudioBytesDelay.text = parts[1].toString();
-      } else {
-        webhookAudioBytes.text = url;
-        webhookAudioBytesDelay.text = '5';
-      }
-      SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
-      SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
-    });
-    getUserWebhookUrl(type: 'realtime_transcript').then((url) {
-      webhookOnTranscriptReceived.text = url;
-      SharedPreferencesUtil().webhookOnTranscriptReceived = url;
-    });
-    getUserWebhookUrl(type: 'memory_created').then((url) {
-      webhookOnMemoryCreated.text = url;
-      SharedPreferencesUtil().webhookOnMemoryCreated = url;
-    });
+    await Future.wait([
+      getUserWebhookUrl(type: 'audio_bytes').then((url) {
+        List<dynamic> parts = url.split(',');
+        if (parts.length == 2) {
+          webhookAudioBytes.text = parts[0].toString();
+          webhookAudioBytesDelay.text = parts[1].toString();
+        } else {
+          webhookAudioBytes.text = url;
+          webhookAudioBytesDelay.text = '5';
+        }
+        SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
+        SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+      }),
+      getUserWebhookUrl(type: 'realtime_transcript').then((url) {
+        webhookOnTranscriptReceived.text = url;
+        SharedPreferencesUtil().webhookOnTranscriptReceived = url;
+      }),
+      getUserWebhookUrl(type: 'memory_created').then((url) {
+        webhookOnMemoryCreated.text = url;
+        SharedPreferencesUtil().webhookOnMemoryCreated = url;
+      }),
+    ]);
     // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
-
+    setIsLoading(false);
     notifyListeners();
   }
 
