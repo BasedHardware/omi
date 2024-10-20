@@ -61,6 +61,11 @@ class Event(BaseModel):
     duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
 
+    def as_dict_cleaned_dates(self):
+        event_dict = self.dict()
+        event_dict['start'] = event_dict['start'].isoformat()
+        return event_dict
+
 
 class Structured(BaseModel):
     title: str = Field(description="A title/name for this conversation", default='')
@@ -189,6 +194,7 @@ class Memory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
+        self.structured.events = [event.as_dict_cleaned_dates() for event in self.structured.events]
         memory_dict = self.dict()
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
