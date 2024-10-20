@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'widgets/appbar_with_banner.dart';
+
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -22,26 +24,9 @@ class DeveloperSettingsPage extends StatefulWidget {
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => DeveloperModeProvider(),
-      child: const _DeveloperSettingsPage(),
-    );
-  }
-}
-
-class _DeveloperSettingsPage extends StatefulWidget {
-  const _DeveloperSettingsPage();
-
-  @override
-  State<_DeveloperSettingsPage> createState() => __DeveloperSettingsPageState();
-}
-
-class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
-  @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
     });
     super.initState();
   }
@@ -54,21 +39,33 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
         builder: (context, provider, child) {
           return Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: const Text('Developer Settings'),
-              actions: [
-                TextButton(
-                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Text(
-                      'Save',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+            appBar: AppBarWithBanner(
+              appBar: AppBar(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                title: const Text('Developer Settings'),
+                actions: [
+                  TextButton(
+                    onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text(
+                        'Save',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                      ),
                     ),
+                  )
+                ],
+              ),
+              showAppBar: provider.savingSettingsLoading,
+              child: Container(
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Syncing Developer Settings...',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
-                )
-              ],
+                ),
+              ),
             ),
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -123,7 +120,8 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                         underline: Container(height: 0, color: Colors.white),
                         isExpanded: true,
                         itemHeight: 48,
-                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) { // 'speechmatics'
+                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
+                          // 'speechmatics'
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(
