@@ -155,7 +155,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
 
     // _migrationScripts(); not for now, we don't have scripts
-    authenticateGCP();
+    // authenticateGCP();
 
     _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
