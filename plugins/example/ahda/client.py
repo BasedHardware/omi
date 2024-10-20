@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, Form, Query, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, Form, Query, BackgroundTasks, Body
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from db import get_ahda_url, store_ahda, get_ahda_os
 import os
@@ -46,13 +46,17 @@ def sendToPC(uid, response):
         raise
     return {'message': 'Webhook sent successfully'}
 
-@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'], response_model=EndpointResponse)
-async def send_ahda_webhook(data: RealtimePluginRequest, background_tasks: BackgroundTasks):
-    uid = data.uid
+
+@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'])
+async def send_ahda_webhook(
+    uid: str = Query(...), 
+    data: dict = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    segments = data.get("segments")
     if not uid:
         raise HTTPException(status_code=400, detail="UID is required")
 
-    segments = data.segments
     if not segments or not isinstance(segments, list):
         raise HTTPException(status_code=400, detail="Invalid payload")
 
@@ -78,6 +82,7 @@ async def send_ahda_webhook(data: RealtimePluginRequest, background_tasks: Backg
         active_sessions[uid]["active"] = False
         active_sessions[uid]["timer"] = None
 
+    # Adjusted to handle segments as dictionaries
     for segment in segments:
         text = segment.get("text", "").strip().lower()
         logger.info(f"Received segment: {text} (session_id: {uid})")
@@ -108,6 +113,7 @@ async def send_ahda_webhook(data: RealtimePluginRequest, background_tasks: Backg
             )
 
     return {"status": "success"}
+
 
 async def call_chatgpt_to_generate_code(command, uid):
     try:
