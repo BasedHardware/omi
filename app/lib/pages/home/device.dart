@@ -31,9 +31,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<DeviceProvider>().pairedDevice == null) {
-        await context.read<DeviceProvider>().getDeviceInfo();
-      }
+      await context.read<DeviceProvider>().getDeviceInfo();
     });
     super.initState();
   }
@@ -178,7 +176,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () async {
-                await IntercomManager.instance.displayChargingArticle();
+                await IntercomManager.instance.displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
               },
               child: const Text(
                 'Issues charging?',
