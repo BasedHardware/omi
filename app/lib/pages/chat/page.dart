@@ -139,9 +139,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               },
                             );
                           },
-                          child: const Text(
-                            "Clear Chat  \u{1F5D1}",
-                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text(
+                              "Clear Chat  \u{1F5D1}",
+                              style: TextStyle(color: Colors.white, fontSize: 14),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 20),
