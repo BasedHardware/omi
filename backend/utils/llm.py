@@ -96,7 +96,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         'started_at': started_at.isoformat(),
         'tz': tz,
     })
-    print(response)
 
     for event in (response.events or []):
         if event.duration > 180:
