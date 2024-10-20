@@ -206,7 +206,7 @@ class EventsListWidget extends StatelessWidget {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
-                      '${dateTimeFormat('MMM d, yyyy', utcToLocal(event.startsAt))} at ${dateTimeFormat('h:mm a', utcToLocal(event.startsAt))} ~ ${minutesConversion(event.duration)}',
+                      '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${minutesConversion(event.duration)}',
                       style: const TextStyle(color: Colors.grey, fontSize: 15),
                     ),
                   ),
@@ -248,14 +248,6 @@ class EventsListWidget extends StatelessWidget {
         );
       },
     );
-  }
-}
-
-DateTime utcToLocal(DateTime dateTime) {
-  if (dateTime.isUtc) {
-    return dateTime.toLocal();
-  } else {
-    return dateTime;
   }
 }
 
