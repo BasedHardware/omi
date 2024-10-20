@@ -29,6 +29,16 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (context.read<DeviceProvider>().pairedDevice == null) {
+        await context.read<DeviceProvider>().getDeviceInfo();
+      }
+    });
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(builder: (context, provider, child) {
       return Scaffold(
