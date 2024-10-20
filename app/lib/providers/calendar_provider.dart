@@ -45,23 +45,20 @@ class CalenderProvider extends ChangeNotifier {
         setLoading(true);
 
         await _getCalendars();
-
-        if (calendars.isEmpty) {
-          // try to get calendars again
+        // try to get calendars again after 3 seconds
+        // Delay is necessary because the calendar plugin does not return the calendars immediately
+        // While testing, on first call I got only 1 calendar, but on the second call I got all the calendars
+        await Future.delayed(const Duration(seconds: 3), () async {
           await _getCalendars();
-          setLoading(false);
-          if (calendars.isEmpty) {
-            AppSnackbar.showSnackbar(
-              'No calendars found. Please check your device settings.',
-              duration: const Duration(seconds: 5),
-            );
-            calendarEnabled = false;
-          } else {
-            calendarEnabled = true;
-            _mixpanelManager.calendarEnabled();
-          }
+        });
+        setLoading(false);
+        if (calendars.isEmpty) {
+          AppSnackbar.showSnackbar(
+            'No calendars found. Please check your device settings.',
+            duration: const Duration(seconds: 5),
+          );
+          calendarEnabled = false;
         } else {
-          setLoading(false);
           calendarEnabled = true;
           _mixpanelManager.calendarEnabled();
         }

@@ -35,9 +35,10 @@ def _get_structured(
         force_process: bool = False, retries: int = 1
 ) -> Tuple[Structured, bool]:
     try:
+        tz = notification_db.get_user_time_zone(uid)
         if memory.source == MemorySource.workflow:
             if memory.text_source == WorkflowMemorySource.audio:
-                structured = get_transcript_structure(memory.text, memory.started_at, language_code)
+                structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
             if memory.text_source == WorkflowMemorySource.other:
@@ -54,13 +55,13 @@ def _get_structured(
         # from Friend
         if force_process:
             # reprocess endpoint
-            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
+            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code,tz), False
 
         discarded = should_discard_memory(memory.get_transcript(False))
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
+        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code,tz), False
     except Exception as e:
         print(e)
         if retries == 2:
