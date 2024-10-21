@@ -7,12 +7,11 @@ import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:http/http.dart' as http;
-import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:path/path.dart';
 
 // DEPRECATED
 Future<List<TranscriptSegment>> transcribe(File file) async {
-  final client = InstabugHttpClient();
+  final client = http.Client();
   var request = http.MultipartRequest(
     'POST',
     Uri.parse(
