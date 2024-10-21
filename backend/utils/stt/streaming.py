@@ -16,50 +16,6 @@ headers = {
 }
 
 
-# def transcribe_file_deepgram(file_path: str, language: str = 'en'):
-#     print('transcribe_file_deepgram', file_path, language)
-#     url = ('https://api.deepgram.com/v1/listen?'
-#            'model=nova-2-general&'
-#            'detect_language=false&'
-#            f'language={language}&'
-#            'filler_words=false&'
-#            'multichannel=false&'
-#            'diarize=true&'
-#            'punctuate=true&'
-#            'smart_format=true')
-#
-#     with open(file_path, "rb") as file:
-#         response = requests.post(url, headers=headers, data=file)
-#
-#     data = response.json()
-#     result = data['results']['channels'][0]['alternatives'][0]
-#     segments = []
-#     for word in result['words']:
-#         if not segments:
-#             segments.append({
-#                 'speaker': f"SPEAKER_{word['speaker']}",
-#                 'start': word['start'],
-#                 'end': word['end'],
-#                 'text': word['word'],
-#                 'isUser': False
-#             })
-#         else:
-#             last_segment = segments[-1]
-#             if last_segment['speaker'] == f"SPEAKER_{word['speaker']}":
-#                 last_segment['text'] += f" {word['word']}"
-#                 last_segment['end'] = word['end']
-#             else:
-#                 segments.append({
-#                     'speaker': f"SPEAKER_{word['speaker']}",
-#                     'start': word['start'],
-#                     'end': word['end'],
-#                     'text': word['word'],
-#                     'isUser': False
-#                 })
-#
-#     return segments
-
-
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
     print('send_initial_file_path')
     start = time.time()
@@ -143,9 +99,6 @@ async def process_audio_dg(
 
     print("Connecting to Deepgram")  # Log before connection attempt
     return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels)
-
-
-
 
 
 # Calculate backoff with jitter
