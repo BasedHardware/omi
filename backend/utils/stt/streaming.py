@@ -8,8 +8,6 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
-import database.notifications as notification_db
-from utils.plugins import trigger_realtime_integrations
 from utils.stt.soniox_util import *
 
 headers = {
@@ -147,9 +145,7 @@ async def process_audio_dg(
     return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels)
 
 
-def process_segments(uid: str, segments: list[dict]):
-    token = notification_db.get_token_only(uid)  # TODO: don't retrieve token before knowing if to notify
-    trigger_realtime_integrations(uid, token, segments)
+
 
 
 # Calculate backoff with jitter
