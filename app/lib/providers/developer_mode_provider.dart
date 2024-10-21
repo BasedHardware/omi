@@ -21,11 +21,13 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingImportMemories = false;
 
   bool localSyncEnabled = false;
+  bool followUpQuestionEnabled = false;
 
   void initialize() {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
+    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
 
     getUserWebhookUrl(type: 'audio_bytes').then((url) {
       List<dynamic> parts = url.split(',');
@@ -126,6 +128,7 @@ class DeveloperModeProvider extends BaseProvider {
 
     // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
+    prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
 
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
@@ -138,6 +141,11 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onLocalSyncEnabledChanged(var value) {
     localSyncEnabled = value;
+    notifyListeners();
+  }
+
+  void onFollowUpQuestionChanged(var value) {
+    followUpQuestionEnabled = value;
     notifyListeners();
   }
 }
