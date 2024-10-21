@@ -5,7 +5,7 @@ import firebase_admin
 from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret, Cron
-from routers import workflow, chat, firmware, plugins, memories, transcribe, transcribe_v2, notifications, \
+from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
     speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
 from utils.other.notifications import start_cron_job
 
@@ -17,7 +17,6 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
-app.include_router(transcribe.router)
 app.include_router(transcribe_v2.router)
 app.include_router(memories.router)
 app.include_router(facts.router)
