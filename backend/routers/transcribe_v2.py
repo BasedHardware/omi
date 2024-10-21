@@ -16,7 +16,7 @@ from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, G
 from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
-from utils.plugins import trigger_external_integrations
+from utils.plugins import trigger_external_integrations, trigger_realtime_integrations
 from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
@@ -159,7 +159,7 @@ async def _websocket_util(
     async def _create_current_memory():
         print("_create_current_memory")
 
-        # Reset state variables
+        # Reset state variablesr
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
         seconds_to_trim = None
@@ -261,6 +261,9 @@ async def _websocket_util(
                 segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
+
+        # realtime plugins + realtime webhook
+        asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
         asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
@@ -285,12 +288,10 @@ async def _websocket_util(
         # DEEPGRAM
         if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, 1, language, sample_rate, 1, preseconds=speech_profile_duration
+                stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
-                deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, 2, language, sample_rate, 1
-                )
+                deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
 
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
@@ -299,13 +300,13 @@ async def _websocket_util(
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, 1, sample_rate, language,
+                stream_transcript, sample_rate, language,
                 uid if include_speech_profile else None
             )
         # SPEECHMATICS
         elif stt_service == STTService.speechmatics:
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, 1, sample_rate, language, preseconds=speech_profile_duration
+                stream_transcript, sample_rate, language, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
                 await send_initial_file_path(file_path, speechmatics_socket.send)
@@ -364,7 +365,8 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
-                if audio_bytes_webhook_delay_seconds and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
+                if audio_bytes_webhook_delay_seconds and len(
+                        audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
                     asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
                     audiobuffer = bytearray()
 
