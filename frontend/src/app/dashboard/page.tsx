@@ -168,7 +168,7 @@ function PluginCard({ plugin, stat }: { plugin: Plugin, stat?: PluginStat }) {
             </span>
           </div>
           <div className="flex items-center">
-            <DollarSign className="mb-2 h-8 w-8 text-green-500" />
+            <DollarSign className="mb-1 h-5 w-5 text-green-500" />
             <span className="text-sm text-gray-600 dark:text-gray-400">
               {(stat?.money ?? 0).toLocaleString()}
             </span>
