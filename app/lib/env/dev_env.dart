@@ -33,10 +33,6 @@ final class DevEnv implements EnvFields {
   final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
 
   @override
-  @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
-  final String? gleapApiKey = _DevEnv.gleapApiKey;
-
-  @override
   @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
   final String? intercomAppId = _DevEnv.intercomAppId;
 

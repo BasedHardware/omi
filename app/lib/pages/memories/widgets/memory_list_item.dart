@@ -217,7 +217,7 @@ class MemoryNewStatusIndicator extends StatefulWidget {
   const MemoryNewStatusIndicator({super.key, required this.text});
 
   @override
-  _MemoryNewStatusIndicatorState createState() => _MemoryNewStatusIndicatorState();
+  State<MemoryNewStatusIndicator> createState() => _MemoryNewStatusIndicatorState();
 }
 
 class _MemoryNewStatusIndicatorState extends State<MemoryNewStatusIndicator> with SingleTickerProviderStateMixin {

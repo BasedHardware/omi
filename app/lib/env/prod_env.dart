@@ -33,10 +33,6 @@ final class ProdEnv implements EnvFields {
   final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
 
   @override
-  @EnviedField(varName: 'GLEAP_API_KEY', obfuscate: true)
-  final String? gleapApiKey = _ProdEnv.gleapApiKey;
-
-  @override
   @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
   final String? intercomAppId = _ProdEnv.intercomAppId;
 

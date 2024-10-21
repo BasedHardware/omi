@@ -76,7 +76,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       scrollToBottom();
     });
-    ;
     super.initState();
   }
 
@@ -90,7 +89,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    print('ChatPage build');
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(

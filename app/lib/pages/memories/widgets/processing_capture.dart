@@ -7,7 +7,6 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/pages/processing_memories/page.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -23,7 +22,6 @@ class MemoryCaptureWidget extends StatefulWidget {
   @override
   State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
 }
-
 
 class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   bool _isReady = false;
@@ -255,7 +253,7 @@ class RecordingStatusIndicator extends StatefulWidget {
   const RecordingStatusIndicator({super.key});
 
   @override
-  _RecordingStatusIndicatorState createState() => _RecordingStatusIndicatorState();
+  State<RecordingStatusIndicator> createState() => _RecordingStatusIndicatorState();
 }
 
 class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> with SingleTickerProviderStateMixin {

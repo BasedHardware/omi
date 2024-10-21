@@ -24,8 +24,6 @@ class FoundDevices extends StatefulWidget {
 class _FoundDevicesState extends State<FoundDevices> {
   @override
   void initState() {
-    //TODO: Already we have a listner in DeviceProvider, so we can remove this
-    // _initiateConnectionListener();
     super.initState();
   }
 
