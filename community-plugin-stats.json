@@ -1,232 +1,233 @@
 [
   {
-    "id": "doctor-patient-notes",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "raise-agency-swyx",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "startup-mentor",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
     "id": "tweet-extractor",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 56.35
+  },
+  {
+    "id": "doctor-patient-notes",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 12.98
   },
   {
     "id": "paul-graham",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 21.46
   },
   {
-    "id": "therapist-patient-notes",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "startup-mentor",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 38.03
   },
   {
-    "id": "strict-mentor",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "raise-agency-swyx",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 45.23
   },
   {
     "id": "medical-history-summary",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 8.21
+  },
+  {
+    "id": "therapist-patient-notes",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 28.07
+  },
+  {
+    "id": "strict-mentor",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 106.47
   },
   {
     "id": "dictionary",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 75.43
   },
   {
     "id": "game-theory-strategist",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "latent-information-analyzer",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "insight-extractor",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 40.41
   },
   {
     "id": "cognitive-bias-detector",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 111.97
+  },
+  {
+    "id": "latent-information-analyzer",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 236.76
   },
   {
     "id": "transcript-improver",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 287.4
   },
   {
     "id": "sentiment-analyzer",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 136.03
   },
   {
-    "id": "conversation-summarizer",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "topic-identifier",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "insight-extractor",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 360.81
   },
   {
     "id": "nvc-communication-analyzer",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 62.3
+  },
+  {
+    "id": "topic-identifier",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 171.54
   },
   {
     "id": "fact-checker",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 74.88
   },
   {
-    "id": "elon-musk",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "psychologist",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "girlfriend",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "conversation-summarizer",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 418.69
   },
   {
     "id": "boyfriend",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.42
   },
   {
-    "id": "notion-crm",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "girlfriend",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 2.37
+  },
+  {
+    "id": "psychologist",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 1.05
+  },
+  {
+    "id": "elon-musk",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.68
   },
   {
     "id": "news-checker",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 2.02
   },
   {
-    "id": "note-to-self",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "better-communicator",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "speech-coach",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "notion-crm",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 264.54
   },
   {
     "id": "longevity-coach",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.1
+  },
+  {
+    "id": "speech-coach",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 50.96
+  },
+  {
+    "id": "note-to-self",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 65.54
   },
   {
     "id": "dating-coach",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 7.02
   },
   {
-    "id": "omniscience-papergen",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "omniscience-bookgen",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "better-communicator",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 142.26
   },
   {
     "id": "conversation-coach",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 12.2
   },
   {
-    "id": "emotional-supporter",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "omniscience-bookgen",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 15.85
+  },
+  {
+    "id": "omniscience-papergen",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 15.16
   },
   {
     "id": "warren-buffett-advisor",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "advanced-fact-checker",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.08
   },
   {
     "id": "workout-buddy",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 1.4
+  },
+  {
+    "id": "emotional-supporter",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 55.62
   },
   {
     "id": "nik-shevchenko",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.37
   },
   {
     "id": "class-notes",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 56.33
   },
   {
-    "id": "zapier",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "echosense",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
-  },
-  {
-    "id": "bookwatch",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "advanced-fact-checker",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 70.87
   },
   {
     "id": "multion-amazon",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0
   },
   {
-    "id": "native-speak",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "echosense",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0.15
   },
   {
-    "id": "map-notes",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "id": "zapier",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 158.5
+  },
+  {
+    "id": "bookwatch",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0
   },
   {
     "id": "gen-z-a-translator",
-    "money": 0,
-    "stat_at": "2024-10-21 03:25:55.089802+00:00Z"
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0
+  },
+  {
+    "id": "map-notes",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 0
+  },
+  {
+    "id": "native-speak",
+    "stat_at": "2024-10-21 03:25:55.089802+00:00Z",
+    "money": 8.31
   }
 ]
+
