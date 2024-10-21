@@ -104,7 +104,8 @@ class _CalendarPageState extends State<CalendarPage> {
 
                 RadioListTile(
                   title: const Text('Manual'),
-                  subtitle: const Text('Your memories will contain the discussed events, and you can decide to schedule them.'),
+                  subtitle: const Text(
+                      'Your memories will contain the discussed events, and you can decide to schedule them.'),
                   value: 'manual',
                   groupValue: SharedPreferencesUtil().calendarType,
                   onChanged: provider.onCalendarTypeChanged,
