@@ -1,8 +1,7 @@
 import asyncio
 import os
-import time
-import math
 import random
+import time
 from typing import List
 
 import websockets
@@ -92,10 +91,12 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file', time.time() - start)
 
 
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect":"true"}))
+deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'),
+                          DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"}))
+
 
 async def process_audio_dg(
-        stream_transcript, stream_id: int, language: str, sample_rate: int, channels: int, preseconds: int = 0,
+        stream_transcript, language: str, sample_rate: int, channels: int, preseconds: int = 0,
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -137,7 +138,7 @@ async def process_audio_dg(
                     })
 
         # stream
-        stream_transcript(segments, stream_id)
+        stream_transcript(segments)
 
     def on_error(self, error, **kwargs):
         print(f"Error: {error}")
@@ -236,7 +237,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
 soniox_valid_languages = ['en']
 
 
-async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: int, language: str, uid: str):
+async def process_audio_soniox(stream_transcript, sample_rate: int, language: str, uid: str):
     # Fuck, soniox doesn't even support diarization in languages != english
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -340,7 +341,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
 
                     # print('Soniox:', transcript.replace('<end>', ''))
                     if segments:
-                        stream_transcript(segments, stream_id)
+                        stream_transcript(segments)
             except websockets.exceptions.ConnectionClosedOK:
                 print("Soniox connection closed normally.")
             except Exception as e:
@@ -362,8 +363,7 @@ async def process_audio_soniox(stream_transcript, stream_id: int, sample_rate: i
         raise  # Re-raise the exception to be handled by the caller
 
 
-async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_rate: int, language: str,
-                                     preseconds: int = 0):
+async def process_audio_speechmatics(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
 
@@ -455,7 +455,7 @@ async def process_audio_speechmatics(stream_transcript, stream_id: int, sample_r
                                     })
 
                         if segments:
-                            stream_transcript(segments, stream_id)
+                            stream_transcript(segments)
                         # print('---')
                     else:
                         print(response)

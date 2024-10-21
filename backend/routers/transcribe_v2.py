@@ -285,12 +285,10 @@ async def _websocket_util(
         # DEEPGRAM
         if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, 1, language, sample_rate, 1, preseconds=speech_profile_duration
+                stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
-                deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, 2, language, sample_rate, 1
-                )
+                deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
 
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
@@ -299,13 +297,13 @@ async def _websocket_util(
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, 1, sample_rate, language,
+                stream_transcript, sample_rate, language,
                 uid if include_speech_profile else None
             )
         # SPEECHMATICS
         elif stt_service == STTService.speechmatics:
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, 1, sample_rate, language, preseconds=speech_profile_duration
+                stream_transcript, sample_rate, language, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
                 await send_initial_file_path(file_path, speechmatics_socket.send)
@@ -364,7 +362,8 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
-                if audio_bytes_webhook_delay_seconds and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
+                if audio_bytes_webhook_delay_seconds and len(
+                        audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
                     asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
                     audiobuffer = bytearray()
 
