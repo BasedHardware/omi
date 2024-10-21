@@ -42,7 +42,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
     throw new Error('App not found');
   }
 
-  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json");
+  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json");
   const stats = (await response.json()) as PluginStat[];
   const stat = stats.find((p) => p.id === id);
 
