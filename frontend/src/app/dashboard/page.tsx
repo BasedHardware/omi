@@ -25,13 +25,20 @@ interface Plugin {
   external_integration?: ExternalIntegration;
   reviews: PluginReview[];
   user_review?: PluginReview;
-  rating_avg?: number;
+  rating_avg: number;
   rating_count: number;
-  downloads: number;
+  installs: number;
   enabled: boolean;
   deleted: boolean;
   trigger_workflow_memories: boolean;
+  money: number,
 }
+
+interface PluginStat {
+  id: string;
+  money: number,
+}
+
 
 // const plugins: Plugin[] = [
 //   {
@@ -98,10 +105,17 @@ export default async function SleekPluginList() {
   });
   const plugins = (await response.json()) as Plugin[];
 
-  console.log(plugins);
+  const response = await fetch(`https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json`, {
+    headers: {
+      Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
+    },
+  });
+  const stats = (await response.json()) as PluginStats[];
+
+  console.log(stats);
 
   // Sort plugins by downloads in descending order
-  const sortedPlugins = plugins.sort((a, b) => b.downloads - a.downloads);
+  const sortedPlugins = plugins.sort((a, b) => b.installs - a.installs);
 
   return (
     <div className="container mx-auto p-4">
@@ -165,7 +179,7 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
           <div className="flex items-center">
             <Download className="mr-1 h-5 w-5 text-gray-600 dark:text-gray-400" />
             <span className="text-sm text-gray-600 dark:text-gray-400">
-              {plugin.downloads.toLocaleString()}
+              {plugin.installs.toLocaleString()}
             </span>
           </div>
         </div>
