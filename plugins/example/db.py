@@ -132,3 +132,19 @@ def set_task_result(task_id: str, result: str):
 def get_task_result(task_id: str) -> str:
     result = r.get(f'task_result:{task_id}')
     return result.decode('utf-8') if result else None
+
+# **********************************************************
+# ************ AHDA UTILS (PC Control) ************
+# **********************************************************
+
+def store_ahda(uid: str, url: str, os: str):
+    r.set(f'ahda_url:{uid}', url)
+    r.set(f'ahda_os:{uid}', os)
+
+def get_ahda_url(uid: str) -> str:
+    val = r.get(f'ahda_url:{uid}')
+    return val.decode('utf-8') if val else None
+
+def get_ahda_os(uid: str) -> str:
+    val = r.get(f'ahda_os:{uid}')
+    return val.decode('utf-8') if val else None
