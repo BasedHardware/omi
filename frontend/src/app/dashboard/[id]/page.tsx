@@ -30,7 +30,7 @@ const COST_CONSTANT = 0.05;
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
   // const [darkMode, setDarkMode] = useState(false);
-  const response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
+  var response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
     headers: {
       Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
     },
@@ -43,11 +43,12 @@ export default async function PluginDetailView({ params }: { params: { id: strin
   const plugin = plugins.find((p) => p.id === id);
 
   if (!plugin) {
-    throw new Error('Plugin not found');
+    throw new Error('App not found');
   }
 
-  console.log(plugin);
-
+  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json");
+  const stats = (await response.json()) as PluginStat[];
+  const stat = stats.find((p) => p.id === id);
 
   // useEffect(() => {
   //   if (darkMode) {
@@ -66,7 +67,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
             className="flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
           >
             <ArrowLeft className="mr-2" />
-            Back to Plugins
+            Back to Apps
           </Link>
           {/* <button
             variant="outline"
@@ -103,7 +104,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
           </CardHeader>
           <CardContent>
             <p className="mb-6 text-gray-700 dark:text-gray-300">{plugin.description}</p>
-            <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
                 <Download className="mb-2 h-8 w-8 text-blue-500" />
                 <span className="text-2xl font-bold text-gray-800 dark:text-white">
@@ -114,7 +115,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
               <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
                 <DollarSign className="mb-2 h-8 w-8 text-green-500" />
                 <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  ${plugin.money}
+                  ${stat.money}
                 </span>
                 <span className="text-gray-600 dark:text-gray-400">Total Earned</span>
               </div>
@@ -166,12 +167,15 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                   </form>
                 </DialogContent>
               </Dialog> */}
-              <PaidAmountDialog plugin={plugin} />
+              {/*<PaidAmountDialog plugin={plugin} />*/}
             </div>
+            <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
+              <Link href={`https://omi.me`}>Try it</Link>
+            </Button>
             <div className="mb-2 flex items-center">
               <Star className="mr-2 h-6 w-6 text-yellow-400" />
               <span className="mr-2 text-2xl font-bold text-gray-800 dark:text-white">
-                {plugin.rating_avg.toFixed(1)}
+                {(plugin.rating_avg ?? 0).toFixed(1)}
               </span>
               <span className="text-gray-600 dark:text-gray-400">
                 ({plugin.rating_count} ratings)
