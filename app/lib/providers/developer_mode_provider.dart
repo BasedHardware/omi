@@ -22,6 +22,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingImportMemories = false;
 
   bool localSyncEnabled = false;
+  bool followUpQuestionEnabled = false;
 
   Future initialize() async {
     setIsLoading(true);
@@ -32,6 +33,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
+    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
 
     await Future.wait([
       getUserWebhookUrl(type: 'audio_bytes').then((url) {
@@ -143,6 +145,7 @@ class DeveloperModeProvider extends BaseProvider {
     }
     // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
+    prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
 
     MixpanelManager().settingsSaved(
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
@@ -160,6 +163,11 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onLocalSyncEnabledChanged(var value) {
     localSyncEnabled = value;
+    notifyListeners();
+  }
+
+  void onFollowUpQuestionChanged(var value) {
+    followUpQuestionEnabled = value;
     notifyListeners();
   }
 }

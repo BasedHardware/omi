@@ -5,11 +5,13 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from database.memories import get_in_progress_memory, get_memory
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db
 from database.users import *
-from models.memory import Geolocation
+from models.memory import Geolocation, Memory
 from models.other import Person, CreatePerson
 from models.users import WebhookType
+from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
@@ -133,3 +135,20 @@ def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_u
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
     return {'status': 'ok'}
+
+
+# **********************************************************
+# ************* RANDOM JOAN SPECIFIC FEATURES **************
+# **********************************************************
+
+
+@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
+def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    if memory_id == '0':
+        memory = get_in_progress_memory(uid)
+        if not memory:
+            raise HTTPException(status_code=400, detail='No memory in progres')
+    else:
+        memory = get_memory(uid, memory_id)
+    memory = Memory(**memory)
+    return {'result': followup_question_prompt(memory.transcript_segments)}
