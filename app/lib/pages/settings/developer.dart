@@ -382,6 +382,20 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
                   const SizedBox(height: 64),
+                  Text(
+                    'Joan Only Features (Be careful)',
+                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Suggest follow up question',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    value: provider.followUpQuestionEnabled,
+                    onChanged: provider.onFollowUpQuestionChanged,
+                  ),
                 ],
               ),
             ),

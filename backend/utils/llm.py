@@ -101,7 +101,7 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         if event.duration > 180:
             event.duration = 180
         event.created = False
-        
+
     return response
 
 
@@ -525,3 +525,30 @@ def trends_extractor(memory: Memory) -> List[Item]:
     except Exception as e:
         print(f'Error determining memory discard: {e}')
         return []
+
+
+# **********************************************************
+# ************* RANDOM JOAN SPECIFIC FEATURES **************
+# **********************************************************
+
+def followup_question_prompt(segments: List[TranscriptSegment]):
+    transcript_str = TranscriptSegment.segments_as_string(segments, include_timestamps=False)
+    words = transcript_str.split()
+    w_count = len(words)
+    if w_count < 10:
+        return ''
+    elif w_count > 100:
+        # trim to last 500 words
+        transcript_str = ' '.join(words[-100:])
+
+    prompt = f"""
+        You will be given the transcript of an in-progress conversation.
+        Your task as an engaging, fun, and curious conversationalist, is to suggest the next follow-up question to keep the conversation engaging.
+         
+        Conversation Transcript:
+        {transcript_str}
+        
+        Output your response in plain text, without markdown.
+        Output only the question, without context, be concise and straight to the point.
+        """.replace('    ', '').strip()
+    return llm_mini.invoke(prompt).content
