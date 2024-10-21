@@ -102,7 +102,7 @@ export default async function SleekPluginList() {
 
   const plugins = (await response.json()) as Plugin[];
 
-  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json");
+  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json");
   const stats = (await response.json()) as PluginStat[];
 
   // Sort plugins by downloads in descending order
