@@ -48,6 +48,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
 
   console.log(plugin);
 
+
   // useEffect(() => {
   //   if (darkMode) {
   //     document.documentElement.classList.add('dark');
@@ -106,14 +107,14 @@ export default async function PluginDetailView({ params }: { params: { id: strin
               <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
                 <Download className="mb-2 h-8 w-8 text-blue-500" />
                 <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  {plugin.downloads.toLocaleString()}
+                  {plugin.installs.toLocaleString()}
                 </span>
-                <span className="text-gray-600 dark:text-gray-400">Downloads</span>
+                <span className="text-gray-600 dark:text-gray-400">Installs</span>
               </div>
               <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
                 <DollarSign className="mb-2 h-8 w-8 text-green-500" />
                 <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  ${plugin.runs * COST_CONSTANT}
+                  ${plugin.money}
                 </span>
                 <span className="text-gray-600 dark:text-gray-400">Total Earned</span>
               </div>
