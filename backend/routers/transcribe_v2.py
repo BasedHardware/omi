@@ -16,7 +16,7 @@ from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, G
 from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
-from utils.plugins import trigger_external_integrations
+from utils.plugins import trigger_external_integrations, trigger_realtime_integrations
 from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
@@ -159,7 +159,7 @@ async def _websocket_util(
     async def _create_current_memory():
         print("_create_current_memory")
 
-        # Reset state variables
+        # Reset state variablesr
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
         seconds_to_trim = None
@@ -261,6 +261,9 @@ async def _websocket_util(
                 segments[i] = segment
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
+
+        # realtime plugins + realtime webhook
+        asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
         asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?

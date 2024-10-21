@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import requests
 
+import database.notifications as notification_db
 from database.chat import add_plugin_message
 from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count
@@ -11,6 +12,10 @@ from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
 
+
+# ***********************************
+# ************* BASICS **************
+# ***********************************
 
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     if not plugin_id:
@@ -56,7 +61,12 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     return plugins
 
 
+# **************************************************
+# ************* EXTERNAL INTEGRATIONS **************
+# **************************************************
+
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
+    """ON MEMORY CREATED"""
     if not memory or memory.discarded:
         return []
 
@@ -110,10 +120,19 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     return messages
 
 
-def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
+async def trigger_realtime_integrations(uid: str, segments: list[dict]):
+    """REALTIME STREAMING"""
+    # TODO: don't retrieve token before knowing if to notify
+    token = notification_db.get_token_only(uid)
+    _trigger_realtime_integrations(uid, token, segments)
+
+
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if
-                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
+    filtered_plugins = [
+        plugin for plugin in plugins if
+        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
+    ]
     if not filtered_plugins:
         return {}
 
