@@ -141,9 +141,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     deviceProvider = provider;
   }
 
-  // TODO: improve this and find_device page.
-  // TODO: include speech profile, once it's well tested, in a few days, rn current version works
-
   // Method to handle taps on devices
   Future<void> handleTap({
     required BtDevice device,
@@ -172,10 +169,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
-      //TODO: should'nt update codec here, becaause then the prev connection codec and the current codec will
-      // become same and the app won't transcribe at all because inherently there's a mismatch in the
-      //codec for websocket and the codec for the device
-      // await getAudioCodec(deviceId).then((codec) => SharedPreferencesUtil().deviceCodec = codec);
       await deviceProvider?.scanAndConnectToDevice();
       var connectedDevice = deviceProvider!.connectedDevice;
       batteryPercentage = deviceProvider!.batteryLevel;
