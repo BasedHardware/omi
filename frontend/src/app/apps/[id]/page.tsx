@@ -59,7 +59,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
       <div className="container mx-auto p-4">
         <div className="mb-6 flex items-center justify-between">
           <Link
-            href="/dashboard"
+            href="/apps"
             className="flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
           >
             <ArrowLeft className="mr-2" />
