@@ -5,6 +5,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/logger.dart';
 
 class DeveloperModeProvider extends BaseProvider {
   final TextEditingController gcpCredentialsController = TextEditingController();
@@ -23,26 +24,41 @@ class DeveloperModeProvider extends BaseProvider {
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
 
-  void initialize() {
+  Future initialize() async {
+    setIsLoading(true);
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
+    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
+    webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
+    webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
+    webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
 
-    getUserWebhookUrl(type: 'audio_bytes').then((url) {
-      List<dynamic> parts = url.split(',');
-      if (parts.length == 2) {
-        webhookAudioBytes.text = parts[0].toString();
-        webhookAudioBytesDelay.text = parts[1].toString();
-      } else {
-        webhookAudioBytes.text = url;
-        webhookAudioBytesDelay.text = '5';
-      }
-    });
-    getUserWebhookUrl(type: 'realtime_transcript').then((url) => webhookOnTranscriptReceived.text = url);
-    getUserWebhookUrl(type: 'memory_created').then((url) => webhookOnMemoryCreated.text = url);
+    await Future.wait([
+      getUserWebhookUrl(type: 'audio_bytes').then((url) {
+        List<dynamic> parts = url.split(',');
+        if (parts.length == 2) {
+          webhookAudioBytes.text = parts[0].toString();
+          webhookAudioBytesDelay.text = parts[1].toString();
+        } else {
+          webhookAudioBytes.text = url;
+          webhookAudioBytesDelay.text = '5';
+        }
+        SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
+        SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+      }),
+      getUserWebhookUrl(type: 'realtime_transcript').then((url) {
+        webhookOnTranscriptReceived.text = url;
+        SharedPreferencesUtil().webhookOnTranscriptReceived = url;
+      }),
+      getUserWebhookUrl(type: 'memory_created').then((url) {
+        webhookOnMemoryCreated.text = url;
+        SharedPreferencesUtil().webhookOnMemoryCreated = url;
+      }),
+    ]);
     // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
-
+    setIsLoading(false);
     notifyListeners();
   }
 
@@ -64,8 +80,7 @@ class DeveloperModeProvider extends BaseProvider {
 
   void saveSettings() async {
     if (savingSettingsLoading) return;
-    savingSettingsLoading = true;
-    notifyListeners();
+    setIsLoading(true);
     final prefs = SharedPreferencesUtil();
 
     if (gcpCredentialsController.text.isNotEmpty && gcpBucketNameController.text.isNotEmpty) {
@@ -83,15 +98,12 @@ class DeveloperModeProvider extends BaseProvider {
       }
     }
 
-    // TODO: test openai + deepgram keys + bucket existence, before saving
-
     prefs.gcpCredentials = gcpCredentialsController.text.trim();
     prefs.gcpBucketName = gcpBucketNameController.text.trim();
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
-      savingSettingsLoading = false;
-      notifyListeners();
+      setIsLoading(false);
       return;
     }
     if (webhookAudioBytes.text.isNotEmpty && webhookAudioBytesDelay.text.isEmpty) {
@@ -99,14 +111,12 @@ class DeveloperModeProvider extends BaseProvider {
     }
     if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
       AppSnackbar.showSnackbarError('Invalid realtime transcript webhook URL');
-      savingSettingsLoading = false;
-      notifyListeners();
+      setIsLoading(false);
       return;
     }
     if (webhookOnMemoryCreated.text.isNotEmpty && !isValidUrl(webhookOnMemoryCreated.text)) {
       AppSnackbar.showSnackbarError('Invalid memory created webhook URL');
-      savingSettingsLoading = false;
-      notifyListeners();
+      setIsLoading(false);
       return;
     }
 
@@ -124,8 +134,15 @@ class DeveloperModeProvider extends BaseProvider {
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnMemoryCreated.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
-    await Future.wait([w1, w2, w3]);
-
+    try {
+      Future.wait([w1, w2, w3]);
+      prefs.webhookAudioBytes = webhookAudioBytes.text;
+      prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+      prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
+      prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text;
+    } catch (e) {
+      Logger.error('Error occurred while updating endpoints: $e');
+    }
     // Experimental
     prefs.localSyncEnabled = localSyncEnabled;
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
@@ -134,9 +151,14 @@ class DeveloperModeProvider extends BaseProvider {
       hasGCPCredentials: prefs.gcpCredentials.isNotEmpty,
       hasGCPBucketName: prefs.gcpBucketName.isNotEmpty,
     );
-    savingSettingsLoading = false;
+    setIsLoading(false);
     notifyListeners();
     AppSnackbar.showSnackbar('Settings saved!');
+  }
+
+  void setIsLoading(bool value) {
+    savingSettingsLoading = value;
+    notifyListeners();
   }
 
   void onLocalSyncEnabledChanged(var value) {

@@ -26,8 +26,12 @@ class IntercomManager {
     );
   }
 
-  Future displayChargingArticle() async {
-    return await intercom.displayArticle('9907475-how-to-charge-the-device');
+  Future displayChargingArticle(String device) async {
+    if (device == 'Omi DevKit 2') {
+      return await intercom.displayArticle('10003257-how-to-charge-devkit2');
+    } else {
+      return await intercom.displayArticle('9907475-how-to-charge-the-device');
+    }
   }
 
   Future displayFirmwareUpdateArticle() async {

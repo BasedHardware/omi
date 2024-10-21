@@ -9,6 +9,8 @@ import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
+import '../settings/device_settings.dart';
+
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
 
@@ -27,6 +29,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<DeviceProvider>().getDeviceInfo();
+    });
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(builder: (context, provider, child) {
       return Scaffold(
@@ -34,6 +44,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         appBar: AppBar(
           title: Text(provider.connectedDevice != null ? 'Connected Device' : 'Paired Device'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DeviceSettings(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings),
+            )
+          ],
         ),
         body: Column(
           children: [
@@ -154,7 +176,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () async {
-                await IntercomManager.instance.displayChargingArticle();
+                await IntercomManager.instance.displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
               },
               child: const Text(
                 'Issues charging?',

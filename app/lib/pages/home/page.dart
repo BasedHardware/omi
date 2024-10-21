@@ -155,7 +155,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
 
     // _migrationScripts(); not for now, we don't have scripts
-    authenticateGCP();
+    // authenticateGCP();
 
     _listenToMessagesFromNotification();
     if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
@@ -315,7 +315,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Memories',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),
@@ -324,7 +324,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),
@@ -333,7 +333,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Apps',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                      fontSize: 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
                                 ),

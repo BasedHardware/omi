@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/utils/logger.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<ServerMessage>> getMessagesServer() async {
   // TODO: Add pagination
@@ -44,7 +46,13 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
     if (response.statusCode == 200) {
       return ServerMessage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to send message');
+      Logger.error('Failed to send message ${response.body}');
+      CrashReporting.reportHandledCrash(
+        Exception('Failed to send message ${response.body}'),
+        StackTrace.current,
+        level: NonFatalExceptionLevel.error,
+      );
+      return ServerMessage.failedMessage();
     }
   });
 }

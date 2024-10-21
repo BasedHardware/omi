@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
 
@@ -111,6 +112,19 @@ class ServerMessage {
       '0000',
       DateTime.now(),
       '',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+    );
+  }
+
+  static ServerMessage failedMessage() {
+    return ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      'Looks like we are having issues with the server. Please try again later.',
       MessageSender.ai,
       MessageType.text,
       null,

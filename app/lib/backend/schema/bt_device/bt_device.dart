@@ -137,7 +137,7 @@ class BtDevice {
         _manufacturerName = '';
 
   // getters
-  String get modelNumber => _modelNumber ?? 'Unknown11';
+  String get modelNumber => _modelNumber ?? 'Unknown';
   String get firmwareRevision => _firmwareRevision ?? 'Unknown';
   String get hardwareRevision => _hardwareRevision ?? 'Unknown';
   String get manufacturerName => _manufacturerName ?? 'Unknown';
