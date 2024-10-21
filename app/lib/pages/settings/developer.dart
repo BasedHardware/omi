@@ -123,7 +123,8 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                         underline: Container(height: 0, color: Colors.white),
                         isExpanded: true,
                         itemHeight: 48,
-                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) { // 'speechmatics'
+                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
+                          // 'speechmatics'
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(
@@ -382,6 +383,20 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
                   const SizedBox(height: 64),
+                  Text(
+                    'Joan Only Features (Be careful)',
+                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Suggest follow up question',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    value: provider.followUpQuestionEnabled,
+                    onChanged: provider.onFollowUpQuestionChanged,
+                  ),
                 ],
               ),
             ),
