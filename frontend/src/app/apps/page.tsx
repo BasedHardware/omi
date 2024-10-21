@@ -181,7 +181,7 @@ function PluginCard({ plugin, stat }: { plugin: Plugin, stat?: PluginStat }) {
           </div>
         </div>
         <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
-          <Link href={`/dashboard/${plugin.id}`}>View Info</Link>
+          <Link href={`/apps/${plugin.id}`}>View Info</Link>
         </Button>
       </div>
     </div>
