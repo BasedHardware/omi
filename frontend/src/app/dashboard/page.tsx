@@ -97,11 +97,9 @@ export default async function SleekPluginList() {
   //     document.documentElement.classList.remove('dark');
   //   }
   // }, [darkMode]);
-  var response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
-    headers: {
-      Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
-    },
-  });
+  var response = await fetch(`${envConfig.API_URL}/plugins?uid=s5rl6e7nk8cc9rn2`);
+
+
   const plugins = (await response.json()) as Plugin[];
 
   response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json");
