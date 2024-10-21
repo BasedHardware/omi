@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -401,4 +401,8 @@ class SharedPreferencesUtil {
   set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
 
   bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
+
+  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
+
+  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 }
