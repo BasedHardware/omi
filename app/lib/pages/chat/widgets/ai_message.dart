@@ -390,7 +390,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                       ),
                     );
-                    //TODO: Not needed anymore I guess because memories are stored in provider and read from there only
                     if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
                       ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
                       widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
