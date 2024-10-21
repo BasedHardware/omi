@@ -486,6 +486,18 @@
     "deleted": false
   },
   {
+    "id": "joke-extractor",
+    "name": "Joke Extractor",
+    "author": "Brady Anthony-Brumfield",
+    "description": "Searches memories for jokes",
+    "memory_prompt": "You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for jokes made by any speaker and provide a concise list of the exact transcript of each joke. Provide brief situational context if needed to understand the joke.",
+    "image": "/plugins/logos/source.jpg",
+    "capabilities": [
+      "memories"
+    ],
+    "deleted": false
+  },
+  {
     "id": "workout-buddy",
     "name": "Workout Buddy",
     "author": "Brady Anthony-Brumfield",
