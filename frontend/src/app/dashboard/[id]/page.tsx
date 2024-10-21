@@ -30,11 +30,7 @@ const COST_CONSTANT = 0.05;
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
   // const [darkMode, setDarkMode] = useState(false);
-  var response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
-    headers: {
-      Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
-    },
-  });
+  var response = await fetch(`${envConfig.API_URL}/plugins?uid=s5rl6e7nk8cc9rn2`);
   const plugins = (await response.json()) as Plugin[];
 
   // Get params in a server component
