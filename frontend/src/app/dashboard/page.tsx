@@ -1,7 +1,7 @@
 // import { useState, useEffect } from 'react';
 import envConfig from '@/src/constants/envConfig';
 import { Button } from '@/src/components/ui/button';
-import { Star, Download, Moon, Sun } from 'lucide-react';
+import { Star, DollarSign, Download, Moon, Sun } from 'lucide-react';
 import Link from 'next/link';
 // import { Button } from '@/components/ui/button';
 
@@ -31,7 +31,6 @@ interface Plugin {
   enabled: boolean;
   deleted: boolean;
   trigger_workflow_memories: boolean;
-  money: number,
 }
 
 interface PluginStat {
@@ -98,21 +97,15 @@ export default async function SleekPluginList() {
   //     document.documentElement.classList.remove('dark');
   //   }
   // }, [darkMode]);
-  const response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
+  var response = await fetch(`${envConfig.API_URL}/v2/plugins`, {
     headers: {
       Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
     },
   });
   const plugins = (await response.json()) as Plugin[];
 
-  const response = await fetch(`https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json`, {
-    headers: {
-      Authorization: `Bearer ${envConfig.ADMIN_KEY}`,
-    },
-  });
-  const stats = (await response.json()) as PluginStats[];
-
-  console.log(stats);
+  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/payment-stuff/community-plugin-stats.json");
+  const stats = (await response.json()) as PluginStat[];
 
   // Sort plugins by downloads in descending order
   const sortedPlugins = plugins.sort((a, b) => b.installs - a.installs);
@@ -120,7 +113,7 @@ export default async function SleekPluginList() {
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Plugin List</h1>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">App List</h1>
         {/* <button
           variant="outline"
           size="icon"
@@ -136,15 +129,15 @@ export default async function SleekPluginList() {
         </button> */}
       </div>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {plugins.map((plugin) => (
-          <PluginCard key={plugin.id} plugin={plugin} />
+        {sortedPlugins.map((plugin) => (
+          <PluginCard key={plugin.id} plugin={plugin} stat={stats.find((s) => s.id == plugin.id)} />
         ))}
       </div>
     </div>
   );
 }
 
-function PluginCard({ plugin }: { plugin: Plugin }) {
+function PluginCard({ plugin, stat }: { plugin: Plugin, stat?: PluginStat }) {
   return (
     <div
       key={plugin.id}
@@ -174,6 +167,12 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
             </span>
             <span className="text-sm text-gray-600 dark:text-gray-400">
               ({plugin.rating_count ?? 0})
+            </span>
+          </div>
+          <div className="flex items-center">
+            <DollarSign className="mb-2 h-8 w-8 text-green-500" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {(stat?.money ?? 0).toLocaleString()}
             </span>
           </div>
           <div className="flex items-center">
