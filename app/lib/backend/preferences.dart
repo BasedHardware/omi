@@ -6,7 +6,6 @@ import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +26,8 @@ class SharedPreferencesUtil {
   set uid(String value) => saveString('uid', value);
 
   String get uid => getString('uid') ?? '';
+
+  //-------------------------------- Device ----------------------------------//
 
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
@@ -52,9 +53,15 @@ class SharedPreferencesUtil {
 
   BleAudioCodec get deviceCodec => mapNameToCodec(getString('deviceCodec') ?? '');
 
+  bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
+
+  set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
+
   String get openAIApiKey => getString('openaiApiKey') ?? '';
 
   set openAIApiKey(String value) => saveString('openaiApiKey', value);
+
+  //----------------------------- Permissions ---------------------------------//
 
   set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
 
@@ -142,10 +149,6 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
-  String get locationPermissionState => getString('locationPermissionState') ?? 'UNKNOWN';
-
-  set locationPermissionState(String value) => saveString('locationPermissionState', value);
-
   bool get showDiscardedMemories => getBool('showDiscardedMemories') ?? true;
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
@@ -157,10 +160,6 @@ class SharedPreferencesUtil {
   int get previousStorageBytes => getInt('previousStorageBytes') ?? 0;
 
   set previousStorageBytes(int value) => saveInt('previousStorageBytes', value);
-
-  bool get deviceIsV2 => getBool('deviceIsV2') ?? false;
-
-  set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
   int get enabledAppsCount => appsList.where((element) => element.enabled).length;
 
@@ -194,26 +193,6 @@ class SharedPreferencesUtil {
   String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
-
-  List<TranscriptSegment> get transcriptSegments {
-    final List<String> segments = getStringList('transcriptSegments') ?? [];
-    return segments.map((e) => TranscriptSegment.fromJson(jsonDecode(e))).toList();
-  }
-
-  set transcriptSegments(List<TranscriptSegment> value) {
-    final List<String> segments = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('transcriptSegments', segments);
-  }
-
-  List<ServerMemory> get failedMemories {
-    final List<String> memories = getStringList('failedServerMemories') ?? [];
-    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
-  }
-
-  set failedMemories(List<ServerMemory> value) {
-    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('failedServerMemories', memories);
-  }
 
   List<ServerMemory> get cachedMemories {
     final List<String> memories = getStringList('cachedMemories') ?? [];
@@ -292,6 +271,92 @@ class SharedPreferencesUtil {
 
   set lastDailySummaryDay(String value) => saveString('lastDailySummaryDate', value);
 
+  set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
+
+  bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
+
+  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted2', value);
+
+  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
+
+  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
+
+  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
+
+  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
+
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
+
+  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
+
+  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
+
+  bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
+
+  set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
+
+  bool get calendarEnabled => getBool('calendarEnabled') ?? false;
+
+  set calendarId(String value) => saveString('calendarId', value);
+
+  String get calendarId => getString('calendarId') ?? '';
+
+  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
+
+  String get calendarType => getString('calendarType2') ?? 'manual';
+
+  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
+
+  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
+
+  //--------------------------------- Auth ------------------------------------//
+
+  String get authToken => getString('authToken') ?? '';
+
+  set authToken(String value) => saveString('authToken', value);
+
+  int get tokenExpirationTime => getInt('tokenExpirationTime') ?? 0;
+
+  set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
+
+  String get email => getString('email') ?? '';
+
+  set email(String value) => saveString('email', value);
+
+  String get givenName => getString('givenName') ?? '';
+
+  set givenName(String value) => saveString('givenName', value);
+
+  String get familyName => getString('familyName') ?? '';
+
+  set familyName(String value) => saveString('familyName', value);
+
+  String get fullName => '$givenName $familyName';
+
+  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
+
+  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
+
+  //--------------------------------- Wals ------------------------------------//
+
+  set wals(List<Wal> wals) {
+    final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('wals', value);
+  }
+
+  List<Wal> get wals {
+    final List<String> value = getStringList('wals') ?? [];
+    return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
+  }
+
+  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
+
+  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
+
+  //--------------------------- Setters & Getters -----------------------------//
+
   Future<bool> saveString(String key, String value) async {
     return await _preferences?.setString(key, value) ?? false;
   }
@@ -339,88 +404,4 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
-
-  set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
-
-  bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
-
-  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted2', value);
-
-  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
-
-  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
-
-  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
-
-  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
-
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
-
-  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
-
-  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
-
-  set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
-
-  bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
-
-  set calendarEnabled(bool value) => saveBool('calendarEnabled', value);
-
-  bool get calendarEnabled => getBool('calendarEnabled') ?? false;
-
-  set calendarId(String value) => saveString('calendarId', value);
-
-  String get calendarId => getString('calendarId') ?? '';
-
-  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
-
-  String get calendarType => getString('calendarType2') ?? 'manual';
-
-  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
-
-  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
-
-  // AUTH
-
-  String get authToken => getString('authToken') ?? '';
-
-  set authToken(String value) => saveString('authToken', value);
-
-  int get tokenExpirationTime => getInt('tokenExpirationTime') ?? 0;
-
-  set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
-
-  String get email => getString('email') ?? '';
-
-  set email(String value) => saveString('email', value);
-
-  String get givenName => getString('givenName') ?? '';
-
-  set givenName(String value) => saveString('givenName', value);
-
-  String get familyName => getString('familyName') ?? '';
-
-  set familyName(String value) => saveString('familyName', value);
-
-  String get fullName => '$givenName $familyName';
-
-  set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
-
-  bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
-
-  // WAL
-
-  set wals(List<Wal> wals) {
-    final List<String> value = wals.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('wals', value);
-  }
-
-  List<Wal> get wals {
-    final List<String> value = getStringList('wals') ?? [];
-    return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
-  }
-  
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 }
