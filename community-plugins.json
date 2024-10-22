@@ -686,7 +686,7 @@
   {
     "id": "omi-reflect-integration",
     "name": "Reflect Notes",
-    "author": "SalmanM",
+    "author": "@salman.m",
     "description": "Connect your OMI conversations with your Reflect notes seamlessly! Capture OMI Memories and/or Transcripts, map conversations to Reflect Daily notes, and consolidate action items.",
     "image": "/plugins/logos/reflect_logo.png",
     "capabilities": [
@@ -695,7 +695,7 @@
     "external_integration": {
       "triggers_on": "memory_creation",
       "webhook_url": "https://reflect.soundbrain.cc/webhook",
-      "setup_completed_url": "https://reflect.soundbrain.cc/intro",
+      "setup_completed_url": "https://reflect.soundbrain.cc/setup_check",
       "setup_instructions_file_path": "/plugins/instructions/reflect/README.md",
       "auth_steps": [
         {
