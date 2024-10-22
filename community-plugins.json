@@ -648,12 +648,13 @@
     "author": "Neo",
     "description": "This Plugin translates your memories into Gen Z or A slang.",
     "image": "/plugins/logos/gen-z-a-translator.jpg",
-    "memories": false,
+    "memories": true,
     "chat": true,
     "capabilities": [
-      "memories"
+      "memories",
+      "chat"
     ],
-    "memory_prompt": "Please transform the following sentence into Gen Z/Gen Alpha slang, incorporating as many of the following terms as possible (and more): *bet, fax, W, vibe, bussin', rizz, lit, drip, mid, cap, salty, slay, extra, flex, yeet, mood, glow up, big L, bop, Gucci, period, sus, sheesh, lowkey, snack, snatched, stan, thirsty, tea, ghost, cringe, delulu, fire, basic, GOAT, ick, peep, sleeper, low-vibrational, it's giving,* and *vibin'*, cooked. The goal is to maintain the original meaning of the sentence but make it sound as if it's being spoken by a Gen Z or Gen Alpha person. Feel free to get creative with the slang, keeping it short and casual, while giving the sentence that trendy, social-media-ready vibe. Also, ensure the use of terms fits contextually and naturally into the sentence.",
+    "memory_prompt": "Please transform the following sentence into Gen Z/Gen Alpha slang, incorporating as many of the following terms as possible (and more): *bet, fax, W, vibe, bussin', rizz, lit, drip, mid, cap, salty, slay, extra, flex, yeet, mood, glow up, big L, Gucci, period, sus, sheesh, lowkey, snack, snatched, stan, ghost, cringe, delulu, fire, basic, GOAT, ick, peep, sleeper, it's giving,* and *vibin'*, cooked.",
     "deleted": false
   },
   {
@@ -668,7 +669,7 @@
     "external_integration": {
       "triggers_on": "transcript_processed",
       "webhook_url": "https://based-hardware--plugins-api.modal.run/ahda/send-webhook",
-      "setup_completed_url": null,
+      "setup_completed_url": "https://based-hardware--plugins-api.modal.run/ahda/completion",
       "setup_instructions_file_path": "/plugins/instructions/ahda/README.md",
       "auth_steps": [
         {
