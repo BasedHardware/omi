@@ -73,12 +73,12 @@
       "group": "Developer",
       "pages": [
         {
-          "group": "Plugins",
+          "group": "Apps",
           "pages": [
-            "developer/plugins/Introduction",
-            "developer/plugins/PromptBased",
-            "developer/plugins/Integrations",
-            "developer/plugins/Submitting"
+            "developer/apps/Introduction",
+            "developer/apps/PromptBased",
+            "developer/apps/Integrations",
+            "developer/apps/Submitting"
           ]
         },
         "developer/HowItWorks",
