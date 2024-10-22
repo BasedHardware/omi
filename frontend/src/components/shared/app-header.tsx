@@ -62,7 +62,7 @@ export default function AppHeader() {
                 target="_blank"
                 className="flex items-center gap-2 rounded-md bg-white/90 p-1.5 px-3.5 text-black transition-colors hover:bg-white"
               >
-                Build Plugin
+                Build App
               </Link>
             </li>
           </ul>
