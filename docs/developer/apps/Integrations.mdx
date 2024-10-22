@@ -1,19 +1,19 @@
 ---
-title: Developing Integration Plugins for FRIEND
+title: Developing Integration Apps for FRIEND
 description: ''
 ---
 
-Integration plugins allow FRIEND to interact with external services and process data in real-time. This guide will walk
+Integration apps allow FRIEND to interact with external services and process data in real-time. This guide will walk
 you through creating both Memory Creation Triggers and Real-Time Transcript Processors.
 
-## Types of Integration Plugins
+## Types of Integration Apps
 
 ### 1. 👷 Memory Creation Triggers
 
-These plugins are activated when FRIEND creates a new memory, allowing you to process or store the memory data
+These apps are activated when FRIEND creates a new memory, allowing you to process or store the memory data
 externally.
 
-[![Memory trigger plugin](https://img.youtube.com/vi/Yv7gP3GZ0ME/0.jpg)](https://youtube.com/shorts/Yv7gP3GZ0ME)
+[![Memory trigger app](https://img.youtube.com/vi/Yv7gP3GZ0ME/0.jpg)](https://youtube.com/shorts/Yv7gP3GZ0ME)
 
 #### Example Use Cases
 
@@ -23,9 +23,9 @@ externally.
 
 ### 2. 🏎️ Real-Time Transcript Processors (@DEPRECATED / NOT READY YET)
 
-These plugins process conversation transcripts as they occur, enabling real-time analysis and actions.
+These apps process conversation transcripts as they occur, enabling real-time analysis and actions.
 
-[![Memory trigger plugin](https://img.youtube.com/vi/h4ojO3WzkxQ/0.jpg)](https://youtube.com/shorts/h4ojO3WzkxQ)
+[![Memory trigger app](https://img.youtube.com/vi/h4ojO3WzkxQ/0.jpg)](https://youtube.com/shorts/h4ojO3WzkxQ)
 
 #### Example Use Cases
 
@@ -33,9 +33,9 @@ These plugins process conversation transcripts as they occur, enabling real-time
 - Real-time web searches or fact-checking
 - Emotional state analysis and supportive responses
 
-## Creating an Integration Plugin
+## Creating an Integration App
 
-### Step 1: Define Your Plugin 🎯
+### Step 1: Define Your App 🎯
 
 Decide whether you're creating a Memory Creation Trigger or a Real-Time Transcript Processor, and outline its specific
 purpose.
@@ -43,7 +43,7 @@ purpose.
 ### Step 2: Set Up Your Endpoint 🔗
 
 Create an endpoint (webhook) that can receive and process the data sent by FRIEND. You can [create a test webhook](https://webhook-test.com/). The data structure will differ based on your
-plugin type:
+app type:
 
 #### For Memory Creation Triggers:
 
@@ -85,20 +85,20 @@ expect:
     ],
     "events": []
   },
-  "plugins_response": [
+  "apps_response": [
     {
-      "plugin_id": "plugin-id",
-      "content": "Plugin response content"
+      "app_id": "app-id",
+      "content": "App response content"
     }
   ],
   "discarded": false
 }
 ```
 
-Your plugin should process this entire object and perform any necessary actions based on the full context of the memory.
+Your app should process this entire object and perform any necessary actions based on the full context of the memory.
 
-> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L85)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L359).
+> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/apps/example/main.py#L85)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-apps.json#L359).
 
 **For Real-Time Transcript Processors:**
 
@@ -131,12 +131,12 @@ uid as query parameters. Here's the structure:
 
 Remember to handle errors gracefully and consider performance, especially for lengthy conversations!
 
-> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L100)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L379).
+> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/apps/example/main.py#L100)
+> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-apps.json#L379).
 
-### Step 3: Test Your Plugin 🧪
+### Step 3: Test Your App 🧪
 
-Time to put your plugin through its paces! Follow these steps to test both types of integrations:
+Time to put your app through its paces! Follow these steps to test both types of integrations:
 
 1. Open the FRIEND app on your device.
 2. Go to Settings and enable Developer Mode.
@@ -150,34 +150,34 @@ Time to put your plugin through its paces! Follow these steps to test both types
     - Click on the top right corner (3 dots menu).
     - In the Developer Tools section, trigger the endpoint call with existing memory data.
 
-[![Memory trigger plugin](https://img.youtube.com/vi/dYVSbEpoV0U/0.jpg)](https://youtube.com/shorts/dYVSbEpoV0U)
+[![Memory trigger app](https://img.youtube.com/vi/dYVSbEpoV0U/0.jpg)](https://youtube.com/shorts/dYVSbEpoV0U)
 
 #### For Real-Time Transcript Processors:
 
 4. Set your endpoint URL in the "Real-Time Transcript Webhook" field.
 5. Start speaking to your device - your endpoint will receive real-time updates as you speak.
 
-[![Memory trigger plugin](https://img.youtube.com/vi/CHz9JnOGlTQ/0.jpg)](https://youtube.com/shorts/CHz9JnOGlTQ)
+[![Memory trigger app](https://img.youtube.com/vi/CHz9JnOGlTQ/0.jpg)](https://youtube.com/shorts/CHz9JnOGlTQ)
 
 Your endpoints are now ready to spring into action!
 
 For **Memory Creation Triggers**, you can test with existing memories or wait for new ones to be created.
 
-For **Real-Time Processors**, simply start a conversation with FRIEND to see your plugin in action.
+For **Real-Time Processors**, simply start a conversation with FRIEND to see your app in action.
 
-Happy plugin crafting! We can't wait to see what you create! 🎉
+Happy app crafting! We can't wait to see what you create! 🎉
 
-### Step 4: Prepare Your Plugin for Submission
+### Step 4: Prepare Your App for Submission
 
-Create a JSON object defining your plugin:
+Create a JSON object defining your app:
 
 ```python
 {
-  "id": "your-plugin-id",
-  "name": "Your Plugin Name",
+  "id": "your-app-id",
+  "name": "Your App Name",
   "author": "Your Name",
-  "description": "Brief description of your plugin",
-  "image": "/plugins/logos/your-plugin-logo.jpg",
+  "description": "Brief description of your app",
+  "image": "/apps/logos/your-app-logo.jpg",
   "capabilities": [
     "external_integration"
   ],
@@ -186,10 +186,10 @@ Create a JSON object defining your plugin:
     "triggers_on": "memory_creation",
     // a POST request with the memory object will be sent here as a JSON payload
     "webhook_url": "https://your-endpoint-url.com",
-    // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your plugin doesn't require setup, set to null.
+    // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your app doesn't require setup, set to null.
     "setup_completed_url": "https://your-setup-completion-url.com",
-    // Include a Readme with more details about your plugin in the PR
-    "setup_instructions_file_path": "/plugins/instructions/your-plugin/README.md"
+    // Include a Readme with more details about your app in the PR
+    "setup_instructions_file_path": "/apps/instructions/your-app/README.md"
   },
   "deleted": false
 }
@@ -207,7 +207,7 @@ Create a markdown file at `setup_instructions_file_path` with:
 Example structure:
 
 ```markdown
-# Setting Up [Your Plugin Name]
+# Setting Up [Your App Name]
 
 1. [First step]
    ![Step 1](assets/step_1.png)
@@ -217,14 +217,14 @@ Example structure:
 
 ## Authentication (if required)
 
-If your plugin requires user-specific authentication (e.g., connecting to a user's Notion table):
+If your app requires user-specific authentication (e.g., connecting to a user's Notion table):
 
 1. In your authentication flow, use the `uid` query parameter we append this as query param to all your links in your
    README, so you can map user credentials.
 2. [Authentication steps]
 3. After successful authentication, return `{"is_setup_completed": true}` from your `setup_completed_url`.
 
-If your plugin doesn't require user authentication (e.g., it's a purely LLM-based service), you can skip this section.
+If your app doesn't require user authentication (e.g., it's a purely LLM-based service), you can skip this section.
 
 ## Troubleshooting
 
@@ -237,7 +237,7 @@ If your plugin doesn't require user authentication (e.g., it's a purely LLM-base
 
 **Notes:**
 
-- Authentication is not needed for all plugins. Include only if your plugin requires user-specific setup or credentials.
-- For plugins without authentication, users can simply enable the plugin without additional steps.
+- Authentication is not needed for all apps. Include only if your app requires user-specific setup or credentials.
+- For apps without authentication, users can simply enable the app without additional steps.
 - All your README links, when the user opens them, we'll append a `uid` query parameter to it, which you can use to
   associate setup or credentials with specific users.
