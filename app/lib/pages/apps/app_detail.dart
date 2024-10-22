@@ -252,7 +252,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   style: TextStyle(color: Colors.grey, fontSize: 18),
                                 ),
                               )
-                            : SizedBox(),
+                            : const SizedBox(),
                       ],
                     ),
                   )
@@ -424,7 +424,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
               child: GestureDetector(
-                onTap: (){
+                onTap: () {
                   routeToPage(context, AppAnalytics(app: widget.app));
                 },
                 child: const Text(
