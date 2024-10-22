@@ -308,7 +308,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;
 
-  CustomErrorWidget({required this.errorMessage});
+  const CustomErrorWidget({super.key, required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {
