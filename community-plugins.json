@@ -629,7 +629,7 @@
     "id": "map-notes",
     "name": "Map Notes",
     "author": "Blockchain at Berkeley",
-    "description": "Drop notes as pins on the world around you by saying 'start', your note, then 'finish.'",
+    "description": "Drop notes as pins on the world around you by saying 'start map note' or 'clip this', your note, then 'end map note' or clip that",
     "image": "/plugins/logos/map-notes-logo.png",
     "capabilities": [
       "external_integration"
