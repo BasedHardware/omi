@@ -89,7 +89,8 @@
         </div>
         <p class="plugin-text">AHDA Integration Plugin</p>
         <h1>AHDA Integration</h1>
-        <h1>Install https://github.com/ActuallyAdvanced/OMI-AHDA first</h1>
+        Install https://github.com/ActuallyAdvanced/OMI-AHDA first
+        <br>
         <form id="ahda-form">
             <input type="text" id="url" placeholder="Enter AHDA URL" required>
             <input type="text" id="os" placeholder="Enter Operating System" required>
@@ -102,6 +103,9 @@
         // Extract the uid from the URL query parameters
         const urlParams = new URLSearchParams(window.location.search);
         const uid = urlParams.get('uid');
+
+        const url = urlParams.get('url');
+        const os = urlParams.get('os');
 
         if (!uid) {
             document.getElementById('response-message').textContent = "UID is missing. Please check the URL.";
