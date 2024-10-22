@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Request, HTTPException, Form, Query, BackgroundTasks, Body
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Body, Request, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from db import get_ahda_url, store_ahda, get_ahda_os
 import os
 import requests
-from models import RealtimePluginRequest, EndpointResponse
 import time
 import asyncio
 import logging
@@ -14,7 +13,7 @@ router = APIRouter()
 active_sessions = {}
 
 KEYWORD = "computer"
-COMMAND_TIMEOUT = 5  # Seconds to wait after the last word to finalize the command
+COMMAND_TIMEOUT = 8  # Seconds to wait after the last word to finalize the command
 
 # Path to the directory containing `index.html`
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,13 +38,12 @@ def sendToPC(uid, response):
         'response': response
     }
     try:
-        resp = requests.post(ahda_url+"/recieve", json=payload)
+        resp = requests.post(ahda_url + "/recieve", json=payload)
         resp.raise_for_status()
+        return {'message': 'Webhook sent successfully'}
     except requests.RequestException as e:
         logger.error(f"Error sending webhook: {e}")
-        raise
-    return {'message': 'Webhook sent successfully'}
-
+        return {'message': f'Failed to send webhook: {e}'}
 
 @router.post('/ahda/send-webhook', tags=['ahda', 'realtime'])
 async def send_ahda_webhook(
@@ -71,7 +69,8 @@ async def send_ahda_webhook(
 
     async def schedule_finalize_command(uid, delay):
         await asyncio.sleep(delay)
-        await finalize_command(uid)
+        if time.time() - active_sessions[uid]["last_received_time"] >= delay:
+            await finalize_command(uid)
 
     async def finalize_command(uid):
         final_command = active_sessions[uid]["command"].strip()
@@ -82,7 +81,7 @@ async def send_ahda_webhook(
         active_sessions[uid]["active"] = False
         active_sessions[uid]["timer"] = None
 
-    # Adjusted to handle segments as dictionaries
+    # Process each segment
     for segment in segments:
         text = segment.get("text", "").strip().lower()
         logger.info(f"Received segment: {text} (session_id: {uid})")
@@ -90,40 +89,46 @@ async def send_ahda_webhook(
         if KEYWORD in text:
             logger.info("Activation keyword detected!")
             active_sessions[uid]["active"] = True
+
+            # Reset command aggregation and update last received time
             active_sessions[uid]["last_received_time"] = time.time()
+            active_sessions[uid]["command"] = text
 
+            # Cancel the previous timer if any
             if active_sessions[uid]["timer"]:
-                pass
+                active_sessions[uid]["timer"].cancel()
 
-            active_sessions[uid]["timer"] = background_tasks.add_task(
-                schedule_finalize_command, uid, COMMAND_TIMEOUT
+            # Schedule a new timer for finalizing the command
+            active_sessions[uid]["timer"] = asyncio.create_task(
+                schedule_finalize_command(uid, COMMAND_TIMEOUT)
             )
             continue
 
+        # Append to the existing command if active
         if active_sessions[uid]["active"]:
             active_sessions[uid]["command"] += " " + text
             active_sessions[uid]["last_received_time"] = time.time()
             logger.info(f"Aggregating command: {active_sessions[uid]['command'].strip()}")
 
+            # Cancel the previous timer and set a new one
             if active_sessions[uid]["timer"]:
-                pass
+                active_sessions[uid]["timer"].cancel()
 
-            active_sessions[uid]["timer"] = background_tasks.add_task(
-                schedule_finalize_command, uid, COMMAND_TIMEOUT
+            active_sessions[uid]["timer"] = asyncio.create_task(
+                schedule_finalize_command(uid, COMMAND_TIMEOUT)
             )
 
     return {"status": "success"}
-
 
 async def call_chatgpt_to_generate_code(command, uid):
     try:
         ahda_os = get_ahda_os(uid)
         messages = [
-            ("system", prompt.replace("{os_name}",ahda_os)),
+            ("system", prompt.replace("{os_name}", ahda_os)),
             ("human", command),
         ]
-        ai_msg = chat.invoke(messages)
-        sendToPC(uid, ai_msg)
+        ai_msg = await chat.invoke(messages)  # Ensure this is awaited
+        return sendToPC(uid, ai_msg)
     except Exception as e:
         logger.error(f"Error calling ChatGPT-4: {e}")
         return {"type": "error", "content": str(e)}
@@ -132,6 +137,7 @@ async def call_chatgpt_to_generate_code(command, uid):
 async def get_ahda_index(request: Request, uid: str = Query(None)):
     if not uid:
         raise HTTPException(status_code=400, detail="UID is required")
+
     return FileResponse(INDEX_PATH)
 
 @router.post('/ahda/configure', tags=['ahda'])
