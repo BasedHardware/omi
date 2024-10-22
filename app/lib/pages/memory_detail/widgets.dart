@@ -409,95 +409,96 @@ class GetAppsWidgets extends StatelessWidget {
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 24),
-                    ...provider.memory.appResults.mapIndexed(
-                      (i, appResponse) {
-                        if (appResponse.content.length < 5) return const SizedBox.shrink();
-                        App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 40),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              app != null
-                                  ? ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: CachedNetworkImage(
-                                        imageUrl: app.getImageUrl(),
-                                        imageBuilder: (context, imageProvider) {
-                                          return CircleAvatar(
+                    if (provider.memory.appResults.isNotEmpty)
+                      ...provider.memory.appResults.mapIndexed(
+                        (i, appResponse) {
+                          if (appResponse.content.length < 5) return const SizedBox.shrink();
+                          App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 40),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                app != null
+                                    ? ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: CachedNetworkImage(
+                                          imageUrl: app.getImageUrl(),
+                                          imageBuilder: (context, imageProvider) {
+                                            return CircleAvatar(
+                                              backgroundColor: Colors.white,
+                                              radius: 16,
+                                              backgroundImage: imageProvider,
+                                            );
+                                          },
+                                          errorWidget: (context, url, error) {
+                                            return const CircleAvatar(
+                                              backgroundColor: Colors.white,
+                                              radius: 16,
+                                              child: Icon(Icons.error_outline_rounded),
+                                            );
+                                          },
+                                          progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
                                             backgroundColor: Colors.white,
                                             radius: 16,
-                                            backgroundImage: imageProvider,
-                                          );
-                                        },
-                                        errorWidget: (context, url, error) {
-                                          return const CircleAvatar(
-                                            backgroundColor: Colors.white,
-                                            radius: 16,
-                                            child: Icon(Icons.error_outline_rounded),
-                                          );
-                                        },
-                                        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                                          backgroundColor: Colors.white,
-                                          radius: 16,
-                                          child: CircularProgressIndicator(
-                                            value: progress.progress,
-                                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                            child: CircularProgressIndicator(
+                                              value: progress.progress,
+                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      title: Text(
-                                        app.name,
-                                        maxLines: 1,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      subtitle: Padding(
-                                        padding: const EdgeInsets.only(top: 4.0),
-                                        child: Text(
-                                          app.description,
+                                        title: Text(
+                                          app.name,
                                           maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
                                         ),
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                        onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text('App response copied to clipboard'),
-                                          ));
-                                          MixpanelManager()
-                                              .copiedMemoryDetails(provider.memory, source: 'App Response');
-                                        },
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                              ExpandableTextWidget(
-                                text: appResponse.content.decodeSting.trim(),
-                                isExpanded: provider.appResponseExpanded[i],
-                                toggleExpand: () {
-                                  debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
-                                  if (!provider.appResponseExpanded[i]) {
-                                    MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
-                                  }
-                                  provider.updateAppResponseExpanded(i);
-                                },
-                                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                                maxLines: 6,
-                                // Change this to 6 if you want the initial max lines to be 6
-                                linkColor: Colors.white,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                                        subtitle: Padding(
+                                          padding: const EdgeInsets.only(top: 4.0),
+                                          child: Text(
+                                            app.description,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                          ),
+                                        ),
+                                        trailing: IconButton(
+                                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                                          onPressed: () {
+                                            Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                              content: Text('App response copied to clipboard'),
+                                            ));
+                                            MixpanelManager()
+                                                .copiedMemoryDetails(provider.memory, source: 'App Response');
+                                          },
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                                ExpandableTextWidget(
+                                  text: appResponse.content.decodeSting.trim(),
+                                  isExpanded: provider.appResponseExpanded[i],
+                                  toggleExpand: () {
+                                    debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
+                                    if (!provider.appResponseExpanded[i]) {
+                                      MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
+                                    }
+                                    provider.updateAppResponseExpanded(i);
+                                  },
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                                  maxLines: 6,
+                                  // Change this to 6 if you want the initial max lines to be 6
+                                  linkColor: Colors.white,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                   ],
                   const SizedBox(height: 8)
                 ],
@@ -574,49 +575,46 @@ class GetGeolocationWidgets extends StatelessWidget {
                   style: TextStyle(color: Colors.grey.shade300),
                 ),
                 const SizedBox(height: 8),
-                geolocation != null
-                    ? GestureDetector(
-                        onTap: () async {
-                          // TODO: open google maps URL if available
-                          MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
-                        },
-                        child: CachedNetworkImage(
-                          imageBuilder: (context, imageProvider) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                image: DecorationImage(
-                                  image: imageProvider,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            );
-                          },
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                color: Colors.grey.shade800,
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'Could not load Maps. Please check your internet connection.',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            );
-                          },
-                          imageUrl: MapsUtil.getMapImageUrl(
-                            geolocation.latitude!,
-                            geolocation.longitude!,
+                GestureDetector(
+                  onTap: () async {
+                    MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      )
-                    : const SizedBox.shrink(),
+                      );
+                    },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      geolocation.latitude!,
+                      geolocation.longitude!,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
               ],
       );

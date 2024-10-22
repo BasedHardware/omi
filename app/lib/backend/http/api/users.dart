@@ -182,3 +182,19 @@ Future<bool> deletePerson(String personId) async {
   debugPrint('deletePerson response: ${response.body}');
   return response.statusCode == 204;
 }
+
+Future<String> getFollowUpQuestion({String memoryId = '0'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/joan/$memoryId/followup-question',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  debugPrint('getFollowUpQuestion response: ${response.body}');
+  if (response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    return jsonResponse['result'] as String? ?? '';
+  }
+  return '';
+}
