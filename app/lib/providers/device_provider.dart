@@ -43,6 +43,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
+      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+        return;
+      }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice!.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;

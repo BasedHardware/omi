@@ -7,6 +7,7 @@ const envConfig = {
   ALGOLIA_APP_ID: process.env.NEXT_PUBLIC_ALGOLIA_APP_ID ?? '',
   ALGOLIA_SEARCH_API_KEY: process.env.NEXT_PUBLIC_ALGOLIA_API_KEY ?? '',
   ALGOLIA_INDEX_NAME: process.env.NEXT_PUBLIC_ALGOLIA_INDEX_NAME ?? 'memories',
+  ADMIN_KEY: process.env.ADMIN_KEY,
 };
 
 export default envConfig;
