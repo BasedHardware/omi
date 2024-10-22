@@ -140,6 +140,13 @@ async def get_ahda_index(request: Request, uid: str = Query(None)):
 
     return FileResponse(INDEX_PATH)
 
+@router.get("/ahda/completion", tags=['ahda'])
+def is_setup_completed(uid: str):
+    ahda_url = get_ahda_url(uid)
+    ahda_os = get_ahda_os(uid)
+
+    return {'is_setup_completed': ahda_url is not None and ahda_os is not None}
+
 @router.post('/ahda/configure', tags=['ahda'])
 def configure_ahda(uid: str = Form(...), url: str = Form(...), os: str = Form(...)):
     if not uid or not url:
