@@ -7,7 +7,6 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
-import 'package:instabug_http_client/instabug_http_client.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 Future<String> getAuthHeader() async {
@@ -47,7 +46,7 @@ Future<http.Response?> makeApiCall({
       // headers['Authorization'] = ''; // set admin key + uid here for testing
     }
 
-    final client = InstabugHttpClient();
+    final client = http.Client();
 
     http.Response? response = await _performRequest(client, url, headers, body, method);
     if (response.statusCode == 401) {
@@ -88,7 +87,7 @@ Future<http.Response?> makeApiCall({
 }
 
 Future<http.Response> _performRequest(
-  InstabugHttpClient client,
+  http.Client client,
   String url,
   Map<String, String> headers,
   String body,

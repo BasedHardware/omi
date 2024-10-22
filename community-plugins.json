@@ -233,7 +233,7 @@
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a conversation. Use Non-Violent Communication (NVC) principles, also known as Compassionate Communication, to analyze the conversation. Provide feedback and ratings for each speaker individually, including their needs, sentiment analysis, conflict detection, personalized tips, giraffe and jackal analysis, and next actions. Identify potentially miscommunicated 'Please' and 'Thank You' statements and provide suggestions for improvement. Highlight the most concerning and exemplary statements based on their ratings and alignment with NVC principles.\n\nYour output should be formatted as follows:\n\n### \uD83D\uDCA1 TL;DR:\n\n**Category: [Category Name] [Icon]**  \n**Tags:** [tag1], [tag2], [tag3], [tag4], [tag5]\n\n[Summary of the conversation]\n\n---\n\n### [Speaker Name]\n\n**Statements and Suggestions:**\n\n   \uD83D\uDDE3 ***\"[Statement 1]\"***  \n   \uD83D\uDCA1 **Suggestion**: \"[Improved statement for Statement 1]\"\n\n   \uD83D\uDDE3 ***\"[Statement 2]\"***  \n   \uD83D\uDCA1 **Suggestion**: \"[Improved statement for Statement 2]\"\n\n   \uD83D\uDCCB **Needs:**  \n\n   Needs are the universal human values that drive our feelings and actions.\n\n   **[Need 1]**: [Description of Need 1]  \n   **[Need 2]**: [Description of Need 2]\n\n   \uD83D\uDE4F **Requests:**  \n\n   Requests are expressions of our needs and desires, aiming to improve our well-being and relationships.\n\n   ***\"[Request 1]\"***  \n   ***\"[Request 2]\"***\n\n   **Analysis:**\n\n   \uD83D\uDCCA **Rating**: ⭐\uFE0F⭐\uFE0F⭐\uFE0F☆☆ (3",
+    "memory_prompt": "You will be given a conversation. Use Non-Violent Communication (NVC) principles, also known as Compassionate Communication, to analyze the conversation. Provide feedback and ratings for each speaker individually, including their needs, sentiment analysis, conflict detection, personalized tips, giraffe and jackal analysis, and next actions. Identify potentially miscommunicated 'Please' and 'Thank You' statements and provide suggestions for improvement. Highlight the most concerning and exemplary statements based on their ratings and alignment with NVC principles.\n\nYour output should be formatted as follows:\n\n### 💡 TL;DR:\n\n**Category: [Category Name] [Icon]**  \n**Tags:** [tag1], [tag2], [tag3], [tag4], [tag5]\n\n[Summary of the conversation]\n\n---\n\n### [Speaker Name]\n\n**Statements and Suggestions:**\n\n   🗣 ***\"[Statement 1]\"***  \n   💡 **Suggestion**: \"[Improved statement for Statement 1]\"\n\n   🗣 ***\"[Statement 2]\"***  \n   💡 **Suggestion**: \"[Improved statement for Statement 2]\"\n\n   📋 **Needs:**  \n\n   Needs are the universal human values that drive our feelings and actions.\n\n   **[Need 1]**: [Description of Need 1]  \n   **[Need 2]**: [Description of Need 2]\n\n   🙏 **Requests:**  \n\n   Requests are expressions of our needs and desires, aiming to improve our well-being and relationships.\n\n   ***\"[Request 1]\"***  \n   ***\"[Request 2]\"***\n\n   **Analysis:**\n\n   📊 **Rating**: ⭐️⭐️⭐️☆☆ (3",
     "chat_prompt": "Analyze conversations to detect Non-Violent Communication (NVC) principles, provide ratings, insights, and suggestions for improving communication.",
     "deleted": false
   },
@@ -486,6 +486,18 @@
     "deleted": false
   },
   {
+    "id": "joke-extractor",
+    "name": "Joke Extractor",
+    "author": "Brady Anthony-Brumfield",
+    "description": "Searches memories for jokes",
+    "memory_prompt": "You will be given a transcription. First, understand that the transcription is potentially of poor quality and if you see nonsensical text, infer the proper meaning. Then, check it for jokes made by any speaker and provide a concise list of the exact transcript of each joke. Provide brief situational context if needed to understand the joke.",
+    "image": "/plugins/logos/source.jpg",
+    "capabilities": [
+      "memories"
+    ],
+    "deleted": false
+  },
+  {
     "id": "workout-buddy",
     "name": "Workout Buddy",
     "author": "Brady Anthony-Brumfield",
@@ -667,6 +679,29 @@
         {
           "name": "Enter URL into OMI",
           "url": "https://based-hardware--plugins-api.modal.run/ahda/index"
+        }
+      ]
+    },
+    "deleted": false
+  },
+  {
+    "id": "omi-reflect-integration",
+    "name": "Reflect Notes",
+    "author": "SalmanM",
+    "description": "Connect your OMI conversations with your Reflect notes seamlessly! Capture OMI Memories and/or Transcripts, map conversations to Reflect Daily notes, and consolidate action items.",
+    "image": "/plugins/logos/reflect_logo.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://reflect.soundbrain.cc/webhook",
+      "setup_completed_url": "https://reflect.soundbrain.cc/intro",
+      "setup_instructions_file_path": "/plugins/instructions/reflect/README.md",
+      "auth_steps": [
+        {
+          "name": "Authorize Reflect Account",
+          "url": "https://reflect.soundbrain.cc/intro"
         }
       ]
     },

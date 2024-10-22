@@ -55,6 +55,15 @@ export default function AppHeader() {
               Order now
             </Link>
           </li>
+          <li>
+            <Link
+              href={`https://docs.omi.me/developer/plugins/Introduction`}
+              target="_blank"
+              className="flex items-center gap-2 rounded-md bg-white/90 p-1.5 px-3.5 text-black transition-colors hover:bg-white"
+            >
+              Create App
+            </Link>
+          </li>
         </ul>
       </nav>
     </header>
