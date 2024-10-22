@@ -18,7 +18,7 @@ class SyncAnimation extends StatefulWidget {
   });
 
   @override
-  _SyncAnimationState createState() => _SyncAnimationState();
+  State<SyncAnimation> createState() => _SyncAnimationState();
 }
 
 class _SyncAnimationState extends State<SyncAnimation> with TickerProviderStateMixin {
