@@ -115,7 +115,7 @@ class _SyncPageState extends State<SyncPage> {
                             textAlign: TextAlign.center,
                           ),
                         )
-                      : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers != null
+                      : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
                           ? Column(
                               children: [
                                 const Text(

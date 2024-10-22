@@ -575,49 +575,46 @@ class GetGeolocationWidgets extends StatelessWidget {
                   style: TextStyle(color: Colors.grey.shade300),
                 ),
                 const SizedBox(height: 8),
-                geolocation != null
-                    ? GestureDetector(
-                        onTap: () async {
-                          // TODO: open google maps URL if available
-                          MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
-                        },
-                        child: CachedNetworkImage(
-                          imageBuilder: (context, imageProvider) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                image: DecorationImage(
-                                  image: imageProvider,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            );
-                          },
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                color: Colors.grey.shade800,
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'Could not load Maps. Please check your internet connection.',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            );
-                          },
-                          imageUrl: MapsUtil.getMapImageUrl(
-                            geolocation.latitude!,
-                            geolocation.longitude!,
+                GestureDetector(
+                  onTap: () async {
+                    MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      )
-                    : const SizedBox.shrink(),
+                      );
+                    },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      geolocation.latitude!,
+                      geolocation.longitude!,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
               ],
       );
