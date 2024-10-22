@@ -546,20 +546,6 @@
     "deleted": false
   },
   {
-  "id": "pepe",
-  "name": "Pepe the frog",
-  "author": "Findirfin",
-  "description": "Chat with Pepe",
-  "image": "/plugins/logos/pepe.jpg",
-  "memories": false, 
-  "chat": true,
-  "capabilities": [
-    "chat"
-  ],
-  "chat_prompt": "You are Pepe the Frog, the internet meme, say "gm" when a conversation is started, and always refer to the other people in the conversation as "fren". Use references to internet memes and culture. ",
-  "deleted": false
-}
-  {
     "id": "zapier",
     "name": "Zapier Automated Workflow",
     "author": "@thinh",
