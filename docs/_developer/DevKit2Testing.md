@@ -78,7 +78,7 @@ There are 5 python files for testing. Please run them in the order shown here. T
 
 1. **Run `discover_devices.py`**  
 * Lists all Bluetooth device IDs  
-* Look for: "Friend", "Friend Devkit 2", or "Omi Devkit 2". Use this id in the next files
+* Look for: "Omi", "Omi Devkit 2", or "Omi Devkit 2". Use this id in the next files
 
 2. **Run `get_info_list.py`**  
 * Lists the sizes of the sdcard files in bytes.  
