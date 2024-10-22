@@ -1,12 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Body, Request, Form
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
-from db import get_ahda_url, store_ahda, get_ahda_os
+from fastapi import APIRouter, HTTPException, Query, Body, Request, Form
+from fastapi.responses import HTMLResponse, FileResponse
 import os
 import requests
-import time
 import asyncio
 import logging
 from langchain_openai import ChatOpenAI
+from db import get_ahda_url, get_ahda_os, store_ahda
 
 router = APIRouter()
 
@@ -38,7 +37,23 @@ def sendToPC(uid, response):
         'response': response
     }
     try:
-        resp = requests.post(ahda_url + "/recieve", json=payload)
+        resp = requests.post(ahda_url + "/receive", json=payload)
+        resp.raise_for_status()
+        return {'message': 'Webhook sent successfully'}
+    except requests.RequestException as e:
+        logger.error(f"Error sending webhook: {e}")
+        return {'message': f'Failed to send webhook: {e}'}
+
+def sendLiveTranscriptToPC(uid, response):
+    ahda_url = get_ahda_url(uid)
+    if not ahda_url:
+        raise ValueError('AHDA URL not configured for this UID')
+    payload = {
+        'uid': uid,
+        'response': response
+    }
+    try:
+        resp = requests.post(ahda_url + "/transcript", json=payload)
         resp.raise_for_status()
         return {'message': 'Webhook sent successfully'}
     except requests.RequestException as e:
@@ -49,7 +64,6 @@ def sendToPC(uid, response):
 async def send_ahda_webhook(
     uid: str = Query(...), 
     data: dict = Body(...),
-    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     segments = data.get("segments")
     if not uid:
@@ -62,57 +76,69 @@ async def send_ahda_webhook(
         logger.info(f"New session started: {uid}")
         active_sessions[uid] = {
             "command": "",
-            "last_received_time": time.time(),
+            "last_received_time": asyncio.get_event_loop().time(),
             "active": False,
             "timer": None
         }
 
     async def schedule_finalize_command(uid, delay):
-        await asyncio.sleep(delay)
-        if time.time() - active_sessions[uid]["last_received_time"] >= delay:
-            await finalize_command(uid)
+        try:
+            await asyncio.sleep(delay)
+            if asyncio.get_event_loop().time() - active_sessions[uid]["last_received_time"] >= delay:
+                await finalize_command(uid)
+        except asyncio.CancelledError:
+            logger.info(f"Timer for session {uid} was cancelled")
 
     async def finalize_command(uid):
         final_command = active_sessions[uid]["command"].strip()
         if final_command:
             logger.info(f"Final command for session {uid}: {final_command}")
             await call_chatgpt_to_generate_code(final_command, uid)
+        # Reset session
         active_sessions[uid]["command"] = ""
         active_sessions[uid]["active"] = False
         active_sessions[uid]["timer"] = None
 
-    # Process each segment
     for segment in segments:
         text = segment.get("text", "").strip().lower()
+        sendLiveTranscriptToPC(uid, text)
         logger.info(f"Received segment: {text} (session_id: {uid})")
 
-        if KEYWORD in text:
-            logger.info("Activation keyword detected!")
-            active_sessions[uid]["active"] = True
+        if not active_sessions[uid]["active"]:
+            if KEYWORD in text:
+                logger.info("Activation keyword detected!")
+                active_sessions[uid]["active"] = True
+                active_sessions[uid]["command"] = text
+                active_sessions[uid]["last_received_time"] = asyncio.get_event_loop().time()
 
-            # Reset command aggregation and update last received time
-            active_sessions[uid]["last_received_time"] = time.time()
-            active_sessions[uid]["command"] = text
+                # Cancel the previous timer if any
+                if active_sessions[uid]["timer"]:
+                    active_sessions[uid]["timer"].cancel()
+                    try:
+                        await active_sessions[uid]["timer"]
+                    except asyncio.CancelledError:
+                        pass
 
-            # Cancel the previous timer if any
-            if active_sessions[uid]["timer"]:
-                active_sessions[uid]["timer"].cancel()
-
-            # Schedule a new timer for finalizing the command
-            active_sessions[uid]["timer"] = asyncio.create_task(
-                schedule_finalize_command(uid, COMMAND_TIMEOUT)
-            )
-            continue
-
-        # Append to the existing command if active
-        if active_sessions[uid]["active"]:
+                # Schedule a new timer for finalizing the command
+                active_sessions[uid]["timer"] = asyncio.create_task(
+                    schedule_finalize_command(uid, COMMAND_TIMEOUT)
+                )
+            else:
+                # Not active and keyword not detected, ignore
+                continue
+        else:
+            # Append to the existing command
             active_sessions[uid]["command"] += " " + text
-            active_sessions[uid]["last_received_time"] = time.time()
-            logger.info(f"Aggregating command: {active_sessions[uid]['command'].strip()}")
+            active_sessions[uid]["last_received_time"] = asyncio.get_event_loop().time()
+            logger.info(f"Aggregating command: '{active_sessions[uid]['command'].strip()}'")
 
             # Cancel the previous timer and set a new one
             if active_sessions[uid]["timer"]:
                 active_sessions[uid]["timer"].cancel()
+                try:
+                    await active_sessions[uid]["timer"]
+                except asyncio.CancelledError:
+                    pass
 
             active_sessions[uid]["timer"] = asyncio.create_task(
                 schedule_finalize_command(uid, COMMAND_TIMEOUT)
@@ -127,7 +153,7 @@ async def call_chatgpt_to_generate_code(command, uid):
             ("system", prompt.replace("{os_name}", ahda_os)),
             ("human", command),
         ]
-        ai_msg = await chat.invoke(messages)  # Ensure this is awaited
+        ai_msg = chat.invoke(messages)
         return sendToPC(uid, ai_msg)
     except Exception as e:
         logger.error(f"Error calling ChatGPT-4: {e}")
