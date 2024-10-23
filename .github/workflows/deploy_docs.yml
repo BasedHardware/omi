@@ -34,14 +34,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Change to docs directory
+        run: cd docs
+      - name: Install dependencies
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: yarn
-      - name: Change to docs directory
-        run: cd docs
-      - name: Install dependencies
         run: yarn install --frozen-lockfile --non-interactive
       - name: Build
         run: yarn build
