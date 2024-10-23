@@ -6,7 +6,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 const chunkSizeInSeconds = 30;
@@ -16,8 +18,11 @@ abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
 }
 
-abstract class IWalServiceListener {
+abstract class IWalServiceListener extends IWalSyncListener {
   void onStatusChanged(WalServiceStatus status);
+}
+
+abstract class IWalSyncListener {
   void onNewMissingWal(Wal wal);
   void onWalSynced(Wal wal, {ServerMemory? memory});
 }
@@ -65,6 +70,7 @@ class Wal {
   String codec;
   int channel;
   int sampleRate;
+  int seconds;
 
   WalStatus status;
   WalStorage storage;
@@ -82,9 +88,8 @@ class Wal {
       this.status = WalStatus.inProgress,
       this.storage = WalStorage.mem,
       this.filePath,
+      this.seconds = chunkSizeInSeconds,
       this.data = const []});
-
-  get seconds => chunkSizeInSeconds;
 
   factory Wal.fromJson(Map<String, dynamic> json) {
     return Wal(
@@ -114,6 +119,76 @@ class Wal {
 
   getFileName() {
     return "audio_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
+  }
+}
+
+class SDCardWalSync implements IWalSync {
+  List<Wal> _wals = const [];
+  BtDevice? _device;
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
+  }
+
+  @override
+  Future<bool> deleteWal(Wal wal) {
+    // TODO: implement deleteWal
+    throw UnimplementedError();
+  }
+
+  Future<List<Wal>> _getMissingWals() async {
+    if (_device == null) {
+      return [];
+    }
+    var storageFiles = await _getStorageList(_device!.id);
+    if (storageFiles.isEmpty) {
+      return [];
+    }
+    var totalBytes = storageFiles[0];
+    if (totalBytes <= 0) {
+      return [];
+    }
+    // TODO: FIXME
+    //var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
+
+    return [
+      Wal(
+        timerStart: DateTime.now().millisecond ~/ 1000, // TODO: FIXME
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        seconds: (totalBytes / 80) ~/ 100.0, // 80: frame length, 100: frame per seconds
+      )
+    ];
+  }
+
+  @override
+  Future<List<Wal>> getMissingWals() async {
+    return _wals;
+  }
+
+  @override
+  Future start() async {
+    _wals = await _getMissingWals();
+  }
+
+  @override
+  Future stop() async {
+    _wals = [];
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) {
+    // TODO: implement syncAll
+    throw UnimplementedError();
+  }
+
+  void setDevice(BtDevice? device) async {
+    _device = device;
+    _wals = await _getMissingWals();
   }
 }
 
@@ -396,28 +471,40 @@ class WalSyncs implements IWalSync {
   late LocalWalSync _phoneSync;
   LocalWalSync get phone => _phoneSync;
 
-  WalSyncs() {
+  late SDCardWalSync _sdcardSync;
+  SDCardWalSync get sdcard => _sdcardSync;
+
+  IWalSyncListener listener;
+
+  WalSyncs(this.listener) {
     _phoneSync = LocalWalSync();
+    _sdcardSync = SDCardWalSync();
   }
 
   @override
   Future<bool> deleteWal(Wal wal) async {
-    return await _phoneSync.deleteWal(wal);
+    var phoneOk = await _phoneSync.deleteWal(wal);
+    var sdcardOk = await _sdcardSync.deleteWal(wal);
+    return phoneOk || sdcardOk;
   }
 
   @override
-  Future<List<Wal>> getMissingWals() {
-    return _phoneSync.getMissingWals();
+  Future<List<Wal>> getMissingWals() async {
+    var wals = await _phoneSync.getMissingWals();
+    wals.addAll(await _sdcardSync.getMissingWals());
+    return wals;
   }
 
   @override
   void start() {
     _phoneSync.start();
+    _sdcardSync.start();
   }
 
   @override
   Future stop() async {
     await _phoneSync.stop();
+    await _sdcardSync.stop();
   }
 
   @override
@@ -426,7 +513,7 @@ class WalSyncs implements IWalSync {
   }
 }
 
-class WalService implements IWalService {
+class WalService implements IWalService, IWalSyncListener {
   final Map<Object, IWalServiceListener> _subscriptions = {};
   WalServiceStatus _status = WalServiceStatus.init;
   WalServiceStatus get status => _status;
@@ -435,7 +522,7 @@ class WalService implements IWalService {
   WalSyncs get syncs => _syncs;
 
   WalService() {
-    _syncs = WalSyncs();
+    _syncs = WalSyncs(this);
   }
 
   @override
@@ -476,5 +563,19 @@ class WalService implements IWalService {
   @override
   WalSyncs getSyncs() {
     return _syncs;
+  }
+
+  @override
+  void onNewMissingWal(Wal wal) {
+    for (var s in _subscriptions.values) {
+      s.onNewMissingWal(wal);
+    }
+  }
+
+  @override
+  void onWalSynced(Wal wal, {ServerMemory? memory}) {
+    for (var s in _subscriptions.values) {
+      s.onWalSynced(wal, memory: memory);
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -27,6 +28,18 @@ class _SyncPageState extends State<SyncPage> {
 
   @override
   Widget build(BuildContext context) {
+    // TODO: FIXME
+    List<Widget> _buildWals(List<Wal> wals) {
+      var views = <Widget>[];
+
+      for (var i = 0; i < wals.length; i++) {
+        var wal = wals[i];
+        views.add(Text("${wal.id}"));
+      }
+
+      return views;
+    }
+
     return PopScope(
       canPop: !Provider.of<MemoryProvider>(context, listen: false).isSyncing,
       onPopInvoked: (didPop) {
@@ -105,6 +118,9 @@ class _SyncPageState extends State<SyncPage> {
                         ),
                   const SizedBox(
                     height: 20,
+                  ),
+                  Column(
+                    children: _buildWals(memoryProvider.missingWals),
                   ),
                   memoryProvider.isSyncing
                       ? const Padding(
