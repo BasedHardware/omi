@@ -16,6 +16,10 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
 
+  bool memoryEventsToggled = false;
+  bool transcriptsToggled = false;
+  bool audioBytesToggled = false;
+
   bool savingSettingsLoading = false;
 
   bool loadingExportMemories = false;
@@ -23,6 +27,38 @@ class DeveloperModeProvider extends BaseProvider {
 
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
+
+  void onMemoryEventsToggled(bool value) {
+    memoryEventsToggled = value;
+    notifyListeners();
+  }
+
+  void onTranscriptsToggled(bool value) {
+    transcriptsToggled = value;
+    notifyListeners();
+  }
+
+  void onAudioBytesToggled(bool value) {
+    audioBytesToggled = value;
+    notifyListeners();
+  }
+
+  Future getWebhooksStatus() async {
+    var res = await webhooksStatus();
+    if (res == null) {
+      memoryEventsToggled = false;
+      transcriptsToggled = false;
+      audioBytesToggled = false;
+    } else {
+      memoryEventsToggled = res['memory_created'];
+      transcriptsToggled = res['realtime_transcript'];
+      audioBytesToggled = res['audio_bytes'];
+    }
+    SharedPreferencesUtil().memoryEventsToggled = memoryEventsToggled;
+    SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
+    SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
+    notifyListeners();
+  }
 
   Future initialize() async {
     setIsLoading(true);
@@ -34,8 +70,12 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
+    memoryEventsToggled = SharedPreferencesUtil().memoryEventsToggled;
+    transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
+    audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
 
     await Future.wait([
+      getWebhooksStatus(),
       getUserWebhookUrl(type: 'audio_bytes').then((url) {
         List<dynamic> parts = url.split(',');
         if (parts.length == 2) {
@@ -126,7 +166,6 @@ class DeveloperModeProvider extends BaseProvider {
     //   notifyListeners();
     //   return;
     // }
-
     var w1 = setUserWebhookUrl(
       type: 'audio_bytes',
       url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
