@@ -72,6 +72,7 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
         'audio_bytes': user_webhook_status_db(uid, WebhookType.audio_bytes),
         'memory_created': user_webhook_status_db(uid, WebhookType.memory_created),
         'realtime_transcript': user_webhook_status_db(uid, WebhookType.realtime_transcript),
+        'day_summary': user_webhook_status_db(uid, WebhookType.day_summary),
     }
 
 

@@ -83,7 +83,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Center(
                     child: Container(
                       height: 60,
@@ -266,7 +266,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Webhooks',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(
+                    height: 10,
+                  ),
                   ToggleSectionWidget(
                     isSectionEnabled: provider.memoryEventsToggled,
                     sectionTitle: 'Memory Events',
@@ -329,6 +336,24 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         const SizedBox(height: 16),
                       ],
                       onSectionEnabledChanged: provider.onAudioBytesToggled),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.daySummaryToggled,
+                    sectionTitle: 'Day Summary',
+                    sectionDescription: 'Triggers when day summary is generated.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookDaySummary,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    onSectionEnabledChanged: provider.onDaySummaryToggled,
+                  ),
 
                   // const Text(
                   //   'Websocket Real-time audio bytes:',
