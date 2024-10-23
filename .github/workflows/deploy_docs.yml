@@ -43,11 +43,14 @@ jobs:
         with:
           node-version: 16.x
           cache: npm
+          cache-dependency-path: docs/package-lock.json
       - name: Install dependencies
+        working-directory: ./docs
         run: |
           pwd
           npm ci
       - name: Build
+        working-directory: ./docs
         run: |
           pwd
           npm run build
@@ -56,8 +59,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
-          # Upload entire repository
-          path: build
+          # Upload docs build directory
+          path: docs/build
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
