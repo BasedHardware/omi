@@ -13,19 +13,15 @@ you through creating both Memory Creation Triggers and Real-Time Transcript Proc
 These apps are activated when OMI creates a new memory, allowing you to process or store the memory data
 externally.
 
-[![Memory trigger app](https://img.youtube.com/vi/Yv7gP3GZ0ME/0.jpg)](https://youtube.com/shorts/Yv7gP3GZ0ME)
-
 #### Example Use Cases
 
 - Update project management tools with conversation summaries
 - Create a personalized social platform based on conversations and interests
 - Generate a knowledge graph of interests, experiences, and relationships
 
-### 2. 🏎️ Real-Time Transcript Processors (@DEPRECATED / NOT READY YET)
+### 2. 🏎️ Real-Time Transcript Processors
 
 These apps process conversation transcripts as they occur, enabling real-time analysis and actions.
-
-[![Memory trigger app](https://img.youtube.com/vi/h4ojO3WzkxQ/0.jpg)](https://youtube.com/shorts/h4ojO3WzkxQ)
 
 #### Example Use Cases
 
@@ -150,14 +146,11 @@ Time to put your app through its paces! Follow these steps to test both types of
     - Click on the top right corner (3 dots menu).
     - In the Developer Tools section, trigger the endpoint call with existing memory data.
 
-[![Memory trigger app](https://img.youtube.com/vi/dYVSbEpoV0U/0.jpg)](https://youtube.com/shorts/dYVSbEpoV0U)
 
 #### For Real-Time Transcript Processors:
 
 4. Set your endpoint URL in the "Real-Time Transcript Webhook" field.
 5. Start speaking to your device - your endpoint will receive real-time updates as you speak.
-
-[![Memory trigger app](https://img.youtube.com/vi/CHz9JnOGlTQ/0.jpg)](https://youtube.com/shorts/CHz9JnOGlTQ)
 
 Your endpoints are now ready to spring into action!
 
@@ -182,58 +175,28 @@ Create a JSON object defining your app:
     "external_integration"
   ],
   "external_integration": {
-    // "memory_creation" | "transcript_processed"
-    "triggers_on": "memory_creation",
+    "triggers_on": "memory_creation", // "memory_creation" or "transcript_processed"
+
     // a POST request with the memory object will be sent here as a JSON payload
     "webhook_url": "https://your-endpoint-url.com",
-    // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your app doesn't require setup, set to null.
+
+    // GET endpoint, that returns {'is_setup_completed': boolean} 
     "setup_completed_url": "https://your-setup-completion-url.com",
-    // Include a Readme with more details about your app in the PR
-    "setup_instructions_file_path": "/apps/instructions/your-app/README.md"
-  },
+
+    // Include a ReadMe with more details about your app in the PR
+    "setup_instructions_file_path": "/apps/instructions/your-app/README.md",
+
+    //For Apps that require setup
+    "auth_steps": [
+        {
+          "name": "Authorize",
+          "url": "https://external-url.com/authorize"
+        }
+      ]
+    },
+
   "deleted": false
 }
-```
-
-### Integration Instructions Documentation
-
-Create a markdown file at `setup_instructions_file_path` with:
-
-1. Step-by-step setup guide
-2. Screenshots (if applicable)
-3. Authentication steps (if required)
-4. Troubleshooting tips
-
-Example structure:
-
-```markdown
-# Setting Up [Your App Name]
-
-1. [First step]
-   ![Step 1](assets/step_1.png)
-
-2. [Second step]
-   ![Step 2](assets/step_2.png)
-
-## Authentication (if required)
-
-If your app requires user-specific authentication (e.g., connecting to a user's Notion table):
-
-1. In your authentication flow, use the `uid` query parameter we append this as query param to all your links in your
-   README, so you can map user credentials.
-2. [Authentication steps]
-3. After successful authentication, return `{"is_setup_completed": true}` from your `setup_completed_url`.
-
-If your app doesn't require user authentication (e.g., it's a purely LLM-based service), you can skip this section.
-
-## Troubleshooting
-
-[Common issues and solutions]
-
----
-
-> Experimental feature. Feedback: [your email]
-```
 
 **Notes:**
 
