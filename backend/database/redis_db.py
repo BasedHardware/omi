@@ -228,8 +228,6 @@ def set_user_webhook_db(uid: str, wtype: str, url: str):
     r.set(f'users:{uid}:developer:webhook:{wtype}', url)
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
-    else:
-        enable_user_webhook_db(uid, wtype)
 
 def disable_user_webhook_db(uid: str, wtype: str):
     r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(False).lower())
