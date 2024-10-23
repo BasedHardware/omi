@@ -1,9 +1,7 @@
 ---
-layout: default
 title: Dev Kit 2 Testing
-nav_order: 7
+description: How to test the Omi Dev Kit 2
 ---
-# Omi Dev Kit 2 Testing
 
 **SEE THE BOTTOM OF THE DOCUMENT LABELED BUGS IF YOU RUN INTO ISSUES**
 
