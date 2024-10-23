@@ -30,16 +30,31 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onMemoryEventsToggled(bool value) {
     memoryEventsToggled = value;
+    if (!value) {
+      disableWebhook(type: 'memory_created');
+    } else {
+      enableWebhook(type: 'memory_created');
+    }
     notifyListeners();
   }
 
   void onTranscriptsToggled(bool value) {
     transcriptsToggled = value;
+    if (!value) {
+      disableWebhook(type: 'realtime_transcript');
+    } else {
+      enableWebhook(type: 'realtime_transcript');
+    }
     notifyListeners();
   }
 
   void onAudioBytesToggled(bool value) {
     audioBytesToggled = value;
+    if (!value) {
+      disableWebhook(type: 'audio_bytes');
+    } else {
+      enableWebhook(type: 'audio_bytes');
+    }
     notifyListeners();
   }
 
