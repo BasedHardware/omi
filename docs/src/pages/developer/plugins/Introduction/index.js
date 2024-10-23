@@ -5,7 +5,7 @@ function Home() {
   const history = useHistory();
 
   useEffect(() => {
-    history.push('/docs/developer/apps/Introduction');
+    history.push('/docs/developer/apps/introduction');
   }, [history]);
 
   return null;
