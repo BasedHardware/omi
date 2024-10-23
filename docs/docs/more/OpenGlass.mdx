@@ -38,7 +38,7 @@ Follow these steps to set up OpenGlass:
 3. Open the [firmware folder](https://github.com/BasedHardware/openglass/tree/main/firmware) and open the `.ino` file in the Arduino IDE.
 
    - If you don't have the Arduino IDE installed, download and install it from the [official website](https://www.arduino.cc/en/software).
-   - Alternatively, follow the steps in the [firmware readme](firmware/readme.md) to build using `arduino-cli`
+   - Alternatively, follow the steps in the [firmware readme](more/OpenGlass.mdx) to build using `arduino-cli`
 
 4. Follow the software preparation steps to set up the Arduino IDE for the XIAO ESP32S3 board:
 
@@ -73,7 +73,7 @@ Follow these steps to set up OpenGlass:
 
 2. Add API keys for Groq and OpenAI in the `keys.ts` file located at [https://github.com/BasedHardware/OpenGlass/blob/main/sources/keys.ts](https://github.com/BasedHardware/OpenGlass/blob/main/sources/keys.ts).
 
-3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama) and add the URL to the `keys.ts` file. The URL should be http://localhost:11434/api/chat
+3. For Ollama, self-host the REST API from the repository at [https://github.com/ollama/ollama](https://github.com/ollama/ollama) and add the URL to the `keys.ts` file. The URL should be `http://localhost:11434/api/chat`
 4. go to terminal and type "ollama pull moondream:1.8b-v2-fp16"
 
 5. Start the application:
