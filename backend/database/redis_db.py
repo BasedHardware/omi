@@ -249,7 +249,11 @@ def user_webhook_status_db(uid: str, wtype: str):
 
 
 def get_user_webhook_db(uid: str, wtype: str) -> str:
-    url = r.get(f'users:{uid}:developer:webhook:{wtype}')
-    if not url:
+    toggled = user_webhook_status_db(uid, wtype)
+    if not toggled:
         return ''
+    else:
+        url = r.get(f'users:{uid}:developer:webhook:{wtype}')
+        if not url:
+            return ''
     return url.decode()
