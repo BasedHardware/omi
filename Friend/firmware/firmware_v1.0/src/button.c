@@ -9,6 +9,7 @@
 #include "button.h"
 #include "transport.h"
 #include "speaker.h"
+#include "led.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
@@ -205,6 +206,11 @@ void check_button_level(struct k_work *work_item)
             {
                 //If button is pressed for a long time.......
                 notify_long_tap();
+            	set_led_blue(false);
+	        	set_led_red(false);
+                set_led_green(false);
+                NRF_POWER->SYSTEMOFF=1;
+
                 //Fire the long mode notify and enter a grace period
                 //turn off herre
                 
@@ -273,6 +279,10 @@ void check_button_level(struct k_work *work_item)
             {
                 notify_long_tap();
                 is_off = !is_off;
+            	set_led_blue(false);
+	        	set_led_red(false);
+                set_led_green(false);
+                NRF_POWER->SYSTEMOFF=1;
                 //Fire the notify and enter a grace period
                 play_haptic_milli(100);
                 if (is_off)
