@@ -246,3 +246,9 @@ class CreateMemoryResponse(BaseModel):
 class SetMemoryEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
+
+
+class SetMemoryActionItemsStateRequest(BaseModel):
+    items_idx: List[int]
+    values: List[bool]
+
