@@ -41,7 +41,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 16.x
+          node-version: 18.x
           cache: npm
           cache-dependency-path: docs/package-lock.json
       - name: Install dependencies
@@ -54,6 +54,9 @@ jobs:
         run: |
           pwd
           npm run build
+        shell: /usr/bin/bash -e {0}
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Upload artifact
