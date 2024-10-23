@@ -15,10 +15,12 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytes = TextEditingController();
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
+  final TextEditingController webhookDaySummary = TextEditingController();
 
   bool memoryEventsToggled = false;
   bool transcriptsToggled = false;
   bool audioBytesToggled = false;
+  bool daySummaryToggled = false;
 
   bool savingSettingsLoading = false;
 
@@ -58,20 +60,33 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void onDaySummaryToggled(bool value) {
+    daySummaryToggled = value;
+    if (!value) {
+      disableWebhook(type: 'day_summary');
+    } else {
+      enableWebhook(type: 'day_summary');
+    }
+    notifyListeners();
+  }
+
   Future getWebhooksStatus() async {
     var res = await webhooksStatus();
     if (res == null) {
       memoryEventsToggled = false;
       transcriptsToggled = false;
       audioBytesToggled = false;
+      daySummaryToggled = false;
     } else {
       memoryEventsToggled = res['memory_created'];
       transcriptsToggled = res['realtime_transcript'];
       audioBytesToggled = res['audio_bytes'];
+      daySummaryToggled = res['day_summary'];
     }
     SharedPreferencesUtil().memoryEventsToggled = memoryEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
+    SharedPreferencesUtil().daySummaryToggled = daySummaryToggled;
     notifyListeners();
   }
 
@@ -88,6 +103,7 @@ class DeveloperModeProvider extends BaseProvider {
     memoryEventsToggled = SharedPreferencesUtil().memoryEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
+    daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
 
     await Future.wait([
       getWebhooksStatus(),
@@ -110,6 +126,10 @@ class DeveloperModeProvider extends BaseProvider {
       getUserWebhookUrl(type: 'memory_created').then((url) {
         webhookOnMemoryCreated.text = url;
         SharedPreferencesUtil().webhookOnMemoryCreated = url;
+      }),
+      getUserWebhookUrl(type: 'day_summary').then((url) {
+        webhookDaySummary.text = url;
+        SharedPreferencesUtil().webhookDaySummary = url;
       }),
     ]);
     // getUserWebhookUrl(type: 'audio_bytes_websocket').then((url) => webhookWsAudioBytes.text = url);
@@ -174,6 +194,11 @@ class DeveloperModeProvider extends BaseProvider {
       setIsLoading(false);
       return;
     }
+    if (webhookDaySummary.text.isNotEmpty && !isValidUrl(webhookDaySummary.text)) {
+      AppSnackbar.showSnackbarError('Invalid day summary webhook URL');
+      setIsLoading(false);
+      return;
+    }
 
     // if (webhookWsAudioBytes.text.isNotEmpty && !isValidWebSocketUrl(webhookWsAudioBytes.text)) {
     //   AppSnackbar.showSnackbarError('Invalid audio bytes websocket URL');
@@ -187,13 +212,15 @@ class DeveloperModeProvider extends BaseProvider {
     );
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnMemoryCreated.text.trim());
+    var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
-      Future.wait([w1, w2, w3]);
+      Future.wait([w1, w2, w3, w4]);
       prefs.webhookAudioBytes = webhookAudioBytes.text;
       prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
       prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text;
+      prefs.webhookDaySummary = webhookDaySummary.text;
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
