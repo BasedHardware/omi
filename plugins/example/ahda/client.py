@@ -18,6 +18,8 @@ COMMAND_TIMEOUT = 8  # Seconds to wait after the last word to finalize the comma
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "index.html")
 
+from models import EndpointResponse
+
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 # Use requests to get raw text from URL
@@ -77,7 +79,7 @@ def sendDebugToPC(uid, response):
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
-@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'])
+@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'], response_model=EndpointResponse)
 async def send_ahda_webhook(
     uid: str = Query(...), 
     data: dict = Body(...),
@@ -175,8 +177,8 @@ async def call_chatgpt_to_generate_code(command, uid):
             ("human", command),
         ]
         ai_msg = chat.invoke(messages)
-        sendDebugToPC(uid, "ChatGPT-4 response: " + ai_msg)
-        return sendToPC(uid, ai_msg)
+        sendDebugToPC(uid, "ChatGPT-4 response: " + ai_msg.content)
+        return sendToPC(uid, ai_msg.content)
     except Exception as e:
         sendDebugToPC(uid, f"Error calling ChatGPT-4: {e}")
         logger.error(f"Error calling ChatGPT-4: {e}")

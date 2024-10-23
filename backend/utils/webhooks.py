@@ -27,7 +27,11 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
     webhook_url = get_user_webhook_db(uid, WebhookType.realtime_transcript)
     if not webhook_url:
         return
-    webhook_url += f'?uid={uid}'
+    if("?" not in webhook_url):
+        webhook_url += f'?uid={uid}'
+    else:
+        webhook_url += f'&uid={uid}'
+        
     try:
         response = requests.post(
             webhook_url,

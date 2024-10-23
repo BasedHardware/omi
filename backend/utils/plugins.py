@@ -122,19 +122,19 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
 
 async def trigger_realtime_integrations(uid: str, segments: list[dict]):
     """REALTIME STREAMING"""
-    # TODO: don't retrieve token before knowing if to notify
-    token = notification_db.get_token_only(uid)
-    _trigger_realtime_integrations(uid, token, segments)
+    #token = notification_db.get_token_only(uid)
+    #_trigger_realtime_integrations(uid, token, segments)
+    _trigger_realtime_integrations(uid, segments)
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
+#def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
+def _trigger_realtime_integrations(uid: str, segments: List[dict]) -> dict:
+
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [
-        plugin for plugin in plugins if
-        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
-    ]
+    filtered_plugins = [plugin for plugin in plugins if
+                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
-        return {}
+        return []
 
     threads = []
     results = {}
@@ -150,19 +150,23 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments})
+            response = requests.post(
+                url,
+                json={'segments': segments, 'session_id': uid},
+                headers={'Content-Type': 'application/json'}
+            )
             if response.status_code != 200:
                 print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
                 return
 
-            response_data = response.json()
-            if not response_data:
-                return
-            message = response_data.get('message', '')
-            print('Plugin', plugin.id, 'response:', message)
-            if message and len(message) > 5:
-                send_plugin_notification(token, plugin.name, plugin.id, message)
+            record_plugin_usage(uid, plugin.id, UsageHistoryType.live_transcript_external_integration)
+
+            print('response', response.json())
+            if message := response.json().get('message', ''):
                 results[plugin.id] = message
+            #if message and len(message) > 5:
+            #    send_plugin_notification(token, plugin.name, plugin.id, message)
+            #    results[plugin.id] = message
         except Exception as e:
             print(f"Plugin integration error: {e}")
             return
@@ -172,12 +176,14 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
 
     [t.start() for t in threads]
     [t.join() for t in threads]
+
     messages = []
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_plugin_message(message, key, uid))
+        messages.append(add_plugin_message(message, key, uid, memory.id))
     return messages
+
 
 
 def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, message: str):
