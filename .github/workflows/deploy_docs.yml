@@ -35,16 +35,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Change to docs directory
-        run: cd docs
+        run: |
+          cd docs
+          pwd
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: npm
       - name: Install dependencies
-        run: npm ci
+        run: |
+          pwd
+          npm ci
       - name: Build
-        run: npm run build
+        run: |
+          pwd
+          npm run build
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Upload artifact
