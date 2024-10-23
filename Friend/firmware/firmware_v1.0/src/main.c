@@ -227,6 +227,8 @@ int main(void)
     k_msleep(1000);
     set_led_blue(false);
 
+    NRF_POWER->SYSTEMOFF = 1;
+
 	while (1)
 	{
 		set_led_state();
