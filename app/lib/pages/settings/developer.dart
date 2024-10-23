@@ -11,9 +11,9 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'widgets/appbar_with_banner.dart';
+import 'widgets/toggle_section_widget.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
@@ -70,6 +70,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ListView(
+                shrinkWrap: true,
                 children: [
                   const SizedBox(height: 32),
                   const Padding(
@@ -265,87 +266,70 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Events Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  const SizedBox(height: 18),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.memoryEventsToggled,
+                    sectionTitle: 'Memory Events',
+                    sectionDescription: 'Triggers when a new memory is created.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookOnMemoryCreated,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
-                          MixpanelManager().pageOpened('Advanced Mode Docs');
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Docs',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 16),
                     ],
+                    onSectionEnabledChanged: provider.onMemoryEventsToggled,
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'On memory created:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                  TextField(
-                    controller: provider.webhookOnMemoryCreated,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Real-time transcript received:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                  TextField(
-                    controller: provider.webhookOnTranscriptReceived,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Realtime audio bytes:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                  TextField(
-                    controller: provider.webhookAudioBytes,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  TextField(
-                    controller: provider.webhookAudioBytesDelay,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    keyboardType: TextInputType.number,
-                    decoration: _getTextFieldDecoration('Every x seconds'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.transcriptsToggled,
+                      sectionTitle: 'Real-time Transcript',
+                      sectionDescription: 'Triggers when a new transcript is received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookOnTranscriptReceived,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onTranscriptsToggled),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.audioBytesToggled,
+                      sectionTitle: 'Realtime Audio Bytes',
+                      sectionDescription: 'Triggers when audio bytes are received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookAudioBytes,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        TextField(
+                          controller: provider.webhookAudioBytesDelay,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          keyboardType: TextInputType.number,
+                          decoration: _getTextFieldDecoration('Every x seconds'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onAudioBytesToggled),
+
                   // const Text(
                   //   'Websocket Real-time audio bytes:',
                   //   style: TextStyle(color: Colors.white, fontSize: 16),
@@ -381,9 +365,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     value: provider.localSyncEnabled,
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
-                  const SizedBox(height: 64),
+                  const SizedBox(height: 36),
+                  const Text(
+                    'Pilot Features',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    'Joan Only Features (Be careful)',
+                    'These features are tests and no support is guaranteed.',
                     style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
                   ),
                   const SizedBox(height: 16.0),
