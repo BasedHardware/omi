@@ -7,13 +7,29 @@ import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/message_event.dart';
-import 'package:friend_private/services/sockets/transcription_connection.dart';
-import 'package:friend_private/services/sockets/wal_connection.dart';
 import 'package:path_provider/path_provider.dart';
 
 const chunkSizeInSeconds = 30;
 const flushIntervalInSeconds = 60;
+
+abstract class IWalSyncProgressListener {
+  void onWalSyncedProgress(double percentage); // 0..1
+}
+
+abstract class IWalServiceListener {
+  void onStatusChanged(WalServiceStatus status);
+  void onNewMissingWal(Wal wal);
+  void onWalSynced(Wal wal, {ServerMemory? memory});
+}
+
+abstract class IWalSync {
+  Future<List<Wal>> getMissingWals();
+  Future<bool> deleteWal(Wal wal);
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
+
+  void start();
+  Future stop();
+}
 
 abstract class IWalService {
   void start();
@@ -22,12 +38,7 @@ abstract class IWalService {
   void subscribe(IWalServiceListener subscription, Object context);
   void unsubscribe(Object context);
 
-  void onByteStream(List<int> value);
-  void onBytesSync(List<int> value);
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
-  Future<bool> syncWal(Wal wal);
-  Future<bool> deleteWal(Wal wal);
-  Future<List<Wal>> getMissingWals();
+  WalSyncs getSyncs();
 }
 
 enum WalServiceStatus {
@@ -46,6 +57,7 @@ enum WalStatus {
 enum WalStorage {
   mem,
   disk,
+  sdcard,
 }
 
 class Wal {
@@ -105,19 +117,7 @@ class Wal {
   }
 }
 
-abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage); // 0..1
-}
-
-abstract class IWalServiceListener {
-  void onStatusChanged(WalServiceStatus status);
-  void onNewMissingWal(Wal wal);
-  void onWalSynced(Wal wal, {ServerMemory? memory});
-}
-
-class WalService implements IWalService, IWalSocketServiceListener {
-  WalSocketService? _socket;
-
+class LocalWalSync implements IWalSync {
   List<Wal> _wals = const [];
 
   List<List<int>> _frames = [];
@@ -127,22 +127,6 @@ class WalService implements IWalService, IWalSocketServiceListener {
   Timer? _flushingTimer;
 
   final Map<Object, IWalServiceListener> _subscriptions = {};
-  WalServiceStatus _status = WalServiceStatus.init;
-  WalServiceStatus get status => _status;
-
-  @override
-  void subscribe(IWalServiceListener subscription, Object context) {
-    _subscriptions.remove(context.hashCode);
-    _subscriptions.putIfAbsent(context.hashCode, () => subscription);
-
-    // retains
-    subscription.onStatusChanged(_status);
-  }
-
-  @override
-  void unsubscribe(Object context) {
-    _subscriptions.remove(context.hashCode);
-  }
 
   @override
   void start() {
@@ -154,7 +138,21 @@ class WalService implements IWalService, IWalSocketServiceListener {
     _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds), (t) async {
       await _flush();
     });
-    _status = WalServiceStatus.ready;
+  }
+
+  @override
+  Future stop() async {
+    _chunkingTimer?.cancel();
+    _flushingTimer?.cancel();
+
+    await _chunk();
+    await _flush();
+
+    _frames = [];
+    _syncFrameSeq.clear();
+    _wals = [];
+
+    _subscriptions.clear();
   }
 
   Future _chunk() async {
@@ -276,31 +274,6 @@ class WalService implements IWalService, IWalSocketServiceListener {
     SharedPreferencesUtil().wals = _wals;
   }
 
-  @override
-  Future stop() async {
-    _socket?.stop();
-
-    _chunkingTimer?.cancel();
-    _flushingTimer?.cancel();
-
-    await _chunk();
-    await _flush();
-
-    _frames = [];
-    _syncFrameSeq.clear();
-    _wals = [];
-
-    _status = WalServiceStatus.stop;
-    _onStatusChanged(_status);
-    _subscriptions.clear();
-  }
-
-  void _onStatusChanged(WalServiceStatus status) {
-    for (var s in _subscriptions.values) {
-      s.onStatusChanged(status);
-    }
-  }
-
   Future<bool> _deleteWal(Wal wal) async {
     if (wal.filePath != null) {
       try {
@@ -328,77 +301,14 @@ class WalService implements IWalService, IWalSocketServiceListener {
     return _wals.where((w) => w.status == WalStatus.miss).toList();
   }
 
-  @override
   void onByteStream(List<int> value) async {
     _frames.add(value);
   }
 
-  @override
   void onBytesSync(List<int> value) {
     var head = value.sublist(0, 3);
     var seq = Uint8List.fromList(head..add(0)).buffer.asByteData().getInt32(0);
     _syncFrameSeq.add(seq);
-  }
-
-  @override
-  Future<bool> syncWal(Wal wal) async {
-    // TODO: implement syncWal
-    return true;
-  }
-
-  @Deprecated("keep")
-  Future syncAllWs({IWalSyncProgressListener? progress}) async {
-    _wals.removeWhere((wal) => wal.status == WalStatus.synced);
-    await _flush();
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
-    if (wals.isEmpty) {
-      debugPrint("All synced!");
-      return;
-    }
-
-    // Establish connection
-    _socket?.stop();
-    _socket = WalSocketService.create(wals.map<String>((wal) => wal.getFileName()).toList());
-    await _socket?.start();
-    if (_socket?.state != SocketServiceState.connected) {
-      _socket?.stop();
-      debugPrint("Cant not connect to socket!");
-      return;
-    }
-    _socket?.subscribe(this, this);
-
-    for (var i = 0; i < wals.length; i++) {
-      var wal = wals[i];
-      debugPrint("sync id ${wal.id}");
-      if (wal.filePath == null) {
-        debugPrint("sync error: file path is not found. wal id ${wal.id}");
-        continue;
-      }
-
-      try {
-        File file = File(wal.filePath!);
-        var bytes = await file.readAsBytes();
-
-        final byteFrame = ByteData(12 + bytes.length);
-        byteFrame.setUint32(0, 1, Endian.big); // 0001, start new file
-        byteFrame.setUint32(4, i, Endian.big); // index
-        byteFrame.setUint32(8, bytes.length, Endian.big); // length
-        for (int i = 0; i < bytes.length; i++) {
-          byteFrame.setUint8(i + 12, bytes[i]);
-        }
-        if (_socket?.state != SocketServiceState.connected) {
-          debugPrint("sync error: socket is closed. wal id ${wal.id}");
-          break;
-        }
-        _socket?.send(byteFrame.buffer.asUint8List());
-
-        debugPrint("sync wal ${wal.id} file ${wal.filePath} length ${bytes.length}");
-        //debugPrint("[${bytes.sublist(0, 100).join(", ")}]");
-      } catch (e) {
-        debugPrint(e.toString());
-        continue;
-      }
-    }
   }
 
   @override
@@ -480,38 +390,91 @@ class WalService implements IWalService, IWalSocketServiceListener {
     progress?.onWalSyncedProgress(1.0);
     return resp;
   }
+}
 
-  // *
-  // WS
-  // *
-  @override
-  void onClosed() {}
+class WalSyncs implements IWalSync {
+  late LocalWalSync _phoneSync;
+  LocalWalSync get phone => _phoneSync;
 
-  @override
-  void onConnected() {}
-
-  @override
-  void onError(Object err) {}
+  WalSyncs() {
+    _phoneSync = LocalWalSync();
+  }
 
   @override
-  void onMessageEventReceived(ServerMessageEvent event) async {
-    if (event.type == MessageEventType.memoyBackwardSynced) {
-      int? timerStart = int.tryParse(event.name?.split("_")[1] ?? "");
-      final idx = _wals.indexWhere((w) => w.timerStart == timerStart);
-      if (idx < 0) {
-        debugPrint("Wal is not found $timerStart");
-        return;
-      }
-      var wal = _wals[idx];
+  Future<bool> deleteWal(Wal wal) async {
+    return await _phoneSync.deleteWal(wal);
+  }
 
-      // update
-      await _deleteWal(wal);
-      SharedPreferencesUtil().wals = _wals;
+  @override
+  Future<List<Wal>> getMissingWals() {
+    return _phoneSync.getMissingWals();
+  }
 
-      // send
-      for (var sub in _subscriptions.values) {
-        sub.onWalSynced(wal);
-      }
+  @override
+  void start() {
+    _phoneSync.start();
+  }
+
+  @override
+  Future stop() async {
+    await _phoneSync.stop();
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    return await _phoneSync.syncAll(progress: progress);
+  }
+}
+
+class WalService implements IWalService {
+  final Map<Object, IWalServiceListener> _subscriptions = {};
+  WalServiceStatus _status = WalServiceStatus.init;
+  WalServiceStatus get status => _status;
+
+  late WalSyncs _syncs;
+  WalSyncs get syncs => _syncs;
+
+  WalService() {
+    _syncs = WalSyncs();
+  }
+
+  @override
+  void subscribe(IWalServiceListener subscription, Object context) {
+    _subscriptions.remove(context.hashCode);
+    _subscriptions.putIfAbsent(context.hashCode, () => subscription);
+
+    // retains
+    subscription.onStatusChanged(_status);
+  }
+
+  @override
+  void unsubscribe(Object context) {
+    _subscriptions.remove(context.hashCode);
+  }
+
+  @override
+  void start() {
+    _syncs.start();
+    _status = WalServiceStatus.ready;
+  }
+
+  @override
+  Future stop() async {
+    await _syncs.stop();
+
+    _status = WalServiceStatus.stop;
+    _onStatusChanged(_status);
+    _subscriptions.clear();
+  }
+
+  void _onStatusChanged(WalServiceStatus status) {
+    for (var s in _subscriptions.values) {
+      s.onStatusChanged(status);
     }
+  }
+
+  @override
+  WalSyncs getSyncs() {
+    return _syncs;
   }
 }

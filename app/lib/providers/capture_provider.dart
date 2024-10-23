@@ -42,7 +42,7 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
@@ -178,7 +178,7 @@ class CaptureProvider extends ChangeNotifier
         setIsWalSupported(checkWalSupported);
       }
       if (_isWalSupported) {
-        _walService.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(value);
       }
 
       // send ws
@@ -188,7 +188,7 @@ class CaptureProvider extends ChangeNotifier
 
         // synced
         if (_isWalSupported) {
-          _walService.onBytesSync(value);
+          _wal.getSyncs().phone.onBytesSync(value);
         }
       }
     });
