@@ -95,6 +95,10 @@ class SharedPreferencesUtil {
 
   String get webhookAudioBytesDelay => getString('webhookAudioBytesDelay') ?? '';
 
+  set webhookDaySummary(String value) => saveString('webhookDaySummary', value);
+
+  String get webhookDaySummary => getString('webhookDaySummary') ?? '';
+
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
   set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
@@ -112,6 +116,10 @@ class SharedPreferencesUtil {
   set audioBytesToggled(bool value) => saveBool('audioBytesToggled', value);
 
   bool get audioBytesToggled => getBool('audioBytesToggled') ?? false;
+
+  set daySummaryToggled(bool value) => saveBool('daySummaryToggled', value);
+
+  bool get daySummaryToggled => getBool('daySummaryToggled') ?? false;
 
   set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
 
