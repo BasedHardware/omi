@@ -169,6 +169,7 @@ class CaptureProvider extends ChangeNotifier
       if (value.isEmpty) return;
 
       // support: opus codec, 1m from the first device connectes
+      /* TODO: FIXME
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
       var checkWalSupported = codec == BleAudioCodec.opus &&
           (deviceFirstConnectedAt != null &&
@@ -176,6 +177,10 @@ class CaptureProvider extends ChangeNotifier
           SharedPreferencesUtil().localSyncEnabled;
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
+      }
+	*/
+      if (!isWalSupported) {
+        setIsWalSupported(true);
       }
       if (_isWalSupported) {
         _wal.getSyncs().phone.onByteStream(value);
