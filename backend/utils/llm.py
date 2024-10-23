@@ -74,12 +74,12 @@ def should_discard_memory(transcript: str) -> bool:
 def get_transcript_structure(transcript: str, started_at: datetime, language_code: str, tz: str) -> Structured:
     prompt = ChatPromptTemplate.from_messages([(
         'system',
-        '''Your task is to provide structure and clarity to the recording transcription of a conversation.
+        '''You are an expert conversation analyzer. Your task is to analyze the conversation and provide structure and clarity to the recording transcription of a conversation.
         The conversation language is {language_code}. Use the same language {language_code} for your response.
         
         For the title, use the main topic of the conversation.
         For the overview, condense the conversation into a summary with the main topics discussed, make sure to capture the key points and important details from the conversation.
-        For the action items, include a list of commitments, specific tasks or actionable next steps from the conversation. Specify which speaker is responsible for each action item. 
+        For the action items, include a list of commitments, specific tasks or actionable steps from the conversation that the user is planning to do or has to do on that specific day or in future. Remember the speaker is busy so this has to be very efficient and concise, otherwise they might miss some critical tasks. Specify which speaker is responsible for each action item. 
         For the category, classify the conversation into one of the available categories.
         For Calendar Events, include a list of events extracted from the conversation, that the user must have on his calendar. For date context, this conversation happened on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
             
@@ -101,7 +101,6 @@ def get_transcript_structure(transcript: str, started_at: datetime, language_cod
         if event.duration > 180:
             event.duration = 180
         event.created = False
-
     return response
 
 
