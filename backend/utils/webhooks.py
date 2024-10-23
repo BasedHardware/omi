@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime
 from typing import List
 
 import requests
@@ -21,6 +22,23 @@ def memory_created_webhook(uid, memory: Memory):
         headers={'Content-Type': 'application/json'}
     )
     print('memory_created_webhook:', response.status_code)
+
+
+def day_summary_webhook(uid, summary: str):
+    webhook_url = get_user_webhook_db(uid, WebhookType.day_summary)
+    if not webhook_url:
+        return
+    webhook_url += f'?uid={uid}'
+    response = requests.post(
+        webhook_url,
+        json={
+            'summary': summary,
+            'uid': uid,
+            'created_at': datetime.now().isoformat()
+        },
+        headers={'Content-Type': 'application/json'}
+    )
+    print('day_summary_webhook:', response.status_code)
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict]):
