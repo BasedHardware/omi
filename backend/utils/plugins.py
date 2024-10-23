@@ -181,7 +181,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict]) -> dict:
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_plugin_message(message, key, uid, memory.id))
+        messages.append(add_plugin_message(message, key, uid))
     return messages
 
 
