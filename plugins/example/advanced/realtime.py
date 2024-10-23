@@ -48,7 +48,7 @@ def news_checker(conversation: List[TranscriptSegment]) -> str:
     A user just asked a search engine news the following question:
     {result.query}
 
-    The output was: {output}
+    The output was: {output.content}
 
     The conversation is:
     {conversation_str}
