@@ -83,7 +83,7 @@ const config = {
             items: [
               {
                 label: 'Discord',
-                href: 'https://discord.gg/based-hardware-1192313062041067520',
+                href: 'https://discord.gg/omi',
               },
               {
                 label: 'X',
