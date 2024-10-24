@@ -173,6 +173,7 @@ class ActionItemsListWidget extends StatelessWidget {
                       .then((reason) {
                     if (reason != SnackBarClosedReason.action) {
                       provider.deleteActionItemPermanently(tempItem, tempIdx);
+                      MixpanelManager().deletedActionItem(provider.memory);
                     }
                   });
                 },
