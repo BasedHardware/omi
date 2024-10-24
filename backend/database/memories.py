@@ -137,6 +137,16 @@ def update_memory_events(uid: str, memory_id: str, events: List[dict]):
     memory_ref.update({'structured.events': events})
 
 
+# *********************************
+# ******** ACTION ITEMS ***********
+# *********************************
+
+def update_memory_action_items(uid: str, memory_id: str, action_items: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'structured.action_items':action_items})
+
+
 # ******************************
 # ********** OTHER *************
 # ******************************

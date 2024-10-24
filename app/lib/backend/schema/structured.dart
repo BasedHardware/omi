@@ -95,14 +95,15 @@ class ActionItem {
 
   String description;
   bool completed = false;
+  bool deleted = false;
 
-  ActionItem(this.description, {this.id = 0, this.completed = false});
+  ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
 
   static fromJson(Map<String, dynamic> json) {
-    return ActionItem(json['description'], completed: json['completed'] ?? false);
+    return ActionItem(json['description'], completed: json['completed'] ?? false, deleted: json['deleted'] ?? false);
   }
 
-  toJson() => {'description': description, 'completed': completed};
+  toJson() => {'description': description, 'completed': completed, 'deleted': deleted};
 }
 
 class AppResponse {

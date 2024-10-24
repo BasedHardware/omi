@@ -52,6 +52,7 @@ class PluginResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False  # IGNORE ME from the model parser
+    deleted: bool = False
 
 
 class Event(BaseModel):
@@ -246,3 +247,14 @@ class CreateMemoryResponse(BaseModel):
 class SetMemoryEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
+
+
+class SetMemoryActionItemsStateRequest(BaseModel):
+    items_idx: List[int]
+    values: List[bool]
+
+
+class DeleteActionItemRequest(BaseModel):
+    description: str
+    completed: bool
+

@@ -91,73 +91,137 @@ class GetSummaryWidgets extends StatelessWidget {
                     overview: memory.structured.overview,
                   ),
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-            memory.structured.actionItems.isNotEmpty
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Action Items',
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(
-                            text:
-                                '- ${memory.structured.actionItems.map((e) => e.description.decodeSting).join('\n- ')}',
-                          ));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Action items copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ));
-                          // MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
-                        },
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                      )
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            ...memory.structured.actionItems.map<Widget>((item) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SelectionArea(
-                        child: Text(
-                          item.description.decodeSting,
-                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            const ActionItemsListWidget(),
             memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-            // memory.structured.events.isNotEmpty && memory.structured.events.where((e) => e.startsAt.isBefore(memory.startedAt!)).isNotEmpty
-            //     ? Row(
-            //         children: [
-            //           Icon(Icons.event, color: Colors.grey.shade300),
-            //           const SizedBox(width: 8),
-            //           Text(
-            //             'Events',
-            //             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-            //           )
-            //         ],
-            //       )
-            //     : const SizedBox.shrink(),
             const EventsListWidget(),
             memory.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
         );
       },
     );
+  }
+}
+
+class ActionItemsListWidget extends StatelessWidget {
+  const ActionItemsListWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      return Column(
+        children: [
+          provider.memory.structured.actionItems.isNotEmpty
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Action Items',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(
+                          text:
+                              '- ${provider.memory.structured.actionItems.map((e) => e.description.decodeSting).join('\n- ')}',
+                        ));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Action items copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ));
+                        MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Action Items');
+                      },
+                      icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                    )
+                  ],
+                )
+              : const SizedBox.shrink(),
+          ListView.builder(
+            itemCount: provider.memory.structured.actionItems.where((e) => !e.deleted).length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, idx) {
+              var item = provider.memory.structured.actionItems.where((e) => !e.deleted).toList()[idx];
+              return Dismissible(
+                key: Key(item.description),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20.0),
+                  color: Colors.red,
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) {
+                  var tempItem = provider.memory.structured.actionItems[idx];
+                  var tempIdx = idx;
+                  provider.deleteActionItem(idx);
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(
+                        SnackBar(
+                          content: const Text('Action Item deleted successfully 🗑️'),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          action: SnackBarAction(
+                            label: 'Undo',
+                            textColor: Colors.white,
+                            onPressed: () {
+                              provider.undoDeleteActionItem(idx);
+                            },
+                          ),
+                        ),
+                      )
+                      .closed
+                      .then((reason) {
+                    if (reason != SnackBarClosedReason.action) {
+                      provider.deleteActionItemPermanently(tempItem, tempIdx);
+                      MixpanelManager().deletedActionItem(provider.memory);
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: SizedBox(
+                          height: 22.0,
+                          width: 22.0,
+                          child: Checkbox(
+                            shape: CircleBorder(),
+                            value: item.completed,
+                            onChanged: (value) {
+                              if (value != null) {
+                                context.read<MemoryDetailProvider>().updateActionItemState(value, idx);
+                                setMemoryActionItemState(provider.memory.id, [idx], [value]);
+                                if (value) {
+                                  MixpanelManager().checkedActionItem(provider.memory, idx);
+                                } else {
+                                  MixpanelManager().uncheckedActionItem(provider.memory, idx);
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SelectionArea(
+                          child: Text(
+                            item.description.decodeSting,
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    });
   }
 }
 

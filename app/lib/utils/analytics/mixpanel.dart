@@ -252,6 +252,15 @@ class MixpanelManager {
   void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
 
+  void checkedActionItem(ServerMemory memory, int idx) =>
+      track('Checked Action Item', properties: getMemoryEventProperties(memory));
+
+  void uncheckedActionItem(ServerMemory memory, int idx) =>
+      track('Unchecked Action Item', properties: getMemoryEventProperties(memory));
+
+  void deletedActionItem(ServerMemory memory) =>
+      track('Deleted Action Item', properties: getMemoryEventProperties(memory));
+
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
