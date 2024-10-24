@@ -223,6 +223,44 @@ Future<bool> setMemoryEventsState(
   return response.statusCode == 200;
 }
 
+Future<bool> setMemoryActionItemState(
+  String memoryId,
+  List<int> actionItemsIdx,
+  List<bool> values,
+) async {
+  print(jsonEncode({
+    'items_idx': actionItemsIdx,
+    'values': values,
+  }));
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/action-items',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({
+      'items_idx': actionItemsIdx,
+      'values': values,
+    }),
+  );
+  if (response == null) return false;
+  debugPrint('setMemoryActionItemState: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> deleteMemoryActionItem(String memoryId, ActionItem item) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/action-items',
+    headers: {},
+    method: 'DELETE',
+    body: jsonEncode({
+      'completed': item.completed,
+      'description': item.description,
+    }),
+  );
+  if (response == null) return false;
+  debugPrint('deleteMemoryActionItem: ${response.body}');
+  return response.statusCode == 204;
+}
+
 //this is expected to return complete memories
 Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
   var request = http.MultipartRequest(
