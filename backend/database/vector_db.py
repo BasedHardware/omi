@@ -31,6 +31,10 @@ def upsert_vector(uid: str, memory: Memory, vector: List[float]):
     print('upsert_vector', res)
 
 
+def update_vector_metadata(uid: str, memory_id: str, metadata: dict):
+    return index.update(f'{uid}-{memory_id}', set_metadata=metadata, namespace="ns1")
+
+
 def upsert_vectors(
         uid: str, vectors: List[List[float]], memories: List[Memory]
 ):
