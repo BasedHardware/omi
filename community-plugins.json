@@ -1,5 +1,17 @@
 [
   {
+      "id": "48-laws",
+      "name": "48 Laws Guide",
+      "author": "Tristan L",
+      "description": "Provides strategic advice inspired by the 48 Laws of Power.",
+      "image": "/plugins/logos/48-laws.png",
+      "capabilities": [
+        "memories"
+      ],
+      "memory_prompt": "Analyze the given conversation for moments where the user could apply the strategic principles from the 48 Laws of Power. Identify key opportunities to use specific laws to influence, gain advantage, or avoid pitfalls. Summarize these actions with practical, actionable advice for the user. If no clear opportunity is present, offer general strategic guidance related to the context of the conversation.",
+      "deleted": false
+    },
+  {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
     "author": "Akshay Narisetti",
