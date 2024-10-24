@@ -80,6 +80,8 @@ class Wal {
   List<List<int>> data = [];
   int byteOffset = 0;
 
+  bool isSyncing = false;
+
   String get id => '${device}_$timerStart';
 
   Wal(
@@ -174,8 +176,8 @@ class SDCardWalSync implements IWalSync {
     var storageByteOffset = totalBytes;
     List<Wal> wals = [];
     while (storageByteOffset > 0) {
-      timerStart -= chunkSizeInSeconds;
-      storageByteOffset -= chunkSizeInSeconds * 100 * 80; // 80: frame length, 100: frame per seconds
+      timerStart -= chunkSizeInSeconds * 10; // 5m
+      storageByteOffset -= chunkSizeInSeconds * 10 * 100 * 80; // 80: frame length, 100: frame per seconds
       if (storageByteOffset < 0) {
         storageByteOffset = 0;
       }
@@ -183,7 +185,7 @@ class SDCardWalSync implements IWalSync {
         timerStart: timerStart,
         status: WalStatus.miss,
         storage: WalStorage.sdcard,
-        seconds: chunkSizeInSeconds,
+        seconds: chunkSizeInSeconds * 10,
         byteOffset: storageByteOffset,
         device: _device!.id,
       ));
@@ -428,14 +430,21 @@ class LocalWalSync implements IWalSync {
     var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
 
     var steps = 10;
-    for (var i = 0; i < wals.length; i += steps) {
+    var right = wals.length;
+    while (right > 0) {
+      var left = right - steps;
+      if (left < 0) {
+        left = 0;
+      }
       List<File> files = [];
-      for (var j = i; j < i + steps && j < wals.length; j++) {
+      for (var j = left; j < right; j++) {
         var wal = wals[j];
         debugPrint("sync id ${wal.id}");
         if (wal.filePath == null) {
           debugPrint("file path is not found. wal id ${wal.id}");
           wal.status = WalStatus.corrupted;
+
+          right = left;
           continue;
         }
 
@@ -446,9 +455,12 @@ class LocalWalSync implements IWalSync {
           if (!file.existsSync()) {
             debugPrint("file ${wal.filePath} is not exists");
             wal.status = WalStatus.corrupted;
+
+            right = left;
             continue;
           }
           files.add(file);
+          wal.isSyncing = true;
         } catch (e) {
           wal.status = WalStatus.corrupted;
           debugPrint(e.toString());
@@ -457,13 +469,16 @@ class LocalWalSync implements IWalSync {
 
       if (files.isEmpty) {
         debugPrint("Files are empty");
+
+        right = left;
         continue;
       }
 
       // Progress
-      progress?.onWalSyncedProgress((i + 1).toDouble() / wals.length);
+      progress?.onWalSyncedProgress((left).toDouble() / wals.length);
 
       // Sync
+      listener.onMissingWalUpdated();
       try {
         var partialRes = await syncLocalFiles(files);
 
@@ -473,11 +488,13 @@ class LocalWalSync implements IWalSync {
             .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
       } catch (e) {
         debugPrint(e.toString());
+
+        right = left;
         continue;
       }
 
       // Success? update status to synced
-      for (var j = i; j < i + steps && j < wals.length; j++) {
+      for (var j = left; j < right; j++) {
         var wal = wals[j];
         wals[j].status = WalStatus.synced; // ref to _wals[]
 
@@ -485,6 +502,7 @@ class LocalWalSync implements IWalSync {
         listener.onWalSynced(wal);
       }
       SharedPreferencesUtil().wals = _wals;
+      listener.onMissingWalUpdated();
     }
 
     // Progress
