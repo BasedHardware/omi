@@ -44,7 +44,8 @@ class ExtractedInformation(BaseModel):
     )
 
 
-def migrate_memory_vector_metadata(memory_id: str, created_at: datetime, transcript_segment: List[dict]) -> ExtractedInformation:
+def migrate_memory_vector_metadata(memory_id: str, created_at: datetime,
+                                   transcript_segment: List[dict]) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
         transcript += f'{segment["text"].strip()}\n\n'
@@ -82,6 +83,8 @@ def migrate_memory_vector_metadata(memory_id: str, created_at: datetime, transcr
 
 
 if __name__ == '__main__':
+    # TODO: finish migration script
+    # TODO: inlude process_memory to process this too
     uids = get_users_uid()
     for uid in ['TtCJi59JTVXHmyUC6vUQ1d9U6cK2']:
         memories = memories_db.get_memories(uid, limit=1000)
