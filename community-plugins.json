@@ -734,6 +734,29 @@
     "deleted": false
   },
   {
+    "id": "omi-google-drive-integration",
+    "name": "Google Drive",
+    "author": "@salman.m",
+    "description": "Connect to Google Drive. Automatically sync OMI Memories and/or Transcripts, Action Items, and Plugin Data to Google Drive.",
+    "image": "/plugins/logos/gdrive.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omig.soundbrain.cc/webhook",
+      "setup_completed_url": "https://omig.soundbrain.cc/setup_check",
+      "setup_instructions_file_path": "/plugins/instructions/gdrive/README.md",
+      "auth_steps": [
+        {
+          "name": "Connect Google Drive",
+          "url": "https://omig.soundbrain.cc/intro"
+        }
+      ]
+    },
+    "deleted": false
+  },
+  {
     "id": "mental-health-friend",
     "name": "Mental Health Friend",
     "author": "Infuzu.com",
