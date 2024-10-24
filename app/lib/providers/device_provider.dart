@@ -206,7 +206,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     captureProvider?.updateRecordingDevice(null);
 
     // Wals
-    ServiceManager().wal.getSyncs().sdcard.setDevice(null);
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
 
     print('after resetState inside initiateConnectionListener');
 
@@ -242,7 +242,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SharedPreferencesUtil().deviceName = device.name;
 
     // Wals
-    ServiceManager().wal.getSyncs().sdcard.setDevice(device);
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
 
     notifyListeners();
   }

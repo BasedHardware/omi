@@ -71,14 +71,16 @@ class Wal {
   int channel;
   int sampleRate;
   int seconds;
+  String device;
 
   WalStatus status;
   WalStorage storage;
 
   String? filePath;
   List<List<int>> data = [];
+  int byteOffset = 0;
 
-  String get id => '$timerStart';
+  String get id => '${device}_$timerStart';
 
   Wal(
       {required this.timerStart,
@@ -89,6 +91,8 @@ class Wal {
       this.storage = WalStorage.mem,
       this.filePath,
       this.seconds = chunkSizeInSeconds,
+      this.device = "phone",
+      this.byteOffset = 0,
       this.data = const []});
 
   factory Wal.fromJson(Map<String, dynamic> json) {
@@ -100,6 +104,9 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       filePath: json['file_path'],
+      seconds: json['seconds'] ?? 30,
+      device: json['device'] ?? "phone",
+      byteOffset: json['byte_offset'] ?? 0,
     );
   }
 
@@ -112,19 +119,26 @@ class Wal {
       'status': status.name,
       'storage': storage.name,
       'file_path': filePath,
+      'seconds': seconds,
+      'device': device,
+      'byte_offset': byteOffset,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
+    return "audio_${device.toLowerCase().replaceAll("^[a-z0-9]", "")}_${codec}_${sampleRate}_${channel}_${timerStart}.bin";
   }
 }
 
 class SDCardWalSync implements IWalSync {
   List<Wal> _wals = const [];
   BtDevice? _device;
+
+  IWalSyncListener listener;
+
+  SDCardWalSync(this.listener);
 
   Future<List<int>> _getStorageList(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -152,17 +166,28 @@ class SDCardWalSync implements IWalSync {
     if (totalBytes <= 0) {
       return [];
     }
-    // TODO: FIXME
-    //var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
 
-    return [
-      Wal(
-        timerStart: DateTime.now().millisecond ~/ 1000, // TODO: FIXME
+    // Chunking backward
+    var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var storageByteOffset = totalBytes;
+    List<Wal> wals = [];
+    while (storageByteOffset > 0) {
+      timerStart -= chunkSizeInSeconds;
+      storageByteOffset -= chunkSizeInSeconds * 100 * 80; // 80: frame length, 100: frame per seconds
+      if (storageByteOffset < 0) {
+        storageByteOffset = 0;
+      }
+      wals.add(Wal(
+        timerStart: timerStart,
         status: WalStatus.miss,
         storage: WalStorage.sdcard,
-        seconds: (totalBytes / 80) ~/ 100.0, // 80: frame length, 100: frame per seconds
-      )
-    ];
+        seconds: chunkSizeInSeconds,
+        byteOffset: storageByteOffset,
+        device: _device!.id,
+      ));
+    }
+
+    return wals;
   }
 
   @override
@@ -173,6 +198,7 @@ class SDCardWalSync implements IWalSync {
   @override
   Future start() async {
     _wals = await _getMissingWals();
+    listener.onNewMissingWal(_wals[0]); // TODO: FIXME
   }
 
   @override
@@ -189,6 +215,7 @@ class SDCardWalSync implements IWalSync {
   void setDevice(BtDevice? device) async {
     _device = device;
     _wals = await _getMissingWals();
+    listener.onNewMissingWal(_wals[0]); // TODO: FIXME
   }
 }
 
@@ -201,7 +228,9 @@ class LocalWalSync implements IWalSync {
   Timer? _chunkingTimer;
   Timer? _flushingTimer;
 
-  final Map<Object, IWalServiceListener> _subscriptions = {};
+  IWalSyncListener listener;
+
+  LocalWalSync(this.listener);
 
   @override
   void start() {
@@ -226,8 +255,6 @@ class LocalWalSync implements IWalSync {
     _frames = [];
     _syncFrameSeq.clear();
     _wals = [];
-
-    _subscriptions.clear();
   }
 
   Future _chunk() async {
@@ -288,9 +315,7 @@ class LocalWalSync implements IWalSync {
         }
 
         // send
-        for (var sub in _subscriptions.values) {
-          sub.onNewMissingWal(missWal);
-        }
+        listener.onNewMissingWal(missWal);
       }
 
       // next
@@ -454,9 +479,7 @@ class LocalWalSync implements IWalSync {
         wals[j].status = WalStatus.synced; // ref to _wals[]
 
         // Send
-        for (var sub in _subscriptions.values) {
-          sub.onWalSynced(wal);
-        }
+        listener.onWalSynced(wal);
       }
       SharedPreferencesUtil().wals = _wals;
     }
@@ -477,8 +500,8 @@ class WalSyncs implements IWalSync {
   IWalSyncListener listener;
 
   WalSyncs(this.listener) {
-    _phoneSync = LocalWalSync();
-    _sdcardSync = SDCardWalSync();
+    _phoneSync = LocalWalSync(listener);
+    _sdcardSync = SDCardWalSync(listener);
   }
 
   @override
@@ -490,8 +513,9 @@ class WalSyncs implements IWalSync {
 
   @override
   Future<List<Wal>> getMissingWals() async {
-    var wals = await _phoneSync.getMissingWals();
+    List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
+    wals.addAll(await _phoneSync.getMissingWals());
     return wals;
   }
 
