@@ -73,9 +73,10 @@ def migrate_memory_vector_metadata(memory_id: str, created_at: datetime,
         'topics': result.topics_discussed,
         'entities': result.entities,
         'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+        'created_at': int(created_at.timestamp()),
     }
     update_vector_metadata(uid, memory_id, metadata)
-    print(memory_id, json.dumps(result.dict(), default=str))
+    print(memory_id, int(created_at.timestamp()), json.dumps(result.dict(), default=str))
 
 
 if __name__ == '__main__':

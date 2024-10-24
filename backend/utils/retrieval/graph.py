@@ -1,5 +1,8 @@
 import datetime
+import os
 from typing import List, Optional
+
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -7,10 +10,11 @@ from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
 
-from models.chat import Message, MessageSender, MessageType
+from database.vector_db import query_vectors_by_metadata
+from models.chat import Message
 from models.memory import Memory
 from models.plugin import Plugin
-from utils.llm import requires_context, answer_simple_message
+from utils.llm import requires_context, answer_simple_message, retrieve_context_dates
 
 model = ChatOpenAI(model='gpt-4o-mini')
 
@@ -23,8 +27,8 @@ class StructuredFilters(TypedDict):
 
 
 class DateRangeFilters(TypedDict):
-    start: datetime.date
-    end: datetime.date
+    start: datetime.datetime
+    end: datetime.datetime
 
 
 class GraphState(TypedDict):
@@ -55,24 +59,36 @@ def no_context_conversation(state: GraphState):
 
 
 def context_dependent_conversation(state: GraphState):
-    return {}
+    return {'uid': state.get('uid')}
 
 
 # TODO: include a question extractor? node?
 
 
 def retrieve_topics_filters(state: GraphState):
+    print('retrieve_topics_filters')
     # retrieve all available entities, names, topics, etc, and ask it to filter based on the question.
-    return {'filters': {'topics_discussed': ['topic1', 'topic2']}}
+    return {'filters': {'topics_discussed': []}}
 
 
 def retrieve_date_filters(state: GraphState):
-    # extract dates filters, and send them to qa_handler node
-    return {'date_filters': {'start': datetime.date(2022, 1, 1), 'end': datetime.date(2022, 1, 2)}}
+    dates_range = retrieve_context_dates(state.get('messages', []))
+    if dates_range and len(dates_range) == 2:
+        return {'date_filters': {'start': dates_range[0], 'end': dates_range[1]}}
+    return {'date_filters': {}}
 
 
 def query_vectors(state: GraphState):
-    print('query_vectors', state)
+    print('query_vectors')
+    date_filters = state.get('date_filters')
+    query_vectors_by_metadata(
+        state.get('uid'),
+        dates_filter=[date_filters.get('start'), date_filters.get('end')],
+        people_mentioned=state.get('filters', {}).get('people_mentioned', []),
+        topics_discussed=state.get('filters', {}).get('topics_discussed', []),
+        entities=state.get('filters', {}).get('entities', []),
+        dates_mentioned=state.get('filters', {}).get('dates', []),
+    )
     # receives both filters, and finds vectors + rerank them
     # TODO: maybe didnt find anything, tries RAG, or goes to simple conversation?
     return {'memories_found': []}
@@ -80,7 +96,7 @@ def query_vectors(state: GraphState):
 
 def qa_handler(state: GraphState):
     # takes vectors found, retrieves memories, and does QA on them
-    return END
+    return {'answer': 'answer'}
 
 
 workflow = StateGraph(GraphState)  # custom state?
@@ -123,12 +139,18 @@ if __name__ == '__main__':
     uid = 'TtCJi59JTVXHmyUC6vUQ1d9U6cK2'
     # messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
     # messages = filter_messages(messages, None)
-    messages = [Message(
-        id='0',
-        text='How is it going?',
-        created_at=datetime.datetime.now(),
-        sender=MessageSender.human,
-        type=MessageType.text)
-    ]
-    result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
-    print('result', result)
+    # messages = [Message(
+    #     id='0',
+    #     text='What did I do yesterday?',
+    #     created_at=datetime.datetime.now(),
+    #     sender=MessageSender.human,
+    #     type=MessageType.text)
+    # ]
+    # result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
+    # print('result', result)
+    query_vectors_by_metadata(
+        uid,
+        [datetime.datetime(2024, 10, 1), datetime.datetime(2024, 10, 10)],
+        # [],
+        ['Sam'], [], [], []
+    )
