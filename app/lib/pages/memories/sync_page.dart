@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -20,6 +21,8 @@ class SyncPage extends StatefulWidget {
 class _SyncPageState extends State<SyncPage> {
   bool _isAnimating = false;
 
+  IWalService get _wal => ServiceManager.instance().wal;
+
   void _toggleAnimation() {
     setState(() {
       _isAnimating = !_isAnimating;
@@ -34,7 +37,23 @@ class _SyncPageState extends State<SyncPage> {
 
       for (var i = 0; i < wals.length; i++) {
         var wal = wals[i];
-        views.add(Text("${wal.id} - ${wal.seconds}"));
+        views.add(Container(
+            child: Row(
+          children: [
+            Text("${wal.id} - ${wal.seconds}"),
+            TextButton(
+              onPressed: () {
+                _wal.getSyncs().deleteWal(wal);
+              },
+              child: Text(
+                "Delete",
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        )));
       }
 
       return views;
