@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memories/widgets/date_list_item.dart';
 import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -81,7 +80,7 @@ class _WalListItemState extends State<WalListItem> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(widget.wal.device == "phone" ? "📱" : "🅌",
+          Text(widget.wal.device == "phone" ? "📱" : "💾",
               style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
           const SizedBox(width: 12),
           Container(
@@ -99,14 +98,27 @@ class _WalListItemState extends State<WalListItem> {
           const SizedBox(
             width: 16,
           ),
-          Expanded(
-            child: Text(
-              dateTimeFormat('MMM d, h:mm:ss a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              maxLines: 1,
-              textAlign: TextAlign.end,
-            ),
-          )
+          widget.wal.isSyncing
+              ? const Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        )),
+                  ),
+                )
+              : Expanded(
+                  child: Text(
+                    dateTimeFormat(
+                        'MMM d, h:mm:ss a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
+                  ),
+                )
         ],
       ),
     );
@@ -179,8 +191,6 @@ class SyncPage extends StatefulWidget {
 class _SyncPageState extends State<SyncPage> {
   bool _isAnimating = false;
 
-  IWalService get _wal => ServiceManager.instance().wal;
-
   void _toggleAnimation() {
     setState(() {
       _isAnimating = !_isAnimating;
@@ -206,9 +216,7 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     Widget _buildWals(List<Wal> wals) {
-      debugPrint("_buildWals");
       var groupedWals = _groupWalsByDate(wals);
-
       return SliverList(
         delegate: SliverChildBuilderDelegate(
           childCount: groupedWals.length,
