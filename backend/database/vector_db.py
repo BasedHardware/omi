@@ -63,19 +63,24 @@ def query_vectors_by_metadata(
         uid: str, dates_filter: List[datetime], people_mentioned: List[str], topics_discussed: List[str],
         entities: List[str], dates_mentioned: List[str]
 ):
-    print('query_vectors_by_metadata result:', uid)
-
     filter_data = {'$and': [
         {'uid': {'$eq': uid}},
-        {'$or': [
-            {'people': {'$in': people_mentioned}},
-            {'topics': {'$in': topics_discussed}},
-            {'entities': {'$in': entities}},
-            {'dates': {'$in': dates_mentioned}},
-        ]},
-        {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())} if len(
-            dates_filter) == 2 else {}},
     ]}
+    if people_mentioned or topics_discussed or entities or dates_mentioned:
+        filter_data['$and'].append(
+            {'$or': [
+                {'people_mentioned': {'$in': people_mentioned}},
+                {'topics_discussed': {'$in': topics_discussed}},
+                {'entities': {'$in': entities}},
+                {'dates_mentioned': {'$in': dates_mentioned}},
+            ]}
+        )
+    if dates_filter:
+        filter_data['$and'].append(
+            {'created_at': {'$gte': dates_filter[0].timestamp(), '$lte': dates_filter[1].timestamp()}}
+        )
+
+    print('query_vectors_by_metadata:', json.dumps(filter_data))
 
     # TODO: improve search, don't use 0,0, can use smth better?, also topk 1k would make it slower.
     xc = index.query(
@@ -84,7 +89,7 @@ def query_vectors_by_metadata(
         top_k=50
     )
     memories_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
-
+    # TODO: rerank based on metadata and return top 5
     print('query_vectors_by_metadata result:', memories_id)
     return memories_id
 
