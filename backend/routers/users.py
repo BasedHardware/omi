@@ -16,6 +16,7 @@ from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
+from utils.webhooks import webhook_first_time_setup
 
 router = APIRouter()
 
@@ -46,7 +47,10 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    set_user_webhook_db(uid, wtype, data['url'])
+    url = data['url']
+    if url == '' or url == ',':
+        disable_user_webhook_db(uid, wtype)
+    set_user_webhook_db(uid, wtype, url)
     return {'status': 'ok'}
 
 
@@ -68,11 +72,24 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
 
 @router.get('/v1/users/developer/webhooks/status', tags=['v1'])
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
+    # This only happens the first time because the user_webhook_status_db function will return None for existing users
+    audioBytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
+    if audioBytes is None:
+        audioBytes = webhook_first_time_setup(uid, WebhookType.audio_bytes)
+    memoryCreated = user_webhook_status_db(uid, WebhookType.memory_created)
+    if memoryCreated is None:
+        memoryCreated = webhook_first_time_setup(uid, WebhookType.memory_created)
+    realtimeTranscript = user_webhook_status_db(uid, WebhookType.realtime_transcript)
+    if realtimeTranscript is None:
+        realtimeTranscript = webhook_first_time_setup(uid, WebhookType.realtime_transcript)
+    daySummary = user_webhook_status_db(uid, WebhookType.day_summary)
+    if daySummary is None:
+        daySummary = webhook_first_time_setup(uid, WebhookType.day_summary)
     return {
-        'audio_bytes': user_webhook_status_db(uid, WebhookType.audio_bytes),
-        'memory_created': user_webhook_status_db(uid, WebhookType.memory_created),
-        'realtime_transcript': user_webhook_status_db(uid, WebhookType.realtime_transcript),
-        'day_summary': user_webhook_status_db(uid, WebhookType.day_summary),
+        'audio_bytes': audioBytes,
+        'memory_created': memoryCreated,
+        'realtime_transcript': realtimeTranscript,
+        'day_summary': daySummary
     }
 
 
