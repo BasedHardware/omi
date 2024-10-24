@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -128,11 +128,24 @@ def set_action_item_status(data: SetMemoryActionItemsStateRequest,memory_id: str
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
     action_items = memory.structured.action_items
-    for i, action_item_idx in enumerate(data.action_items_idx):
+    for i, action_item_idx in enumerate(data.items_idx):
         if action_item_idx >= len(action_items):
             continue
         action_items[action_item_idx].completed = data.values[i]
 
+    memories_db.update_memory_action_items(uid, memory_id, [action_item.dict() for action_item in action_items])
+    return {"status": "Ok"}
+
+
+@router.delete("/v1/memories/{memory_id}/action-items", response_model=dict, tags=['memories'])
+def delete_action_item(data: DeleteActionItemRequest,memory_id: str,uid = Depends(auth.get_current_user_uid)):
+    print('here inside of delete action item')
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+    action_items = memory.structured.action_items
+    for i, action_item in enumerate(action_items):
+        if action_item.description == data.description:
+            action_item.deleted = True
     memories_db.update_memory_action_items(uid, memory_id, [action_item.dict() for action_item in action_items])
     return {"status": "Ok"}
 
