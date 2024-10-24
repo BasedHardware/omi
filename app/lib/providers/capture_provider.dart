@@ -42,7 +42,7 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
@@ -169,6 +169,7 @@ class CaptureProvider extends ChangeNotifier
       if (value.isEmpty) return;
 
       // support: opus codec, 1m from the first device connectes
+      /* TODO: FIXME
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
       var checkWalSupported = codec == BleAudioCodec.opus &&
           (deviceFirstConnectedAt != null &&
@@ -177,8 +178,12 @@ class CaptureProvider extends ChangeNotifier
       if (checkWalSupported != _isWalSupported) {
         setIsWalSupported(checkWalSupported);
       }
+	*/
+      if (!isWalSupported) {
+        setIsWalSupported(true);
+      }
       if (_isWalSupported) {
-        _walService.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(value);
       }
 
       // send ws
@@ -188,7 +193,7 @@ class CaptureProvider extends ChangeNotifier
 
         // synced
         if (_isWalSupported) {
-          _walService.onBytesSync(value);
+          _wal.getSyncs().phone.onBytesSync(value);
         }
       }
     });

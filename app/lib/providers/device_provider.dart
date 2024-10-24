@@ -205,6 +205,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     captureProvider?.updateRecordingDevice(null);
 
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
+
     print('after resetState inside initiateConnectionListener');
 
     InstabugLog.logInfo('Friend Device Disconnected');
@@ -237,6 +240,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
+
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
 
     notifyListeners();
   }
