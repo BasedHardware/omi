@@ -703,12 +703,30 @@ extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
+int bt_off()
+{
+   bt_disable();
+   int err = bt_le_adv_stop();
+   if (err)
+   {
+       printk("Failed to stop Bluetooth %d\n",err);
+   }
+   sd_off();
+   mic_off();
+   //everything else off
+
+
+   return 0;
+}
 int bt_on()
 {
-    int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    // bt_gatt_service_register(&storage_service);
+   int err = bt_enable(NULL);
+   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+   bt_gatt_service_register(&storage_service);
+   sd_on();
+   mic_on();
 
+   return 0;
 }
 
 //periodic advertising

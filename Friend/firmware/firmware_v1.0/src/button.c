@@ -218,6 +218,7 @@ void check_button_level(struct k_work *work_item)
                 is_off = !is_off;
                 if (is_off)
                 {
+                    bt_off();
                     turnoff_all();
                 }
                 current_button_state = GRACE;
@@ -267,6 +268,7 @@ void check_button_level(struct k_work *work_item)
                 //Fire the notify and enter a grace period
                 if (is_off)
                 {
+                    bt_off();
                     turnoff_all();
                 }
                 current_button_state = GRACE;
