@@ -34,7 +34,7 @@ class _SyncPageState extends State<SyncPage> {
 
       for (var i = 0; i < wals.length; i++) {
         var wal = wals[i];
-        views.add(Text("${wal.id}"));
+        views.add(Text("${wal.id} - ${wal.seconds}"));
       }
 
       return views;
@@ -73,104 +73,106 @@ class _SyncPageState extends State<SyncPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: Consumer<MemoryProvider>(
           builder: (context, memoryProvider, child) {
-            return Center(
-              child: Column(
-                children: [
-                  const SizedBox(height: 80),
-                  child!,
-                  const SizedBox(height: 80),
-                  memoryProvider.isSyncing || memoryProvider.syncCompleted
-                      ? const SizedBox()
-                      : Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                          decoration: BoxDecoration(
-                            border: const GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
-                              width: 2,
+            return SingleChildScrollView(
+              child: Center(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 80),
+                    child!,
+                    const SizedBox(height: 80),
+                    memoryProvider.isSyncing || memoryProvider.syncCompleted
+                        ? const SizedBox()
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                            decoration: BoxDecoration(
+                              border: const GradientBoxBorder(
+                                gradient: LinearGradient(colors: [
+                                  Color.fromARGB(127, 208, 208, 208),
+                                  Color.fromARGB(127, 188, 99, 121),
+                                  Color.fromARGB(127, 86, 101, 182),
+                                  Color.fromARGB(127, 126, 190, 236)
+                                ]),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            borderRadius: BorderRadius.circular(12),
+                            child: TextButton(
+                              onPressed: () async {
+                                if (context.read<ConnectivityProvider>().isConnected) {
+                                  _toggleAnimation();
+                                  await memoryProvider.syncWals();
+                                  _toggleAnimation();
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Internet connection is required to sync memories'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Sync Now',
+                                style: TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ),
                           ),
-                          child: TextButton(
-                            onPressed: () async {
-                              if (context.read<ConnectivityProvider>().isConnected) {
-                                _toggleAnimation();
-                                await memoryProvider.syncWals();
-                                _toggleAnimation();
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Internet connection is required to sync memories'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text(
-                              'Sync Now',
+                    const SizedBox(
+                      height: 20,
+                    ),
+                    Column(
+                      children: _buildWals(memoryProvider.missingWals),
+                    ),
+                    memoryProvider.isSyncing
+                        ? const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text(
+                              'Syncing Memories\nPlease don\'t close the app or press the back button',
                               style: TextStyle(color: Colors.white, fontSize: 16),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                        ),
-                  const SizedBox(
-                    height: 20,
-                  ),
-                  Column(
-                    children: _buildWals(memoryProvider.missingWals),
-                  ),
-                  memoryProvider.isSyncing
-                      ? const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Syncing Memories\nPlease don\'t close the app or press the back button',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
-                          ? Column(
-                              children: [
-                                const Text(
-                                  'Memories Synced Successfully 🎉',
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                                const SizedBox(
-                                  height: 18,
-                                ),
-                                (memoryProvider.syncedMemoriesPointers.isNotEmpty)
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                        decoration: BoxDecoration(
-                                          border: const GradientBoxBorder(
-                                            gradient: LinearGradient(colors: [
-                                              Color.fromARGB(127, 208, 208, 208),
-                                              Color.fromARGB(127, 188, 99, 121),
-                                              Color.fromARGB(127, 86, 101, 182),
-                                              Color.fromARGB(127, 126, 190, 236)
-                                            ]),
-                                            width: 2,
+                          )
+                        : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
+                            ? Column(
+                                children: [
+                                  const Text(
+                                    'Memories Synced Successfully 🎉',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  ),
+                                  const SizedBox(
+                                    height: 18,
+                                  ),
+                                  (memoryProvider.syncedMemoriesPointers.isNotEmpty)
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                          decoration: BoxDecoration(
+                                            border: const GradientBoxBorder(
+                                              gradient: LinearGradient(colors: [
+                                                Color.fromARGB(127, 208, 208, 208),
+                                                Color.fromARGB(127, 188, 99, 121),
+                                                Color.fromARGB(127, 86, 101, 182),
+                                                Color.fromARGB(127, 126, 190, 236)
+                                              ]),
+                                              width: 2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(12),
                                           ),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: TextButton(
-                                          onPressed: () {
-                                            routeToPage(context, const SyncedMemoriesPage());
-                                          },
-                                          child: const Text(
-                                            'View Synced Memories',
-                                            style: TextStyle(color: Colors.white, fontSize: 16),
+                                          child: TextButton(
+                                            onPressed: () {
+                                              routeToPage(context, const SyncedMemoriesPage());
+                                            },
+                                            child: const Text(
+                                              'View Synced Memories',
+                                              style: TextStyle(color: Colors.white, fontSize: 16),
+                                            ),
                                           ),
-                                        ),
-                                      )
-                                    : const SizedBox.shrink(),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                ],
+                                        )
+                                      : const SizedBox.shrink(),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                  ],
+                ),
               ),
             );
           },
