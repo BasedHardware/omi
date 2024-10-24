@@ -53,6 +53,44 @@ Future<String> getUserWebhookUrl({required String type}) async {
   return '';
 }
 
+Future disableWebhook({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/disable',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode == 204) return true;
+  return false;
+}
+
+Future enableWebhook({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/enable',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode == 204) return true;
+  return false;
+}
+
+Future webhooksStatus() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhooks/status',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
 Future<bool> deleteAccount() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/delete-account',

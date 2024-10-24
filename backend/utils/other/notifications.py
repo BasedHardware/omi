@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import threading
 from datetime import datetime
 from datetime import time
 
@@ -11,6 +12,7 @@ import database.notifications as notification_db
 from models.notification_message import NotificationMessage
 from utils.llm import get_memory_summary
 from utils.notifications import send_notification, send_bulk_notification
+from utils.webhooks import day_summary_webhook
 
 
 async def start_cron_job():
@@ -66,6 +68,7 @@ def _send_summary_notification(user_data: tuple):
         notification_type='daily_summary',
     )
     chat_db.add_summary_message(summary, uid)
+    threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
     send_notification(fcm_token, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
 
 
