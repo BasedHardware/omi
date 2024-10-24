@@ -334,7 +334,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   @override
-  void onNewMissingWal(Wal wal) async {
+  void onMissingWalUpdated() async {
     _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
