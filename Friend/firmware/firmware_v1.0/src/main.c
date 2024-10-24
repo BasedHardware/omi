@@ -148,16 +148,18 @@ int main(void)
         printf("from reset \n");
         is_off = true;
 
-        usb_charge = true;
+        // usb_charge = true;
         activate_everything_no_lights();
         // bt_disable();
+        bt_off();
     }
     else if (from_wakeup)
     {
         k_msleep(100);
         is_off = false;
         usb_charge = false;
-        activate_everything_no_lights();        
+        activate_everything_no_lights(); 
+        bt_on();       
         play_haptic_milli(100);
     }
     else

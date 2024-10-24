@@ -95,4 +95,7 @@ int clear_audio_directory();
 
 int save_offset(uint32_t offset);
 int get_offset();
+
+void sd_on();
+void sd_off();
 #endif
