@@ -3,6 +3,7 @@ import os
 
 import firebase_admin
 from fastapi import FastAPI
+import utils.retrieval.graph as graph
 
 from modal import Image, App, asgi_app, Secret, Cron
 from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
