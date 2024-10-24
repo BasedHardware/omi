@@ -6,7 +6,8 @@ from typing import List
 import requests
 import websockets
 
-from database.redis_db import get_user_webhook_db, user_webhook_status_db
+from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
+    enable_user_webhook_db, set_user_webhook_db
 from models.memory import Memory
 from models.users import WebhookType
 
@@ -130,3 +131,15 @@ async def connect_user_webhook_ws(sample_rate: int, language: str, preseconds: i
     except Exception as e:
         print(f"Exception in process_audio_speechmatics: {e}")
         raise
+
+
+def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
+    res = False
+    url = get_user_webhook_db(uid, wType)
+    if url == '' or url == ',':
+        disable_user_webhook_db(uid, wType)
+        res = False
+    else:
+        enable_user_webhook_db(uid, wType)
+        res = True
+    return res
