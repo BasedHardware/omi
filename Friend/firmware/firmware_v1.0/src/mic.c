@@ -101,3 +101,14 @@ void set_mic_callback(mix_handler callback)
 {
     _callback = callback;
 }
+
+void mic_off()
+{
+  nrfy_gpio_pin_clear(PDM_PWR_PIN);
+}
+
+
+void mic_on()
+{
+  nrfy_gpio_pin_set(PDM_PWR_PIN);
+}

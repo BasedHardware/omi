@@ -23,6 +23,7 @@
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
+#define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
@@ -613,7 +614,7 @@ static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
-
+static uint8_t heartbeat_count = 0;
 void update_file_size() 
 {
     file_num_array[0] = get_file_size(1);
@@ -650,6 +651,7 @@ void pusher(void)
             {
                 printk("updating file size\n");
                 update_file_size();
+                
                 file_size_updated = true;
             }
             if (conn)
@@ -672,10 +674,20 @@ void pusher(void)
             
             if (!valid  && !storage_is_on) 
             {
-                bool result = write_to_storage();
+                bool result = false;
+                if (file_num_array[1] < MAX_STORAGE_BYTES)
+                {
+                result = write_to_storage();
+                }
                 if (result)
                 {
-    
+                 heartbeat_count++;
+                 if (heartbeat_count == 255)
+                 {
+                    update_file_size();
+                    heartbeat_count = 0;
+                    printk("drawing\n");
+                 }
                 }
                 else 
                 {
@@ -703,12 +715,30 @@ extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
+int bt_off()
+{
+   bt_disable();
+   int err = bt_le_adv_stop();
+   if (err)
+   {
+       printk("Failed to stop Bluetooth %d\n",err);
+   }
+   sd_off();
+   mic_off();
+   //everything else off
+
+
+   return 0;
+}
 int bt_on()
 {
-    int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    // bt_gatt_service_register(&storage_service);
+   int err = bt_enable(NULL);
+   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+   bt_gatt_service_register(&storage_service);
+   sd_on();
+   mic_on();
 
+   return 0;
 }
 
 //periodic advertising
@@ -757,7 +787,7 @@ int transport_start()
         LOG_INF("Speaker initialized");
     }
 
-    play_boot_sound();
+
 #endif
     // Start advertising
 
