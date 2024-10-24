@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timezone
 from typing import List
@@ -56,6 +57,36 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
     # print(xc)
     return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+
+
+def query_vectors_by_metadata(
+        uid: str, dates_filter: List[datetime], people_mentioned: List[str], topics_discussed: List[str],
+        entities: List[str], dates_mentioned: List[str]
+):
+    print('query_vectors_by_metadata result:', uid)
+
+    filter_data = {'$and': [
+        {'uid': {'$eq': uid}},
+        {'$or': [
+            {'people': {'$in': people_mentioned}},
+            {'topics': {'$in': topics_discussed}},
+            {'entities': {'$in': entities}},
+            {'dates': {'$in': dates_mentioned}},
+        ]},
+        {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())} if len(
+            dates_filter) == 2 else {}},
+    ]}
+
+    # TODO: improve search, don't use 0,0, can use smth better?, also topk 1k would make it slower.
+    xc = index.query(
+        vector=[0] * 3072, filter=filter_data, namespace="ns1", include_values=False,
+        include_metadata=True,
+        top_k=50
+    )
+    memories_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+
+    print('query_vectors_by_metadata result:', memories_id)
+    return memories_id
 
 
 def delete_vector(memory_id: str):
