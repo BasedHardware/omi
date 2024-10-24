@@ -118,6 +118,30 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
+  void updateActionItemState(bool state, int i) {
+    memory.structured.actionItems[i].completed = state;
+    notifyListeners();
+  }
+
+  List<ActionItem> deletedActionItems = [];
+
+  void deleteActionItem(int i) {
+    deletedActionItems.add(memory.structured.actionItems[i]);
+    memory.structured.actionItems.removeAt(i);
+    notifyListeners();
+  }
+
+  void undoDeleteActionItem(int idx) {
+    memory.structured.actionItems.insert(idx, deletedActionItems.removeLast());
+    notifyListeners();
+  }
+
+  void deleteActionItemPermanently(ActionItem item, int itemIdx) {
+    deletedActionItems.removeWhere((element) => element == item);
+    deleteMemoryActionItem(memory.id, item);
+    notifyListeners();
+  }
+
   void updateAppResponseExpanded(int index) {
     appResponseExpanded[index] = !appResponseExpanded[index];
     notifyListeners();
