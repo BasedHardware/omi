@@ -256,7 +256,10 @@ def requires_context(messages: List[Message]) -> bool:
     '''
     with_parser = llm_mini.with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
-    return response.value
+    try:
+        return response.value
+    except ValidationError:
+        return False
 
 
 # TODO: try query expansion
@@ -323,6 +326,32 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     with_parser = llm_mini.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
+
+
+def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+    conversation_history = Message.get_messages_as_string(
+        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+    )
+    user_name, facts_str = get_prompt_facts(uid)
+
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    prompt = f"""
+    You are an assistant for engaging personal conversations. 
+    You are made for {user_name}, {facts_str}
+
+    Use what you know about {user_name}, to continue the conversation, feel free to ask questions, share stories, or just say hi.
+    {plugin_info}
+
+    Conversation History:
+    {conversation_history}
+
+    Answer:
+    """.replace('    ', '').strip()
+    print(prompt)
+    return llm_mini.invoke(prompt).content
 
 
 def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
