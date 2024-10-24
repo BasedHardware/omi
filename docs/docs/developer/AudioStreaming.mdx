@@ -28,15 +28,15 @@ That's it! You should now see audio bytes arriving at your webhook. The audio by
 Check out the example below to see how you can save the audio bytes as audio files in Google Cloud Storage using the audio streaming feature.
 
 ## Example: Saving Audio Bytes as Audio Files in Google Cloud Storage
-Step 1: Create a Google Cloud Storage bucket and set the appropriate permissions. You can follow the steps mentioned [here](https://docs.omi.me/developer/savingaudio) up to step 5.
-Step 2: Fork the example repository from [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming).
-Step 3: Clone the repository to your local machine.
-Step 4: Deploy it to any of your preferred cloud providers like GCP, AWS, DigitalOcean, or run it locally (you can use Ngrok for local testing). The repository includes a Dockerfile for easy deployment.
-Step 5: While deploying, ensure the following environment variables are set:
+1. Create a Google Cloud Storage bucket and set the appropriate permissions. You can follow the steps mentioned [here](https://docs.omi.me/developer/savingaudio) up to step 5.
+2. Fork the example repository from [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming).
+3. Clone the repository to your local machine.
+4. Deploy it to any of your preferred cloud providers like GCP, AWS, DigitalOcean, or run it locally (you can use Ngrok for local testing). The repository includes a Dockerfile for easy deployment.
+5. While deploying, ensure the following environment variables are set:
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Your GCP credentials, encoded in base64.
 - `GCS_BUCKET_NAME`: The name of your GCP storage bucket.
-Step 6: Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes. The endpoint should be the URL where you deployed the example + `/audio`.
-Step 7: You should now see audio files being saved in your GCP bucket every x seconds, where x is the value you set in the `Every x seconds` field.
+6. Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes. The endpoint should be the URL where you deployed the example + `/audio`.
+7. You should now see audio files being saved in your GCP bucket every x seconds, where x is the value you set in the `Every x seconds` field.
 
 ## Contributing 🤝
 
@@ -47,7 +47,7 @@ We welcome contributions from the open source community! Whether it's improving 
 If you're stuck, have questions, or just want to chat about Omi:
 
 - **GitHub Issues: 🐛** For bug reports and feature requests
-- **Community Forum: 💬** Join our [community forum](https://discord.gg/based-hardware-1192313062041067520) for discussions and questions
+- **Community Forum: 💬** Join our [community forum](https://discord.gg/omi) for discussions and questions
 - **Documentation: 📚** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
 
 Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.

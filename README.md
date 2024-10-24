@@ -48,7 +48,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 * Check out our [contributions guide](https://docs.omi.me/developer/Contribution/).
 * Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
 * Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
-* Join the [Discord](https://discord.gg/based-hardware-1192313062041067520).
+* Join the [Discord](https://discord.gg/omi).
 * Build your own [Plugins/Integrations](https://docs.omi.me/developer/plugins/Introduction/).
 
 [//]: # (## More links:)
