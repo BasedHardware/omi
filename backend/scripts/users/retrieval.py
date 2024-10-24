@@ -30,10 +30,6 @@ class ExtractedInformation(BaseModel):
         default=[],
         description='List all the main topics and subtopics that were discussed.',
     )
-    # recommendations: List[dict] = Field(
-    #     default=[],
-    #     description='Extract any recommendations made, specifying who made them and what they are about.'
-    # )
     entities: List[str] = Field(
         default=[],
         description='List any products, technologies, places, or other entities that are relevant to the conversation.'
