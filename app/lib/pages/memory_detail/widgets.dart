@@ -188,7 +188,7 @@ class ActionItemsListWidget extends StatelessWidget {
                           height: 22.0,
                           width: 22.0,
                           child: Checkbox(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            shape: CircleBorder(),
                             value: item.completed,
                             onChanged: (value) {
                               if (value != null) {
