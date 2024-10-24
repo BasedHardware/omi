@@ -18,6 +18,8 @@ firebase_admin.initialize_app()
 from database._client import get_users_uid
 import database.memories as memories_db
 
+from database.vector_db import update_vector_metadata
+
 
 class ExtractedInformation(BaseModel):
     people_mentioned: List[str] = Field(
@@ -42,7 +44,7 @@ class ExtractedInformation(BaseModel):
     )
 
 
-def generate(created_at: str, transcript_segment: List[dict]) -> ExtractedInformation:
+def migrate_memory_vector_metadata(memory_id: str, created_at: datetime, transcript_segment: List[dict]) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
         transcript += f'{segment["text"].strip()}\n\n'
@@ -57,7 +59,7 @@ def generate(created_at: str, transcript_segment: List[dict]) -> ExtractedInform
     
     Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
     
-    For context when extracting dates, today is {created_at}.
+    For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
@@ -69,15 +71,21 @@ def generate(created_at: str, transcript_segment: List[dict]) -> ExtractedInform
     ```
     '''.replace('    ', '')
     result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
-    print(json.dumps(result.dict(), indent=2, default=str))
-    return result
+    metadata = {
+        'people': result.people_mentioned,
+        'topics': result.topics_discussed,
+        'entities': result.entities,
+        'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+    }
+    update_vector_metadata(uid, memory_id, metadata)
+    print(memory_id, json.dumps(result.dict(), default=str))
 
 
 if __name__ == '__main__':
     uids = get_users_uid()
     for uid in ['TtCJi59JTVXHmyUC6vUQ1d9U6cK2']:
-        memories = memories_db.get_memories(uid, limit=50)
+        memories = memories_db.get_memories(uid, limit=1000)
         to_merge = []
         for memory in memories:
             created_at = datetime.fromtimestamp(memory['created_at'].timestamp(), tz=timezone.utc)
-            generate(created_at.strftime('%Y-%m-%d'), memory['transcript_segments'])
+            migrate_memory_vector_metadata(memory['id'], created_at, memory['transcript_segments'])
