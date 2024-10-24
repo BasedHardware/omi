@@ -757,7 +757,7 @@ int transport_start()
         LOG_INF("Speaker initialized");
     }
 
-    play_boot_sound();
+
 #endif
     // Start advertising
 

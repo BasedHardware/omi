@@ -6,6 +6,7 @@
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/poweroff.h>
 #include "button.h"
 #include "transport.h"
 #include "speaker.h"
@@ -177,6 +178,12 @@ void check_button_level(struct k_work *work_item)
             //Also do nothing, but transition to the next state
             notify_press();
             current_button_state = ONE_PRESS;
+            if (is_off)
+           {
+             is_off = false;
+             bt_on();
+             play_haptic_milli(100);
+           }
         }
     }
 
@@ -206,35 +213,12 @@ void check_button_level(struct k_work *work_item)
             {
                 //If button is pressed for a long time.......
                 notify_long_tap();
-            	set_led_blue(false);
-	        	set_led_red(false);
-                set_led_green(false);
-                gpio_remove_callback(d5_pin_input.port, &button_cb_data);
-                NRF_POWER->SYSTEMOFF=1;
-
                 //Fire the long mode notify and enter a grace period
                 //turn off herre
-                
                 is_off = !is_off;
-                play_haptic_milli(100);
                 if (is_off)
                 {
-                    bt_disable();
-                    int err = bt_le_adv_stop();
-                    if (err)
-                    {
-                        printk("Failed to stop Bluetooth %d\n",err);
-                    }
-                }
-                else
-                {
-                    int err = bt_enable(NULL);
-                    if (err)
-                    {
-                        printk("Failed to enable Bluetooth %d\n",err);
-                    }
-                    bt_on();
-                    
+                    turnoff_all();
                 }
                 current_button_state = GRACE;
                 reset_count();
@@ -280,31 +264,10 @@ void check_button_level(struct k_work *work_item)
             {
                 notify_long_tap();
                 is_off = !is_off;
-            	set_led_blue(false);
-	        	set_led_red(false);
-                set_led_green(false);
-                gpio_remove_callback(d5_pin_input.port, &button_cb_data);
-                NRF_POWER->SYSTEMOFF=1;
                 //Fire the notify and enter a grace period
-                play_haptic_milli(100);
                 if (is_off)
                 {
-                    bt_disable();
-                    int err = bt_le_adv_stop();
-                    if (err)
-                    {
-                        printk("Failed to stop Bluetooth %d\n",err);
-                    }
-                }
-                else
-                {
-                    int err = bt_enable(NULL);
-                    if (err)
-                    {
-                        printk("Failed to enable Bluetooth %d\n",err);
-                    }
-                    bt_on();
-                    
+                    turnoff_all();
                 }
                 current_button_state = GRACE;
                 reset_count();
@@ -385,7 +348,7 @@ int button_init()
     {
 		LOG_INF("D5 ready");
 	}
-
+// GPIO_INT_LEVEL_INACTIVE
 	err2 =  gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) 
@@ -397,9 +360,10 @@ int button_init()
     {
 		LOG_INF("D5 ready to detect button presses");
 	}
+  
 
-    // gpio_init_callback(&button_cb_data, button_pressed, BIT(d5_pin_input.pin));
-	// gpio_add_callback(d5_pin_input.port, &button_cb_data);
+    gpio_init_callback(&button_cb_data, button_pressed, BIT(d5_pin_input.pin));
+	gpio_add_callback(d5_pin_input.port, &button_cb_data);
 
     return 0;
 }
@@ -417,4 +381,18 @@ void register_button_service()
 FSM_STATE_T get_current_button_state() 
 {
     return current_button_state;
+}
+
+void turnoff_all()
+{
+    set_led_blue(false);
+	set_led_red(false);
+    set_led_green(false);
+    play_haptic_milli(100);
+    k_msleep(10);
+    gpio_remove_callback(d5_pin_input.port, &button_cb_data);
+    gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_LEVEL_INACTIVE);
+    //maybe save something here to indicate success. next time the button is pressed we should know about it
+    NRF_USBD->INTENCLR= 0xFFFFFFFF;    
+    NRF_POWER->SYSTEMOFF=1;
 }
