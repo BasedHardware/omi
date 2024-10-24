@@ -37,7 +37,7 @@ class GraphState(TypedDict):
 
     memories_found: Optional[List[Memory]]
 
-    answer: Optional[Message]
+    answer: Optional[str]
 
 
 def determine_conversation_type(s: GraphState) -> Literal[
@@ -50,14 +50,11 @@ def determine_conversation_type(s: GraphState) -> Literal[
 
 
 def no_context_conversation(state: GraphState):
-    print('no_context_conversation', state)
-    # continue the conversation
-    return {'answer': Message(id='1', text='Hello', created_at=datetime.datetime.now(), sender=MessageSender.ai,
-                              type=MessageType.text)}
+    print('no_context_conversation node')
+    return {'answer': answer_simple_message(state.get('uid'), state.get('messages'))}
 
 
 def context_dependent_conversation(state: GraphState):
-    answer_simple_message(state.get('uid'), state.get('messages'))
     return {}
 
 
@@ -133,4 +130,5 @@ if __name__ == '__main__':
         sender=MessageSender.human,
         type=MessageType.text)
     ]
-    graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
+    result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
+    print('result', result)
