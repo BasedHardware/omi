@@ -1,67 +1,105 @@
-from typing import Literal
+import datetime
+from typing import List, Optional
 
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
-from langgraph.graph import START, StateGraph, MessagesState
+from langgraph.graph import START, StateGraph
+from typing_extensions import TypedDict, Literal
+
+from models.chat import Message, MessageSender, MessageType
+from models.memory import Memory
+from models.plugin import Plugin
+from utils.llm import requires_context, answer_simple_message
 
 model = ChatOpenAI(model='gpt-4o-mini')
 
 
-def determine_conversation_type(s: MessagesState) -> Literal["no_context_conversation", "context_dependent_conversation"]:
-    # call requires context
-    # if requires context, spawn 2 parallel graphs edges?
+class StructuredFilters(TypedDict):
+    topics_discussed: List[str]
+    people_mentioned: List[str]
+    entities: List[str]
+    dates: List[datetime.date]
+
+
+class DateRangeFilters(TypedDict):
+    start: datetime.date
+    end: datetime.date
+
+
+class GraphState(TypedDict):
+    uid: str
+    messages: List[Message]
+    plugin_selected: Optional[Plugin]
+
+    filters: Optional[StructuredFilters]
+    date_filters: Optional[DateRangeFilters]
+
+    memories_found: Optional[List[Memory]]
+
+    answer: Optional[Message]
+
+
+def determine_conversation_type(s: GraphState) -> Literal[
+    "no_context_conversation", "context_dependent_conversation"]:
+    requires = requires_context(s.get('messages', []))
+
+    if requires:
+        return 'context_dependent_conversation'
     return 'no_context_conversation'
 
 
-def no_context_conversation(state: MessagesState):
+def no_context_conversation(state: GraphState):
+    print('no_context_conversation', state)
     # continue the conversation
-    return END
+    return {'answer': Message(id='1', text='Hello', created_at=datetime.datetime.now(), sender=MessageSender.ai,
+                              type=MessageType.text)}
 
 
-def context_dependent_conversation(state: MessagesState):
-    pass
+def context_dependent_conversation(state: GraphState):
+    answer_simple_message(state.get('uid'), state.get('messages'))
+    return {}
 
 
 # TODO: include a question extractor? node?
 
 
-def retrieve_topics_filters(state: MessagesState):
+def retrieve_topics_filters(state: GraphState):
     # retrieve all available entities, names, topics, etc, and ask it to filter based on the question.
-    return 'query_vectors'
+    return {'filters': {'topics_discussed': ['topic1', 'topic2']}}
 
 
-def retrieve_date_filters(state: MessagesState):
+def retrieve_date_filters(state: GraphState):
     # extract dates filters, and send them to qa_handler node
-    return 'query_vectors'
+    return {'date_filters': {'start': datetime.date(2022, 1, 1), 'end': datetime.date(2022, 1, 2)}}
 
 
-def query_vectors(state: MessagesState):
+def query_vectors(state: GraphState):
+    print('query_vectors', state)
     # receives both filters, and finds vectors + rerank them
     # TODO: maybe didnt find anything, tries RAG, or goes to simple conversation?
-    pass
+    return {'memories_found': []}
 
 
-def qa_handler(state: MessagesState):
+def qa_handler(state: GraphState):
     # takes vectors found, retrieves memories, and does QA on them
     return END
 
 
-workflow = StateGraph(MessagesState)  # custom state?
+workflow = StateGraph(GraphState)  # custom state?
 
-
-
-
-workflow.add_edge(START, "determine_conversation_type")
-workflow.add_node('determine_conversation_type', determine_conversation_type)
+# workflow.add_edge(START, "determine_conversation_type")
+# workflow.add_node('determine_conversation_type', determine_conversation_type)
 
 workflow.add_conditional_edges(
-    "determine_conversation_type",
+    START,
     determine_conversation_type,
 )
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+
+workflow.add_edge("no_context_conversation", END)
 
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
@@ -84,4 +122,15 @@ checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
 if __name__ == '__main__':
-    graph.get_graph().draw_png('workflow.png')
+    # graph.get_graph().draw_png('workflow.png')
+    uid = 'TtCJi59JTVXHmyUC6vUQ1d9U6cK2'
+    # messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
+    # messages = filter_messages(messages, None)
+    messages = [Message(
+        id='0',
+        text='How is it going?',
+        created_at=datetime.datetime.now(),
+        sender=MessageSender.human,
+        type=MessageType.text)
+    ]
+    graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
