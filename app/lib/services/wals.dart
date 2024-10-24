@@ -23,13 +23,13 @@ abstract class IWalServiceListener extends IWalSyncListener {
 }
 
 abstract class IWalSyncListener {
-  void onNewMissingWal(Wal wal);
+  void onMissingWalUpdated();
   void onWalSynced(Wal wal, {ServerMemory? memory});
 }
 
 abstract class IWalSync {
   Future<List<Wal>> getMissingWals();
-  Future<bool> deleteWal(Wal wal);
+  Future deleteWal(Wal wal);
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
 
   void start();
@@ -149,9 +149,11 @@ class SDCardWalSync implements IWalSync {
   }
 
   @override
-  Future<bool> deleteWal(Wal wal) {
-    // TODO: implement deleteWal
-    throw UnimplementedError();
+  Future deleteWal(Wal wal) async {
+    // Soft delete
+    // TODO: Delete from sdcard
+    _wals.removeWhere((w) => w.id == wal.id);
+    listener.onMissingWalUpdated();
   }
 
   Future<List<Wal>> _getMissingWals() async {
@@ -198,7 +200,7 @@ class SDCardWalSync implements IWalSync {
   @override
   Future start() async {
     _wals = await _getMissingWals();
-    listener.onNewMissingWal(_wals[0]); // TODO: FIXME
+    listener.onMissingWalUpdated(); // TODO: FIXME
   }
 
   @override
@@ -215,7 +217,7 @@ class SDCardWalSync implements IWalSync {
   void setDevice(BtDevice? device) async {
     _device = device;
     _wals = await _getMissingWals();
-    listener.onNewMissingWal(_wals[0]); // TODO: FIXME
+    listener.onMissingWalUpdated();
   }
 }
 
@@ -315,7 +317,7 @@ class LocalWalSync implements IWalSync {
         }
 
         // send
-        listener.onNewMissingWal(missWal);
+        listener.onMissingWalUpdated();
       }
 
       // next
@@ -375,7 +377,7 @@ class LocalWalSync implements IWalSync {
   }
 
   Future<bool> _deleteWal(Wal wal) async {
-    if (wal.filePath != null) {
+    if (wal.filePath != null && wal.filePath!.isNotEmpty) {
       try {
         final file = File(wal.filePath!);
         if (file.existsSync()) {
@@ -392,8 +394,9 @@ class LocalWalSync implements IWalSync {
   }
 
   @override
-  Future<bool> deleteWal(Wal wal) async {
-    return _deleteWal(wal);
+  Future deleteWal(Wal wal) async {
+    await _deleteWal(wal);
+    listener.onMissingWalUpdated();
   }
 
   @override
@@ -505,10 +508,9 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<bool> deleteWal(Wal wal) async {
-    var phoneOk = await _phoneSync.deleteWal(wal);
-    var sdcardOk = await _sdcardSync.deleteWal(wal);
-    return phoneOk || sdcardOk;
+  Future deleteWal(Wal wal) async {
+    await _phoneSync.deleteWal(wal);
+    await _sdcardSync.deleteWal(wal);
   }
 
   @override
@@ -590,9 +592,9 @@ class WalService implements IWalService, IWalSyncListener {
   }
 
   @override
-  void onNewMissingWal(Wal wal) {
+  void onMissingWalUpdated() {
     for (var s in _subscriptions.values) {
-      s.onNewMissingWal(wal);
+      s.onMissingWalUpdated();
     }
   }
 
