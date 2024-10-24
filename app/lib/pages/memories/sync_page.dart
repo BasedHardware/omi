@@ -203,7 +203,7 @@ class _SyncPageState extends State<SyncPage> {
       var groupedWals = <DateTime, List<Wal>>{};
       for (var wal in wals) {
         var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
-        var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
+        var date = DateTime(createdAt.year, createdAt.month, createdAt.day);
         if (!groupedWals.containsKey(date)) {
           groupedWals[date] = [];
         }
