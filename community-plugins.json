@@ -534,6 +534,18 @@
     "deleted": false
   },
   {
+    "id": "participant-analysis",
+    "name": "Participant Analysis",
+    "author": "Findirfin",
+    "description": "Lists and Collects information about the people in this conversation",
+    "image": "/plugins/logos/participant-analysis.jpeg",
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "You will be given a transcription of a conversation. The transcript will not be perfect. Your task is to: 1. Discover all other speakers and people mentioned in the conversation. 2. Infer and organize information about these individuals, prioritizing: a) Names b) Roles or occupations c) Relationships to the main speaker d) Any other details about them. If the identity or information about a person is ambiguous or unclear, note this and provide your best inference based on context. Present this information in a clear, organized list format.",
+    "deleted": false
+  },
+  {
     "id": "zapier",
     "name": "Zapier Automated Workflow",
     "author": "@thinh",
