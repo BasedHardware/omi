@@ -144,14 +144,17 @@ int main(void)
     bool from_wakeup =  (reset_reas & WAKEUP_DETECT);
     if (from_usb_event) 
     {
+        k_msleep(100);
         printf("from reset \n");
         is_off = true;
-        bt_disable();
+
         usb_charge = true;
         activate_everything_no_lights();
+        // bt_disable();
     }
     else if (from_wakeup)
     {
+        k_msleep(100);
         is_off = false;
         usb_charge = false;
         activate_everything_no_lights();        
