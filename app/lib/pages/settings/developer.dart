@@ -11,6 +11,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'widgets/appbar_with_banner.dart';
 import 'widgets/toggle_section_widget.dart';
@@ -267,9 +268,31 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Webhooks',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      const Text(
+                        'Webhooks',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
+                          MixpanelManager().pageOpened('Advanced Mode Docs');
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text(
+                            'Docs',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(
                     height: 10,
