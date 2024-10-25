@@ -227,6 +227,18 @@ def get_in_progress_memory_id(uid: str) -> str:
 def set_user_webhook_db(uid: str, wtype: str, url: str):
     r.set(f'users:{uid}:developer:webhook:{wtype}', url)
 
+def disable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(False).lower())
+
+def enable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(True).lower())
+
+def user_webhook_status_db(uid: str, wtype: str):
+    status = r.get(f'users:{uid}:developer:webhook_status:{wtype}')
+    if status is None:
+        return None
+    return status.decode() == str(True).lower()
+
 
 def get_user_webhook_db(uid: str, wtype: str) -> str:
     url = r.get(f'users:{uid}:developer:webhook:{wtype}')
