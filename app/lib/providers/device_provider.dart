@@ -15,6 +15,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
+  bool isDeviceV2Connected = false;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -71,6 +72,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
+  }
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
   }
 
   Future<BtDevice?> _getConnectedDevice() async {
@@ -157,6 +166,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         var cDevice = await _getConnectedDevice();
         if (cDevice != null) {
           setConnectedDevice(cDevice);
+          setIsDeviceV2Connected();
           // SharedPreferencesUtil().btDevice = cDevice;
           SharedPreferencesUtil().deviceName = cDevice.name;
           MixpanelManager().deviceConnected();
@@ -200,6 +210,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onDeviceDisconnected() async {
     debugPrint('onDisconnected inside: $connectedDevice');
     setConnectedDevice(null);
+    setIsDeviceV2Connected();
     setIsConnected(false);
     updateConnectingStatus(false);
 
@@ -231,6 +242,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
+    setIsDeviceV2Connected();
     setIsConnected(true);
     if (isConnected) {
       await initiateBleBatteryListener();
@@ -244,6 +256,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
 
+    notifyListeners();
+  }
+
+  Future setIsDeviceV2Connected() async {
+    if (connectedDevice == null) {
+      isDeviceV2Connected = false;
+    } else {
+      var storageFiles = await _getStorageList(connectedDevice!.id);
+      isDeviceV2Connected = storageFiles.isNotEmpty;
+    }
     notifyListeners();
   }
 
