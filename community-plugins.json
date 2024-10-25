@@ -94,8 +94,21 @@
       "memory_prompt": "From the transcript provided, look for moments where a friendly roast could have added humor. Identify specific things the other person said or did that could be playfully teased, like a funny comment, quirky habit, or light mistake. Generate light-hearted roast ideas that keep the tone fun and non-offensive, ensuring they come across as friendly and add humor to future interactions. Provide a few specific examples of how the user could phrase these roasts to keep the conversation playful and enjoyable.",
       "chat_prompt": "Act as a friendly roast buddy, giving the user funny, harmless roast ideas based on the conversation. Suggest playful, witty comments that add humor without crossing any lines, helping the user keep things light-hearted and fun.",
       "deleted": false
-    }
-,    
+    },
+    {
+      "id": "slang-buddy",
+      "name": "Slang Buddy",
+      "author": "Tristan L",
+      "description": "Slang Buddy decodes modern slang and abbreviations, so you’re always in the know.",
+      "image": "/plugins/logos/slang-buddy.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, identify any slang, abbreviations, or trendy language that might not be immediately clear. For each term, provide a straightforward explanation, including any cultural context or nuances that could help the user fully understand how it was used. Offer examples of how this slang is typically used in different contexts, helping the user feel comfortable with similar language in future conversations.",
+      "chat_prompt": "Act as a slang interpreter, defining any trendy terms or abbreviations the user encountered. Provide clear, easy-to-understand explanations and offer examples of how this slang is used in different contexts to make it relatable and easy to grasp.",
+      "deleted": false
+    },    
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
