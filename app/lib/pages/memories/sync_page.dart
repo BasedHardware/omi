@@ -75,12 +75,13 @@ class _WalListItemState extends State<WalListItem> {
   }
 
   _getWalHeader() {
+    final wal = widget.wal;
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(widget.wal.device == "phone" ? "📱" : "💾",
+          Text(wal.device == "phone" ? "📱" : "💾",
               style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
           const SizedBox(width: 12),
           Container(
@@ -90,7 +91,7 @@ class _WalListItemState extends State<WalListItem> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              "${widget.wal.seconds}s",
+              "${wal.seconds}s",
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -98,22 +99,39 @@ class _WalListItemState extends State<WalListItem> {
           const SizedBox(
             width: 16,
           ),
-          widget.wal.isSyncing
-              ? const Expanded(
+          wal.isSyncing
+              ? Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        )),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        (wal.syncEtaSeconds ?? 0) > 0
+                            ? Text(
+                                "${wal.syncEtaSeconds}s ETA",
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall!
+                                    .copyWith(color: Colors.white, fontStyle: FontStyle.italic),
+                              )
+                            : const SizedBox.shrink(),
+                        const SizedBox(
+                          width: 8,
+                        ),
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : Expanded(
                   child: Text(
-                    dateTimeFormat(
-                        'MMM d, h:mm:ss a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    dateTimeFormat('MMM d, h:mm:ss a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     maxLines: 1,
                     textAlign: TextAlign.end,
@@ -203,7 +221,7 @@ class _SyncPageState extends State<SyncPage> {
       var groupedWals = <DateTime, List<Wal>>{};
       for (var wal in wals) {
         var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
-        var date = DateTime(createdAt.year, createdAt.month, createdAt.day);
+        var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
         if (!groupedWals.containsKey(date)) {
           groupedWals[date] = [];
         }
@@ -217,11 +235,13 @@ class _SyncPageState extends State<SyncPage> {
 
     Widget _buildWals(List<Wal> wals) {
       var groupedWals = _groupWalsByDate(wals);
+      var keys = groupedWals.keys.toList();
+      keys.sort((a, b) => b.compareTo(a));
       return SliverList(
         delegate: SliverChildBuilderDelegate(
-          childCount: groupedWals.length,
+          childCount: keys.length,
           (context, index) {
-            var date = groupedWals.keys.elementAt(index);
+            var date = keys[index];
             List<Wal> wals = groupedWals[date] ?? [];
             return Column(
               mainAxisSize: MainAxisSize.min,
