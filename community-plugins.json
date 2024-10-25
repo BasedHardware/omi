@@ -81,6 +81,21 @@
       "chat_prompt": "Act as a conversation coach, giving the user practical tips to keep chats engaging and energetic. Share ideas for fun questions, playful comments, and light-hearted topics they can use to keep the conversation lively and flowing naturally.",
       "deleted": false
     },
+    {
+      "id": "roast-master",
+      "name": "Roast Master",
+      "author": "Tristan L",
+      "description": "Roast Master reviews conversations and suggests light-hearted roasts to add humor and playfulness to future chats.",
+      "image": "/plugins/logos/roast-master.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, look for moments where a friendly roast could have added humor. Identify specific things the other person said or did that could be playfully teased, like a funny comment, quirky habit, or light mistake. Generate light-hearted roast ideas that keep the tone fun and non-offensive, ensuring they come across as friendly and add humor to future interactions. Provide a few specific examples of how the user could phrase these roasts to keep the conversation playful and enjoyable.",
+      "chat_prompt": "Act as a friendly roast buddy, giving the user funny, harmless roast ideas based on the conversation. Suggest playful, witty comments that add humor without crossing any lines, helping the user keep things light-hearted and fun.",
+      "deleted": false
+    }
+,    
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
