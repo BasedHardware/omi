@@ -131,7 +131,7 @@ class _WalListItemState extends State<WalListItem> {
                 )
               : Expanded(
                   child: Text(
-                    dateTimeFormat('MMM d, h:mm:ss a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                    dateTimeFormat('MMM d, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     maxLines: 1,
                     textAlign: TextAlign.end,
@@ -234,14 +234,34 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     Widget _buildWals(List<Wal> wals) {
-      var groupedWals = _groupWalsByDate(wals);
-      var keys = groupedWals.keys.toList();
-      keys.sort((a, b) => b.compareTo(a));
+      // sdcard
+      var sdcardWals = wals.where((w) => w.storage == WalStorage.sdcard).toList();
+      var sdcardGroupedWals = _groupWalsByDate(sdcardWals);
+      var sdcardKeys = sdcardGroupedWals.keys.toList();
+      sdcardKeys.sort((a, b) => b.compareTo(a));
+
+      // phone
+      var phoneWals = wals.where((w) => w.storage == WalStorage.disk).toList();
+      var phoneGroupedWals = _groupWalsByDate(phoneWals);
+      var phoneKeys = phoneGroupedWals.keys.toList();
+      phoneKeys.sort((a, b) => b.compareTo(a));
+
       return SliverList(
         delegate: SliverChildBuilderDelegate(
-          childCount: keys.length,
+          childCount: sdcardKeys.length + phoneKeys.length,
           (context, index) {
-            var date = keys[index];
+            var keys = sdcardKeys;
+            var groupedWals = sdcardGroupedWals;
+            var idx = index;
+
+            // Phone sections
+            if (index > sdcardKeys.length - 1) {
+              keys = phoneKeys;
+              groupedWals = phoneGroupedWals;
+              idx -= sdcardKeys.length;
+            }
+
+            var date = keys[idx];
             List<Wal> wals = groupedWals[date] ?? [];
             return Column(
               mainAxisSize: MainAxisSize.min,
