@@ -11,9 +11,15 @@ FROM python:3.11-slim
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get -y install ffmpeg curl git gcc unzip graphviz graphviz-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
+
+ENV CFLAGS="-I/usr/include/graphviz" LDFLAGS="-L/usr/local/lib/graphviz"
+RUN pip install git+https://github.com/pygraphviz/pygraphviz.git
+
 COPY backend/ .
 
 EXPOSE 8080
