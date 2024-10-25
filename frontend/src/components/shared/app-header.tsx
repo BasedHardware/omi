@@ -71,7 +71,7 @@ export default function AppHeader() {
       <div className="fixed top-16 z-30 w-full bg-blue-500 p-2 text-center text-white">
         <span>Submit your own App by November 30th and get a free trip to OMI HQ in San Francisco</span>
         <Link
-          href="https://discord.gg/based-hardware-1192313062041067520"
+          href="https://discord.gg/omi"
           target="_blank"
           className="ml-4 inline-block rounded-md bg-white px-3 py-1 text-blue-500 hover:bg-blue-100"
         >
