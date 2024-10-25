@@ -42,7 +42,7 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
@@ -178,7 +178,7 @@ class CaptureProvider extends ChangeNotifier
         setIsWalSupported(checkWalSupported);
       }
       if (_isWalSupported) {
-        _walService.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(value);
       }
 
       // send ws
@@ -188,7 +188,7 @@ class CaptureProvider extends ChangeNotifier
 
         // synced
         if (_isWalSupported) {
-          _walService.onBytesSync(value);
+          _wal.getSyncs().phone.onBytesSync(value);
         }
       }
     });
@@ -531,7 +531,34 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
+    if (_recordingDevice == null) return;
+    var storageFiles = await _getStorageList(_recordingDevice!.id);
+    if (storageFiles.isEmpty) {
+      return;
+    }
+    var totalBytes = storageFiles[0];
+    if (totalBytes <= 0) {
+      return;
+    }
+    var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
+    if (storageOffset > totalBytes) {
+      // bad state?
+      debugPrint("SDCard bad state, offset > total");
+      storageOffset = 0;
+    }
 
+    // 80: frame length, 100: frame per seconds
+    sdCardSecondsTotal = totalBytes / 80 / 100;
+    sdCardSecondsReceived = storageOffset / 80 / 100;
+
+    // > 10s
+    if (totalBytes - storageOffset > 10 * 80 * 100) {
+      sdCardReady = true;
+    }
+
+    notifyListeners();
+
+    /* TODO: Remove
     if (_recordingDevice == null) return;
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
     if (currentStorageFiles.isEmpty) {
@@ -575,8 +602,10 @@ class CaptureProvider extends ChangeNotifier
       sdCardReady = true;
     }
     notifyListeners();
+		*/
   }
 
+  @Deprecated("Unsued")
   Future sendStorage(String id) async {
     if (_storageStream != null) {
       _storageStream?.cancel();
@@ -635,7 +664,7 @@ class CaptureProvider extends ChangeNotifier
           sdCardSocket.sdCardChannel?.sink.add(value); //replace
           SharedPreferencesUtil().currentStorageBytes = 0;
           SharedPreferencesUtil().previousStorageBytes = 0;
-          clearFileFromDevice(sdCardFileNum);
+          _clearFileFromDevice(sdCardFileNum);
         } else {
           //bad bit
           debugPrint('Error bit returned');
@@ -657,7 +686,7 @@ class CaptureProvider extends ChangeNotifier
             return;
           }
           sdCardIsDownloading = false;
-          pauseFileFromDevice(sdCardFileNum);
+          _pauseFileFromDevice(sdCardFileNum);
           debugPrint('paused file from device');
           //attempt reconnection
           sdCardSocket.sdCardChannel?.sink.close();
@@ -675,7 +704,7 @@ class CaptureProvider extends ChangeNotifier
             debugPrint('sdCardReconnectionTimer');
             if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
               sdCardIsDownloading = true;
-              getFileFromDevice(sdCardFileNum, totalBytesReceived);
+              _getFileFromDevice(sdCardFileNum, totalBytesReceived);
             }
           });
 
@@ -691,23 +720,23 @@ class CaptureProvider extends ChangeNotifier
       notifyListeners();
     });
 
-    getFileFromDevice(sdCardFileNum, totalBytesReceived);
+    _getFileFromDevice(sdCardFileNum, totalBytesReceived);
     //  notifyListeners();
   }
 
-  Future getFileFromDevice(int fileNum, int offset) async {
+  Future _getFileFromDevice(int fileNum, int offset) async {
     sdCardFileNum = fileNum;
     int command = 0;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, offset);
   }
 
-  Future clearFileFromDevice(int fileNum) async {
+  Future _clearFileFromDevice(int fileNum) async {
     sdCardFileNum = fileNum;
     int command = 1;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
   }
 
-  Future pauseFileFromDevice(int fileNum) async {
+  Future _pauseFileFromDevice(int fileNum) async {
     sdCardFileNum = fileNum;
     int command = 3;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
@@ -738,7 +767,7 @@ class CaptureProvider extends ChangeNotifier
     return connection.getStorageList();
   }
 
-  void setsdCardReady(bool value) {
+  void _setsdCardReady(bool value) {
     sdCardReady = value;
     notifyListeners();
   }
