@@ -53,6 +53,20 @@
       "chat_prompt": "Act as a supportive coach, giving the user a confidence boost. Highlight what they did well in the conversation and share practical, easy-to-use tips for building on that confidence next time. Use real examples from the chat to make the advice encouraging and actionable.",
       "deleted": false
     },
+    {
+      "id": "lie-detector",
+      "name": "Lie Detector",
+      "author": "Tristan L",
+      "description": "Lie Detector helps you spot signs of insincerity, letting you read between the lines with confidence.",
+      "image": "/plugins/logos/lie-detector.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, review for any hints that the other person might not have been fully truthful. Look for specific signs of insincerity, like vague answers, sudden changes in tone, avoiding certain details, or contradicting statements. Point out where these moments occurred and suggest how the user might interpret them as potential red flags. Offer practical advice on how to handle these situations in future conversations, such as asking direct follow-up questions, clarifying ambiguous statements, or watching for changes in tone or body language. Provide examples of questions or comments the user could use to encourage openness and get a clearer response.",
+      "chat_prompt": "Act as a lie-detection guide, helping the user notice signs of possible insincerity. Offer clear examples, like avoiding direct answers or using vague language, and provide tips on how to respond in a way that keeps the conversation open and honest.",
+      "deleted": false
+    },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
