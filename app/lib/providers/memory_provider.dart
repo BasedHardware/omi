@@ -354,6 +354,8 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   Future syncWals() async {
+    debugPrint("provider > syncWals");
+
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
     var res = await _wal.getSyncs().syncAll(progress: this);
