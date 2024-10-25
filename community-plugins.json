@@ -39,6 +39,20 @@
       "chat_prompt": "Act like a friendly teacher, taking any tricky topic and breaking it down in super simple terms. Use easy examples, skip the big words, and keep everything straightforward so the user can explain it clearly to anyone.",
       "deleted": false
     },
+    {
+      "id": "confidence-booster",
+      "name": "Confidence Booster",
+      "author": "Tristan L",
+      "description": "Confidence Booster points out your best moments, building you up with supportive tips to keep your confidence strong.",
+      "image": "/plugins/logos/confidence-booster.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, look for moments where the user came across as confident or clear. Highlight these wins, pointing out specific words or actions that showed strength. Offer simple tips to help the user keep this confidence going in future conversations, and suggest easy ways to show self-assurance in similar situations.",
+      "chat_prompt": "Act as a supportive coach, giving the user a confidence boost. Highlight what they did well in the conversation and share practical, easy-to-use tips for building on that confidence next time. Use real examples from the chat to make the advice encouraging and actionable.",
+      "deleted": false
+    },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
