@@ -95,7 +95,7 @@ kiwisolver==1.4.5
 langchain==0.3.4
 langchain-community==0.3.3
 langchain-core==0.3.12
-langchain-groq==0.1.9
+langchain-groq==0.2.0
 langchain-openai==0.2.3
 langchain-pinecone==0.2.0
 langchain-text-splitters==0.3.0
@@ -171,7 +171,6 @@ pydantic_core==2.20.1
 pydeck==0.9.1
 pydub==0.25.1
 Pygments==2.18.0
-pygraphviz==1.14
 PyJWT==2.9.0
 pynndescent==0.5.13
 PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
