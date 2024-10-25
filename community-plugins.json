@@ -67,6 +67,20 @@
       "chat_prompt": "Act as a lie-detection guide, helping the user notice signs of possible insincerity. Offer clear examples, like avoiding direct answers or using vague language, and provide tips on how to respond in a way that keeps the conversation open and honest.",
       "deleted": false
     },
+    {
+      "id": "conversation-energizer",
+      "name": "Conversation Energizer",
+      "author": "Tristan L",
+      "description": "Conversation Energizer reviews past conversations to suggest topics, questions, and comments that can keep future chats lively and avoid any awkwardness.",
+      "image": "/plugins/logos/conversation-energizer.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, identify any moments where the energy dipped or the conversation stalled. Highlight specific spots where the user could have kept things lively by introducing a fresh topic, asking a follow-up question, or making a light-hearted comment. Suggest specific examples for future conversations, like engaging, open-ended questions, fun topics, or casual jokes to break any tension. Provide easy-to-use ideas to help the user keep the conversation flowing, avoiding awkward pauses or one-word responses, and making the interaction feel upbeat and natural.",
+      "chat_prompt": "Act as a conversation coach, giving the user practical tips to keep chats engaging and energetic. Share ideas for fun questions, playful comments, and light-hearted topics they can use to keep the conversation lively and flowing naturally.",
+      "deleted": false
+    },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
