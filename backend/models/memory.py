@@ -195,8 +195,8 @@ class Memory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
-        self.structured.events = [event.as_dict_cleaned_dates() for event in self.structured.events]
         memory_dict = self.dict()
+        memory_dict['structured']['events'] = [event['start'].isoformat() for event in memory_dict['structured']['events']]
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
         memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
