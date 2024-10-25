@@ -238,6 +238,7 @@ async def _websocket_util(
         nonlocal websocket
         nonlocal seconds_to_trim
 
+        print(f"uid: ${uid} stream_transcript #0")
         if not segments or len(segments) == 0:
             return
 
@@ -247,6 +248,7 @@ async def _websocket_util(
 
         finished_at = datetime.now(timezone.utc)
         asyncio.run_coroutine_threadsafe(create_memory_on_segment_received_task(finished_at), loop)
+        print(f"uid: ${uid} stream_transcript #1")
 
         # Segments aligning duration seconds.
         if seconds_to_add:
@@ -260,15 +262,20 @@ async def _websocket_util(
                 segment["end"] -= seconds_to_trim
                 segments[i] = segment
 
+        print(f"uid: ${uid} stream_transcript #2")
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
 
+        print(f"uid: ${uid} stream_transcript #3")
         # realtime plugins + realtime webhook
         asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
+        print(f"uid: ${uid} stream_transcript #4")
         asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
 
+        print(f"uid: ${uid} stream_transcript #5")
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+        print(f"uid: ${uid} stream_transcript #6")
 
         # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
 
