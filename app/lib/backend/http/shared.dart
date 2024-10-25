@@ -100,7 +100,8 @@ Future<http.Response> _performRequest(
     case 'GET':
       return await client.get(Uri.parse(url), headers: headers);
     case 'DELETE':
-      return await client.delete(Uri.parse(url), headers: headers);
+      headers['Content-Type'] = 'application/json';
+      return await client.delete(Uri.parse(url), headers: headers, body: body);
     case 'PATCH':
       headers['Content-Type'] = 'application/json';
       return await client.patch(Uri.parse(url), headers: headers, body: body);
