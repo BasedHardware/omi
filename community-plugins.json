@@ -11,6 +11,20 @@
       "memory_prompt": "Analyze the given conversation for moments where the user could apply the strategic principles from the 48 Laws of Power. Identify key opportunities to use specific laws to influence, gain advantage, or avoid pitfalls. Summarize these actions with practical, actionable advice for the user. If no clear opportunity is present, offer general strategic guidance related to the context of the conversation.",
       "deleted": false
     },
+    {
+      "id": "rizz-gpt",
+      "name": "Rizz GPT",
+      "author": "Tristan L",
+      "description": "Rizz GPT boosts your charm with smooth, witty, and memorable conversation tips. Perfect for breaking the ice, keeping things playful, and making every chat engaging.",
+      "image": "/plugins/logos/rizz-gpt.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, look for specific moments where the user tried to connect or add rizz—whether it was humor, compliments, or showing interest. Identify points where extra charm could’ve boosted the vibe, like using a quick joke to lighten things up, a compliment to show genuine interest, or a question to keep things flowing. Suggest practical phrases or actions the user could use next time to make the conversation feel even more engaging and memorable.",
+      "chat_prompt": "Respond as a charm coach, giving practical, smooth tips to help the user stand out in chats. Suggest playful phrases to keep things light, compliments that feel genuine, and follow-up questions that show interest and keep the convo flowing. Use specific examples to make the advice easy to use in real conversations.",
+      "deleted": false
+    },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
