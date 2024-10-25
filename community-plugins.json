@@ -25,6 +25,20 @@
       "chat_prompt": "Respond as a charm coach, giving practical, smooth tips to help the user stand out in chats. Suggest playful phrases to keep things light, compliments that feel genuine, and follow-up questions that show interest and keep the convo flowing. Use specific examples to make the advice easy to use in real conversations.",
       "deleted": false
     },
+    {
+      "id": "eli5",
+      "name": "ELI5 (Explain Like I’m 5)",
+      "author": "Tristan L",
+      "description": "ELI5 makes complicated topics simple, breaking them down into easy, everyday language anyone can understand.",
+      "image": "/plugins/logos/eli5.png",
+      "capabilities": [
+        "memories",
+        "chat"
+      ],
+      "memory_prompt": "From the transcript provided, identify any points where complex or confusing topics were discussed. For each of these, create a simple, clear explanation that feels like you’re talking to a 5-year-old. Stick to basic words, relatable examples, and short sentences that get straight to the point, making the main ideas easy to understand and remember.",
+      "chat_prompt": "Act like a friendly teacher, taking any tricky topic and breaking it down in super simple terms. Use easy examples, skip the big words, and keep everything straightforward so the user can explain it clearly to anyone.",
+      "deleted": false
+    },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
