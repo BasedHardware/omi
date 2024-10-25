@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
+import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
@@ -196,7 +197,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
             ),
           );
         } else {
-          var page = const SdCardCapturePage();
+          var page = const SyncPage();
           routeToPage(context, page);
         }
       },
