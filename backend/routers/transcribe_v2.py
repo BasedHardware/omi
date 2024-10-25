@@ -234,7 +234,7 @@ async def _websocket_util(
             memory_creation_task = asyncio.create_task(
                 _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
-    def stream_transcript(segments, _):
+    def stream_transcript(segments):
         nonlocal websocket
         nonlocal seconds_to_trim
 
