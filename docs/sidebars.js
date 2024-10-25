@@ -71,6 +71,7 @@ const sidebars = {
         'developer/Protocol',
         'developer/Contribution',
         'developer/savingaudio',
+        'developer/AudioStreaming',
         'developer/DevKit2Testing'
       ]
     },
