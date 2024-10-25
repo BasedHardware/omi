@@ -39,7 +39,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 break
 
             frame_length = struct.unpack('<I', length_bytes)[0]
-            print(f"Reading frame {frame_count}: length {frame_length}")
+            # print(f"Reading frame {frame_count}: length {frame_length}")
             opus_data = f.read(frame_length)
             if len(opus_data) < frame_length:
                 print(f"Unexpected end of file at frame {frame_count}.")
@@ -49,7 +49,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                 pcm_data.append(pcm_frame)
                 frame_count += 1
             except Exception as e:
-                print(f"Error decoding frame {frame_count}: {e} {list(opus_data)}")
+                print(f"Error decoding frame {frame_count}: {e}")
                 break
         if pcm_data:
             pcm_bytes = b''.join(pcm_data)
