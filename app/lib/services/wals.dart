@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -12,8 +11,8 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:path_provider/path_provider.dart';
 
-const chunkSizeInSeconds = 30;
-const flushIntervalInSeconds = 60;
+const chunkSizeInSeconds = 60;
+const flushIntervalInSeconds = 90;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
@@ -113,7 +112,7 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       filePath: json['file_path'],
-      seconds: json['seconds'] ?? 30,
+      seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
       storageOffset: json['storage_offset'] ?? 0,
       storageTotalBytes: json['storage_total_bytes'] ?? 0,
@@ -188,8 +187,13 @@ class SDCardWalSync implements IWalSync {
       return [];
     }
     var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
+    if (storageOffset > totalBytes) {
+      // bad state?
+      debugPrint("SDCard bad state, offset > total");
+      storageOffset = 0;
+    }
+    //> 10s
     if (totalBytes - storageOffset > 10 * 80 * 100) {
-      //> 10s
       var seconds = ((totalBytes - storageOffset) / 80) ~/ 100; // 80: frame length, 100: frame per seconds
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
       wals.add(Wal(
@@ -248,7 +252,7 @@ class SDCardWalSync implements IWalSync {
     String filePath = '${directory.path}/audio_${timerStart}.bin';
     List<int> data = [];
     for (int i = 0; i < chunk.length; i++) {
-      var frame = chunk[i]; //.sublist(3);
+      var frame = chunk[i];
 
       // Format: <length>|<data> ; bytes: 4 | n
       final byteFrame = ByteData(frame.length);
@@ -421,7 +425,7 @@ class SDCardWalSync implements IWalSync {
     }
 
     // Clear file
-    // await _writeToStorage(wal.device, wal.fileNum, 1, 0);
+    await _writeToStorage(wal.device, wal.fileNum, 1, 0);
 
     return resp;
   }
@@ -513,8 +517,8 @@ class LocalWalSync implements IWalSync {
     }
 
     var framesPerSeconds = 100;
-    var lossesThreshold = 3 * framesPerSeconds; // 3s
-    var newFrameSyncDelaySeconds = 5; // wait 5s for new frame synced
+    var lossesThreshold = 10 * framesPerSeconds; // 10s
+    var newFrameSyncDelaySeconds = 15; // wait 15s for new frame synced
     var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * framesPerSeconds;
     if (pivot <= 0) {
@@ -589,12 +593,8 @@ class LocalWalSync implements IWalSync {
         for (int i = 0; i < wal.data.length; i++) {
           var frame = wal.data[i].sublist(3);
 
-          // Format:
-          // <length>|<bytes>
-          // 4 bytes |  n bytes
+          // Format: <length>|<data> ; bytes: 4 | n
           final byteFrame = ByteData(frame.length);
-          // Check why 37 -> [0, 0, 0, 37] ???
-          // byteFrame.setUint32(0, frame.length, Endian.big);
           for (int i = 0; i < frame.length; i++) {
             byteFrame.setUint8(i, frame[i]);
           }
@@ -793,16 +793,16 @@ class WalSyncs implements IWalSync {
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
 
-    // phone
-    var partialRes = await _phoneSync.syncAll(progress: progress);
+    // sdcard
+    var partialRes = await _sdcardSync.syncAll(progress: progress);
     if (partialRes != null) {
       resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
       resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
           .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
     }
 
-    // sdcard
-    partialRes = await _sdcardSync.syncAll(progress: progress);
+    // phone
+    partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
       resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
       resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
