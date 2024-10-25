@@ -446,11 +446,13 @@ class SDCardWalSync implements IWalSync {
       wal.syncStartedAt = DateTime.now();
       listener.onMissingWalUpdated();
 
+      final storageOffsetStarts = wal.storageOffset;
+
       var partialRes = await _syncWal(wal, (offset) {
         wal.storageOffset = offset;
-        wal.syncEtaSeconds =
-            (DateTime.now().difference(wal.syncStartedAt!).inSeconds * (wal.storageTotalBytes / wal.storageOffset))
-                .toInt();
+        wal.syncEtaSeconds = DateTime.now().difference(wal.syncStartedAt!).inSeconds *
+            (wal.storageTotalBytes - wal.storageOffset) ~/
+            (wal.storageOffset - storageOffsetStarts);
         listener.onMissingWalUpdated();
       });
       resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
