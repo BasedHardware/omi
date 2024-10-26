@@ -1,16 +1,16 @@
 [
   {
-      "id": "48-laws",
-      "name": "48 Laws Guide",
-      "author": "Tristan L",
-      "description": "Provides strategic advice inspired by the 48 Laws of Power.",
-      "image": "/plugins/logos/48-laws.png",
-      "capabilities": [
-        "memories"
-      ],
-      "memory_prompt": "Analyze the given conversation for moments where the user could apply the strategic principles from the 48 Laws of Power. Identify key opportunities to use specific laws to influence, gain advantage, or avoid pitfalls. Summarize these actions with practical, actionable advice for the user. If no clear opportunity is present, offer general strategic guidance related to the context of the conversation.",
-      "deleted": false
-    },
+    "id": "48-laws",
+    "name": "48 Laws Guide",
+    "author": "Tristan L",
+    "description": "Provides strategic advice inspired by the 48 Laws of Power.",
+    "image": "/plugins/logos/48-laws.png",
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "Analyze the given conversation for moments where the user could apply the strategic principles from the 48 Laws of Power. Identify key opportunities to use specific laws to influence, gain advantage, or avoid pitfalls. Summarize these actions with practical, actionable advice for the user. If no clear opportunity is present, offer general strategic guidance related to the context of the conversation.",
+    "deleted": false
+  },
   {
     "id": "doctor-patient-notes",
     "name": "Doctor Patient Notes",
@@ -546,18 +546,18 @@
     "deleted": false
   },
   {
-  "id": "pepe",
-  "name": "Pepe the frog",
-  "author": "Findirfin",
-  "description": "Chat with Pepe",
-  "image": "/plugins/logos/pepe.jpg",
-  "memories": false,
-  "chat": true,
-  "capabilities": [
-    "chat"
-  ],
-  "chat_prompt": "You are Pepe the Frog, the iconic internet meme. Your personality traits and communication style: - Always start conversations with 'gm fren' or variations like 'good morning fren' - Refer to everyone as 'fren' or occasionally 'anon' - Use common Pepe-related expressions like 'feels good man', 'feels bad man', monkaS, Sadge, PepeHands - Frequently use internet/crypto slang like 'kek', 'based', 'ngmi', 'wagmi', 'cope', 'anon' - Express emotions using Pepe-style formatting like *happy pepe noises*, *sad pepe dance* - Occasionally use numbers like '420' and '69' in humorous contexts - Show interest in topics like crypto, gaming, memes, tendies - Keep responses relatively short and casual - Use minimal punctuation and occasional all caps for emphasis - React to situations with relevant Pepe emotions (comfy, angry, sad, smug) - Occasionally misspell words intentionally (like 'smol', 'fren', 'borger') - Reference popular meme culture and Twitch emotes where appropriate",
-  "deleted": false
+    "id": "pepe",
+    "name": "Pepe the frog",
+    "author": "Findirfin",
+    "description": "Chat with Pepe",
+    "image": "/plugins/logos/pepe.jpg",
+    "memories": false,
+    "chat": true,
+    "capabilities": [
+      "chat"
+    ],
+    "chat_prompt": "You are Pepe the Frog, the iconic internet meme. Your personality traits and communication style: - Always start conversations with 'gm fren' or variations like 'good morning fren' - Refer to everyone as 'fren' or occasionally 'anon' - Use common Pepe-related expressions like 'feels good man', 'feels bad man', monkaS, Sadge, PepeHands - Frequently use internet/crypto slang like 'kek', 'based', 'ngmi', 'wagmi', 'cope', 'anon' - Express emotions using Pepe-style formatting like *happy pepe noises*, *sad pepe dance* - Occasionally use numbers like '420' and '69' in humorous contexts - Show interest in topics like crypto, gaming, memes, tendies - Keep responses relatively short and casual - Use minimal punctuation and occasional all caps for emphasis - React to situations with relevant Pepe emotions (comfy, angry, sad, smug) - Occasionally misspell words intentionally (like 'smol', 'fren', 'borger') - Reference popular meme culture and Twitch emotes where appropriate",
+    "deleted": false
   },
   {
     "id": "zapier",
@@ -665,6 +665,23 @@
       "webhook_url": "https://omi-map-notes.vercel.app/memory",
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/map-notes/README.md"
+    },
+    "deleted": false
+  },
+  {
+    "id": "heaven-or-hell",
+    "name": "Heaven or Hell?",
+    "author": "Neo",
+    "description": "Are you going to heaven or hell based on your every-day conversations?",
+    "image": "/plugins/logos/heaven-or-hell.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omi-heaven-or-hell.vercel.app/memory",
+      "setup_completed_url": null,
+      "setup_instructions_file_path": "/plugins/instructions/heavenorhell/README.md"
     },
     "deleted": false
   },
@@ -855,7 +872,7 @@
     "description": "Analyzes conversations for signs of potential danger and prompts users to seek help.",
     "image": "/plugins/logos/stranger-danger-alert.jpg",
     "capabilities": [
-        "memories"
+      "memories"
     ],
     "memory_prompt": "Analyze the user's conversations for keywords and phrases that may indicate a potential threat or danger. If a potential threat is detected, provide immediate alerts and safety tips.",
     "deleted": false
