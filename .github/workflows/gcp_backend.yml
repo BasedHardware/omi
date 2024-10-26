@@ -55,6 +55,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Google Service Account
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:

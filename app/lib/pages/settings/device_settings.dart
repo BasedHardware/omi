@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
+import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
@@ -159,6 +159,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+  var provider = Provider.of<DeviceProvider>(context, listen: true);
+
   return [
     ListTile(
       title: const Text('Device Name'),
@@ -183,7 +185,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ),
     GestureDetector(
       onTap: () {
-        if (!SharedPreferencesUtil().deviceIsV2) {
+        if (!provider.isDeviceV2Connected) {
           showDialog(
             context: context,
             builder: (c) => getDialog(
@@ -196,7 +198,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
             ),
           );
         } else {
-          var page = const SdCardCapturePage();
+          var page = const SyncPage();
           routeToPage(context, page);
         }
       },
