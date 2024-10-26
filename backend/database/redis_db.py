@@ -233,3 +233,22 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     if not url:
         return ''
     return url.decode()
+
+
+def get_filter_category_items(uid: str, category: str) -> List[str]:
+    val = r.smembers(f'users:{uid}:filters:{category}')
+    if not val:
+        return []
+    return [x.decode() for x in val]
+
+
+def add_filter_category_item(uid: str, category: str, item: str):
+    r.sadd(f'users:{uid}:filters:{category}', item)
+
+
+def remove_filter_category_item(uid: str, category: str, item: str):
+    r.srem(f'users:{uid}:filters:{category}', item)
+
+
+def remove_all_filter_category_items(uid: str, category: str):
+    r.delete(f'users:{uid}:filters:{category}')

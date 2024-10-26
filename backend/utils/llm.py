@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
+from database.redis_db import add_filter_category_item
 from models.chat import Message
 from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
@@ -21,6 +23,25 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
 encoding = tiktoken.encoding_for_model('gpt-4')
+
+
+class ExtractedInformation(BaseModel):
+    people_mentioned: List[str] = Field(
+        default=[],
+        description='Identify all the people names who were mentioned during the conversation.'
+    )
+    topics_discussed: List[str] = Field(
+        default=[],
+        description='List all the main topics and subtopics that were discussed.',
+    )
+    entities: List[str] = Field(
+        default=[],
+        description='List any products, technologies, places, or other entities that are relevant to the conversation.'
+    )
+    dates: List[str] = Field(
+        default=[],
+        description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.'
+    )
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -497,6 +518,86 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     except Exception as e:
         # print(f'Error extracting new facts: {e}')
         return []
+
+
+def retrieve_metadata_fields_from_transcript(
+        uid: str, created_at: datetime, transcript_segment: List[dict]
+) -> ExtractedInformation:
+    transcript = ''
+    for segment in transcript_segment:
+        transcript += f'{segment["text"].strip()}\n\n'
+
+    prompt = f'''
+    You will be given the raw transcript of a conversation, this transcript has about 20% word error rate, 
+    and diarization is also made very poorly.
+
+    Your task is to extract the most accurate information from the conversation in the output object indicated below.
+
+    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
+
+    For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
+    If one says "today", it means the current day.
+    If one says "tomorrow", it means the next day after today.
+    If one says "yesterday", it means the day before today.
+    If one says "next week", it means the next monday.
+    Do not include dates greater than 2025.
+
+    Conversation Transcript:
+    ```
+    {transcript}
+    ```
+    '''.replace('    ', '')
+    try:
+        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+    except Exception as e:
+        print('e', e)
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+
+    def normalize_filter(value: str) -> str:
+        # Convert to lowercase and strip whitespace
+        value = value.lower().strip()
+
+        # Remove special characters and extra spaces
+        value = re.sub(r'[^\w\s-]', '', value)
+        value = re.sub(r'\s+', ' ', value)
+
+        # Remove common filler words
+        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+        value = ' '.join(word for word in value.split() if word not in filler_words)
+
+        # Standardize common variations
+        value = value.replace('ai', 'artificial intelligence')
+        value = value.replace('ml', 'machine learning')
+        value = value.replace('nlp', 'natural language processing')
+
+        return value.strip()
+
+    metadata = {
+        'people': [normalize_filter(p) for p in result.people_mentioned],
+        'topics': [normalize_filter(t) for t in result.topics_discussed],
+        'entities': [normalize_filter(e) for e in result.topics_discussed],
+        'dates': []
+    }
+    # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+    for date in result.dates:
+        try:
+            date = datetime.strptime(date, '%Y-%m-%d')
+            if date.year > 2025:
+                continue
+            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f'Error parsing date: {e}')
+
+    for p in metadata['people']:
+        add_filter_category_item(uid, 'people', p)
+    for t in metadata['topics']:
+        add_filter_category_item(uid, 'topics', t)
+    for e in metadata['entities']:
+        add_filter_category_item(uid, 'entities', e)
+    for d in metadata['dates']:
+        add_filter_category_item(uid, 'dates', d)
+
+    return metadata
 
 
 # **********************************
