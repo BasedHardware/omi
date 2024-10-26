@@ -5,6 +5,7 @@ import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import 'app_detail.dart';
@@ -65,7 +66,7 @@ class AppListItem extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        app.description,
+                        app.description.decodeSting,
                         maxLines: 2,
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
