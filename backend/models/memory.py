@@ -52,6 +52,7 @@ class PluginResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False  # IGNORE ME from the model parser
+    deleted: bool = False
 
 
 class Event(BaseModel):
@@ -194,8 +195,8 @@ class Memory(BaseModel):
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
-        self.structured.events = [event.as_dict_cleaned_dates() for event in self.structured.events]
         memory_dict = self.dict()
+        memory_dict['structured']['events'] = [event['start'].isoformat() for event in memory_dict['structured']['events']]
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
         memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
@@ -246,3 +247,14 @@ class CreateMemoryResponse(BaseModel):
 class SetMemoryEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
+
+
+class SetMemoryActionItemsStateRequest(BaseModel):
+    items_idx: List[int]
+    values: List[bool]
+
+
+class DeleteActionItemRequest(BaseModel):
+    description: str
+    completed: bool
+

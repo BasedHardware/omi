@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
+import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -48,7 +48,7 @@ class _SdCardBannerWidgetState extends State<SdCardBannerWidget> {
 
       return GestureDetector(
         onTap: () {
-          routeToPage(context, const SdCardCapturePage());
+          routeToPage(context, const SyncPage());
           _visibleTimer?.cancel();
           setState(() {
             _visible = false;

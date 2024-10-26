@@ -95,7 +95,31 @@ class SharedPreferencesUtil {
 
   String get webhookAudioBytesDelay => getString('webhookAudioBytesDelay') ?? '';
 
+  set webhookDaySummary(String value) => saveString('webhookDaySummary', value);
+
+  String get webhookDaySummary => getString('webhookDaySummary') ?? '';
+
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
+
+  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
+
+  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
+
+  set memoryEventsToggled(bool value) => saveBool('memoryEventsToggled', value);
+
+  bool get memoryEventsToggled => getBool('memoryEventsToggled') ?? false;
+
+  set transcriptsToggled(bool value) => saveBool('transcriptsToggled', value);
+
+  bool get transcriptsToggled => getBool('transcriptsToggled') ?? false;
+
+  set audioBytesToggled(bool value) => saveBool('audioBytesToggled', value);
+
+  bool get audioBytesToggled => getBool('audioBytesToggled') ?? false;
+
+  set daySummaryToggled(bool value) => saveBool('daySummaryToggled', value);
+
+  bool get daySummaryToggled => getBool('daySummaryToggled') ?? false;
 
   set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
 
@@ -350,10 +374,6 @@ class SharedPreferencesUtil {
     final List<String> value = getStringList('wals') ?? [];
     return Wal.fromJsonList(value.map((e) => jsonDecode(e)).toList());
   }
-
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 
   //--------------------------- Setters & Getters -----------------------------//
 
