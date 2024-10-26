@@ -683,6 +683,12 @@
       "setup_completed_url": null,
       "setup_instructions_file_path": "/plugins/instructions/heavenorhell/README.md"
     },
+    "auth_steps": [
+      {
+        "name": "See your score",
+        "url": "https://omi-heaven-or-hell.vercel.app/memory"
+      }
+    ],
     "deleted": false
   },
   {
