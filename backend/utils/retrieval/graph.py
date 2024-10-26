@@ -4,18 +4,17 @@ import time
 import uuid
 from typing import List, Optional, Tuple
 
-from database.redis_db import get_filter_category_items
-
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
 
-from database.vector_db import query_vectors_by_metadata
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
 import database.memories as memories_db
+from database.redis_db import get_filter_category_items
+from database.vector_db import query_vectors_by_metadata
 from models.chat import Message, MessageSender, MessageType
 from models.memory import Memory
 from models.plugin import Plugin
@@ -115,15 +114,11 @@ def qa_handler(state: GraphState):
     messages = state.get('messages', [])
     uid = state.get('uid')
     memories = state.get('memories_found', [])
-    # TODO: use memories transcript instead
-    response: str = qa_rag(uid, Memory.memories_to_string(memories), messages, state.get('plugin_selected'))
+    response: str = qa_rag(uid, Memory.memories_to_string(memories, True), messages, state.get('plugin_selected'))
     return {'answer': response}
 
 
-workflow = StateGraph(GraphState)  # custom state?
-
-# workflow.add_edge(START, "determine_conversation_type")
-# workflow.add_node('determine_conversation_type', determine_conversation_type)
+workflow = StateGraph(GraphState)
 
 workflow.add_conditional_edges(
     START,
@@ -166,22 +161,8 @@ def execute_graph_chat(uid: str, messages: List[Message]) -> Tuple[str, List[Mem
 if __name__ == '__main__':
     # graph.get_graph().draw_png('workflow.png')
     uid = 'TtCJi59JTVXHmyUC6vUQ1d9U6cK2'
-    # messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
-    # messages = filter_messages(messages, None)
-    messages = [Message(
-        id='0',
-        text='What have I discussed this Nick this 2 months?',
-        created_at=datetime.datetime.now(),
-        sender=MessageSender.human,
-        type=MessageType.text)
-    ]
+    messages = []
     start_time = time.time()
     result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
     print('result:', result.get('answer'))
     print('time:', time.time() - start_time)
-    # query_vectors_by_metadata(
-    #     uid,
-    #     [datetime.datetime(2024, 10, 1), datetime.datetime(2024, 10, 10)],
-    #     # [],
-    #     [], [], [], []
-    # )
