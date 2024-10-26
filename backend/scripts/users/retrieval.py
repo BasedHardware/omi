@@ -15,6 +15,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPL
 from database._client import get_users_uid
 import database.memories as memories_db
 from utils.memories.process_memory import save_structured_vector
+from database.redis_db import get_filter_category_items
 
 if __name__ == '__main__':
     uids = get_users_uid()
@@ -28,3 +29,5 @@ if __name__ == '__main__':
         for chunk in chunks:
             [t.start() for t in chunk]
             [t.join() for t in chunk]
+    print(get_filter_category_items('ccQJWj5mwhSY1dwjS1FPFBfKIXe2', 'people'))
+    print(get_filter_category_items('ccQJWj5mwhSY1dwjS1FPFBfKIXe2', 'entities'))

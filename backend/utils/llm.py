@@ -356,10 +356,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
-def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
-    conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
-    )
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     plugin_info = ""
@@ -370,14 +367,16 @@ def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plu
     You are an assistant for question-answering tasks. 
     You are made for {user_name}, {facts_str}
     
-    Use what you know about {user_name}, the following pieces of retrieved context and the chat history to continue the chat.
-    If you don't know the answer, just say that there's no available information about it. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so follow-up the conversation casually.
-    If there's not enough information to provide a valuable answer, ask the user for clarification questions.
+    Use what you know about {user_name}, the following pieces of retrieved context to answer the user question.
+    If there's no context or the context is not related, tell the user that they didn't record any conversations about that specific topic.
+    Never say that you don't have enough information. 
+    
+    Use three sentences maximum and keep the answer concise.
+    
     {plugin_info}
     
-    Chat History:
-    {conversation_history}
+    Question:
+    {question}
 
     Context:
     ```
@@ -617,6 +616,26 @@ class FiltersToUse(BaseModel):
     )
 
 
+class OutputQuestion(BaseModel):
+    question: str = Field(description='The extracted user question from the conversation.')
+
+
+def extract_question_from_conversation(messages: List[Message]) -> str:
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the last few messages, and identify the single question that the user is asking.
+    
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    
+    Conversation:
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+    '''.replace('    ', '').strip()
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
 def retrieve_metadata_fields_from_transcript(
         uid: str, created_at: datetime, transcript_segment: List[dict]
 ) -> ExtractedInformation:
@@ -639,7 +658,7 @@ def retrieve_metadata_fields_from_transcript(
     If one says "yesterday", it means the day before today.
     If one says "next week", it means the next monday.
     Do not include dates greater than 2025.
-
+    
     Conversation Transcript:
     ```
     {transcript}
@@ -664,9 +683,9 @@ def retrieve_metadata_fields_from_transcript(
         value = ' '.join(word for word in value.split() if word not in filler_words)
 
         # Standardize common variations
-        value = value.replace('ai', 'artificial intelligence')
-        value = value.replace('ml', 'machine learning')
-        value = value.replace('nlp', 'natural language processing')
+        value = value.replace('artificial intelligence', 'ai')
+        value = value.replace('machine learning', 'ml')
+        value = value.replace('natural language processing', 'nlp')
 
         return value.strip()
 
@@ -698,24 +717,24 @@ def retrieve_metadata_fields_from_transcript(
     return metadata
 
 
-def select_structured_filters(messages: List[Message], filters_available: dict) -> dict:
+def select_structured_filters(question: str, filters_available: dict) -> dict:
     prompt = f'''
-    Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, 
-    it needs to search for the user information related to topics, entities, people, and dates that will help it answering.
-
-    Your task is to identify the correct ones that can be searched for.
+    Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
+    Your task is to identify the correct fields that can be related to the question and can help answering.
     
-    Make sure to choose from the following set of available options:
+    You must choose for each field, only the ones available in the JSON below.
+    Find as many as possible that can relate to the question asked.
     ```
     {json.dumps(filters_available, indent=2)}
     ```
 
-    Conversation:
-    {Message.get_messages_as_string(messages)}
+    Question: {question}
     '''.replace('    ', '').strip()
+    # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
+        print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
