@@ -1,5 +1,6 @@
 import json
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List
 
@@ -69,38 +70,54 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
 
 def query_vectors_by_metadata(
-        uid: str, dates_filter: List[datetime], people_mentioned: List[str], topics_discussed: List[str],
-        entities: List[str], dates_mentioned: List[str]
+        uid: str, dates_filter: List[datetime], people: List[str], topics: List[str], entities: List[str],
+        dates: List[str]
 ):
     filter_data = {'$and': [
         {'uid': {'$eq': uid}},
     ]}
-    if people_mentioned or topics_discussed or entities or dates_mentioned:
+    if people or topics or entities or dates:
         filter_data['$and'].append(
             {'$or': [
-                {'people_mentioned': {'$in': people_mentioned}},
-                {'topics_discussed': {'$in': topics_discussed}},
+                {'people': {'$in': people}},
+                {'topics': {'$in': topics}},
                 {'entities': {'$in': entities}},
-                {'dates_mentioned': {'$in': dates_mentioned}},
+                # {'dates_mentioned': {'$in': dates_mentioned}},
             ]}
         )
     if dates_filter:
         filter_data['$and'].append(
-            {'created_at': {'$gte': dates_filter[0].timestamp(), '$lte': dates_filter[1].timestamp()}}
+            {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
-    print('query_vectors_by_metadata:', json.dumps(filter_data))
+    print('query_vectors_by_metadata:', json.dumps(filter_data, indent=2))
 
     # TODO: improve search, don't use 0,0, can use smth better?, also topk 1k would make it slower.
+    # do question extraction, and then use that embedding to match
     xc = index.query(
         vector=[0] * 3072, filter=filter_data, namespace="ns1", include_values=False,
         include_metadata=True,
-        top_k=50
+        top_k=10000
     )
+
+    memory_id_to_matches = defaultdict(int)
+    for item in xc['matches']:
+        metadata = item['metadata']
+        memory_id = metadata['memory_id']
+        for topic in topics:
+            if topic in metadata.get('topics', []):
+                memory_id_to_matches[memory_id] += 1
+        for entity in entities:
+            if entity in metadata.get('entities', []):
+                memory_id_to_matches[memory_id] += 1
+        for person in people:
+            if person in metadata.get('people_mentioned', []):
+                memory_id_to_matches[memory_id] += 1
+
     memories_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
-    # TODO: rerank based on metadata and return top 5
+    memories_id.sort(key=lambda x: memory_id_to_matches[x], reverse=True)
     print('query_vectors_by_metadata result:', memories_id)
-    return memories_id
+    return memories_id[:5] if len(memories_id) > 5 else memories_id
 
 
 def delete_vector(memory_id: str):
