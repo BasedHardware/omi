@@ -1,7 +1,8 @@
 import datetime
 import os
 import time
-from typing import List, Optional
+import uuid
+from typing import List, Optional, Tuple
 
 from database.redis_db import get_filter_category_items
 
@@ -153,6 +154,14 @@ workflow.add_edge('qa_handler', END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
+
+
+def execute_graph_chat(uid: str, messages: List[Message]) -> Tuple[str, List[Memory]]:
+    start_time = time.time()
+    result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": str(uuid.uuid4())}})
+    print('graph chat result:', result.get('answer'), 'took:', time.time() - start_time)
+    return result, result.get('memories_found')
+
 
 if __name__ == '__main__':
     # graph.get_graph().draw_png('workflow.png')
