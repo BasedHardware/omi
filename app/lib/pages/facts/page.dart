@@ -98,7 +98,7 @@ class _FactsPageState extends State<_FactsPage> {
       return;
     }
 
-    final contentController = TextEditingController(text: fact?.content.decodeSting ?? '');
+    final contentController = TextEditingController(text: fact?.content.decodeString ?? '');
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -402,7 +402,7 @@ class _FactsPageState extends State<_FactsPage> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 16.0),
                     child: ListTile(
-                      title: Text(fact.content.decodeSting),
+                      title: Text(fact.content.decodeString),
                       onTap: () => _showFactDialog(context, provider, fact: fact),
                     ),
                   ),

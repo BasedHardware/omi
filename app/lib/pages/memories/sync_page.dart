@@ -46,7 +46,7 @@ class _WalListItemState extends State<WalListItem> {
             borderRadius: BorderRadius.circular(16.0),
             child: Dismissible(
               key: Key(widget.wal.id),
-              direction: DismissDirection.endToStart,
+              direction: widget.wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
               background: Container(
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 20.0),

@@ -49,7 +49,7 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title.decodeSting,
+              memory.discarded ? 'Discarded Memory' : memory.structured.title.decodeString,
               style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
             ),
             const SizedBox(height: 16),
@@ -123,7 +123,7 @@ class ActionItemsListWidget extends StatelessWidget {
                       onPressed: () {
                         Clipboard.setData(ClipboardData(
                           text:
-                              '- ${provider.memory.structured.actionItems.map((e) => e.description.decodeSting).join('\n- ')}',
+                              '- ${provider.memory.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
                         ));
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Action items copied to clipboard'),
@@ -208,7 +208,7 @@ class ActionItemsListWidget extends StatelessWidget {
                       Expanded(
                         child: SelectionArea(
                           child: Text(
-                            item.description.decodeSting,
+                            item.description.decodeString,
                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
                           ),
                         ),
@@ -544,7 +544,7 @@ class GetAppsWidgets extends StatelessWidget {
                                       )
                                     : const SizedBox.shrink(),
                                 ExpandableTextWidget(
-                                  text: appResponse.content.decodeSting.trim(),
+                                  text: appResponse.content.decodeString.trim(),
                                   isExpanded: provider.appResponseExpanded[i],
                                   toggleExpand: () {
                                     debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
