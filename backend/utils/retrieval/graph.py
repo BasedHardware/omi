@@ -3,6 +3,8 @@ import os
 import time
 from typing import List, Optional
 
+from database.redis_db import get_filter_category_items
+
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 from langchain_openai import ChatOpenAI
@@ -16,14 +18,14 @@ import database.memories as memories_db
 from models.chat import Message, MessageSender, MessageType
 from models.memory import Memory
 from models.plugin import Plugin
-from utils.llm import requires_context, answer_simple_message, retrieve_context_dates, qa_rag
+from utils.llm import requires_context, answer_simple_message, retrieve_context_dates, qa_rag, select_structured_filters
 
 model = ChatOpenAI(model='gpt-4o-mini')
 
 
 class StructuredFilters(TypedDict):
-    topics_discussed: List[str]
-    people_mentioned: List[str]
+    topics: List[str]
+    people: List[str]
     entities: List[str]
     dates: List[datetime.date]
 
@@ -64,13 +66,24 @@ def context_dependent_conversation(state: GraphState):
     return {'uid': state.get('uid')}
 
 
-# TODO: include a question extractor? node?
+# !! include a question extractor? node?
 
 
 def retrieve_topics_filters(state: GraphState):
     print('retrieve_topics_filters')
-    # retrieve all available entities, names, topics, etc, and ask it to filter based on the question.
-    return {'filters': {'topics_discussed': []}}
+    filters = {
+        'people': get_filter_category_items(state.get('uid'), 'people'),
+        'topics': get_filter_category_items(state.get('uid'), 'topics'),
+        'entities': get_filter_category_items(state.get('uid'), 'entities'),
+        # 'dates': get_filter_category_items(state.get('uid'), 'dates'),
+    }
+    result = select_structured_filters(state.get('messages', []), filters)
+    return {'filters': {
+        'topics': result.get('topics', []),
+        'people': result.get('people', []),
+        'entities': result.get('entities', []),
+        # 'dates': result.get('dates', []),
+    }}
 
 
 def retrieve_date_filters(state: GraphState):
@@ -87,10 +100,10 @@ def query_vectors(state: GraphState):
     memories_id = query_vectors_by_metadata(
         uid,
         dates_filter=[date_filters.get('start'), date_filters.get('end')],
-        people_mentioned=state.get('filters', {}).get('people_mentioned', []),
-        topics_discussed=state.get('filters', {}).get('topics_discussed', []),
+        people=state.get('filters', {}).get('people', []),
+        topics=state.get('filters', {}).get('topics', []),
         entities=state.get('filters', {}).get('entities', []),
-        dates_mentioned=state.get('filters', {}).get('dates', []),
+        dates=state.get('filters', {}).get('dates', []),
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
     # TODO: maybe didnt find anything, tries RAG, or goes to simple conversation?
@@ -148,7 +161,7 @@ if __name__ == '__main__':
     # messages = filter_messages(messages, None)
     messages = [Message(
         id='0',
-        text='What have I done this month?',
+        text='What have I discussed this Nick this 2 months?',
         created_at=datetime.datetime.now(),
         sender=MessageSender.human,
         type=MessageType.text)
