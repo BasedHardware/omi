@@ -1,3 +1,5 @@
+import time
+import timeit
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -36,15 +38,11 @@ def send_message(
     )
     chat_db.add_message(uid, message.dict())
 
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_plugin_by_id(plugin_id) if plugin_id else None
     plugin_id = plugin.id if plugin else None
 
-    messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
-    # messages = filter_messages(messages, plugin_id)
-
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     response, memories = execute_graph_chat(uid, messages)
-    # context_str, memories = retrieve_rag_context(uid, messages)
-    # response: str = qa_rag(uid, context_str, messages, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -53,7 +51,6 @@ def send_message(
         sender='ai',
         plugin_id=plugin_id,
         type='text',
-        # only store the 5 most relevant memories
         memories_id=[m.id for m in (memories if len(memories) < 5 else memories[:5])],
     )
     chat_db.add_message(uid, ai_message.dict())
