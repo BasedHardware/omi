@@ -18,7 +18,7 @@ from utils.memories.process_memory import save_structured_vector
 
 if __name__ == '__main__':
     uids = get_users_uid()
-    for uid in ['TtCJi59JTVXHmyUC6vUQ1d9U6cK2']:
+    for uid in uids:
         memories = memories_db.get_memories(uid, limit=2000)
         threads = []
         for memory in memories:
