@@ -66,7 +66,7 @@ class AppListItem extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        app.description.decodeSting,
+                        app.description.decodeString,
                         maxLines: 2,
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
