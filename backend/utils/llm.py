@@ -716,6 +716,9 @@ def select_structured_filters(messages: List[Message], filters_available: dict) 
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
+        response.topics = [t for t in response.topics if t in filters_available['topics']]
+        response.people = [p for p in response.people if p in filters_available['people']]
+        response.entities = [e for e in response.entities if e in filters_available['entities']]
         return response.dict()
     except ValidationError:
         return {}

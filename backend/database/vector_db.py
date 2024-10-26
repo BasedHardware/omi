@@ -82,7 +82,7 @@ def query_vectors_by_metadata(
                 {'people': {'$in': people}},
                 {'topics': {'$in': topics}},
                 {'entities': {'$in': entities}},
-                # {'dates_mentioned': {'$in': dates_mentioned}},
+                # {'dates': {'$in': dates_mentioned}},
             ]}
         )
     if dates_filter:
