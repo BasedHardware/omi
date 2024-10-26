@@ -680,7 +680,7 @@
     "external_integration": {
       "triggers_on": "memory_creation",
       "webhook_url": "https://omi-heaven-or-hell.vercel.app/memory",
-      "setup_completed_url": null,
+      "setup_completed_url": "https://omi-heaven-or-hell.vercel.app/checksetup",
       "setup_instructions_file_path": "/plugins/instructions/heavenorhell/README.md"
     },
     "auth_steps": [
