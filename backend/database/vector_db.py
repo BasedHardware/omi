@@ -22,7 +22,7 @@ def _get_data(uid: str, memory_id: str, vector: List[float]):
         'metadata': {
             'uid': uid,
             'memory_id': memory_id,
-            'created_at': datetime.now(timezone.utc).timestamp() / 1000,  # TODO: check this
+            'created_at': int(datetime.now(timezone.utc).timestamp()),
         }
     }
 
@@ -32,7 +32,16 @@ def upsert_vector(uid: str, memory: Memory, vector: List[float]):
     print('upsert_vector', res)
 
 
+def upsert_vector2(uid: str, memory: Memory, vector: List[float], metadata: dict):
+    data = _get_data(uid, memory.id, vector)
+    data['metadata'].update(metadata)
+    res = index.upsert(vectors=[data], namespace="ns1")
+    print('upsert_vector', res)
+
+
 def update_vector_metadata(uid: str, memory_id: str, metadata: dict):
+    metadata['uid'] = uid
+    metadata['memory_id'] = memory_id
     return index.update(f'{uid}-{memory_id}', set_metadata=metadata, namespace="ns1")
 
 

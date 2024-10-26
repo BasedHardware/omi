@@ -13,13 +13,13 @@ import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.plugins import record_plugin_usage
-from database.vector_db import upsert_vector
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.facts import FactDB
 from models.memory import *
 from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
-from utils.llm import obtain_emotional_message
+from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor
@@ -55,13 +55,13 @@ def _get_structured(
         # from Friend
         if force_process:
             # reprocess endpoint
-            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code,tz), False
+            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code, tz), False
 
         discarded = should_discard_memory(memory.get_transcript(False))
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code,tz), False
+        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code, tz), False
     except Exception as e:
         print(e)
         if retries == 2:
@@ -137,6 +137,20 @@ def _extract_trends(memory: Memory):
     trends_db.save_trends(memory, parsed)
 
 
+def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
+    vector = generate_embedding(str(memory.structured)) if not update_only else None
+
+    segments = [t.dict() for t in memory.transcript_segments]
+    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments)
+    metadata['created_at'] = int(memory.created_at.timestamp())
+    if not update_only:
+        print('save_structured_vector creating vector')
+        upsert_vector2(uid, memory, vector, metadata)
+    else:
+        print('save_structured_vector updating metadata')
+        update_vector_metadata(uid, memory.id, metadata)
+
+
 def process_memory(
         uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
         force_process: bool = False, is_reprocess: bool = False
@@ -145,9 +159,8 @@ def process_memory(
     memory = _get_memory_obj(uid, structured, memory)
 
     if not discarded:
-        vector = generate_embedding(str(structured))
-        upsert_vector(uid, memory, vector)
         _trigger_plugins(uid, memory, is_reprocess=is_reprocess)
+        threading.Thread(target=save_structured_vector, args=(uid, memory,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
     memory.status = MemoryStatus.completed
