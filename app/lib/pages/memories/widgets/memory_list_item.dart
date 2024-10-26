@@ -128,7 +128,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.title.decodeSting,
+                              structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
@@ -136,7 +136,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.overview.decodeSting,
+                              structured.overview.decodeString,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium!
