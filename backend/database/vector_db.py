@@ -70,8 +70,8 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
 
 def query_vectors_by_metadata(
-        uid: str, dates_filter: List[datetime], people: List[str], topics: List[str], entities: List[str],
-        dates: List[str]
+        uid: str, vector: List[float], dates_filter: List[datetime], people: List[str], topics: List[str],
+        entities: List[str], dates: List[str]
 ):
     filter_data = {'$and': [
         {'uid': {'$eq': uid}},
@@ -92,13 +92,21 @@ def query_vectors_by_metadata(
 
     print('query_vectors_by_metadata:', json.dumps(filter_data, indent=2))
 
-    # TODO: improve search, don't use 0,0, can use smth better?, also topk 1k would make it slower.
-    # do question extraction, and then use that embedding to match
     xc = index.query(
-        vector=[0] * 3072, filter=filter_data, namespace="ns1", include_values=False,
+        vector=vector, filter=filter_data, namespace="ns1", include_values=False,
         include_metadata=True,
         top_k=10000
     )
+    if not xc['matches']:
+        if len(filter_data['$and']) == 3:
+            filter_data['$and'].pop(1)
+            xc = index.query(
+                vector=vector, filter=filter_data, namespace="ns1", include_values=False,
+                include_metadata=True,
+                top_k=20
+            )
+        else:
+            return []
 
     memory_id_to_matches = defaultdict(int)
     for item in xc['matches']:

@@ -11,12 +11,14 @@ from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
+from utils.other.endpoints import timeit
 
 
 # ***********************************
 # ************* BASICS **************
 # ***********************************
 
+@timeit
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     if not plugin_id:
         return None
