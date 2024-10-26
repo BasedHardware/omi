@@ -117,17 +117,17 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeSting,
+      messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateMemory: updateMemory,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, date: message.createdAt);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, sendMessage: sendMessage);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting);
+    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString);
   }
 }
 
