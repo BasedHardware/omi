@@ -171,12 +171,19 @@ class Memory(BaseModel):
     status: Optional[MemoryStatus] = MemoryStatus.completed
 
     @staticmethod
-    def memories_to_string(memories: List['Memory']) -> str:
+    def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
         result = []
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
+            if use_transcript:
+                memory_str = (f"Memory #{i + 1}\n"
+                              f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                              f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+                result.append(memory_str.strip())
+                continue
+
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
@@ -196,7 +203,8 @@ class Memory(BaseModel):
 
     def as_dict_cleaned_dates(self):
         memory_dict = self.dict()
-        memory_dict['structured']['events'] = [event['start'].isoformat() for event in memory_dict['structured']['events']]
+        memory_dict['structured']['events'] = [event['start'].isoformat() for event in
+                                               memory_dict['structured']['events']]
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
         memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
@@ -257,4 +265,3 @@ class SetMemoryActionItemsStateRequest(BaseModel):
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool
-
