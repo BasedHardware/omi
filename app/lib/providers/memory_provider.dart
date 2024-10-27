@@ -37,6 +37,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   bool isSyncing = false;
   bool syncCompleted = false;
+  bool isFetchingMemories = false;
   List<SyncedMemoryPointer> syncedMemoriesPointers = [];
 
   MemoryProvider() {
@@ -373,7 +374,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   Future getSyncedMemoriesData(SyncLocalFilesResponse syncResult) async {
     List<dynamic> newMemories = syncResult.newMemoryIds;
     List<dynamic> updatedMemories = syncResult.updatedMemoryIds;
-
+    setIsFetchingMemories(true);
     List<Future<ServerMemory?>> newMemoriesFutures = newMemories.map((item) => getMemoryDetails(item)).toList();
 
     List<Future<ServerMemory?>> updatedMemoriesFutures = updatedMemories.map((item) => getMemoryDetails(item)).toList();
@@ -385,8 +386,10 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
       final updatedMemoriesResponses = await Future.wait(updatedMemoriesFutures);
       syncedMemories['updated_memories'] = updatedMemoriesResponses;
       addSyncedMemoriesToGroupedMemories(syncedMemories);
+      setIsFetchingMemories(false);
     } catch (e) {
       print('Error during API calls: $e');
+      setIsFetchingMemories(false);
     }
   }
 
@@ -460,6 +463,11 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   void setIsSyncing(bool value) {
     isSyncing = value;
+    notifyListeners();
+  }
+
+  void setIsFetchingMemories(bool value) {
+    isFetchingMemories = value;
     notifyListeners();
   }
 }
