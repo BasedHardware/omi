@@ -204,7 +204,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
       },
       child: const ListTile(
         title: Text('SD Card Sync'),
-        subtitle: Text('Import auido files from SD Card'),
+        subtitle: Text('Import audio files from SD Card'),
         trailing: Icon(
           Icons.arrow_forward_ios,
           size: 16,
