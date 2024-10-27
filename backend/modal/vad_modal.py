@@ -26,7 +26,7 @@ os.makedirs('_temp', exist_ok=True)
 
 @app.function(
     image=image,
-    keep_warm=0,
+    keep_warm=1,
     memory=(1024, 2048),
     cpu=4,
     secrets=[Secret.from_name('huggingface-token')],
