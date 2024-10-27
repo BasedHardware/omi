@@ -1,5 +1,3 @@
-import time
-import timeit
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -33,12 +31,12 @@ def filter_messages(messages, plugin_id):
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
+    print('send_message', data.text, plugin_id, uid)
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
     chat_db.add_message(uid, message.dict())
-
-    plugin = get_plugin_by_id(plugin_id) if plugin_id else None
+    plugin = get_plugin_by_id(plugin_id)
     plugin_id = plugin.id if plugin else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
@@ -56,7 +54,7 @@ def send_message(
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if plugin_id:
-        record_plugin_usage(uid, plugin.id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+        record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     return ai_message
 
