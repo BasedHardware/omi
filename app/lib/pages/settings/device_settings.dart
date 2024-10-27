@@ -98,7 +98,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await IntercomManager().displayChargingArticle('Omi DevKit 2');
+                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
