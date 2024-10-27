@@ -90,7 +90,7 @@ def query_vectors_by_metadata(
             {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
-    print('query_vectors_by_metadata:', json.dumps(filter_data, indent=2))
+    print('query_vectors_by_metadata:', json.dumps(filter_data))
 
     xc = index.query(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False,
@@ -100,6 +100,7 @@ def query_vectors_by_metadata(
     if not xc['matches']:
         if len(filter_data['$and']) == 3:
             filter_data['$and'].pop(1)
+            print('query_vectors_by_metadata retrying without structured filters:', json.dumps(filter_data))
             xc = index.query(
                 vector=vector, filter=filter_data, namespace="ns1", include_values=False,
                 include_metadata=True,
