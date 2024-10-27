@@ -5,6 +5,7 @@ import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class SyncedMemoryListItem extends StatefulWidget {
@@ -86,12 +87,12 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                       const SizedBox(height: 16),
                       memory.discarded
                           ? Text(
-                              '${memory.transcriptSegments.first.text} ${memory.transcriptSegments[1].text}',
+                              memory.transcriptSegments.first.text.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             )
                           : Text(
-                              memory.structured.title,
+                              memory.structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
@@ -99,7 +100,7 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                     ],
                   ),
                 ),
-                widget.showReprocess
+                widget.showReprocess || memory.discarded
                     ? GestureDetector(
                         onTap: () async {
                           setReprocessing(true);

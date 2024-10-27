@@ -45,14 +45,14 @@ class SyncedMemoriesPage extends StatelessWidget {
 }
 
 class MemoriesListWidget extends StatelessWidget {
-  final List<SyncedMemoryPointer>? memories;
+  final List<SyncedMemoryPointer> memories;
   final String title;
   final bool showReprocess;
   const MemoriesListWidget({super.key, required this.memories, required this.title, required this.showReprocess});
 
   @override
   Widget build(BuildContext context) {
-    if (memories == null || memories!.isEmpty) {
+    if (memories.isEmpty) {
       return const SizedBox();
     }
     return Column(
@@ -72,7 +72,7 @@ class MemoriesListWidget extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (ctx, i) {
-            var mem = memories![i];
+            var mem = memories[i];
             return SyncedMemoryListItem(
                 memory: mem.memory, date: mem.key, memoryIdx: mem.index, showReprocess: showReprocess);
           },
@@ -81,7 +81,7 @@ class MemoriesListWidget extends StatelessWidget {
               height: 10,
             );
           },
-          itemCount: memories!.length,
+          itemCount: memories.length,
         ),
       ],
     );
