@@ -542,7 +542,7 @@
     "capabilities": [
       "memories"
     ],
-    "memory_prompt": "You will be given a transcription of a conversation. The transcript will not be perfect. Your task is to: 1. Discover all other speakers and people mentioned in the conversation. 2. Infer and organize information about these individuals, prioritizing: a) Names b) Roles or occupations c) Relationships to the main speaker d) Any other details about them. If the identity or information about a person is ambiguous or unclear, note this and provide your best inference based on context. Present this information in a clear, organized list format.",
+    "memory_prompt": "You will be given a transcription of a conversation. The transcript will not be perfect, speaker dissemination is very poor and contains many errors. Your task is to: 1. Discover all other speakers and people mentioned in the conversation. 2. Infer and organize information about these individuals, prioritizing: a) Names b) Roles or occupations c) Relationships to the main speaker d) Any other details about them. Be flexible for the names of the categories. If the identity or information about a person is ambiguous or unclear, note this and provide your best inference based on context. Present this information in a clear, organized list format.",
     "deleted": false
   },
   {
