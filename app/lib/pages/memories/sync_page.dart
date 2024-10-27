@@ -116,7 +116,7 @@ class _WalListItemState extends State<WalListItem> {
                               )
                             : const SizedBox.shrink(),
                         const SizedBox(
-                          width: 8,
+                          width: 12,
                         ),
                         const SizedBox(
                           width: 24,
@@ -280,26 +280,27 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     return PopScope(
-      canPop: !Provider.of<MemoryProvider>(context, listen: false).isSyncing,
+      canPop: true,
       onPopInvoked: (didPop) {
         var provider = Provider.of<MemoryProvider>(context, listen: false);
         if (provider.isSyncing) {
-          showDialog(
-              context: context,
-              builder: (ctx) {
-                return getDialog(
-                  context,
-                  () {
-                    Navigator.pop(context);
-                  },
-                  () {
-                    Navigator.pop(context);
-                  },
-                  'Sync In-Progress',
-                  'Memories are being synced. Please wait until the process is complete',
-                  singleButton: true,
-                );
-              });
+          // Shouldn't have to force the user to wait for the sync to complete, state isn't handled by specific page
+          // showDialog(
+          //     context: context,
+          //     builder: (ctx) {
+          //       return getDialog(
+          //         context,
+          //         () {
+          //           Navigator.pop(context);
+          //         },
+          //         () {
+          //           Navigator.pop(context);
+          //         },
+          //         'Sync In-Progress',
+          //         'Memories are being synced. Please wait until the process is complete',
+          //         singleButton: true,
+          //       );
+          //     });
         } else {
           provider.clearSyncResult();
         }
@@ -324,21 +325,43 @@ class _SyncPageState extends State<SyncPage> {
                         children: [
                           const SizedBox(height: 80),
                           Text(
-                            '${seconds}',
+                            '$seconds',
                             style: const TextStyle(color: Colors.white, fontSize: 80),
                           ),
                           const SizedBox(height: 16),
                           const Text('Seconds', style: TextStyle(color: Colors.white, fontSize: 18)),
                           const SizedBox(height: 20),
                           memoryProvider.isSyncing
-                              ? const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Text(
-                                    'Syncing Memories\nPlease don\'t close the app or press the back button',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                )
+                              ? memoryProvider.isFetchingMemories
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          SizedBox(width: 12),
+                                          Text(
+                                            'Finalizing your memories',
+                                            style: TextStyle(color: Colors.white, fontSize: 16),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Text(
+                                        'Syncing Memories\nPlease don\'t close the app',
+                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    )
                               : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
                                   ? Column(
                                       children: [
