@@ -106,7 +106,8 @@ Future<List<AppUsageHistory>> retrieveAppUsageHistory(String pluginId) async {
     method: 'GET',
   );
   try {
-    log('retrieveAppUsageHistory: ${response!.body}');
+    if (response == null || response.statusCode != 200) return [];
+    log('retrieveAppUsageHistory: ${response.body}');
     return AppUsageHistory.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
     debugPrint(e.toString());
@@ -123,7 +124,8 @@ Future<double> getAppMoneyMade(String pluginId) async {
     method: 'GET',
   );
   try {
-    log('retrieveAppUsageHistory: ${response!.body}');
+    if (response == null || response.statusCode != 200) return 0;
+    log('retrieveAppUsageHistory: ${response.body}');
     return jsonDecode(response.body)['money'];
   } catch (e, stackTrace) {
     debugPrint(e.toString());

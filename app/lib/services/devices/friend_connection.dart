@@ -227,7 +227,10 @@ class FriendDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
     if (_storageService == null) {
-      logServiceNotFoundError('Storage', deviceId);
+      if (device.name == 'Omi DevKit 2') {
+        // Should only report incase of DevKit 2 because only DevKit 2 has storage service
+        logServiceNotFoundError('Storage', deviceId);
+      }
       return Future.value(<int>[]);
     }
 
