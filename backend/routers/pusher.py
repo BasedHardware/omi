@@ -26,7 +26,7 @@ router = APIRouter()
 async def _websocket_util_transcript(
         websocket: WebSocket, uid: str,
 ):
-    print('_websocket_util_external_trigger', uid)
+    print('_websocket_util_transcript', uid)
 
     try:
         await websocket.accept()
@@ -36,7 +36,7 @@ async def _websocket_util_transcript(
         return
 
     websocket_active = False
-    websocket_close_code = 1011
+    websocket_close_code = 1000
 
     loop = asyncio.get_event_loop()
 
@@ -55,7 +55,7 @@ async def _websocket_util_transcript(
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
-            print(f'Could not process audio: error {e}')
+            print(f'Could not process segments: error {e}')
             websocket_close_code = 1011
         finally:
             websocket_active = False
@@ -117,7 +117,7 @@ async def _websocket_util_audio_bytes(
         return
 
     websocket_active = False
-    websocket_close_code = 1011
+    websocket_close_code = 1000
 
     loop = asyncio.get_event_loop()
 
