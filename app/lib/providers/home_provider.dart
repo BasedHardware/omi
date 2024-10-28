@@ -22,6 +22,7 @@ class HomeProvider extends ChangeNotifier {
     'Danish': 'da',
     'Dutch': 'nl',
     'English': 'en',
+    'English/Spanish': 'multi',
     'Estonian': 'et',
     'Finnish': 'fi',
     'French': 'fr',

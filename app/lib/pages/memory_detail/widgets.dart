@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
@@ -11,6 +12,7 @@ import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -22,6 +24,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:tuple/tuple.dart';
 
 import 'maps_util.dart';
 
@@ -40,18 +43,27 @@ class GetSummaryWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, ServerMemory>(
-      selector: (context, provider) => provider.memory,
-      builder: (context, memory, child) {
+    return Selector<MemoryDetailProvider, Tuple3<ServerMemory, TextEditingController?, FocusNode?>>(
+      selector: (context, provider) => Tuple3(provider.memory, provider.titleController, provider.titleFocusNode),
+      builder: (context, data, child) {
+        ServerMemory memory = data.item1;
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-            Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title.decodeString,
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
-            ),
+            memory.discarded
+                ? Text(
+                    'Discarded Memory',
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
+                  )
+                : GetEditTextField(
+                    memoryId: memory.id,
+                    focusNode: data.item3,
+                    controller: data.item2,
+                    content: memory.structured.title.decodeString,
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
+                  ),
             const SizedBox(height: 16),
             Text(
               memory.source == MemorySource.sdcard
@@ -86,9 +98,11 @@ class GetSummaryWidgets extends StatelessWidget {
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
             memory.discarded
                 ? const SizedBox.shrink()
-                : GetEditTextField(
-                    enabled: context.read<MemoryDetailProvider>().editingTitle,
-                    overview: memory.structured.overview,
+                : SelectionArea(
+                    child: Text(
+                      memory.structured.overview,
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                    ),
                   ),
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
             const ActionItemsListWidget(),
@@ -334,43 +348,41 @@ String minutesConversion(int minutes) {
 }
 
 class GetEditTextField extends StatefulWidget {
-  final bool enabled;
-  final String overview;
+  final String memoryId;
+  final String content;
+  final TextStyle style;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
 
-  const GetEditTextField({super.key, required this.enabled, required this.overview});
+  const GetEditTextField({
+    super.key,
+    required this.content,
+    required this.style,
+    required this.memoryId,
+    required this.controller,
+    required this.focusNode,
+  });
 
   @override
   State<GetEditTextField> createState() => _GetEditTextFieldState();
 }
 
 class _GetEditTextFieldState extends State<GetEditTextField> {
-  late TextEditingController controller;
-
-  @override
-  void initState() {
-    controller = TextEditingController(text: widget.overview);
-    super.initState();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return widget.enabled
-        ? TextField(
-            keyboardType: TextInputType.multiline,
-            maxLines: null,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(borderSide: BorderSide.none),
-              contentPadding: EdgeInsets.all(0),
-            ),
-            enabled: widget.enabled,
-            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-          )
-        : SelectionArea(
-            child: Text(
-              controller.text,
-              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-            ),
-          );
+    return TextField(
+      keyboardType: TextInputType.multiline,
+      minLines: 1,
+      maxLines: 3,
+      focusNode: widget.focusNode,
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(borderSide: BorderSide.none),
+        contentPadding: EdgeInsets.all(0),
+      ),
+      controller: widget.controller,
+      enabled: true,
+      style: widget.style,
+    );
   }
 }
 
@@ -742,41 +754,60 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      // Card(
-      //   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-      //   child: ListTile(
-      //     title: const Text('Trigger Memory Created Integration'),
-      //     leading: loadingAppIntegrationTest
-      //         ? const SizedBox(
-      //             height: 24,
-      //             width: 24,
-      //             child: CircularProgressIndicator(
-      //               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      //             ),
-      //           )
-      //         : const Icon(Icons.send_to_mobile_outlined),
-      //     onTap: () {
-      //       changeLoadingAppIntegrationTest(true);
-      //       // TODO: if not set, show dialog to set URL or take them to settings.
-      //  is anyone using it? does anyone complain later?
-      //       webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
-      //         showDialog(
-      //           context: context,
-      //           builder: (c) => getDialog(
-      //             context,
-      //             () => Navigator.pop(context),
-      //             () => Navigator.pop(context),
-      //             'Result:',
-      //             response,
-      //             okButtonText: 'Ok',
-      //             singleButton: true,
-      //           ),
-      //         );
-      //         changeLoadingAppIntegrationTest(false);
-      //       });
-      //     },
-      //   ),
-      // ),
+      Card(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        child: ListTile(
+          title: const Text('Trigger Memory Created Integration'),
+          leading: loadingAppIntegrationTest
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.send_to_mobile_outlined),
+          onTap: () {
+            changeLoadingAppIntegrationTest(true);
+            if (SharedPreferencesUtil().webhookOnMemoryCreated.isEmpty) {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () {
+                    Navigator.pop(context);
+                  },
+                  () {
+                    Navigator.pop(context);
+                    routeToPage(context, const DeveloperSettingsPage());
+                  },
+                  'Webhook URL not set',
+                  'Please set the webhook URL in developer settings to use this feature.',
+                  okButtonText: 'Settings',
+                ),
+              );
+              changeLoadingAppIntegrationTest(false);
+              return;
+            } else {
+              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () => Navigator.pop(context),
+                    'Result:',
+                    response,
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                );
+                changeLoadingAppIntegrationTest(false);
+              });
+            }
+          },
+        ),
+      ),
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
@@ -878,15 +909,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 );
                 return;
               }
-              String content = '''
-              Here\'s my memory created with Omi. ${widget.memory.structured.getEmoji()}
-              
-              https://h.omi.me/memories/${widget.memory.id}
-              
-              Get started using Omi today.
-              '''
-                  .replaceAll('  ', '')
-                  .trim();
+              String content = '''https://h.omi.me/memories/${widget.memory.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
               changeLoadingShareMemoryViaURL(false);
@@ -904,15 +927,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 onTap: () async {
                   if (loadingShareTranscript) return;
                   changeLoadingShareTranscript(true);
-                  // TODO: check web url open graph.
                   String content = '''
-              Here\'s my memory created with Omi.
-              
               ${widget.memory.structured.title}
               
               ${widget.memory.getTranscript(generate: true)}
-              
-              Get started using Omi today (https://www.omi.me).
               '''
                       .replaceAll('  ', '')
                       .trim();
@@ -929,15 +947,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
-                        String content = '''
-              Here\'s my memory created with Omi.
-              
-              ${widget.memory.structured.toString()}
-              
-              Get started using Omi today (https://www.omi.me).
-              '''
-                            .replaceAll('  ', '')
-                            .trim();
+                        String content = widget.memory.structured.toString().replaceAll('  ', '').trim();
                         await Share.share(content);
                         changeLoadingShareSummary(false);
                       },
