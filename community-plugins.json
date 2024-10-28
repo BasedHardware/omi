@@ -1009,6 +1009,29 @@
     "deleted": false
   },
   {
+    "id": "omi-google-calendar-integration",
+    "name": "Google Calendar",
+    "author": "@salman.m",
+    "description": "Auto-sync OMI Events to Google Calendar. Connect once, and forget about it.",
+    "image": "/plugins/logos/gcal.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omigcal.soundbrain.cc/webhook",
+      "setup_completed_url": "https://omigcal.soundbrain.cc/setup_check",
+      "setup_instructions_file_path": "/plugins/instructions/gcal/README.md",
+      "auth_steps": [
+        {
+          "name": "Connect Google Calendar",
+          "url": "https://omigcal.soundbrain.cc/intro"
+        }
+      ]
+    },
+    "deleted": false
+  },
+  {
     "id": "mental-health-friend",
     "name": "Mental Health Friend",
     "author": "Infuzu.com",
