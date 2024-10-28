@@ -159,7 +159,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments})
+            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
                 print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
                 return
