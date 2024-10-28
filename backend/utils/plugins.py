@@ -6,19 +6,22 @@ import requests
 import database.notifications as notification_db
 from database.chat import add_plugin_message
 from database.plugins import record_plugin_usage
-from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count
+from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
+    set_generic_cache
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
+from utils.other.endpoints import timeit
 
 
 # ***********************************
 # ************* BASICS **************
 # ***********************************
 
+@timeit
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
-    if not plugin_id:
+    if not plugin_id or plugin_id == 'null':
         return None
     plugins = get_plugins_data('', include_reviews=False)
     return next((p for p in plugins if p.id == plugin_id), None)
@@ -34,12 +37,18 @@ def weighted_rating(plugin):
 
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     # print('get_plugins_data', uid, include_reviews)
-    response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
-    if response.status_code != 200:
-        return []
+    if data := get_generic_cache('get_plugins_data'):
+        print('get_plugins_data from cache')
+        pass
+    else:
+        response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
+        if response.status_code != 200:
+            return []
+        data = response.json()
+        set_generic_cache('get_plugins_data', data, 60 * 10)  # 10 minutes cached
+
     user_enabled = set(get_enabled_plugins(uid))
     # print('get_plugins_data, user_enabled', user_enabled)
-    data = response.json()
     plugins = []
     for plugin in data:
         plugin_dict = plugin

@@ -1,3 +1,5 @@
+import json
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
+from database.redis_db import add_filter_category_item
 from models.chat import Message
 from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
@@ -353,10 +356,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
-def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
-    conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
-    )
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     plugin_info = ""
@@ -367,14 +367,16 @@ def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plu
     You are an assistant for question-answering tasks. 
     You are made for {user_name}, {facts_str}
     
-    Use what you know about {user_name}, the following pieces of retrieved context and the chat history to continue the chat.
-    If you don't know the answer, just say that there's no available information about it. Use three sentences maximum and keep the answer concise.
-    If the message doesn't require context, it will be empty, so follow-up the conversation casually.
-    If there's not enough information to provide a valuable answer, ask the user for clarification questions.
+    Use what you know about {user_name}, the following pieces of retrieved context to answer the user question.
+    If there's no context or the context is not related, tell the user that they didn't record any conversations about that specific topic.
+    Never say that you don't have enough information. 
+    
+    Use three sentences maximum and keep the answer concise.
+    
     {plugin_info}
     
-    Chat History:
-    {conversation_history}
+    Question:
+    {question}
 
     Context:
     ```
@@ -382,7 +384,7 @@ def qa_rag(uid: str, context: str, messages: List[Message], plugin: Optional[Plu
     ```
     Answer:
     """.replace('    ', '').strip()
-    print(prompt)
+    print('QA Using context:', context)
     return llm_mini.invoke(prompt).content
 
 
@@ -559,6 +561,7 @@ def trends_extractor(memory: Memory) -> List[Item]:
 # ************* RANDOM JOAN SPECIFIC FEATURES **************
 # **********************************************************
 
+
 def followup_question_prompt(segments: List[TranscriptSegment]):
     transcript_str = TranscriptSegment.segments_as_string(segments, include_timestamps=False)
     words = transcript_str.split()
@@ -580,3 +583,161 @@ def followup_question_prompt(segments: List[TranscriptSegment]):
         Output only the question, without context, be concise and straight to the point.
         """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+
+# **********************************************
+# ************* CHAT V2 LANGGRAPH **************
+# **********************************************
+
+class ExtractedInformation(BaseModel):
+    people: List[str] = Field(
+        default=[],
+        description='Identify all the people names who were mentioned during the conversation.'
+    )
+    topics: List[str] = Field(
+        default=[],
+        description='List all the main topics and subtopics that were discussed.',
+    )
+    entities: List[str] = Field(
+        default=[],
+        description='List any products, technologies, places, or other entities that are relevant to the conversation.'
+    )
+    dates: List[str] = Field(
+        default=[],
+        description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.'
+    )
+
+
+class FiltersToUse(BaseModel):
+    people: List[str] = Field(default=[], description='People, names that could be relevant')
+    topics: List[str] = Field(default=[], description='Topics and subtopics that can help finding more information')
+    entities: List[str] = Field(
+        default=[], description='products, technologies, places, or other entities that could be relevant.'
+    )
+
+
+class OutputQuestion(BaseModel):
+    question: str = Field(description='The extracted user question from the conversation.')
+
+
+def extract_question_from_conversation(messages: List[Message]) -> str:
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the last few messages, and identify the single question that the user is asking.
+    
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+    
+    Conversation:
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+    '''.replace('    ', '').strip()
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
+def retrieve_metadata_fields_from_transcript(
+        uid: str, created_at: datetime, transcript_segment: List[dict]
+) -> ExtractedInformation:
+    transcript = ''
+    for segment in transcript_segment:
+        transcript += f'{segment["text"].strip()}\n\n'
+
+    # TODO: ask it to use max 2 words? to have more standardization possibilities
+    prompt = f'''
+    You will be given the raw transcript of a conversation, this transcript has about 20% word error rate, 
+    and diarization is also made very poorly.
+
+    Your task is to extract the most accurate information from the conversation in the output object indicated below.
+
+    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
+
+    For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
+    If one says "today", it means the current day.
+    If one says "tomorrow", it means the next day after today.
+    If one says "yesterday", it means the day before today.
+    If one says "next week", it means the next monday.
+    Do not include dates greater than 2025.
+    
+    Conversation Transcript:
+    ```
+    {transcript}
+    ```
+    '''.replace('    ', '')
+    try:
+        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+    except Exception as e:
+        print('e', e)
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+
+    def normalize_filter(value: str) -> str:
+        # Convert to lowercase and strip whitespace
+        value = value.lower().strip()
+
+        # Remove special characters and extra spaces
+        value = re.sub(r'[^\w\s-]', '', value)
+        value = re.sub(r'\s+', ' ', value)
+
+        # Remove common filler words
+        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+        value = ' '.join(word for word in value.split() if word not in filler_words)
+
+        # Standardize common variations
+        value = value.replace('artificial intelligence', 'ai')
+        value = value.replace('machine learning', 'ml')
+        value = value.replace('natural language processing', 'nlp')
+
+        return value.strip()
+
+    metadata = {
+        'people': [normalize_filter(p) for p in result.people],
+        'topics': [normalize_filter(t) for t in result.topics],
+        'entities': [normalize_filter(e) for e in result.topics],
+        'dates': []
+    }
+    # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
+    for date in result.dates:
+        try:
+            date = datetime.strptime(date, '%Y-%m-%d')
+            if date.year > 2025:
+                continue
+            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f'Error parsing date: {e}')
+
+    for p in metadata['people']:
+        add_filter_category_item(uid, 'people', p)
+    for t in metadata['topics']:
+        add_filter_category_item(uid, 'topics', t)
+    for e in metadata['entities']:
+        add_filter_category_item(uid, 'entities', e)
+    for d in metadata['dates']:
+        add_filter_category_item(uid, 'dates', d)
+
+    return metadata
+
+
+def select_structured_filters(question: str, filters_available: dict) -> dict:
+    prompt = f'''
+    Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
+    Your task is to identify the correct fields that can be related to the question and can help answering.
+    
+    You must choose for each field, only the ones available in the JSON below.
+    Find as many as possible that can relate to the question asked.
+    ```
+    {json.dumps(filters_available, indent=2)}
+    ```
+
+    Question: {question}
+    '''.replace('    ', '').strip()
+    # print(prompt)
+    with_parser = llm_mini.with_structured_output(FiltersToUse)
+    try:
+        response: FiltersToUse = with_parser.invoke(prompt)
+        print('select_structured_filters:', response.dict())
+        response.topics = [t for t in response.topics if t in filters_available['topics']]
+        response.people = [p for p in response.people if p in filters_available['people']]
+        response.entities = [e for e in response.entities if e in filters_available['entities']]
+        return response.dict()
+    except ValidationError:
+        return {}
