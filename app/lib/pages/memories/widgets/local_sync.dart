@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/memories/sync_page.dart';
+import 'package:friend_private/pages/sdcard/sdcard_transfer_progress.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
@@ -115,7 +115,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
                       const Icon(Icons.download_rounded),
                       const SizedBox(width: 16),
                       Text(
-                        '${secondsToHumanReadable(_missSeconds)} available. Sync now?',
+                        '${secondsToHumanReadable(_missSeconds.toString())} available. Sync now?',
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ],
