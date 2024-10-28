@@ -25,7 +25,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   List<ServerMemory> processingMemories = [];
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
@@ -37,15 +37,15 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   bool isSyncing = false;
   bool syncCompleted = false;
-  Map<String, List<Record>>? syncedMemoriesPointers;
+  List<SyncedMemoryPointer> syncedMemoriesPointers = [];
 
   MemoryProvider() {
-    _walService.subscribe(this, this);
+    _wal.subscribe(this, this);
     _preload();
   }
 
   _preload() async {
-    _missingWals = await _walService.getMissingWals();
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
@@ -163,6 +163,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     for (var memory in memories) {
       if (memory.structured.events.isNotEmpty &&
           !memory.structured.events.first.created &&
+          memory.startedAt != null &&
           memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
         _handleCalendarCreation(memory);
       }
@@ -201,6 +202,18 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     if (groupedMemories.containsKey(date)) {
       groupedMemories[date]!.insert(0, memory);
       groupedMemories[date]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (syncedMemoriesPointers.isNotEmpty) {
+        // if the synced memory pointers contain a memory on this date, then update their index
+        // This usually happens when a memory is added to the grouped memories while/after syncing
+        if (syncedMemoriesPointers.where((element) => element.key == date).isNotEmpty) {
+          var len = syncedMemoriesPointers.where((element) => element.key == date).length;
+          for (var i = 0; i < len; i++) {
+            var mem = syncedMemoriesPointers.where((element) => element.key == date).elementAt(i);
+            var newIdx = groupedMemories[date]!.indexWhere((m) => m.id == mem.memory.id);
+            updateSyncedMemoryPointerIndex(mem, newIdx);
+          }
+        }
+      }
     } else {
       groupedMemories[date] = [memory];
       groupedMemories = Map.fromEntries(groupedMemories.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
@@ -316,19 +329,19 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
-    _walService.unsubscribe(this);
+    _wal.unsubscribe(this);
     super.dispose();
   }
 
   @override
-  void onNewMissingWal(Wal wal) async {
-    _missingWals = await _walService.getMissingWals();
+  void onMissingWalUpdated() async {
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
   @override
   void onWalSynced(Wal wal, {ServerMemory? memory}) async {
-    _missingWals = await _walService.getMissingWals();
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
@@ -341,9 +354,11 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   Future syncWals() async {
+    debugPrint("provider > syncWals");
+
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
-    var res = await _walService.syncAll(progress: this);
+    var res = await _wal.getSyncs().syncAll(progress: this);
     if (res != null) {
       if (res.newMemoryIds.isNotEmpty || res.updatedMemoryIds.isNotEmpty) {
         await getSyncedMemoriesData(res);
@@ -376,7 +391,6 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   void addSyncedMemoriesToGroupedMemories(Map syncedMemories) {
-    syncedMemoriesPointers = {'new_memories': [], 'updated_memories': []};
     if (syncedMemories['new_memories'] != []) {
       for (var memory in syncedMemories['new_memories']!) {
         if (memory != null && memory.status == MemoryStatus.completed) {
@@ -388,54 +402,49 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
       for (var memory in syncedMemories['updated_memories']!) {
         if (memory != null && memory.status == MemoryStatus.completed) {
           upsertMemory(memory);
-          syncedMemoriesPointers!['updated_memories']!.add(getMemoryDateAndIndex(memory));
         }
       }
     }
     for (var memory in syncedMemories['new_memories']!) {
       if (memory != null && memory.status == MemoryStatus.completed) {
-        syncedMemoriesPointers!['new_memories']!.add(getMemoryDateAndIndex(memory));
+        var res = getMemoryDateAndIndex(memory);
+        syncedMemoriesPointers
+            .add(SyncedMemoryPointer(type: SyncedMemoryType.newMemory, index: res.$2, key: res.$1, memory: memory));
       }
     }
     if (syncedMemories['updated_memories'] != []) {
       for (var memory in syncedMemories['updated_memories']!) {
         if (memory != null && memory.status == MemoryStatus.completed) {
-          syncedMemoriesPointers!['updated_memories']!.add(getMemoryDateAndIndex(memory));
+          var res = getMemoryDateAndIndex(memory);
+          syncedMemoriesPointers.add(
+              SyncedMemoryPointer(type: SyncedMemoryType.updatedMemory, index: res.$2, key: res.$1, memory: memory));
         }
       }
     }
   }
 
-  void updateSyncedMemory(ServerMemory memory) {
-    if (syncedMemoriesPointers!['updated_memories'] != null) {
-      var idx = syncedMemoriesPointers!['updated_memories']!.indexWhere((element) {
-        dynamic e = element;
-        return e.$3.id == memory.id;
-      });
-      if (idx != -1) {
-        updateMemory(memory);
-        syncedMemoriesPointers!['updated_memories']![idx] = getMemoryDateAndIndex(memory);
-      }
-    }
-    // if new_memories also include the same memory, update it coz we currently have duplicates
-    if (syncedMemoriesPointers!['new_memories'] != null) {
-      var idx = syncedMemoriesPointers!['new_memories']!.indexWhere((element) {
-        dynamic e = element;
-        return e.$3.id == memory.id;
-      });
-      if (idx != -1) {
-        syncedMemoriesPointers!['new_memories']![idx] = getMemoryDateAndIndex(memory);
-      }
-    }
+  void updateSyncedMemoryPointerIndex(SyncedMemoryPointer mem, int index) {
+    var oldIdx = syncedMemoriesPointers.indexOf(mem);
+    syncedMemoriesPointers[oldIdx] = mem.copyWith(index: index);
+    notifyListeners();
   }
 
-  (DateTime, int, ServerMemory) getMemoryDateAndIndex(ServerMemory memory) {
+  void updateSyncedMemory(ServerMemory memory) {
+    var id = syncedMemoriesPointers.indexWhere((element) => element.memory.id == memory.id);
+    if (id != -1) {
+      syncedMemoriesPointers[id] = syncedMemoriesPointers[id].copyWith(memory: memory);
+    }
+    updateMemoryInSortedList(memory);
+    notifyListeners();
+  }
+
+  (DateTime, int) getMemoryDateAndIndex(ServerMemory memory) {
     var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
     var idx = groupedMemories[date]!.indexWhere((element) => element.id == memory.id);
     if (idx == -1 && groupedMemories.containsKey(date)) {
       groupedMemories[date]!.add(memory);
     }
-    return (date, idx, memory);
+    return (date, idx);
   }
 
   Future<ServerMemory?> getMemoryDetails(String memoryId) async {
@@ -445,6 +454,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   void clearSyncResult() {
     syncCompleted = false;
+    syncedMemoriesPointers = [];
     notifyListeners();
   }
 

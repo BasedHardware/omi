@@ -263,7 +263,7 @@ class FrameDeviceConnection extends DeviceConnection {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 250));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -299,7 +299,7 @@ class FrameDeviceConnection extends DeviceConnection {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -381,7 +381,7 @@ class FrameDeviceConnection extends DeviceConnection {
     if (_frame == null || _frame!.isConnected == false) {
       await init();
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -392,7 +392,7 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetImageListener({required void Function(Uint8List p1) onImageReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
       await Future.doWhile(() async {
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
         return !(_frame?.isConnected ?? false);
       });
     }
@@ -443,7 +443,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performWriteToStorage(int numFile, int command,int offset) {
+  Future<bool> performWriteToStorage(int numFile, int command, int offset) {
     return Future.value(false);
   }
 }

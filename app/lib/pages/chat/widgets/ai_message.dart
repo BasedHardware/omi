@@ -8,7 +8,7 @@ import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
@@ -24,7 +24,7 @@ class AIMessage extends StatefulWidget {
   final ServerMessage message;
   final Function(String) sendMessage;
   final bool displayOptions;
-  final Plugin? pluginSender;
+  final App? appSender;
   final Function(ServerMemory) updateMemory;
 
   const AIMessage({
@@ -33,7 +33,7 @@ class AIMessage extends StatefulWidget {
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    this.pluginSender,
+    this.appSender,
     required this.updateMemory,
   });
 
@@ -56,9 +56,9 @@ class _AIMessageState extends State<AIMessage> {
       mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        widget.pluginSender != null
+        widget.appSender != null
             ? CachedNetworkImage(
-                imageUrl: widget.pluginSender!.getImageUrl(),
+                imageUrl: widget.appSender!.getImageUrl(),
                 imageBuilder: (context, imageProvider) => CircleAvatar(
                   backgroundColor: Colors.white,
                   radius: 16,
@@ -100,7 +100,7 @@ class _AIMessageState extends State<AIMessage> {
                 widget.sendMessage,
                 widget.showTypingIndicator,
                 widget.displayOptions,
-                widget.pluginSender,
+                widget.appSender,
                 widget.updateMemory,
               ),
             ],
@@ -112,22 +112,22 @@ class _AIMessageState extends State<AIMessage> {
 }
 
 Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, bool showTypingIndicator,
-    bool displayOptions, Plugin? pluginSender, Function(ServerMemory) updateMemory) {
+    bool displayOptions, App? appSender, Function(ServerMemory) updateMemory) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeSting,
+      messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateMemory: updateMemory,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, date: message.createdAt);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, sendMessage: sendMessage);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting);
+    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString);
   }
 }
 
@@ -277,6 +277,7 @@ class NormalMessageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SelectionArea(
           child: showTypingIndicator
@@ -389,7 +390,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                       ),
                     );
-                    //TODO: Not needed anymore I guess because memories are stored in provider and read from there only
                     if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
                       ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
                       widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);

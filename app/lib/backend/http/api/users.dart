@@ -26,6 +26,71 @@ Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   return false;
 }
 
+Future<bool> setUserWebhookUrl({required String type, required String url}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'url': url}),
+  );
+  if (response == null) return false;
+  if (response.statusCode == 200) return true;
+  return false;
+}
+
+Future<String> getUserWebhookUrl({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  if (response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    return (jsonResponse['url'] as String?) ?? '';
+  }
+  return '';
+}
+
+Future disableWebhook({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/disable',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode == 204) return true;
+  return false;
+}
+
+Future enableWebhook({required String type}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type/enable',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode == 204) return true;
+  return false;
+}
+
+Future webhooksStatus() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/developer/webhooks/status',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
 Future<bool> deleteAccount() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/delete-account',
@@ -154,4 +219,20 @@ Future<bool> deletePerson(String personId) async {
   if (response == null) return false;
   debugPrint('deletePerson response: ${response.body}');
   return response.statusCode == 204;
+}
+
+Future<String> getFollowUpQuestion({String memoryId = '0'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/joan/$memoryId/followup-question',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return '';
+  debugPrint('getFollowUpQuestion response: ${response.body}');
+  if (response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    return jsonResponse['result'] as String? ?? '';
+  }
+  return '';
 }

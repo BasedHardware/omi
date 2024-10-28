@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/providers/plugin_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
-  PluginProvider? pluginProvider;
+  AppProvider? appProvider;
   MemoryProvider? memoryProvider;
+
   // late ServerMemory memory;
 
   int memoryIdx = 0;
@@ -26,20 +27,20 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   String reprocessMemoryId = '';
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final focusTitleField = FocusNode();
-  final focusOverviewField = FocusNode();
-  List<Plugin> pluginsList = [];
+  List<App> appsList = [];
 
   Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
-  ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
-  List<bool> pluginResponseExpanded = [];
 
-  bool editingTitle = false;
-  bool editingOverview = false;
+  ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
+  List<bool> appResponseExpanded = [];
+
+  TextEditingController? titleController;
+  FocusNode? titleFocusNode;
 
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
+
   // bool hasAudioRecording = false;
 
   List<MemoryPhoto> photos = [];
@@ -80,9 +81,9 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void setProviders(PluginProvider provider, MemoryProvider memoryProvider) {
+  void setProviders(AppProvider provider, MemoryProvider memoryProvider) {
     this.memoryProvider = memoryProvider;
-    pluginProvider = provider;
+    appProvider = provider;
     notifyListeners();
   }
 
@@ -101,7 +102,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateRepocessMemoryId(String id) {
+  void updateReprocessMemoryId(String id) {
     reprocessMemoryId = id;
     notifyListeners();
   }
@@ -109,7 +110,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   void updateMemory(int memIdx, DateTime date) {
     memoryIdx = memIdx;
     selectedDate = date;
-    pluginResponseExpanded = List.filled(memory.pluginsResults.length, false);
+    appResponseExpanded = List.filled(memory.appResults.length, false);
     notifyListeners();
   }
 
@@ -118,13 +119,52 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updatePluginResponseExpanded(int index) {
-    pluginResponseExpanded[index] = !pluginResponseExpanded[index];
+  void updateActionItemState(bool state, int i) {
+    memory.structured.actionItems[i].completed = state;
+    notifyListeners();
+  }
+
+  List<ActionItem> deletedActionItems = [];
+
+  void deleteActionItem(int i) {
+    deletedActionItems.add(memory.structured.actionItems[i]);
+    memory.structured.actionItems.removeAt(i);
+    notifyListeners();
+  }
+
+  void undoDeleteActionItem(int idx) {
+    memory.structured.actionItems.insert(idx, deletedActionItems.removeLast());
+    notifyListeners();
+  }
+
+  void deleteActionItemPermanently(ActionItem item, int itemIdx) {
+    deletedActionItems.removeWhere((element) => element == item);
+    deleteMemoryActionItem(memory.id, item);
+    notifyListeners();
+  }
+
+  void updateAppResponseExpanded(int index) {
+    appResponseExpanded[index] = !appResponseExpanded[index];
     notifyListeners();
   }
 
   Future initMemory() async {
     // updateLoadingState(true);
+    titleController?.dispose();
+    titleFocusNode?.dispose();
+
+    titleController = TextEditingController();
+    titleFocusNode = FocusNode();
+
+    titleController!.text = memory.structured.title;
+    titleFocusNode!.addListener(() {
+      print('titleFocusNode focus changed');
+      if (!titleFocusNode!.hasFocus) {
+        memory.structured.title = titleController!.text;
+        updateMemoryTitle(memory.id, titleController!.text);
+      }
+    });
+
     photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(memory.transcriptSegments);
     if (memory.source == MemorySource.openglass) {
@@ -137,7 +177,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       //   hasAudioRecording = value;
       // });
     }
-    pluginsList = pluginProvider!.plugins;
+    appsList = appProvider!.apps;
     // updateLoadingState(false);
     notifyListeners();
   }
@@ -145,12 +185,12 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   Future<bool> reprocessMemory() async {
     debugPrint('_reProcessMemory');
     updateReprocessMemoryLoadingState(true);
-    updateRepocessMemoryId(memory.id);
+    updateReprocessMemoryId(memory.id);
     try {
       var updatedMemory = await reProcessMemoryServer(memory.id);
       MixpanelManager().reProcessMemory(memory);
       updateReprocessMemoryLoadingState(false);
-      updateRepocessMemoryId('');
+      updateReprocessMemoryId('');
       if (updatedMemory == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
@@ -171,7 +211,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       });
       notifyError('REPROCESS_FAILED');
       updateReprocessMemoryLoadingState(false);
-      updateRepocessMemoryId('');
+      updateReprocessMemoryId('');
       notifyListeners();
       return false;
     }

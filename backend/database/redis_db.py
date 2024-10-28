@@ -97,6 +97,25 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     return eval(reviews)
 
 
+def set_plugin_installs_count(plugin_id: str, count: int):
+    r.set(f'plugins:{plugin_id}:installs', count)
+
+
+def increase_plugin_installs_count(plugin_id: str):
+    r.incr(f'plugins:{plugin_id}:installs')
+
+
+def decrease_plugin_installs_count(plugin_id: str):
+    r.decr(f'plugins:{plugin_id}:installs')
+
+
+def get_plugin_installs_count(plugin_id: str) -> int:
+    count = r.get(f'plugins:{plugin_id}:installs')
+    if not count:
+        return 0
+    return int(count)
+
+
 def set_user_has_soniox_speech_profile(uid: str):
     r.set(f'users:{uid}:has_soniox_speech_profile', '1')
 
@@ -148,7 +167,7 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 def cache_user_geolocation(uid: str, geolocation: dict):
     r.set(f'users:{uid}:geolocation', str(geolocation))
-    r.expire(f'users:{uid}:geolocation', 60 * 10)
+    r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
 def get_cached_user_geolocation(uid: str):
@@ -203,3 +222,45 @@ def get_in_progress_memory_id(uid: str) -> str:
     if not memory_id:
         return ''
     return memory_id.decode()
+
+
+def set_user_webhook_db(uid: str, wtype: str, url: str):
+    r.set(f'users:{uid}:developer:webhook:{wtype}', url)
+
+def disable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(False).lower())
+
+def enable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(True).lower())
+
+def user_webhook_status_db(uid: str, wtype: str):
+    status = r.get(f'users:{uid}:developer:webhook_status:{wtype}')
+    if status is None:
+        return None
+    return status.decode() == str(True).lower()
+
+
+def get_user_webhook_db(uid: str, wtype: str) -> str:
+    url = r.get(f'users:{uid}:developer:webhook:{wtype}')
+    if not url:
+        return ''
+    return url.decode()
+
+
+def get_filter_category_items(uid: str, category: str) -> List[str]:
+    val = r.smembers(f'users:{uid}:filters:{category}')
+    if not val:
+        return []
+    return [x.decode() for x in val]
+
+
+def add_filter_category_item(uid: str, category: str, item: str):
+    r.sadd(f'users:{uid}:filters:{category}', item)
+
+
+def remove_filter_category_item(uid: str, category: str, item: str):
+    r.srem(f'users:{uid}:filters:{category}', item)
+
+
+def remove_all_filter_category_items(uid: str, category: str):
+    r.delete(f'users:{uid}:filters:{category}')

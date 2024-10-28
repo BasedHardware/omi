@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/firmware_update.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
+import 'package:friend_private/pages/memories/sync_page.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/services/services.dart';
@@ -34,10 +34,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.read<DeviceProvider>().connectedDevice!.modelNumber == 'Unknown') {
-        context.read<DeviceProvider>().getDeviceInfo();
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<DeviceProvider>().getDeviceInfo();
     });
     super.initState();
   }
@@ -100,7 +98,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await IntercomManager().displayChargingArticle();
+                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
@@ -138,7 +136,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       provider.setIsConnected(false);
                       provider.setConnectedDevice(null);
                       provider.updateConnectingStatus(false);
-                      context.read<OnboardingProvider>().stopFindDeviceTimer();
+                      context.read<OnboardingProvider>().stopScanDevices();
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -161,6 +159,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+  var provider = Provider.of<DeviceProvider>(context, listen: true);
+
   return [
     ListTile(
       title: const Text('Device Name'),
@@ -183,36 +183,34 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
         ),
       ),
     ),
-  GestureDetector(
-    onTap: () {
-      if (!SharedPreferencesUtil().deviceIsV2) {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.of(context).pop(),
-            () => {},
-            'V2 undetected',
-            'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+    GestureDetector(
+      onTap: () {
+        if (!provider.isDeviceV2Connected) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.of(context).pop(),
+              () => {},
+              'V2 undetected',
+              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
               singleButton: true,
             ),
           );
-      }
-      else {
-            var page = const SdCardCapturePage();
-            routeToPage(context, page);
-      }
-  },
-    child: ListTile(
-    title: const Text('SD Card Import'),
-    subtitle: Text(''),
-    trailing: const Icon(
-      Icons.arrow_forward_ios,
-      size: 16,
+        } else {
+          var page = const SyncPage();
+          routeToPage(context, page);
+        }
+      },
+      child: const ListTile(
+        title: Text('SD Card Sync'),
+        subtitle: Text('Import audio files from SD Card'),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
+      ),
     ),
-  ),
-  ),
-
     ListTile(
       title: const Text('Hardware Revision'),
       subtitle: Text(device?.hardwareRevision ?? 'XIAO'),

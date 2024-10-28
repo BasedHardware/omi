@@ -11,11 +11,15 @@ from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
 from database import redis_db
-from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured
+from database.redis_db import get_cached_user_geolocation
+from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent
+from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
-from utils.plugins import trigger_external_integrations
+from utils.plugins import trigger_external_integrations, trigger_realtime_integrations
 from utils.stt.streaming import *
+from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
+    get_audio_bytes_webhook_seconds
 
 router = APIRouter()
 
@@ -53,25 +57,38 @@ def retrieve_in_progress_memory(uid):
 
 async def _websocket_util(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
     # Not when comes from the phone, and only Friend's with 1.0.4
-    if language == 'en' and sample_rate == 16000 and codec == 'opus':
-        stt_service = STTService.soniox
-    else:
+    if stt_service == STTService.soniox and language not in soniox_valid_languages:
         stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
     except RuntimeError as e:
         print(e)
+        await websocket.close(code=1011, reason="Dirty state")
         return
 
     # Initiate a separate vad for each websocket
     w_vad = webrtcvad.Vad()
     w_vad.set_mode(1)
+
+    # A  frame must be either 10, 20, or 30 ms in duration
+    def _has_speech(data, sample_rate):
+        sample_size = 320 if sample_rate == 16000 else 160
+        offset = 0
+        while offset < len(data):
+            sample = data[offset:offset + sample_size]
+            if len(sample) < sample_size:
+                sample = sample + bytes([0x00] * (sample_size - len(sample) % sample_size))
+            has_speech = w_vad.is_speech(sample, sample_rate)
+            if has_speech:
+                return True
+            offset += sample_size
+        return False
 
     # Stream transcript
     loop = asyncio.get_event_loop()
@@ -111,6 +128,12 @@ async def _websocket_util(
             memory.status = MemoryStatus.processing
 
         try:
+            # Geolocation
+            geolocation = get_cached_user_geolocation(uid)
+            if geolocation:
+                geolocation = Geolocation(**geolocation)
+                memory.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
             memory = process_memory(uid, language, memory)
             messages = trigger_external_integrations(uid, memory)
         except Exception as e:
@@ -136,7 +159,7 @@ async def _websocket_util(
     async def _create_current_memory():
         print("_create_current_memory")
 
-        # Reset state variables
+        # Reset state variablesr
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
         seconds_to_trim = None
@@ -163,8 +186,11 @@ async def _websocket_util(
         finished_at = datetime.fromisoformat(existing_memory['finished_at'].isoformat())
         seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
         if seconds_since_last_segment >= memory_creation_timeout:
+            print('_websocket_util processing existing_memory', existing_memory['id'], seconds_since_last_segment)
             asyncio.create_task(_create_current_memory())
         else:
+            print('_websocket_util will process', existing_memory['id'], 'in',
+                  memory_creation_timeout - seconds_since_last_segment, 'seconds')
             memory_creation_task = asyncio.create_task(
                 _trigger_create_memory_with_delay(memory_creation_timeout - seconds_since_last_segment, finished_at)
             )
@@ -205,9 +231,10 @@ async def _websocket_util(
                     await memory_creation_task
                 except asyncio.CancelledError:
                     print("memory_creation_task is cancelled now")
-            memory_creation_task = asyncio.create_task(_trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
+            memory_creation_task = asyncio.create_task(
+                _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
-    def stream_transcript(segments, _):
+    def stream_transcript(segments):
         nonlocal websocket
         nonlocal seconds_to_trim
 
@@ -235,6 +262,11 @@ async def _websocket_util(
 
         asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
 
+        # Thinh's comment: Temporarily disabled due to bad performance
+        # realtime plugins + realtime webhook
+        #asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
+        #asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
         memories_db.update_memory_finished_at(uid, memory.id, finished_at)
@@ -257,12 +289,10 @@ async def _websocket_util(
         # DEEPGRAM
         if stt_service == STTService.deepgram:
             deepgram_socket = await process_audio_dg(
-                stream_transcript, 1, language, sample_rate, 1, preseconds=speech_profile_duration
+                stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
-                deepgram_socket2 = await process_audio_dg(
-                    stream_transcript, 2, language, sample_rate, 1
-                )
+                deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
 
                 async def deepgram_socket_send(data):
                     return deepgram_socket.send(data)
@@ -271,13 +301,13 @@ async def _websocket_util(
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
-                stream_transcript, 1, sample_rate, language,
+                stream_transcript, sample_rate, language,
                 uid if include_speech_profile else None
             )
         # SPEECHMATICS
         elif stt_service == STTService.speechmatics:
             speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, 1, sample_rate, language, preseconds=speech_profile_duration
+                stream_transcript, sample_rate, language, preseconds=speech_profile_duration
             )
             if speech_profile_duration:
                 await send_initial_file_path(file_path, speechmatics_socket.send)
@@ -292,12 +322,14 @@ async def _websocket_util(
     decoder = opuslib.Decoder(sample_rate, 1)
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
         nonlocal websocket_close_code
 
         timer_start = time.time()
+        #audiobuffer = bytearray()
         # f = open("audio.bin", "ab")
         try:
             while websocket_active:
@@ -310,12 +342,10 @@ async def _websocket_util(
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
 
+                #audiobuffer.extend(data)
+
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
-                    vad_sample_size = 320 if sample_rate == 16000 else 160
-                    if len(data) < vad_sample_size:
-                        data = data[:vad_sample_size]
-                        data = data + bytes([0x00] * (vad_sample_size - len(data)))
-                    has_speech = w_vad.is_speech(data, sample_rate)
+                    has_speech = _has_speech(data, sample_rate)
                     if not has_speech:
                         continue
 
@@ -336,6 +366,12 @@ async def _websocket_util(
                     else:
                         dg_socket2.send(data)
 
+                # Thinh's comment: Temporarily disabled due to bad performance
+                #if audio_bytes_webhook_delay_seconds and len(
+                #        audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
+                #    asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
+                #    audiobuffer = bytearray()
+
         except WebSocketDisconnect:
             print("WebSocket disconnected")
         except Exception as e:
@@ -354,7 +390,7 @@ async def _websocket_util(
 
     # heart beat
     started_at = time.time()
-    timeout_seconds = 1920  # 32m # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
 
     async def send_heartbeat():
@@ -407,6 +443,6 @@ async def _websocket_util(
 @router.websocket("/v2/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True,
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, include_speech_profile)
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)

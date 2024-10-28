@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Set
 
 from pydantic import BaseModel
@@ -20,12 +21,17 @@ class PluginReview(BaseModel):
         )
 
 
+class AuthStep(BaseModel):
+    name: str
+    url: str
+
+
 class ExternalIntegration(BaseModel):
     triggers_on: str
     webhook_url: str
     setup_completed_url: Optional[str] = None
     setup_instructions_file_path: str
-    # TODO: refactor to be read from backend, so frontend doesn't do extra request (cache)
+    auth_steps: Optional[List[AuthStep]] = []
     # setup_instructions_markdown: str = ''
 
 
@@ -46,6 +52,7 @@ class Plugin(BaseModel):
     enabled: bool = False
     deleted: bool = False
     trigger_workflow_memories: bool = True  # default true
+    installs: int = 0
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -70,3 +77,16 @@ class Plugin(BaseModel):
 
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
+
+
+class UsageHistoryType(str, Enum):
+    memory_created_external_integration = 'memory_created_external_integration'
+    memory_created_prompt = 'memory_created_prompt'
+    chat_message_sent = 'chat_message_sent'
+
+
+class UsageHistoryItem(BaseModel):
+    uid: str
+    memory_id: Optional[str] = None
+    timestamp: datetime
+    type: UsageHistoryType

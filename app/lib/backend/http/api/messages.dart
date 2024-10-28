@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
+import 'package:friend_private/utils/logger.dart';
+import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<List<ServerMessage>> getMessagesServer() async {
   // TODO: Add pagination
@@ -33,9 +35,9 @@ Future<List<ServerMessage>> clearChatServer() async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
+Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: jsonEncode({'text': text}),
@@ -44,14 +46,20 @@ Future<ServerMessage> sendMessageServer(String text, {String? pluginId}) {
     if (response.statusCode == 200) {
       return ServerMessage.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to send message');
+      Logger.error('Failed to send message ${response.body}');
+      CrashReporting.reportHandledCrash(
+        Exception('Failed to send message ${response.body}'),
+        StackTrace.current,
+        level: NonFatalExceptionLevel.error,
+      );
+      return ServerMessage.failedMessage();
     }
   });
 }
 
-Future<ServerMessage> getInitialPluginMessage(String? pluginId) {
+Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
