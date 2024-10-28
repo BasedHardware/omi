@@ -845,7 +845,7 @@
     "description": "Analyzes the emotional tone and communication quality of a transcribed conversation. It identifies the speaker's emotional state, offers constructive feedback on their communication style, and encourages reflection on how their words might have been perceived. The goal is to help users connect more deeply with their emotions and improve their communication skills.",
     "image": "/plugins/logos/echo.png",
     "capabilities": [
-      "chat"
+      "memories"
     ],
     "memory_prompt": "Analyze for its emotional tone and communicative quality. Identify the emotional tone of the conversation. Determine whether the speaker(s) sounded angry, mad, upset, happy, content, neutral, or any other emotional state. Provide specific examples from the text to support your analysis. Offer constructive feedback on how the conversation was communicated. Highlight any patterns or phrases that contributed to the identified tone. Suggest ways to improve or maintain effective communication based on the emotional undertones detected. Encourage the speaker(s) to reflect on how their choice of words and tone might have impacted the conversation. Provide insights into how the conversation might have been perceived by others and how it could be adjusted for different outcomes. The goal of this analysis is to help the user connect more deeply with their words and emotions, and to better understand the impact of their communication style.",
     "deleted": false
