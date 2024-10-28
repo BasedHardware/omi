@@ -23,20 +23,20 @@ from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcri
 
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
-async def connect_to_transcript_pusher():
+async def connect_to_transcript_pusher(uid: str):
     try:
         print("Connecting to Pusher transcripts trigger WebSocket...")
-        socket = await websockets.connect(f"{PusherAPI}/v1/trigger/transcript/listen")
+        socket = await websockets.connect(f"{PusherAPI}/v1/trigger/transcript/listen?uid={uid}")
         print("Connected to Pusher transcripts trigger WebSocket.")
         return socket
     except Exception as e:
         print(f"Exception in connect_to_transcript_pusher: {e}")
         raise
 
-async def connect_to_audio_bytes_pusher():
+async def connect_to_audio_bytes_pusher(uid: str, sample_rate: int = 8000):
     try:
         print("Connecting to Pusher audio bytes trigger WebSocket...")
-        socket = await websockets.connect(f"{PusherAPI}/v1/trigger/audio-bytes/listen")
+        socket = await websockets.connect(f"{PusherAPI}/v1/trigger/audio-bytes/listen?uid={uid}&sample_rate={sample_rate}")
         print("Connected to Pusher audio bytes trigger WebSocket.")
         return socket
     except Exception as e:
