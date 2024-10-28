@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException
 
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -6,7 +6,6 @@ from database.vector_db import delete_vector
 from models.memory import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_memory
-from utils.llm import get_transcript_structure
 from utils.memories.process_memory import process_memory
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists, \
@@ -37,6 +36,7 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
     messages = trigger_external_integrations(uid, memory)
 
     return CreateMemoryResponse(memory=memory, messages=messages)
+
 
 # class TranscriptRequest(BaseModel):
 #     transcript: str
@@ -77,6 +77,13 @@ def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
 def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return _get_memory_by_id(uid, memory_id)
+
+
+@router.patch("/v1/memories/{memory_id}/title", tags=['memories'])
+def patch_memory_title(memory_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_memory_by_id(uid, memory_id)
+    memories_db.update_memory_title(uid, memory_id, title)
+    return {'status': 'Ok'}
 
 
 @router.get("/v1/memories/{memory_id}/photos", response_model=List[MemoryPhoto], tags=['memories'])
@@ -124,7 +131,8 @@ def set_memory_events_state(
 
 
 @router.patch("/v1/memories/{memory_id}/action-items", response_model=dict, tags=['memories'])
-def set_action_item_status(data: SetMemoryActionItemsStateRequest,memory_id: str,uid = Depends(auth.get_current_user_uid)):
+def set_action_item_status(data: SetMemoryActionItemsStateRequest, memory_id: str,
+                           uid=Depends(auth.get_current_user_uid)):
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
     action_items = memory.structured.action_items
@@ -138,7 +146,7 @@ def set_action_item_status(data: SetMemoryActionItemsStateRequest,memory_id: str
 
 
 @router.delete("/v1/memories/{memory_id}/action-items", response_model=dict, tags=['memories'])
-def delete_action_item(data: DeleteActionItemRequest,memory_id: str,uid = Depends(auth.get_current_user_uid)):
+def delete_action_item(data: DeleteActionItemRequest, memory_id: str, uid=Depends(auth.get_current_user_uid)):
     print('here inside of delete action item')
     memory = _get_memory_by_id(uid, memory_id)
     memory = Memory(**memory)
