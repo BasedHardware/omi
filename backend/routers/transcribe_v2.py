@@ -237,17 +237,17 @@ async def _websocket_util(
 
     async def create_pusher_task_handler():
         # transcript
-        transcript_ws = await connect_to_transcript_pusher()
+        transcript_ws = await connect_to_transcript_pusher(uid)
         audio_bytes_ws = None
 
         # audio bytes
         audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
         if audio_bytes_webhook_delay_seconds:
-            audio_bytes_ws = await connect_to_audio_bytes_pusher()
+            audio_bytes_ws = await connect_to_audio_bytes_pusher(uid, sample_rate)
 
         async def transcript_send(segments):
             print(f"transcript_send ${len(segments)}")
-            await transcript_ws.send(segments)
+            await transcript_ws.send(json.dumps(segments))
 
         async def audio_bytes_send(audio_buffer):
             print(f"audio_bytes_send ${len(audio_buffer)}")
@@ -296,7 +296,7 @@ async def _websocket_util(
 
         # Send to external trigger
         if transcript_send:
-            transcript_send(segments)
+            asyncio.run_coroutine_threadsafe(transcript_send(segments), loop)
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
@@ -396,7 +396,7 @@ async def _websocket_util(
 
                 # Send to external trigger
                 if audio_bytes_send:
-                    audio_bytes_send(data.copy())
+                    asyncio.run_coroutine_threadsafe(audio_bytes_send(data.copy()), loop)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -466,7 +466,7 @@ async def _websocket_util(
                 print(f"Error closing WebSocket: {e}")
         if pusher_close:
             try:
-                await pusher_close(code=1011)
+                await pusher_close()
             except Exception as e:
                 print(f"Error closing Pusher: {e}")
 
