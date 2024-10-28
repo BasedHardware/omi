@@ -370,6 +370,7 @@ class _GetEditTextFieldState extends State<GetEditTextField> {
   Widget build(BuildContext context) {
     return TextField(
       keyboardType: TextInputType.multiline,
+      minLines: 1,
       maxLines: 3,
       focusNode: widget.focusNode,
       decoration: const InputDecoration(
