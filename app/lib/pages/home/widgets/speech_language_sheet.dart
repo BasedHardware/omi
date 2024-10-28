@@ -7,11 +7,13 @@ class SpeechLanguageSheet extends StatelessWidget {
   final String recordingLanguage;
   final Function(String) setRecordingLanguage;
   final Map<String, String> availableLanguages;
-  const SpeechLanguageSheet(
-      {super.key,
-      required this.recordingLanguage,
-      required this.setRecordingLanguage,
-      required this.availableLanguages});
+
+  const SpeechLanguageSheet({
+    super.key,
+    required this.recordingLanguage,
+    required this.setRecordingLanguage,
+    required this.availableLanguages,
+  });
 
   @override
   Widget build(BuildContext context) {

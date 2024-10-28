@@ -221,18 +221,21 @@ class SummaryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, bool>(
-      selector: (context, provider) => provider.memory.discarded,
-      builder: (context, isDiscaarded, child) {
-        return ListView(
-          shrinkWrap: true,
-          children: [
-            const GetSummaryWidgets(),
-            isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
-            const GetGeolocationWidgets(),
-          ],
-        );
-      },
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Selector<MemoryDetailProvider, bool>(
+        selector: (context, provider) => provider.memory.discarded,
+        builder: (context, isDiscaarded, child) {
+          return ListView(
+            shrinkWrap: true,
+            children: [
+              const GetSummaryWidgets(),
+              isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
+              const GetGeolocationWidgets(),
+            ],
+          );
+        },
+      ),
     );
   }
 }
