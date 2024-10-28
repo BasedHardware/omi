@@ -921,6 +921,29 @@
     "deleted": false
   },
   {
+    "id": "heaven-or-hell",
+    "name": "Heaven or Hell?",
+    "author": "Neo",
+    "description": "Are you going to heaven or hell based on your every-day conversations?",
+    "image": "/plugins/logos/heaven-or-hell.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omi-heaven-or-hell.vercel.app/memory",
+      "setup_completed_url": "https://omi-heaven-or-hell.vercel.app/checksetup",
+      "setup_instructions_file_path": "/plugins/instructions/heavenorhell/README.md"
+    },
+    "auth_steps": [
+      {
+        "name": "See your score",
+        "url": "https://omi-heaven-or-hell.vercel.app/memory"
+      }
+    ],
+    "deleted": false
+  },
+  {
     "id": "gen-z-a-translator",
     "name": "Gen Z/A Translator",
     "author": "Neo",
