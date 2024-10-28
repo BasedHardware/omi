@@ -21,7 +21,7 @@ class HumanMessage extends StatelessWidget {
             ),
             padding: const EdgeInsets.all(16.0),
             child: Text(
-              message.text.decodeSting,
+              message.text.decodeString,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),

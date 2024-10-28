@@ -58,19 +58,25 @@ class _MemoryListItemState extends State<MemoryListItem> {
     }
 
     Structured structured = widget.memory.structured;
-    return GestureDetector(
-      onTap: () async {
-        MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
-        Provider.of<MemoryProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
-        routeToPage(
-          context,
-          MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
-        );
-        // if (result != null && result['deleted'] == true) widget.deleteMemory(widget.memory, widget.memoryIdx);
-      },
-      child: Consumer<MemoryProvider>(builder: (context, provider, child) {
-        return Padding(
+    return Consumer<MemoryProvider>(builder: (context, provider, child) {
+      return GestureDetector(
+        onTap: () async {
+          MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
+          context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
+          String startingTitle = context.read<MemoryDetailProvider>().memory.structured.title;
+          provider.onMemoryTap(widget.memoryIdx);
+
+          await routeToPage(
+            context,
+            MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
+          );
+          String newTitle = context.read<MemoryDetailProvider>().memory.structured.title;
+          if (startingTitle != newTitle) {
+            widget.memory.structured.title = newTitle;
+            provider.upsertMemory(widget.memory);
+          }
+        },
+        child: Padding(
           padding:
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
           child: Container(
@@ -128,7 +134,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.title.decodeSting,
+                              structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
@@ -136,7 +142,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
                       widget.memory.discarded
                           ? const SizedBox.shrink()
                           : Text(
-                              structured.overview.decodeSting,
+                              structured.overview.decodeString,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium!
@@ -158,9 +164,9 @@ class _MemoryListItemState extends State<MemoryListItem> {
               ),
             ),
           ),
-        );
-      }),
-    );
+        ),
+      );
+    });
   }
 
   _getMemoryHeader() {
@@ -214,6 +220,7 @@ class _MemoryListItemState extends State<MemoryListItem> {
 
 class MemoryNewStatusIndicator extends StatefulWidget {
   final String text;
+
   const MemoryNewStatusIndicator({super.key, required this.text});
 
   @override

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
@@ -15,6 +15,7 @@ import 'package:tuple/tuple.dart';
 class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   AppProvider? appProvider;
   MemoryProvider? memoryProvider;
+
   // late ServerMemory memory;
 
   int memoryIdx = 0;
@@ -26,20 +27,20 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   String reprocessMemoryId = '';
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final focusTitleField = FocusNode();
-  final focusOverviewField = FocusNode();
   List<App> appsList = [];
 
   Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
+
   ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
   List<bool> appResponseExpanded = [];
 
-  bool editingTitle = false;
-  bool editingOverview = false;
+  TextEditingController? titleController;
+  FocusNode? titleFocusNode;
 
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
+
   // bool hasAudioRecording = false;
 
   List<MemoryPhoto> photos = [];
@@ -101,7 +102,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void updateRepocessMemoryId(String id) {
+  void updateReprocessMemoryId(String id) {
     reprocessMemoryId = id;
     notifyListeners();
   }
@@ -149,6 +150,21 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
 
   Future initMemory() async {
     // updateLoadingState(true);
+    titleController?.dispose();
+    titleFocusNode?.dispose();
+
+    titleController = TextEditingController();
+    titleFocusNode = FocusNode();
+
+    titleController!.text = memory.structured.title;
+    titleFocusNode!.addListener(() {
+      print('titleFocusNode focus changed');
+      if (!titleFocusNode!.hasFocus) {
+        memory.structured.title = titleController!.text;
+        updateMemoryTitle(memory.id, titleController!.text);
+      }
+    });
+
     photos = [];
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(memory.transcriptSegments);
     if (memory.source == MemorySource.openglass) {
@@ -169,12 +185,12 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   Future<bool> reprocessMemory() async {
     debugPrint('_reProcessMemory');
     updateReprocessMemoryLoadingState(true);
-    updateRepocessMemoryId(memory.id);
+    updateReprocessMemoryId(memory.id);
     try {
       var updatedMemory = await reProcessMemoryServer(memory.id);
       MixpanelManager().reProcessMemory(memory);
       updateReprocessMemoryLoadingState(false);
-      updateRepocessMemoryId('');
+      updateReprocessMemoryId('');
       if (updatedMemory == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
@@ -195,7 +211,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       });
       notifyError('REPROCESS_FAILED');
       updateReprocessMemoryLoadingState(false);
-      updateRepocessMemoryId('');
+      updateReprocessMemoryId('');
       notifyListeners();
       return false;
     }

@@ -98,6 +98,18 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   return null;
 }
 
+Future<bool> updateMemoryTitle(String memoryId, String title) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$memoryId/title?title=$title',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('updateMemoryTitle: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',

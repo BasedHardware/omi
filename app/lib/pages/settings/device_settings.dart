@@ -98,7 +98,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
               GestureDetector(
                 onTap: () async {
-                  await IntercomManager().displayChargingArticle('Omi DevKit 2');
+                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
                 },
                 child: const ListTile(
                   title: Text('Issues charging the device?'),
@@ -204,7 +204,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
       },
       child: const ListTile(
         title: Text('SD Card Sync'),
-        subtitle: Text('Import auido files from SD Card'),
+        subtitle: Text('Import audio files from SD Card'),
         trailing: Icon(
           Icons.arrow_forward_ios,
           size: 16,
