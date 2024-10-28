@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memories/widgets/sync_animation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/utils/other/time_utils.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
@@ -206,262 +206,263 @@ class SyncPage extends StatefulWidget {
   State<SyncPage> createState() => _SyncPageState();
 }
 
-class _SyncPageState extends State<SyncPage> {
-  bool _isAnimating = false;
+class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
+  late AnimationController _hideFabAnimation;
 
-  void _toggleAnimation() {
-    setState(() {
-      _isAnimating = !_isAnimating;
-    });
+  @override
+  void initState() {
+    _hideFabAnimation = AnimationController(vsync: this, duration: kThemeAnimationDuration, value: 1.0);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _hideFabAnimation.dispose();
+    super.dispose();
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.depth == 0) {
+      if (notification is UserScrollNotification) {
+        final UserScrollNotification userScroll = notification;
+        switch (userScroll.direction) {
+          case ScrollDirection.forward:
+            if (userScroll.metrics.maxScrollExtent != userScroll.metrics.minScrollExtent) {
+              _hideFabAnimation.forward();
+            }
+            break;
+          case ScrollDirection.reverse:
+            if (userScroll.metrics.maxScrollExtent != userScroll.metrics.minScrollExtent) {
+              _hideFabAnimation.reverse();
+            }
+            break;
+          case ScrollDirection.idle:
+            break;
+        }
+      }
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
-      var groupedWals = <DateTime, List<Wal>>{};
-      for (var wal in wals) {
-        var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
-        var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
-        if (!groupedWals.containsKey(date)) {
-          groupedWals[date] = [];
-        }
-        groupedWals[date]?.add(wal);
-      }
-      for (final date in groupedWals.keys) {
-        groupedWals[date]?.sort((a, b) => b.timerStart.compareTo(a.timerStart));
-      }
-      return groupedWals;
-    }
-
-    Widget _buildWals(List<Wal> wals) {
-      // sdcard
-      var sdcardWals = wals.where((w) => w.storage == WalStorage.sdcard).toList();
-      var sdcardGroupedWals = _groupWalsByDate(sdcardWals);
-      var sdcardKeys = sdcardGroupedWals.keys.toList();
-      sdcardKeys.sort((a, b) => b.compareTo(a));
-
-      // phone
-      var phoneWals = wals.where((w) => w.storage == WalStorage.disk).toList();
-      var phoneGroupedWals = _groupWalsByDate(phoneWals);
-      var phoneKeys = phoneGroupedWals.keys.toList();
-      phoneKeys.sort((a, b) => b.compareTo(a));
-
-      return SliverList(
-        delegate: SliverChildBuilderDelegate(
-          childCount: sdcardKeys.length + phoneKeys.length,
-          (context, index) {
-            var keys = sdcardKeys;
-            var groupedWals = sdcardGroupedWals;
-            var idx = index;
-
-            // Phone sections
-            if (index > sdcardKeys.length - 1) {
-              keys = phoneKeys;
-              groupedWals = phoneGroupedWals;
-              idx -= sdcardKeys.length;
-            }
-
-            var date = keys[idx];
-            List<Wal> wals = groupedWals[date] ?? [];
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (index == 0) const SizedBox(height: 16),
-                SyncWalGroupWidget(
-                  isFirst: index == 0,
-                  wals: wals,
-                  date: date,
-                ),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
         var provider = Provider.of<MemoryProvider>(context, listen: false);
         if (provider.isSyncing) {
-          // Shouldn't have to force the user to wait for the sync to complete, state isn't handled by specific page
-          // showDialog(
-          //     context: context,
-          //     builder: (ctx) {
-          //       return getDialog(
-          //         context,
-          //         () {
-          //           Navigator.pop(context);
-          //         },
-          //         () {
-          //           Navigator.pop(context);
-          //         },
-          //         'Sync In-Progress',
-          //         'Memories are being synced. Please wait until the process is complete',
-          //         singleButton: true,
-          //       );
-          //     });
         } else {
           provider.clearSyncResult();
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Sync Memories'),
+      child: Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Sync Memories'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
           backgroundColor: Theme.of(context).colorScheme.primary,
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: Consumer<MemoryProvider>(
-          builder: (context, memoryProvider, child) {
-            var missingWals = memoryProvider.missingWals;
-            var seconds = missingWals.isEmpty ? 0 : missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
-
-            return Stack(
-              children: [
-                CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 80),
-                          Text(
-                            '$seconds',
-                            style: const TextStyle(color: Colors.white, fontSize: 80),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text('Seconds', style: TextStyle(color: Colors.white, fontSize: 18)),
-                          const SizedBox(height: 20),
-                          memoryProvider.isSyncing
-                              ? memoryProvider.isFetchingMemories
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          SizedBox(width: 12),
-                                          Text(
-                                            'Finalizing your memories',
-                                            style: TextStyle(color: Colors.white, fontSize: 16),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ],
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          floatingActionButton: memoryProvider.isSyncing || memoryProvider.syncCompleted
+              ? const SizedBox()
+              : ScaleTransition(
+                  scale: _hideFabAnimation,
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(32, 16, 32, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                    decoration: BoxDecoration(
+                      border: const GradientBoxBorder(
+                        gradient: LinearGradient(colors: [
+                          Color.fromARGB(127, 208, 208, 208),
+                          Color.fromARGB(127, 188, 99, 121),
+                          Color.fromARGB(127, 86, 101, 182),
+                          Color.fromARGB(127, 126, 190, 236)
+                        ]),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.black,
+                    ),
+                    child: TextButton(
+                      onPressed: () async {
+                        if (context.read<ConnectivityProvider>().isConnected) {
+                          // _toggleAnimation();
+                          await memoryProvider.syncWals();
+                          // _toggleAnimation();
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Internet connection is required to sync memories'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text(
+                        'Sync Now',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ),
+          body: NotificationListener(
+            onNotification: _handleScrollNotification,
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      memoryProvider.isSyncing
+                          ? Container(
+                              padding: const EdgeInsets.all(12.0),
+                              margin: const EdgeInsets.only(left: 16.0, right: 16.0),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade900,
+                                borderRadius: BorderRadius.circular(16.0),
+                              ),
+                              child: const ListTile(
+                                leading: Icon(
+                                  Icons.warning,
+                                  color: Colors.yellow,
+                                ),
+                                title: Text('Please do not close the app while sync is in progress'),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                      const SizedBox(height: 30),
+                      Text(
+                        secondsToHumanReadable(memoryProvider.missingWalsInSeconds),
+                        style: const TextStyle(color: Colors.white, fontSize: 30),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('of conversations', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      const SizedBox(height: 20),
+                      memoryProvider.isSyncing
+                          ? memoryProvider.isFetchingMemories
+                              ? const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                    )
-                                  : const Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: Text(
-                                        'Syncing Memories\nPlease don\'t close the app',
+                                      SizedBox(width: 12),
+                                      Text(
+                                        'Finalizing your memories',
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                         textAlign: TextAlign.center,
                                       ),
-                                    )
-                              : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
-                                  ? Column(
-                                      children: [
-                                        const Text(
-                                          'Memories Synced Successfully 🎉',
-                                          style: TextStyle(color: Colors.white, fontSize: 16),
-                                        ),
-                                        const SizedBox(
-                                          height: 18,
-                                        ),
-                                        (memoryProvider.syncedMemoriesPointers.isNotEmpty)
-                                            ? Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                                decoration: BoxDecoration(
-                                                  border: const GradientBoxBorder(
-                                                    gradient: LinearGradient(colors: [
-                                                      Color.fromARGB(127, 208, 208, 208),
-                                                      Color.fromARGB(127, 188, 99, 121),
-                                                      Color.fromARGB(127, 86, 101, 182),
-                                                      Color.fromARGB(127, 126, 190, 236)
-                                                    ]),
-                                                    width: 2,
-                                                  ),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                child: TextButton(
-                                                  onPressed: () {
-                                                    routeToPage(context, const SyncedMemoriesPage());
-                                                  },
-                                                  child: const Text(
-                                                    'View Synced Memories',
-                                                    style: TextStyle(color: Colors.white, fontSize: 16),
-                                                  ),
-                                                ),
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ],
-                                    )
-                                  : const SizedBox.shrink(),
-                        ],
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 60)),
-                    _buildWals(missingWals),
-                  ],
-                ),
-                memoryProvider.isSyncing || memoryProvider.syncCompleted
-                    ? const SizedBox()
-                    : Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Container(
-                          margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                          decoration: BoxDecoration(
-                            border: const GradientBoxBorder(
-                              gradient: LinearGradient(colors: [
-                                Color.fromARGB(127, 208, 208, 208),
-                                Color.fromARGB(127, 188, 99, 121),
-                                Color.fromARGB(127, 86, 101, 182),
-                                Color.fromARGB(127, 126, 190, 236)
-                              ]),
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            color: Colors.black,
-                          ),
-                          child: TextButton(
-                            onPressed: () async {
-                              if (context.read<ConnectivityProvider>().isConnected) {
-                                _toggleAnimation();
-                                await memoryProvider.syncWals();
-                                _toggleAnimation();
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Internet connection is required to sync memories'),
-                                    backgroundColor: Colors.red,
+                                    ],
                                   ),
-                                );
-                              }
-                            },
-                            child: const Text(
-                              'Sync Now',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                          ),
-                        ),
-                      ),
+                                )
+                              : const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(
+                                    'Sync in Progress',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                          : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
+                              ? Column(
+                                  children: [
+                                    const Text(
+                                      'Memories Synced Successfully 🎉',
+                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
+                                    const SizedBox(
+                                      height: 18,
+                                    ),
+                                    (memoryProvider.syncedMemoriesPointers.isNotEmpty)
+                                        ? Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                            decoration: BoxDecoration(
+                                              border: const GradientBoxBorder(
+                                                gradient: LinearGradient(colors: [
+                                                  Color.fromARGB(127, 208, 208, 208),
+                                                  Color.fromARGB(127, 188, 99, 121),
+                                                  Color.fromARGB(127, 86, 101, 182),
+                                                  Color.fromARGB(127, 126, 190, 236)
+                                                ]),
+                                                width: 2,
+                                              ),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: TextButton(
+                                              onPressed: () {
+                                                routeToPage(context, const SyncedMemoriesPage());
+                                              },
+                                              child: const Text(
+                                                'View Synced Memories',
+                                                style: TextStyle(color: Colors.white, fontSize: 16),
+                                              ),
+                                            ),
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 60)),
+                WalsListWidget(wals: memoryProvider.missingWals),
               ],
-            );
-          },
-          child: RepaintBoundary(
-            child: SyncAnimation(
-              isAnimating: _isAnimating,
-              onStart: () {},
-              onStop: () {},
-              dotsPerRing: 12,
             ),
           ),
-        ),
+        );
+      }),
+    );
+  }
+}
+
+Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
+  var groupedWals = <DateTime, List<Wal>>{};
+  for (var wal in wals) {
+    var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
+    var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
+    if (!groupedWals.containsKey(date)) {
+      groupedWals[date] = [];
+    }
+    groupedWals[date]?.add(wal);
+  }
+  for (final date in groupedWals.keys) {
+    groupedWals[date]?.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+  }
+  return groupedWals;
+}
+
+class WalsListWidget extends StatelessWidget {
+  final List<Wal> wals;
+  const WalsListWidget({super.key, required this.wals});
+
+  @override
+  Widget build(BuildContext context) {
+    var groupedWals = _groupWalsByDate(wals);
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        childCount: groupedWals.keys.length,
+        (context, index) {
+          var date = groupedWals.keys.toList()[index];
+          List<Wal> wals = groupedWals[date] ?? [];
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (index == 0) const SizedBox(height: 16),
+              SyncWalGroupWidget(
+                isFirst: index == 0,
+                wals: wals,
+                date: date,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
