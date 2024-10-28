@@ -34,7 +34,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
   List<bool> appResponseExpanded = [];
 
-  bool editingTitle = false;
+  bool editingTitle = true;
   bool editingOverview = false;
 
   bool isTranscriptExpanded = false;
