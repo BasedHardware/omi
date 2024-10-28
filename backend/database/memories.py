@@ -56,6 +56,12 @@ def update_memory(uid: str, memory_id: str, memoy_data: dict):
     memory_ref.update(memoy_data)
 
 
+def update_memory_title(uid: str, memory_id: str, title: str):
+    user_ref = db.collection('users').document(uid)
+    memory_ref = user_ref.collection('memories').document(memory_id)
+    memory_ref.update({'structured.title': title})
+
+
 def delete_memory(uid, memory_id):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
@@ -144,7 +150,7 @@ def update_memory_events(uid: str, memory_id: str, events: List[dict]):
 def update_memory_action_items(uid: str, memory_id: str, action_items: List[dict]):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
-    memory_ref.update({'structured.action_items':action_items})
+    memory_ref.update({'structured.action_items': action_items})
 
 
 # ******************************
