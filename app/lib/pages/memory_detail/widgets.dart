@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
@@ -11,6 +12,7 @@ import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -752,41 +754,60 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      // Card(
-      //   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-      //   child: ListTile(
-      //     title: const Text('Trigger Memory Created Integration'),
-      //     leading: loadingAppIntegrationTest
-      //         ? const SizedBox(
-      //             height: 24,
-      //             width: 24,
-      //             child: CircularProgressIndicator(
-      //               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      //             ),
-      //           )
-      //         : const Icon(Icons.send_to_mobile_outlined),
-      //     onTap: () {
-      //       changeLoadingAppIntegrationTest(true);
-      //       // TODO: if not set, show dialog to set URL or take them to settings.
-      //  is anyone using it? does anyone complain later?
-      //       webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
-      //         showDialog(
-      //           context: context,
-      //           builder: (c) => getDialog(
-      //             context,
-      //             () => Navigator.pop(context),
-      //             () => Navigator.pop(context),
-      //             'Result:',
-      //             response,
-      //             okButtonText: 'Ok',
-      //             singleButton: true,
-      //           ),
-      //         );
-      //         changeLoadingAppIntegrationTest(false);
-      //       });
-      //     },
-      //   ),
-      // ),
+      Card(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        child: ListTile(
+          title: const Text('Trigger Memory Created Integration'),
+          leading: loadingAppIntegrationTest
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.send_to_mobile_outlined),
+          onTap: () {
+            changeLoadingAppIntegrationTest(true);
+            if (SharedPreferencesUtil().webhookOnMemoryCreated.isEmpty) {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () {
+                    Navigator.pop(context);
+                  },
+                  () {
+                    Navigator.pop(context);
+                    routeToPage(context, const DeveloperSettingsPage());
+                  },
+                  'Webhook URL not set',
+                  'Please set the webhook URL in developer settings to use this feature.',
+                  okButtonText: 'Settings',
+                ),
+              );
+              changeLoadingAppIntegrationTest(false);
+              return;
+            } else {
+              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () => Navigator.pop(context),
+                    'Result:',
+                    response,
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                );
+                changeLoadingAppIntegrationTest(false);
+              });
+            }
+          },
+        ),
+      ),
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
