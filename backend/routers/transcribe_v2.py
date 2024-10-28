@@ -20,6 +20,7 @@ from utils.plugins import trigger_external_integrations, trigger_realtime_integr
 from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
+from utils.pusher import connect_to_transcript_pusher, connect_to_audio_bytes_pusher
 
 router = APIRouter()
 
@@ -234,33 +235,35 @@ async def _websocket_util(
             memory_creation_task = asyncio.create_task(
                 _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
-    async def create_external_task_handler():
-        ws = await connect_external_listen_transcript()
-
-        async def transcript_send(segments):
-            await ws.send(segments)
-
-        async def audio_bytes_send(uid, sample_rate, audio_buffer):
-            print(f"audio_bytes_send {uid} - ${sample_rate} - ${list(audio_buffer)}")
-
+    async def create_pusher_task_handler():
         # transcript
-        # Thinh's comment: Temporarily disabled due to bad performance
-        # realtime plugins + realtime webhook
-        # asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
-        # asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+        transcript_ws = await connect_to_transcript_pusher()
+        audio_bytes_ws = None
 
         # audio bytes
-        # Thinh's comment: Temporarily disabled due to bad performance
-        # audiobuffer = bytearray()
-        # audiobuffer.extend(data)
-        # if audio_bytes_webhook_delay_seconds and len(
-        #        audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
-        #    asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
-        #    audiobuffer = bytearray()
+        audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
+        if audio_bytes_webhook_delay_seconds:
+            audio_bytes_ws = await connect_to_audio_bytes_pusher()
 
-        return (ws, transcript_send, None)
+        async def transcript_send(segments):
+            print(f"transcript_send ${len(segments)}")
+            await transcript_ws.send(segments)
 
-    external_websocket, transcript_send, audio_bytes_send = await create_external_task_handler()
+        async def audio_bytes_send(audio_buffer):
+            print(f"audio_bytes_send ${len(audio_buffer)}")
+            if audio_bytes_ws:
+                await audio_bytes_ws.send(audio_buffer)
+
+        async def close(code: int = 1000):
+            if transcript_ws:
+                await transcript_ws.close(code)
+
+            if audio_bytes_ws:
+                await audio_bytes_ws.close(code)
+
+        return (close, transcript_send, audio_bytes_send if audio_bytes_ws else None)
+
+    pusher_close, transcript_send, audio_bytes_send = await create_pusher_task_handler()
 
     def stream_transcript(segments):
         nonlocal websocket
@@ -350,7 +353,7 @@ async def _websocket_util(
     decoder = opuslib.Decoder(sample_rate, 1)
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
-    audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
+    # audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
@@ -393,7 +396,7 @@ async def _websocket_util(
 
                 # Send to external trigger
                 if audio_bytes_send:
-                    audio_bytes_send(uid, sample_rate, data.copy())
+                    audio_bytes_send(data.copy())
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -461,11 +464,11 @@ async def _websocket_util(
                 await websocket.close(code=websocket_close_code)
             except Exception as e:
                 print(f"Error closing WebSocket: {e}")
-        if external_websocket and external_websocket.client_state == WebSocketState.CONNECTED:
+        if pusher_close:
             try:
-                await external_websocket.close(code=1011)
+                await pusher_close(code=1011)
             except Exception as e:
-                print(f"Error closing External WebSocket: {e}")
+                print(f"Error closing Pusher: {e}")
 
 
 @router.websocket("/v2/listen")
@@ -474,107 +477,3 @@ async def websocket_endpoint(
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
-
-
-async def _websocket_util_external_listen_transcript(
-        websocket: WebSocket, uid: str,
-):
-    print('_websocket_util_external_trigger', uid)
-
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e)
-        await websocket.close(code=1011, reason="Dirty state")
-        return
-
-    websocket_active = False
-    websocket_close_code = 1011
-
-    # task
-    async def receive_audio():
-        nonlocal websocket_active
-        nonlocal websocket_close_code
-
-        try:
-            while websocket_active:
-                data = await websocket.receive_bytes()
-                print(f"received {list(data)}")
-
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
-        except Exception as e:
-            print(f'Could not process audio: error {e}')
-            websocket_close_code = 1011
-        finally:
-            websocket_active = False
-
-    # heart beat
-    async def send_heartbeat():
-        nonlocal websocket_active
-        nonlocal websocket_close_code
-        try:
-            while websocket_active:
-                await asyncio.sleep(30)
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await websocket.send_json({"type": "ping"})
-                else:
-                    break
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
-        except Exception as e:
-            print(f'Heartbeat error: {e}')
-            websocket_close_code = 1011
-        finally:
-            websocket_active = False
-
-    try:
-        receive_task = asyncio.create_task(
-            receive_audio()
-        )
-        heartbeat_task = asyncio.create_task(send_heartbeat())
-        await asyncio.gather(receive_task, heartbeat_task)
-
-    except Exception as e:
-        print(f"Error during WebSocket operation: {e}")
-    finally:
-        websocket_active = False
-        if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close(code=websocket_close_code)
-            except Exception as e:
-                print(f"Error closing WebSocket: {e}")
-
-
-@router.websocket("/v2/trigger/transcript/listen")
-async def websocket_endpoint_external_listen_transcript(
-        websocket: WebSocket, uid: str,
-):
-    await _websocket_util_external_listen_transcript(websocket, uid)
-
-# TODO: FIXME
-ExternalTriggerAPI = os.getenv('EXTERNAL_TRIGGER_API')
-async def connect_external_listen_transcript():
-    try:
-        print("Connecting to External Listen Transcript WebSocket...")
-        socket = await websockets.connect(f"{ExternalTriggerAPI}/v2/trigger/transcript/listen")
-        print("Connected to  External triggers WebSocket.")
-
-        async def on_message():
-            try:
-                async for message in socket:
-                    print(f"External triggers recived {message} ")
-            except websockets.exceptions.ConnectionClosedOK:
-                print("External triggers connection closed normally.")
-            except Exception as e:
-                print(f"Error receiving from External triggers: {e}")
-            finally:
-                if not socket.closed:
-                    await socket.close()
-                    print("External triggers WebSocket closed in on_message.")
-
-        asyncio.create_task(on_message())
-        return socket
-    except Exception as e:
-        print(f"Exception in connect_external_trigger_ws: {e}")
-        raise
