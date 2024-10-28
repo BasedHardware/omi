@@ -87,8 +87,8 @@ class GetSummaryWidgets extends StatelessWidget {
             memory.discarded
                 ? const SizedBox.shrink()
                 : GetEditTextField(
-                    enabled: context.read<MemoryDetailProvider>().editingTitle,
-                    overview: memory.structured.overview,
+                    enabled: context.read<MemoryDetailProvider>().editingOverview,
+                    content: memory.structured.overview,
                   ),
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
             const ActionItemsListWidget(),
@@ -335,9 +335,9 @@ String minutesConversion(int minutes) {
 
 class GetEditTextField extends StatefulWidget {
   final bool enabled;
-  final String overview;
+  final String content;
 
-  const GetEditTextField({super.key, required this.enabled, required this.overview});
+  const GetEditTextField({super.key, required this.enabled, required this.content});
 
   @override
   State<GetEditTextField> createState() => _GetEditTextFieldState();
@@ -348,7 +348,7 @@ class _GetEditTextFieldState extends State<GetEditTextField> {
 
   @override
   void initState() {
-    controller = TextEditingController(text: widget.overview);
+    controller = TextEditingController(text: widget.content);
     super.initState();
   }
 
@@ -878,15 +878,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 );
                 return;
               }
-              String content = '''
-              Here\'s my memory created with Omi. ${widget.memory.structured.getEmoji()}
-              
-              https://h.omi.me/memories/${widget.memory.id}
-              
-              Get started using Omi today.
-              '''
-                  .replaceAll('  ', '')
-                  .trim();
+              String content = '''https://h.omi.me/memories/${widget.memory.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
               changeLoadingShareMemoryViaURL(false);
@@ -904,15 +896,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 onTap: () async {
                   if (loadingShareTranscript) return;
                   changeLoadingShareTranscript(true);
-                  // TODO: check web url open graph.
                   String content = '''
-              Here\'s my memory created with Omi.
-              
               ${widget.memory.structured.title}
               
               ${widget.memory.getTranscript(generate: true)}
-              
-              Get started using Omi today (https://www.omi.me).
               '''
                       .replaceAll('  ', '')
                       .trim();
@@ -929,15 +916,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
-                        String content = '''
-              Here\'s my memory created with Omi.
-              
-              ${widget.memory.structured.toString()}
-              
-              Get started using Omi today (https://www.omi.me).
-              '''
-                            .replaceAll('  ', '')
-                            .trim();
+                        String content = widget.memory.structured.toString().replaceAll('  ', '').trim();
                         await Share.share(content);
                         changeLoadingShareSummary(false);
                       },
