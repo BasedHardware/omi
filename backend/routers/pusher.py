@@ -35,7 +35,7 @@ async def _websocket_util_transcript(
         await websocket.close(code=1011, reason="Dirty state")
         return
 
-    websocket_active = False
+    websocket_active = True
     websocket_close_code = 1000
 
     loop = asyncio.get_event_loop()
@@ -48,7 +48,7 @@ async def _websocket_util_transcript(
         try:
             while websocket_active:
                 segments = await websocket.receive_json()
-                print(f"pusher received {list(segments)}")
+                #print(f"pusher received segments {len(segments)}")
                 asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
                 asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
 
@@ -116,7 +116,7 @@ async def _websocket_util_audio_bytes(
         await websocket.close(code=1011, reason="Dirty state")
         return
 
-    websocket_active = False
+    websocket_active = True
     websocket_close_code = 1000
 
     loop = asyncio.get_event_loop()
@@ -133,7 +133,7 @@ async def _websocket_util_audio_bytes(
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
-                print(f"pusher received {list(data)}")
+                #print(f"pusher received audio bytes {len(data)}")
                 audiobuffer.extend(data)
                 if audio_bytes_webhook_delay_seconds and len(
                         audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
