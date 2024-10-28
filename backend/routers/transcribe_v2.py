@@ -246,11 +246,11 @@ async def _websocket_util(
             audio_bytes_ws = await connect_to_audio_bytes_pusher(uid, sample_rate)
 
         async def transcript_send(segments):
-            print(f"transcript_send ${len(segments)}")
+            #print(f"transcript_send ${len(segments)}")
             await transcript_ws.send(json.dumps(segments))
 
         async def audio_bytes_send(audio_buffer):
-            print(f"audio_bytes_send ${len(audio_buffer)}")
+            #print(f"audio_bytes_send ${len(audio_buffer)}")
             if audio_bytes_ws:
                 await audio_bytes_ws.send(audio_buffer)
 
@@ -396,7 +396,7 @@ async def _websocket_util(
 
                 # Send to external trigger
                 if audio_bytes_send:
-                    asyncio.run_coroutine_threadsafe(audio_bytes_send(data.copy()), loop)
+                    asyncio.run_coroutine_threadsafe(audio_bytes_send(data), loop)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
