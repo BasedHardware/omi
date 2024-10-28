@@ -238,21 +238,27 @@ async def _websocket_util(
     async def create_pusher_task_handler():
         # transcript
         transcript_ws = await connect_to_transcript_pusher(uid)
-        audio_bytes_ws = None
 
         # audio bytes
+        audio_bytes_ws = None
         audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
         if audio_bytes_webhook_delay_seconds:
             audio_bytes_ws = await connect_to_audio_bytes_pusher(uid, sample_rate)
 
         async def transcript_send(segments):
-            #print(f"transcript_send ${len(segments)}")
-            await transcript_ws.send(json.dumps(segments))
+            # print(f"transcript_send ${len(segments)}")
+            try:
+                await transcript_ws.send(json.dumps(segments))
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"Pusher Transcript Connection closed: {e}")
 
         async def audio_bytes_send(audio_buffer):
-            #print(f"audio_bytes_send ${len(audio_buffer)}")
+            # print(f"audio_bytes_send ${len(audio_buffer)}")
             if audio_bytes_ws:
-                await audio_bytes_ws.send(audio_buffer)
+                try:
+                    await audio_bytes_ws.send(audio_buffer)
+                except websockets.exceptions.ConnectionClosed as e:
+                    print(f"Pusher Audio Bytes Connection closed: {e}")
 
         async def close(code: int = 1000):
             if transcript_ws:
@@ -353,7 +359,6 @@ async def _websocket_util(
     decoder = opuslib.Decoder(sample_rate, 1)
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
-    # audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
 
     async def receive_audio(dg_socket1, dg_socket2, soniox_socket, speechmatics_socket1):
         nonlocal websocket_active
