@@ -27,7 +27,7 @@ static char current_full_path[MAX_PATH_LENGTH];
 static char read_buffer[MAX_PATH_LENGTH];
 static char write_buffer[MAX_PATH_LENGTH];
 
-uint32_t file_num_array[40];    
+uint32_t file_num_array[2];    
 
 static const char *disk_mount_pt = "/SD:/";
 
@@ -101,7 +101,7 @@ int mount_sd_card(void)
         return -1;
     }
     LOG_INF("result of opendir: %d",err);
-    
+    initialize_audio_file(1);
     struct fs_dirent file_count_entry;
     file_count = get_file_contents(&audio_dir_entry, &file_count_entry);
     file_count = 1;
@@ -137,8 +137,10 @@ int mount_sd_card(void)
     if (res) 
     {
         res = create_file("info.txt");
+        save_offset(0);
         LOG_INF("result of info.txt creation: %d ",res);
     }
+    
     LOG_INF("result of check: %d",res);
 
 	return 0;
@@ -153,7 +155,7 @@ uint32_t get_file_size(uint8_t num)
     int res = fs_stat(&current_full_path,&entry);
     if (res)
     {
-        LOG_ERR("invalid file\n");
+        LOG_ERR("invalid file in get file size\n");
         return 0;  
     }
     return (uint32_t)entry.size;
@@ -168,7 +170,7 @@ int move_read_pointer(uint8_t num)
     int res = fs_stat(&read_buffer,&entry);
     if (res) 
     {
-        LOG_ERR("invalid file\n");
+        LOG_ERR("invalid file in move read ptr\n");
         return -1;  
     }
     return 0;
@@ -183,7 +185,7 @@ int move_write_pointer(uint8_t num)
     int res = fs_stat(&write_buffer,&entry);
     if (res) 
     {
-        LOG_ERR("invalid file\n");  
+        LOG_ERR("invalid file in move write pointer\n");  
         return -1;  
     }
     return 0;   
@@ -364,25 +366,83 @@ int clear_audio_directory()
     res = fs_unlink("/SD:/audio");
     if (res) 
     {
-        printk("error deleting file\n");
+        LOG_ERR("error deleting file");
         return -1;
     }
     res = fs_mkdir("/SD:/audio");
     if (res) 
     {
-        printk("failed to make directory \n");
+        LOG_ERR("failed to make directory");
         return -1;
     }
     res = create_file("audio/a01.txt");
     if (res) 
     {
-        printk("failed to make new file in directory files\n");
+        LOG_ERR("failed to make new file in directory files");
         return -1;
     }
-    printk("done with clearing\n");
+    LOG_ERR("done with clearing");
 
     file_count = 1;  
     move_write_pointer(1);
     return 0;
     //if files are cleared, then directory is oked for destrcution.
+}
+
+int save_offset(uint32_t offset)
+{
+    uint8_t buf[4] = {
+	offset & 0xFF,
+	(offset >> 8) & 0xFF,
+	(offset >> 16) & 0xFF, 
+	(offset >> 24) & 0xFF 
+    };
+
+    struct fs_file_t write_file;
+    fs_file_t_init(&write_file);
+    int res = fs_open(&write_file, "/SD:/info.txt" , FS_O_WRITE | FS_O_CREATE);
+    if (res) 
+    {
+        LOG_ERR("error opening file %d",res);
+        return -1;
+    }
+    res = fs_write(&write_file,&buf,4);
+    if (res < 0)
+    {
+        LOG_ERR("error writing file %d",res);
+        return -1;
+    }
+    fs_close(&write_file);
+    return 0;
+}
+
+int get_offset()
+{
+    uint8_t buf[4];
+    struct fs_file_t read_file;
+    fs_file_t_init(&read_file);
+    int rc = fs_open(&read_file, "/SD:/info.txt", FS_O_READ | FS_O_RDWR);
+    if (rc < 0)
+    {
+        LOG_ERR("error opening file %d",rc);
+        return -1;
+    }
+    rc = fs_seek(&read_file,0,FS_SEEK_SET);
+    if (rc < 0)
+    {
+        LOG_ERR("error seeking file %d",rc);
+        return -1;
+    }
+    rc = fs_read(&read_file, &buf, 4);
+    if (rc < 0)
+    {
+        LOG_ERR("error reading file %d",rc);
+        return -1;
+    }
+    fs_close(&read_file);
+    uint32_t *offset_ptr = (uint32_t*)buf;
+    LOG_INF("get offset is %d",offset_ptr[0]);
+    fs_close(&read_file);
+
+    return offset_ptr[0];
 }

@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
 
@@ -64,7 +65,7 @@ class ServerMessage {
   MessageSender sender;
   MessageType type;
 
-  String? pluginId;
+  String? appId;
   bool fromIntegration;
 
   List<MessageMemory> memories;
@@ -75,7 +76,7 @@ class ServerMessage {
     this.text,
     this.sender,
     this.type,
-    this.pluginId,
+    this.appId,
     this.fromIntegration,
     this.memories,
   );
@@ -100,7 +101,7 @@ class ServerMessage {
       'text': text,
       'sender': sender.toString().split('.').last,
       'type': type.toString().split('.').last,
-      'plugin_id': pluginId,
+      'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
     };
@@ -111,6 +112,19 @@ class ServerMessage {
       '0000',
       DateTime.now(),
       '',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+    );
+  }
+
+  static ServerMessage failedMessage() {
+    return ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      'Looks like we are having issues with the server. Please try again later.',
       MessageSender.ai,
       MessageType.text,
       null,

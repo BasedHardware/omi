@@ -31,6 +31,7 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
     big_file_path = f"_temp/_temp{session_id}.wav"
     first_packet_flag = False
     data_packet_length = 83
+    # data_packet_length = 440
     seconds_until_timeout = 10.0
     audio_frames = []
 
@@ -46,13 +47,36 @@ async def sdcard_streaming_endpoint(websocket: WebSocket, uid: str):
                 if not first_packet_flag:
                     first_packet_flag = True
                     print('first valid packet received')
+
+                    amount = int(data[3])
+                    frame_to_decode = bytes(list(data[4:4 + amount]))
+                    audio_frames.append(frame_to_decode)
+            elif len(data) == 440: # the other packet version
+                if not first_packet_flag:
+                    first_packet_flag = True
+                    print('first valid packet received')
+                max_packet_size_idx = 440 - 1
+                # print(i)
+                socket_segments = data
+                current_packet_size = 0
+                offset = 0
+                while True:
+                    current_packet_size = socket_segments[offset]
+                    if (current_packet_size + offset > max_packet_size_idx):
+                        break
+                    elif (current_packet_size + offset == max_packet_size_idx):
+                        # audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
+                        break
+                    elif (current_packet_size + offset  < max_packet_size_idx):
+                        audio_frames.append(socket_segments[offset+1:offset+current_packet_size+1])
+                        offset+=current_packet_size+1
+                        continue
+
             if data == 100:  # valid code
                 print('done.')
                 websocket_active = False
                 break
-            amount = int(data[3])
-            frame_to_decode = bytes(list(data[4:4 + amount]))
-            audio_frames.append(frame_to_decode)
+
 
     except WebSocketDisconnect:
         print("websocket gone")
@@ -140,3 +164,33 @@ def combine_vad_segments(vad_segments):
     if temp_segment is not None:
         segments_result.append(temp_segment)
     return segments_result
+'''
+
+packets are as follows:
+
+[a ...... b..... c...... d.....]
+
+'''
+#data_packet_size
+def split_segments(socket_segments):
+    result = []
+    max_packet_size_idx = 440 - 1
+
+    current_packet_size = 0
+    
+    if not socket_segments:
+        return []
+    offset = 0
+    while True:
+        current_packet_size = socket_segments[offset]
+        if (current_packet_size + offset   > max_packet_size_idx):
+            break
+        elif (current_packet_size + offset == max_packet_size_idx):
+            result.append(socket_segments[offset+1:offset+current_packet_size])
+            break
+        elif (current_packet_size + offset  < max_packet_size_idx):
+            result.append(socket_segments[offset+1:offset+current_packet_size])
+            offset+=current_packet_size+1
+            continue
+        
+    return result

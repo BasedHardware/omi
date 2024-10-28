@@ -3,16 +3,25 @@ from typing import List, Optional
 
 import requests
 
+import database.notifications as notification_db
 from database.chat import add_plugin_message
-from database.redis_db import get_enabled_plugins, get_plugin_reviews
+from database.plugins import record_plugin_usage
+from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
+    set_generic_cache
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
-from models.plugin import Plugin
+from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
+from utils.other.endpoints import timeit
 
 
+# ***********************************
+# ************* BASICS **************
+# ***********************************
+
+@timeit
 def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
-    if not plugin_id:
+    if not plugin_id or plugin_id == 'null':
         return None
     plugins = get_plugins_data('', include_reviews=False)
     return next((p for p in plugins if p.id == plugin_id), None)
@@ -28,16 +37,23 @@ def weighted_rating(plugin):
 
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     # print('get_plugins_data', uid, include_reviews)
-    response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
-    if response.status_code != 200:
-        return []
+    if data := get_generic_cache('get_plugins_data'):
+        print('get_plugins_data from cache')
+        pass
+    else:
+        response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
+        if response.status_code != 200:
+            return []
+        data = response.json()
+        set_generic_cache('get_plugins_data', data, 60 * 10)  # 10 minutes cached
+
     user_enabled = set(get_enabled_plugins(uid))
     # print('get_plugins_data, user_enabled', user_enabled)
-    data = response.json()
     plugins = []
     for plugin in data:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
+        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
         if include_reviews:
             reviews = get_plugin_reviews(plugin['id'])
             sorted_reviews = reviews.values()
@@ -54,7 +70,12 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     return plugins
 
 
+# **************************************************
+# ************* EXTERNAL INTEGRATIONS **************
+# **************************************************
+
 def trigger_external_integrations(uid: str, memory: Memory) -> list:
+    """ON MEMORY CREATED"""
     if not memory or memory.discarded:
         return []
 
@@ -71,10 +92,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if not plugin.external_integration.webhook_url:
             return
 
-        memory_dict = memory.dict()
-        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
-        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
-        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        memory_dict = memory.as_dict_cleaned_dates()
 
         # Ignore external data on workflow
         if memory.source == MemorySource.workflow and 'external_data' in memory_dict:
@@ -90,6 +108,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if response.status_code != 200:
             print('Plugin integration failed', plugin.id, 'result:', response.content)
             return
+
+        record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration, memory_id=memory.id)
 
         print('response', response.json())
         if message := response.json().get('message', ''):
@@ -109,10 +129,19 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     return messages
 
 
-def trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
+async def trigger_realtime_integrations(uid: str, segments: list[dict]):
+    """REALTIME STREAMING"""
+    # TODO: don't retrieve token before knowing if to notify
+    token = notification_db.get_token_only(uid)
+    _trigger_realtime_integrations(uid, token, segments)
+
+
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
-    filtered_plugins = [plugin for plugin in plugins if
-                        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted]
+    filtered_plugins = [
+        plugin for plugin in plugins if
+        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
+    ]
     if not filtered_plugins:
         return {}
 

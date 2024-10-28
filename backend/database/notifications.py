@@ -8,6 +8,13 @@ from ._client import db
 def save_token(uid: str, data: dict):
     db.collection('users').document(uid).set(data, merge=True)
 
+def get_user_time_zone(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref = user_ref.get()
+    if user_ref.exists:
+        user_ref = user_ref.to_dict()
+        return user_ref.get('time_zone')
+    return None
 
 def get_token_only(uid: str):
     user_ref = db.collection('users').document(uid)

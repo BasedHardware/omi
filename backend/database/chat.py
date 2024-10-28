@@ -5,9 +5,11 @@ from typing import Optional
 from google.cloud import firestore
 
 from models.chat import Message
+from utils.other.endpoints import timeit
 from ._client import db
 
 
+@timeit
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
@@ -45,6 +47,7 @@ def add_summary_message(text: str, uid: str) -> Message:
     return ai_message
 
 
+@timeit
 def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False):
     user_ref = db.collection('users').document(uid)
     messages_ref = (

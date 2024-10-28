@@ -25,9 +25,13 @@ class FindDevicesPage extends StatefulWidget {
 }
 
 class _FindDevicesPageState extends State<FindDevicesPage> {
+  OnboardingProvider? _provider;
+
   @override
   void initState() {
     super.initState();
+    _provider = Provider.of<OnboardingProvider>(context, listen: false);
+
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (widget.isFromOnboarding) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -38,12 +42,14 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
 
   @override
   dispose() {
-    // context.read<OnboardingProvider>().dispose();
+    _provider?.stopScanDevices();
+    _provider = null;
+
     super.dispose();
   }
 
   Future<void> _scanDevices() async {
-    Provider.of<OnboardingProvider>(context, listen: false).scanDevices(
+    _provider?.scanDevices(
       onShowDialog: () {
         if (mounted) {
           showDialog(

@@ -5,13 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/plugin.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
-import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
+import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -23,6 +24,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:tuple/tuple.dart';
 
 import 'maps_util.dart';
 
@@ -36,23 +38,32 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   String setTimeSDCard(DateTime? startedAt, DateTime createdAt) {
-    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : '${dateTimeFormat('h:mm a', startedAt)}';
+    return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, ServerMemory>(
-      selector: (context, provider) => provider.memory,
-      builder: (context, memory, child) {
+    return Selector<MemoryDetailProvider, Tuple3<ServerMemory, TextEditingController?, FocusNode?>>(
+      selector: (context, provider) => Tuple3(provider.memory, provider.titleController, provider.titleFocusNode),
+      builder: (context, data, child) {
+        ServerMemory memory = data.item1;
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-            Text(
-              memory.discarded ? 'Discarded Memory' : memory.structured.title,
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
-            ),
+            memory.discarded
+                ? Text(
+                    'Discarded Memory',
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
+                  )
+                : GetEditTextField(
+                    memoryId: memory.id,
+                    focusNode: data.item3,
+                    controller: data.item2,
+                    content: memory.structured.title.decodeString,
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
+                  ),
             const SizedBox(height: 16),
             Text(
               memory.source == MemorySource.sdcard
@@ -87,76 +98,144 @@ class GetSummaryWidgets extends StatelessWidget {
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
             memory.discarded
                 ? const SizedBox.shrink()
-                : GetEditTextField(
-                    enabled: context.read<MemoryDetailProvider>().editingTitle,
-                    overview: memory.structured.overview,
+                : SelectionArea(
+                    child: Text(
+                      memory.structured.overview,
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                    ),
                   ),
             memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
-            memory.structured.actionItems.isNotEmpty
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Action Items',
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(
-                              text: '- ${memory.structured.actionItems.map((e) => e.description).join('\n- ')}'));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Action items copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ));
-                          // MixpanelManager().copiedMemoryDetails(memory, source: 'Action Items');
-                        },
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                      )
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            ...memory.structured.actionItems.map<Widget>((item) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Icon(Icons.task_alt, color: Colors.grey.shade300, size: 20)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SelectionArea(
-                        child: Text(
-                          item.description,
-                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            const ActionItemsListWidget(),
             memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
-            // memory.structured.events.isNotEmpty && memory.structured.events.where((e) => e.startsAt.isBefore(memory.startedAt!)).isNotEmpty
-            //     ? Row(
-            //         children: [
-            //           Icon(Icons.event, color: Colors.grey.shade300),
-            //           const SizedBox(width: 8),
-            //           Text(
-            //             'Events',
-            //             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-            //           )
-            //         ],
-            //       )
-            //     : const SizedBox.shrink(),
             const EventsListWidget(),
             memory.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
         );
       },
     );
+  }
+}
+
+class ActionItemsListWidget extends StatelessWidget {
+  const ActionItemsListWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      return Column(
+        children: [
+          provider.memory.structured.actionItems.isNotEmpty
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Action Items',
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(
+                          text:
+                              '- ${provider.memory.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
+                        ));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Action items copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ));
+                        MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Action Items');
+                      },
+                      icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                    )
+                  ],
+                )
+              : const SizedBox.shrink(),
+          ListView.builder(
+            itemCount: provider.memory.structured.actionItems.where((e) => !e.deleted).length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, idx) {
+              var item = provider.memory.structured.actionItems.where((e) => !e.deleted).toList()[idx];
+              return Dismissible(
+                key: Key(item.description),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20.0),
+                  color: Colors.red,
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) {
+                  var tempItem = provider.memory.structured.actionItems[idx];
+                  var tempIdx = idx;
+                  provider.deleteActionItem(idx);
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(
+                        SnackBar(
+                          content: const Text('Action Item deleted successfully 🗑️'),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          action: SnackBarAction(
+                            label: 'Undo',
+                            textColor: Colors.white,
+                            onPressed: () {
+                              provider.undoDeleteActionItem(idx);
+                            },
+                          ),
+                        ),
+                      )
+                      .closed
+                      .then((reason) {
+                    if (reason != SnackBarClosedReason.action) {
+                      provider.deleteActionItemPermanently(tempItem, tempIdx);
+                      MixpanelManager().deletedActionItem(provider.memory);
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: SizedBox(
+                          height: 22.0,
+                          width: 22.0,
+                          child: Checkbox(
+                            shape: CircleBorder(),
+                            value: item.completed,
+                            onChanged: (value) {
+                              if (value != null) {
+                                context.read<MemoryDetailProvider>().updateActionItemState(value, idx);
+                                setMemoryActionItemState(provider.memory.id, [idx], [value]);
+                                if (value) {
+                                  MixpanelManager().checkedActionItem(provider.memory, idx);
+                                } else {
+                                  MixpanelManager().uncheckedActionItem(provider.memory, idx);
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SelectionArea(
+                          child: Text(
+                            item.description.decodeString,
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    });
   }
 }
 
@@ -205,7 +284,7 @@ class EventsListWidget extends StatelessWidget {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
-                      '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${minutesConversion(event.duration)}.',
+                      '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${minutesConversion(event.duration)}',
                       style: const TextStyle(color: Colors.grey, fontSize: 15),
                     ),
                   ),
@@ -234,7 +313,7 @@ class EventsListWidget extends StatelessWidget {
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Event added to calendar'),
+                                content: Text('Event added! It may take a few minutes to show up in your calendar. 📆'),
                               ),
                             );
                           },
@@ -254,50 +333,56 @@ String minutesConversion(int minutes) {
   if (minutes < 60) {
     return '$minutes minutes';
   } else if (minutes < 1440) {
-    return '${minutes / 60} hours';
+    var hrs = minutes / 60;
+    if (hrs % 1 == 0) {
+      return '${hrs.toInt()} hours';
+    }
+    return '${minutes / 60} hour${hrs > 1 ? 's' : ''}';
   } else {
-    return '${minutes / 1440} days';
+    var days = minutes / 1440;
+    if (days % 1 == 0) {
+      return '${days.toInt()} days';
+    }
+    return '${minutes / 1440} day${days > 1 ? 's' : ''}';
   }
 }
 
 class GetEditTextField extends StatefulWidget {
-  final bool enabled;
-  final String overview;
+  final String memoryId;
+  final String content;
+  final TextStyle style;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
 
-  const GetEditTextField({super.key, required this.enabled, required this.overview});
+  const GetEditTextField({
+    super.key,
+    required this.content,
+    required this.style,
+    required this.memoryId,
+    required this.controller,
+    required this.focusNode,
+  });
 
   @override
   State<GetEditTextField> createState() => _GetEditTextFieldState();
 }
 
 class _GetEditTextFieldState extends State<GetEditTextField> {
-  late TextEditingController controller;
-
-  @override
-  void initState() {
-    controller = TextEditingController(text: widget.overview);
-    super.initState();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return widget.enabled
-        ? TextField(
-            keyboardType: TextInputType.multiline,
-            maxLines: null,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(borderSide: BorderSide.none),
-              contentPadding: EdgeInsets.all(0),
-            ),
-            enabled: widget.enabled,
-            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-          )
-        : SelectionArea(
-            child: Text(
-              controller.text,
-              style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-            ),
-          );
+    return TextField(
+      keyboardType: TextInputType.multiline,
+      minLines: 1,
+      maxLines: 3,
+      focusNode: widget.focusNode,
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(borderSide: BorderSide.none),
+        contentPadding: EdgeInsets.all(0),
+      ),
+      controller: widget.controller,
+      enabled: true,
+      style: widget.style,
+    );
   }
 }
 
@@ -373,8 +458,8 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-class GetPluginsWidgets extends StatelessWidget {
-  const GetPluginsWidgets({super.key});
+class GetAppsWidgets extends StatelessWidget {
+  const GetAppsWidgets({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -383,115 +468,113 @@ class GetPluginsWidgets extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment:
-              provider.memory.pluginsResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: provider.memory.pluginsResults.isEmpty
+          crossAxisAlignment: provider.memory.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: provider.memory.appResults.isEmpty
               ? [child!]
               : [
-                  // TODO: include a way to trigger specific plugins
-                  if (provider.memory.pluginsResults.isNotEmpty &&
+                  // TODO: include a way to trigger specific apps
+                  if (provider.memory.appResults.isNotEmpty &&
                       !provider.memory.discarded &&
-                      provider.pluginResponseExpanded.isNotEmpty) ...[
+                      provider.appResponseExpanded.isNotEmpty) ...[
                     provider.memory.structured.actionItems.isEmpty
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
                     Text(
-                      'Plugins 🧑‍💻',
+                      'Apps 🧑‍💻',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 24),
-                    ...provider.memory.pluginsResults.mapIndexed(
-                      (i, pluginResponse) {
-                        if (pluginResponse.content.length < 5) return const SizedBox.shrink();
-                        Plugin? plugin =
-                            provider.pluginsList.firstWhereOrNull((element) => element.id == pluginResponse.pluginId);
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 40),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              plugin != null
-                                  ? ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: CachedNetworkImage(
-                                        imageUrl: plugin.getImageUrl(),
-                                        imageBuilder: (context, imageProvider) {
-                                          return CircleAvatar(
+                    if (provider.memory.appResults.isNotEmpty)
+                      ...provider.memory.appResults.mapIndexed(
+                        (i, appResponse) {
+                          if (appResponse.content.length < 5) return const SizedBox.shrink();
+                          App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 40),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                app != null
+                                    ? ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: CachedNetworkImage(
+                                          imageUrl: app.getImageUrl(),
+                                          imageBuilder: (context, imageProvider) {
+                                            return CircleAvatar(
+                                              backgroundColor: Colors.white,
+                                              radius: 16,
+                                              backgroundImage: imageProvider,
+                                            );
+                                          },
+                                          errorWidget: (context, url, error) {
+                                            return const CircleAvatar(
+                                              backgroundColor: Colors.white,
+                                              radius: 16,
+                                              child: Icon(Icons.error_outline_rounded),
+                                            );
+                                          },
+                                          progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
                                             backgroundColor: Colors.white,
                                             radius: 16,
-                                            backgroundImage: imageProvider,
-                                          );
-                                        },
-                                        errorWidget: (context, url, error) {
-                                          return const CircleAvatar(
-                                            backgroundColor: Colors.white,
-                                            radius: 16,
-                                            child: Icon(Icons.error_outline_rounded),
-                                          );
-                                        },
-                                        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                                          backgroundColor: Colors.white,
-                                          radius: 16,
-                                          child: CircularProgressIndicator(
-                                            value: progress.progress,
-                                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                            child: CircularProgressIndicator(
+                                              value: progress.progress,
+                                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      title: Text(
-                                        plugin.name,
-                                        maxLines: 1,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      subtitle: Padding(
-                                        padding: const EdgeInsets.only(top: 4.0),
-                                        child: Text(
-                                          plugin.description,
+                                        title: Text(
+                                          app.name,
                                           maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
                                         ),
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                                        onPressed: () {
-                                          Clipboard.setData(ClipboardData(text: pluginResponse.content.trim()));
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text('Plugin response copied to clipboard'),
-                                          ));
-                                          MixpanelManager()
-                                              .copiedMemoryDetails(provider.memory, source: 'Plugin Response');
-                                        },
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                              ExpandableTextWidget(
-                                text: pluginResponse.content.decodeSting.trim(),
-                                isExpanded: provider.pluginResponseExpanded[i],
-                                toggleExpand: () {
-                                  print('pluginResponseExpanded: ${provider.pluginResponseExpanded}');
-                                  if (!provider.pluginResponseExpanded[i]) {
-                                    MixpanelManager()
-                                        .pluginResultExpanded(provider.memory, pluginResponse.pluginId ?? '');
-                                  }
-                                  provider.updatePluginResponseExpanded(i);
-                                },
-                                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
-                                maxLines: 6,
-                                // Change this to 6 if you want the initial max lines to be 6
-                                linkColor: Colors.white,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                                        subtitle: Padding(
+                                          padding: const EdgeInsets.only(top: 4.0),
+                                          child: Text(
+                                            app.description,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                          ),
+                                        ),
+                                        trailing: IconButton(
+                                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                                          onPressed: () {
+                                            Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                              content: Text('App response copied to clipboard'),
+                                            ));
+                                            MixpanelManager()
+                                                .copiedMemoryDetails(provider.memory, source: 'App Response');
+                                          },
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                                ExpandableTextWidget(
+                                  text: appResponse.content.decodeString.trim(),
+                                  isExpanded: provider.appResponseExpanded[i],
+                                  toggleExpand: () {
+                                    debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
+                                    if (!provider.appResponseExpanded[i]) {
+                                      MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
+                                    }
+                                    provider.updateAppResponseExpanded(i);
+                                  },
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
+                                  maxLines: 6,
+                                  // Change this to 6 if you want the initial max lines to be 6
+                                  linkColor: Colors.white,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                   ],
                   const SizedBox(height: 8)
                 ],
@@ -503,7 +586,7 @@ class GetPluginsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No plugins were triggered\nfor this memory.',
+            'No apps were triggered\nfor this memory.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -526,13 +609,13 @@ class GetPluginsWidgets extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () {
-                    routeToPage(context, const PluginsPage());
-                    MixpanelManager().pageOpened('Memory Detail Plugins');
+                    routeToPage(context, const AppsPage());
+                    MixpanelManager().pageOpened('Memory Detail Apps');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Enable Plugins', style: TextStyle(color: Colors.white, fontSize: 16))),
+                      child: Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -568,49 +651,46 @@ class GetGeolocationWidgets extends StatelessWidget {
                   style: TextStyle(color: Colors.grey.shade300),
                 ),
                 const SizedBox(height: 8),
-                geolocation != null
-                    ? GestureDetector(
-                        onTap: () async {
-                          // TODO: open google maps URL if available
-                          MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
-                        },
-                        child: CachedNetworkImage(
-                          imageBuilder: (context, imageProvider) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                image: DecorationImage(
-                                  image: imageProvider,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            );
-                          },
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 8),
-                              height: 200,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                color: Colors.grey.shade800,
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'Could not load Maps. Please check your internet connection.',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            );
-                          },
-                          imageUrl: MapsUtil.getMapImageUrl(
-                            geolocation.latitude!,
-                            geolocation.longitude!,
+                GestureDetector(
+                  onTap: () async {
+                    MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
+                  },
+                  child: CachedNetworkImage(
+                    imageBuilder: (context, imageProvider) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: imageProvider,
+                            fit: BoxFit.cover,
                           ),
                         ),
-                      )
-                    : const SizedBox.shrink(),
+                      );
+                    },
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        height: 200,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade800,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Could not load Maps. Please check your internet connection.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    },
+                    imageUrl: MapsUtil.getMapImageUrl(
+                      geolocation.latitude!,
+                      geolocation.longitude!,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
               ],
       );
@@ -663,11 +743,11 @@ class GetDevToolsOptions extends StatefulWidget {
 }
 
 class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
-  bool loadingPluginIntegrationTest = false;
+  bool loadingAppIntegrationTest = false;
 
-  void changeLoadingPluginIntegrationTest(bool value) {
+  void changeLoadingAppIntegrationTest(bool value) {
     setState(() {
-      loadingPluginIntegrationTest = value;
+      loadingAppIntegrationTest = value;
     });
   }
 
@@ -678,7 +758,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
           title: const Text('Trigger Memory Created Integration'),
-          leading: loadingPluginIntegrationTest
+          leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
                   width: 24,
@@ -688,24 +768,43 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 )
               : const Icon(Icons.send_to_mobile_outlined),
           onTap: () {
-            changeLoadingPluginIntegrationTest(true);
-            // TODO: if not set, show dialog to set URL or take them to settings.
-
-            webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+            changeLoadingAppIntegrationTest(true);
+            if (SharedPreferencesUtil().webhookOnMemoryCreated.isEmpty) {
               showDialog(
                 context: context,
                 builder: (c) => getDialog(
                   context,
-                  () => Navigator.pop(context),
-                  () => Navigator.pop(context),
-                  'Result:',
-                  response,
-                  okButtonText: 'Ok',
-                  singleButton: true,
+                  () {
+                    Navigator.pop(context);
+                  },
+                  () {
+                    Navigator.pop(context);
+                    routeToPage(context, const DeveloperSettingsPage());
+                  },
+                  'Webhook URL not set',
+                  'Please set the webhook URL in developer settings to use this feature.',
+                  okButtonText: 'Settings',
                 ),
               );
-              changeLoadingPluginIntegrationTest(false);
-            });
+              changeLoadingAppIntegrationTest(false);
+              return;
+            } else {
+              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () => Navigator.pop(context),
+                    'Result:',
+                    response,
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                );
+                changeLoadingAppIntegrationTest(false);
+              });
+            }
           },
         ),
       ),
@@ -810,15 +909,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 );
                 return;
               }
-              String content = '''
-              Here\'s my memory created with Omi. ${widget.memory.structured.getEmoji()}
-              
-              https://h.omi.me/memories/${widget.memory.id}
-              
-              Get started using Omi today.
-              '''
-                  .replaceAll('  ', '')
-                  .trim();
+              String content = '''https://h.omi.me/memories/${widget.memory.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
               changeLoadingShareMemoryViaURL(false);
@@ -836,15 +927,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                 onTap: () async {
                   if (loadingShareTranscript) return;
                   changeLoadingShareTranscript(true);
-                  // TODO: check web url open graph.
                   String content = '''
-              Here\'s my memory created with Omi.
-              
               ${widget.memory.structured.title}
               
               ${widget.memory.getTranscript(generate: true)}
-              
-              Get started using Omi today (https://www.omi.me).
               '''
                       .replaceAll('  ', '')
                       .trim();
@@ -861,15 +947,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
-                        String content = '''
-              Here\'s my memory created with Omi.
-              
-              ${widget.memory.structured.toString()}
-              
-              Get started using Omi today (https://www.omi.me).
-              '''
-                            .replaceAll('  ', '')
-                            .trim();
+                        String content = widget.memory.structured.toString().replaceAll('  ', '').trim();
                         await Share.share(content);
                         changeLoadingShareSummary(false);
                       },
