@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices.dart';
@@ -31,7 +32,7 @@ class FriendDeviceConnection extends DeviceConnection {
     _friendService = await getService(friendServiceUuid);
     if (_friendService == null) {
       logServiceNotFoundError('Friend', deviceId);
-      throw Exception("Friend ble service is not found");
+      throw DeviceConnectionException("Friend ble service is not found");
     }
 
     _batteryService = await getService(batteryServiceUuid);
@@ -140,7 +141,11 @@ class FriendDeviceConnection extends DeviceConnection {
           await device.requestMtu(512); // This might fix the code 133 error
         }
         if (device.isConnected) {
-          await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+          try {
+            await audioDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+          } on PlatformException catch (e) {
+            Logger.error('Error setting notify value for audio data stream $e');
+          }
         } else {
           Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
               message: 'Device is disconnected. Please reconnect and try again');
@@ -222,7 +227,10 @@ class FriendDeviceConnection extends DeviceConnection {
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
     if (_storageService == null) {
-      logServiceNotFoundError('Friend', deviceId);
+      if (device.name == 'Omi DevKit 2') {
+        // Should only report incase of DevKit 2 because only DevKit 2 has storage service
+        logServiceNotFoundError('Storage', deviceId);
+      }
       return Future.value(<int>[]);
     }
 
@@ -294,7 +302,7 @@ class FriendDeviceConnection extends DeviceConnection {
     return listener;
   }
 
-  Future<bool> performWriteToStorage(int numFile, int command,int offset) async {
+  Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
     if (_storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);
       return false;
@@ -307,16 +315,17 @@ class FriendDeviceConnection extends DeviceConnection {
     }
     debugPrint('About to write to storage bytes');
     debugPrint('about to send $numFile');
-       debugPrint('about to send $command');
-     debugPrint('about to send offset$offset');
-     var offsetBytes = [
-       (offset >> 24) & 0xFF,
-       (offset >> 16) & 0xFF,
-       (offset >> 8) & 0xFF,
-       offset & 0xFF,
-     ]; 
+    debugPrint('about to send $command');
+    debugPrint('about to send offset$offset');
+    var offsetBytes = [
+      (offset >> 24) & 0xFF,
+      (offset >> 16) & 0xFF,
+      (offset >> 8) & 0xFF,
+      offset & 0xFF,
+    ];
 
-     await storageDataStreamCharacteristic.write([command & 0xFF,numFile & 0xFF,offsetBytes[0],offsetBytes[1],offsetBytes[2],offsetBytes[3]]);
+    await storageDataStreamCharacteristic
+        .write([command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
     return true;
   }
   // Future<List<int>> performGetStorageList();

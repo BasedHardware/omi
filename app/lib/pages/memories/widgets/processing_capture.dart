@@ -7,7 +7,6 @@ import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/memories/widgets/capture.dart';
 import 'package:friend_private/pages/memory_capturing/page.dart';
 import 'package:friend_private/pages/processing_memories/page.dart';
-import 'package:friend_private/pages/sdcard/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -52,36 +51,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       var topMemoryId =
           (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
-
-      /// Friend V2 SD CARD functionality
-      String totalsdCardSecondsRemainingString =
-          (provider.sdCardSecondsTotal - provider.sdCardSecondsReceived).toStringAsFixed(2);
-
-      if (provider.sdCardReady) {
-        var banner = 'You have $totalsdCardSecondsRemainingString seconds of Storage Remaining. Click here to see';
-        Future.delayed(Duration.zero, () {
-          ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-          ScaffoldMessenger.of(context).showMaterialBanner(
-            MaterialBanner(
-              content: Text(banner),
-              backgroundColor: Colors.green,
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                    routeToPage(context, const SdCardCapturePage());
-                  },
-                  child: const Text('Click here'),
-                ),
-              ],
-              onVisible: () => Future.delayed(const Duration(seconds: 15), () {
-                ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-              }),
-            ),
-          );
-        });
-        provider.setsdCardReady(false);
-      }
 
       // Waiting ready state, 3s for now
       if (!_isReady) {
@@ -170,8 +139,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    //print(
-    //    'isMemoryInProgress: $isMemoryInProgress internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic');
+    // print(
+    //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
 
     // Left
     Widget? left;
@@ -183,7 +152,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
           captureProvider.recordingState,
         ),
       );
-    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript) {
+    } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
       return null; // not using phone mic, not ready
     } else if (!deviceServiceStateOk) {
       left = Row(
@@ -234,10 +203,12 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     // Right
     Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
-    if (deviceServiceStateOk && transcriptServiceStateOk) {
+    if (!isHavingDesireDevice && !isUsingPhoneMic) {
+      stateText = "";
+    } else if (transcriptServiceStateOk) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
-    } else if (isHavingDesireDevice && (!internetConnectionStateOk || !transcriptServiceStateOk)) {
+    } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
       stateText = "Reconnecting";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
@@ -282,7 +253,7 @@ class RecordingStatusIndicator extends StatefulWidget {
   const RecordingStatusIndicator({super.key});
 
   @override
-  _RecordingStatusIndicatorState createState() => _RecordingStatusIndicatorState();
+  State<RecordingStatusIndicator> createState() => _RecordingStatusIndicatorState();
 }
 
 class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> with SingleTickerProviderStateMixin {

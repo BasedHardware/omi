@@ -26,8 +26,12 @@ class IntercomManager {
     );
   }
 
-  Future displayChargingArticle() async {
-    return await intercom.displayArticle('9907475-how-to-charge-the-device');
+  Future displayChargingArticle(String device) async {
+    if (device == 'Omi DevKit 2') {
+      return await intercom.displayArticle('10003257-how-to-charge-devkit2');
+    } else {
+      return await intercom.displayArticle('9907475-how-to-charge-the-device');
+    }
   }
 
   Future displayFirmwareUpdateArticle() async {
@@ -54,8 +58,8 @@ class IntercomManager {
     await updateCustomAttributes({
       'Notifications Enabled': _preferences.notificationsEnabled,
       'Location Enabled': _preferences.locationEnabled,
-      'Plugins Enabled Count': _preferences.enabledPluginsCount,
-      'Plugins Integrations Enabled Count': _preferences.enabledPluginsIntegrationsCount,
+      'Apps Enabled Count': _preferences.enabledAppsCount,
+      'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
       'Speaker Profile': _preferences.hasSpeakerProfile,
       'Calendar Enabled': _preferences.calendarEnabled,
       'Recordings Language': _preferences.recordingsLanguage,

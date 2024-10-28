@@ -15,6 +15,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
+  bool isDeviceV2Connected = false;
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -43,6 +44,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
+      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+        return;
+      }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice!.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;
@@ -68,6 +72,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
+  }
+
+  Future<List<int>> _getStorageList(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return [];
+    }
+    return connection.getStorageList();
   }
 
   Future<BtDevice?> _getConnectedDevice() async {
@@ -124,7 +136,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     int timeoutCounter = 0;
     while (true) {
       if (timeout && timeoutCounter >= 10) return null;
-      await ServiceManager.instance().device.discover();
+      await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
       if (connectedDevice != null) {
         return connectedDevice;
       }
@@ -154,6 +166,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         var cDevice = await _getConnectedDevice();
         if (cDevice != null) {
           setConnectedDevice(cDevice);
+          setIsDeviceV2Connected();
           // SharedPreferencesUtil().btDevice = cDevice;
           SharedPreferencesUtil().deviceName = cDevice.name;
           MixpanelManager().deviceConnected();
@@ -197,10 +210,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onDeviceDisconnected() async {
     debugPrint('onDisconnected inside: $connectedDevice');
     setConnectedDevice(null);
+    setIsDeviceV2Connected();
     setIsConnected(false);
     updateConnectingStatus(false);
-    await captureProvider?.stopStreamDeviceRecording(cleanDevice: true);
-    captureProvider?.setAudioBytesConnected(false);
+
+    captureProvider?.updateRecordingDevice(null);
+
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
+
     print('after resetState inside initiateConnectionListener');
 
     InstabugLog.logInfo('Friend Device Disconnected');
@@ -219,21 +237,34 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  void onDeviceReconnected(BtDevice device) async {
+  void _onDeviceConnected(BtDevice device) async {
     debugPrint('_onConnected inside: $connectedDevice');
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
+    setIsDeviceV2Connected();
     setIsConnected(true);
+    if (isConnected) {
+      await initiateBleBatteryListener();
+    }
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: device);
-    //  initiateBleBatteryListener();
-    // The device is still disconnected for some reason
-    if (connectedDevice != null) {
-      MixpanelManager().deviceConnected();
-      await getDeviceInfo();
-      // SharedPreferencesUtil().btDevice = connectedDevice!;
-      SharedPreferencesUtil().deviceName = connectedDevice!.name;
+
+    await getDeviceInfo();
+    SharedPreferencesUtil().deviceName = device.name;
+
+    // Wals
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
+
+    notifyListeners();
+  }
+
+  Future setIsDeviceV2Connected() async {
+    if (connectedDevice == null) {
+      isDeviceV2Connected = false;
+    } else {
+      var storageFiles = await _getStorageList(connectedDevice!.id);
+      isDeviceV2Connected = storageFiles.isNotEmpty;
     }
     notifyListeners();
   }
@@ -247,7 +278,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (connection == null) {
           return;
         }
-        onDeviceReconnected(connection.device);
+        _onDeviceConnected(connection.device);
         break;
       case DeviceConnectionState.disconnected:
         if (deviceId == connectedDevice?.id) {
@@ -259,26 +290,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   @override
-  void onDevices(List<BtDevice> devices) async {
-    if (connectedDevice != null) {
-      return;
-    }
-
-    if (devices.length <= 0) {
-      return;
-    }
-
-    // Connect to first founded device
-    var force = devices.first.id == SharedPreferencesUtil().btDevice.id;
-    var connection = await ServiceManager.instance().device.ensureConnection(devices.first.id, force: force);
-    if (connection == null) {
-      return;
-    }
-    connectedDevice = connection.device;
-  }
+  void onDevices(List<BtDevice> devices) async {}
 
   @override
-  void onStatusChanged(DeviceServiceStatus status) {
-    // TODO: implement onStatusChanged
-  }
+  void onStatusChanged(DeviceServiceStatus status) {}
 }

@@ -34,7 +34,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (context.read<DeviceProvider>().connectedDevice != null) {
-        context.read<OnboardingProvider>().stopFindDeviceTimer();
+        context.read<OnboardingProvider>().stopScanDevices();
       }
       if (mounted) {
         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);

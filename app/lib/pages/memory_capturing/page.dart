@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
@@ -129,6 +130,15 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                   const Text("🎙️"),
                   const SizedBox(width: 4),
                   const Expanded(child: Text("In progress")),
+                  if (SharedPreferencesUtil().devModeJoanFollowUpEnabled)
+                    IconButton(
+                      onPressed: () async {
+                        getFollowUpQuestion().then((v) {
+                          debugPrint('Follow up question: $v');
+                        });
+                      },
+                      icon: const Icon(Icons.question_answer),
+                    )
                 ],
               ),
             ),

@@ -100,8 +100,8 @@ class DeviceService implements IDeviceService {
     onDevices(devices);
 
     // Check desirable device
-    if (desirableDeviceId != null) {
-      await _connectToDevice(desirableDeviceId);
+    if (desirableDeviceId != null && desirableDeviceId.isNotEmpty) {
+      await ensureConnection(desirableDeviceId, force: true);
     }
   }
 
@@ -231,12 +231,14 @@ class DeviceService implements IDeviceService {
       }
 
       // connect
-      await _connectToDevice(deviceId);
-
-      if (_firstConnectedAt == null) {
-        _firstConnectedAt = DateTime.now();
+      try {
+        await _connectToDevice(deviceId);
+      } on DeviceConnectionException catch (e) {
+        debugPrint(e.toString());
+        return null;
       }
 
+      _firstConnectedAt ??= DateTime.now();
       return _connection;
     } finally {
       mutex = false;

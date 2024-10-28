@@ -52,6 +52,7 @@ class PluginResult(BaseModel):
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     completed: bool = False  # IGNORE ME from the model parser
+    deleted: bool = False
 
 
 class Event(BaseModel):
@@ -60,6 +61,11 @@ class Event(BaseModel):
     start: datetime = Field(description="The start date and time of the event")
     duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
+
+    def as_dict_cleaned_dates(self):
+        event_dict = self.dict()
+        event_dict['start'] = event_dict['start'].isoformat()
+        return event_dict
 
 
 class Structured(BaseModel):
@@ -165,12 +171,19 @@ class Memory(BaseModel):
     status: Optional[MemoryStatus] = MemoryStatus.completed
 
     @staticmethod
-    def memories_to_string(memories: List['Memory']) -> str:
+    def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
         result = []
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
+            if use_transcript:
+                memory_str = (f"Memory #{i + 1}\n"
+                              f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                              f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+                result.append(memory_str.strip())
+                continue
+
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
@@ -187,6 +200,15 @@ class Memory(BaseModel):
     def get_transcript(self, include_timestamps: bool) -> str:
         # Warn: missing transcript for workflow source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
+
+    def as_dict_cleaned_dates(self):
+        memory_dict = self.dict()
+        memory_dict['structured']['events'] = [event['start'].isoformat() for event in
+                                               memory_dict['structured']['events']]
+        memory_dict['created_at'] = memory_dict['created_at'].isoformat()
+        memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
+        memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
+        return memory_dict
 
 
 class CreateMemory(BaseModel):
@@ -233,3 +255,13 @@ class CreateMemoryResponse(BaseModel):
 class SetMemoryEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
+
+
+class SetMemoryActionItemsStateRequest(BaseModel):
+    items_idx: List[int]
+    values: List[bool]
+
+
+class DeleteActionItemRequest(BaseModel):
+    description: str
+    completed: bool

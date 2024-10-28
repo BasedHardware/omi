@@ -30,8 +30,8 @@ class MixpanelManager {
   setPeopleValues() {
     setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
     setUserProperty('Location Enabled', _preferences.locationEnabled);
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
-    setUserProperty('Plugins Integrations Enabled Count', _preferences.enabledPluginsIntegrationsCount);
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
+    setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
     setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
@@ -97,26 +97,26 @@ class MixpanelManager {
 
   void pageOpened(String name) => track('$name Opened');
 
-  void pluginEnabled(String pluginId) {
-    track('Plugin Enabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+  void appEnabled(String appId) {
+    track('App Enabled', properties: {'app_id': appId});
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
 
-  void pluginDisabled(String pluginId) {
-    track('Plugin Disabled', properties: {'plugin_id': pluginId});
-    setUserProperty('Plugins Enabled Count', _preferences.enabledPluginsCount);
+  void appDisabled(String appId) {
+    track('App Disabled', properties: {'app_id': appId});
+    setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
 
-  void pluginRated(String pluginId, double rating) {
-    track('Plugin Rated', properties: {'plugin_id': pluginId, 'rating': rating});
+  void appRated(String appId, double rating) {
+    track('App Rated', properties: {'app_id': appId, 'rating': rating});
   }
 
   void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
-  void pluginResultExpanded(ServerMemory memory, String pluginId) {
-    track('Plugin Result Expanded', properties: getMemoryEventProperties(memory)..['plugin_id'] = pluginId);
+  void appResultExpanded(ServerMemory memory, String appId) {
+    track('App Result Expanded', properties: getMemoryEventProperties(memory)..['app_id'] = appId);
   }
 
   void recordingLanguageChanged(String language) {
@@ -251,6 +251,15 @@ class MixpanelManager {
 
   void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
+
+  void checkedActionItem(ServerMemory memory, int idx) =>
+      track('Checked Action Item', properties: getMemoryEventProperties(memory));
+
+  void uncheckedActionItem(ServerMemory memory, int idx) =>
+      track('Unchecked Action Item', properties: getMemoryEventProperties(memory));
+
+  void deletedActionItem(ServerMemory memory) =>
+      track('Deleted Action Item', properties: getMemoryEventProperties(memory));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 

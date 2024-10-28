@@ -12,13 +12,14 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.vector_db import upsert_vector
+from database.plugins import record_plugin_usage
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.facts import FactDB
 from models.memory import *
-from models.plugin import Plugin
+from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
-from utils.llm import obtain_emotional_message
+from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor
@@ -26,6 +27,7 @@ from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.plugins import get_plugins_data
 from utils.retrieval.rag import retrieve_rag_memory_context
+from utils.webhooks import memory_created_webhook
 
 
 def _get_structured(
@@ -33,9 +35,10 @@ def _get_structured(
         force_process: bool = False, retries: int = 1
 ) -> Tuple[Structured, bool]:
     try:
+        tz = notification_db.get_user_time_zone(uid)
         if memory.source == MemorySource.workflow:
             if memory.text_source == WorkflowMemorySource.audio:
-                structured = get_transcript_structure(memory.text, memory.started_at, language_code)
+                structured = get_transcript_structure(memory.text, memory.started_at, language_code, tz)
                 return structured, False
 
             if memory.text_source == WorkflowMemorySource.other:
@@ -52,13 +55,13 @@ def _get_structured(
         # from Friend
         if force_process:
             # reprocess endpoint
-            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
+            return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code, tz), False
 
         discarded = should_discard_memory(memory.get_transcript(False))
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code), False
+        return get_transcript_structure(memory.get_transcript(False), memory.started_at, language_code, tz), False
     except Exception as e:
         print(e)
         if retries == 2:
@@ -98,7 +101,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-def _trigger_plugins(uid: str, memory: Memory):
+def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
     plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     memory.plugins_results = []
@@ -107,6 +110,8 @@ def _trigger_plugins(uid: str, memory: Memory):
     def execute_plugin(plugin):
         if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
             memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+            if not is_reprocess:
+                record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
@@ -132,19 +137,40 @@ def _extract_trends(memory: Memory):
     trends_db.save_trends(memory, parsed)
 
 
-def process_memory(uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
-                   force_process: bool = False) -> Memory:
+def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
+    vector = generate_embedding(str(memory.structured)) if not update_only else None
+
+    segments = [t.dict() for t in memory.transcript_segments]
+    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments)
+    metadata['created_at'] = int(memory.created_at.timestamp())
+    if not update_only:
+        print('save_structured_vector creating vector')
+        upsert_vector2(uid, memory, vector, metadata)
+    else:
+        print('save_structured_vector updating metadata')
+        update_vector_metadata(uid, memory.id, metadata)
+
+
+def process_memory(
+        uid: str, language_code: str, memory: Union[Memory, CreateMemory, WorkflowCreateMemory],
+        force_process: bool = False, is_reprocess: bool = False
+) -> Memory:
     structured, discarded = _get_structured(uid, language_code, memory, force_process)
     memory = _get_memory_obj(uid, structured, memory)
 
     if not discarded:
-        vector = generate_embedding(str(structured))
-        upsert_vector(uid, memory, vector)
-        _trigger_plugins(uid, memory)
+        _trigger_plugins(uid, memory, is_reprocess=is_reprocess)
+        threading.Thread(target=save_structured_vector, args=(uid, memory,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
     memory.status = MemoryStatus.completed
     memories_db.upsert_memory(uid, memory.dict())
+
+    if not is_reprocess:
+        threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
+
+    # TODO: trigger external integrations here too
+
     print('process_memory completed memory.id=', memory.id)
     return memory
 

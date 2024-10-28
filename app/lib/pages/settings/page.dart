@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/plugins/page.dart';
 import 'package:friend_private/pages/settings/about.dart';
 import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
@@ -102,12 +101,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.help_outline_outlined,
                 ),
                 const SizedBox(height: 20),
-                getItemAddOn2(
-                  'Plugins',
-                  () => routeToPage(context, const PluginsPage()),
-                  icon: Icons.integration_instructions,
-                ),
-                const SizedBox(height: 8),
+                // getItemAddOn2(
+                //   'Plugins',
+                //   () => routeToPage(context, const PluginsPage()),
+                //   icon: Icons.integration_instructions,
+                // ),
+                // const SizedBox(height: 8),
                 getItemAddOn2(
                   'Calendar Integration',
                   () => routeToPage(context, const CalendarPage()),

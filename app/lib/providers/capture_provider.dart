@@ -24,8 +24,6 @@ import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/utils/memories/integrations.dart';
-import 'package:friend_private/utils/memories/process.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -44,13 +42,16 @@ class CaptureProvider extends ChangeNotifier
 
   ServerMemory? get inProgressMemory => _inProgressMemory;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
+
   IDeviceService get _deviceService => ServiceManager.instance().device;
   bool _isWalSupported = false;
+
   bool get isWalSupported => _isWalSupported;
 
   StreamSubscription<InternetStatus>? _internetStatusListener;
   InternetStatus? _internetStatus;
+
   get internetStatus => _internetStatus;
 
   CaptureProvider() {
@@ -69,9 +70,6 @@ class CaptureProvider extends ChangeNotifier
   List<TranscriptSegment> segments = [];
 
   bool hasTranscripts = false;
-
-  // bool memoryCreating = false;
-  bool audioBytesConnected = false;
 
   StreamSubscription? _bleBytesStream;
 
@@ -104,15 +102,14 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setAudioBytesConnected(bool value) {
-    audioBytesConnected = value;
-    notifyListeners();
-  }
-
   void _updateRecordingDevice(BtDevice? device) {
     debugPrint('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
     notifyListeners();
+  }
+
+  void updateRecordingDevice(BtDevice? device) {
+    _updateRecordingDevice(device);
   }
 
   Future _resetStateVariables() async {
@@ -181,7 +178,7 @@ class CaptureProvider extends ChangeNotifier
         setIsWalSupported(checkWalSupported);
       }
       if (_isWalSupported) {
-        _walService.onByteStream(value);
+        _wal.getSyncs().phone.onByteStream(value);
       }
 
       // send ws
@@ -191,11 +188,10 @@ class CaptureProvider extends ChangeNotifier
 
         // synced
         if (_isWalSupported) {
-          _walService.onBytesSync(value);
+          _wal.getSyncs().phone.onBytesSync(value);
         }
       }
     });
-    setAudioBytesConnected(true);
     notifyListeners();
   }
 
@@ -212,7 +208,6 @@ class CaptureProvider extends ChangeNotifier
   void _cleanupCurrentState() {
     closeBleStream();
     cancelMemoryCreationTimer();
-    setAudioBytesConnected(false);
   }
 
   // TODO: use connection directly
@@ -278,14 +273,12 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // Why is the _recordingDevice null at this point?
-    if (!audioBytesConnected) {
-      if (_recordingDevice != null) {
-        await streamAudioToWs(_recordingDevice!.id, codec);
-      } else {
-        // Is the app in foreground when this happens?
-        Logger.handle(Exception('Device Not Connected'), StackTrace.current,
-            message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
-      }
+    if (_recordingDevice != null) {
+      await streamAudioToWs(_recordingDevice!.id, codec);
+    } else {
+      // Is the app in foreground when this happens?
+      Logger.handle(Exception('Device Not Connected'), StackTrace.current,
+          message: 'Device Not Connected. Please make sure the device is turned on and nearby.');
     }
 
     notifyListeners();
@@ -462,8 +455,6 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
     if (memory == null) return;
-
-    processMemoryContent(memory: memory, messages: messages, sendMessageToChat: messageProvider?.addMessage);
     memoryProvider?.upsertMemory(memory);
     MixpanelManager().memoryCreated(memory);
   }
@@ -478,9 +469,6 @@ class CaptureProvider extends ChangeNotifier
       _loadInProgressMemory();
     }
     TranscriptSegment.combineSegments(segments, newSegments);
-    triggerTranscriptSegmentReceivedEvents(newSegments, conversationId, sendMessageToChat: (v) {
-      messageProvider?.addMessage(v);
-    });
     hasTranscripts = true;
     notifyListeners();
   }
@@ -507,6 +495,11 @@ class CaptureProvider extends ChangeNotifier
   List<int> currentStorageFiles = <int>[];
   int sdCardFileNum = 1;
 
+// To show the progress of the download in the UI
+  int currentTotalBytesReceived = 0;
+  double currentSdCardSecondsReceived = 0.0;
+//--------------------------------------------
+
   int totalStorageFileBytes = 0; // how much in storage
   int totalBytesReceived = 0; // how much already received
   double sdCardSecondsTotal = 0.0; // time to send the next chunk
@@ -522,43 +515,105 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<void> updateStorageList() async {
+    currentStorageFiles = await _getStorageList(_recordingDevice!.id);
+    if (currentStorageFiles.isEmpty) {
+      debugPrint('No storage files found');
+      SharedPreferencesUtil().deviceIsV2 = false;
+      debugPrint('Device is not V2');
+      return;
+    }
+    totalStorageFileBytes = currentStorageFiles[0];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
+    totalBytesReceived = storageOffset;
+    notifyListeners();
+  }
+
   Future<void> initiateStorageBytesStreaming() async {
     debugPrint('initiateStorageBytesStreaming');
+    if (_recordingDevice == null) return;
+    var storageFiles = await _getStorageList(_recordingDevice!.id);
+    if (storageFiles.isEmpty) {
+      return;
+    }
+    var totalBytes = storageFiles[0];
+    if (totalBytes <= 0) {
+      return;
+    }
+    var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
+    if (storageOffset > totalBytes) {
+      // bad state?
+      debugPrint("SDCard bad state, offset > total");
+      storageOffset = 0;
+    }
 
+    // 80: frame length, 100: frame per seconds
+    sdCardSecondsTotal = totalBytes / 80 / 100;
+    sdCardSecondsReceived = storageOffset / 80 / 100;
+
+    // > 10s
+    if (totalBytes - storageOffset > 10 * 80 * 100) {
+      sdCardReady = true;
+    }
+
+    notifyListeners();
+
+    /* TODO: Remove
     if (_recordingDevice == null) return;
     currentStorageFiles = await _getStorageList(_recordingDevice!.id);
     if (currentStorageFiles.isEmpty) {
       debugPrint('No storage files found');
       SharedPreferencesUtil().deviceIsV2 = false;
       debugPrint('Device is not V2');
-
       return;
     }
     SharedPreferencesUtil().deviceIsV2 = true;
     debugPrint('Device is V2');
     debugPrint('Device model name: ${_recordingDevice!.name}');
     debugPrint('Storage files: $currentStorageFiles');
-    totalStorageFileBytes = currentStorageFiles.fold(0, (sum, fileSize) => sum + fileSize);
-    var previousStorageBytes = SharedPreferencesUtil().previousStorageBytes;
+    totalStorageFileBytes = currentStorageFiles[0];
+    var storageOffset = currentStorageFiles.length < 2 ? 0 : currentStorageFiles[1];
+    debugPrint('storageOffset: $storageOffset');
     // SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     //check if new or old file
-    if (totalStorageFileBytes < previousStorageBytes) {
+    if (totalStorageFileBytes < SharedPreferencesUtil().previousStorageBytes) {
       totalBytesReceived = 0;
+      currentTotalBytesReceived = 0;
       SharedPreferencesUtil().currentStorageBytes = 0;
     } else {
       totalBytesReceived = SharedPreferencesUtil().currentStorageBytes;
     }
     if (totalBytesReceived > totalStorageFileBytes) {
       totalBytesReceived = 0;
+      currentTotalBytesReceived = 0;
     }
+    totalBytesReceived = storageOffset;
     SharedPreferencesUtil().previousStorageBytes = totalStorageFileBytes;
     sdCardSecondsTotal =
         ((totalStorageFileBytes.toDouble() / 80.0) / 100.0) * 2.2; // change 2.2 depending on empirical dl speed
-
+    sdCardSecondsReceived = ((storageOffset.toDouble() / 80.0) / 100.0) * 2.2;
+    currentSdCardSecondsReceived = 0.0;
     debugPrint('totalBytesReceived in initiateStorageBytesStreaming: $totalBytesReceived');
-    debugPrint('previousStorageBytes in initiateStorageBytesStreaming: $previousStorageBytes');
+    debugPrint(
+        'previousStorageBytes in initiateStorageBytesStreaming: ${SharedPreferencesUtil().previousStorageBytes}');
     btConnectedTime = DateTime.now().toUtc().toString();
-    sdCardSocket.setupSdCardWebSocket(
+
+    if (totalStorageFileBytes > 100) {
+      sdCardReady = true;
+    }
+    notifyListeners();
+		*/
+  }
+
+  @Deprecated("Unsued")
+  Future sendStorage(String id) async {
+    if (_storageStream != null) {
+      _storageStream?.cancel();
+    }
+    if (totalStorageFileBytes == 0) {
+      return;
+    }
+    await sdCardSocket.setupSdCardWebSocket(
       //replace
       onMessageReceived: () {
         debugPrint('onMessageReceived');
@@ -569,20 +624,6 @@ class CaptureProvider extends ChangeNotifier
       },
       btConnectedTime: btConnectedTime,
     );
-
-    if (totalStorageFileBytes > 100) {
-      sdCardReady = true;
-    }
-    notifyListeners();
-  }
-
-  Future sendStorage(String id) async {
-    if (_storageStream != null) {
-      _storageStream?.cancel();
-    }
-    if (totalStorageFileBytes == 0) {
-      return;
-    }
     if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
       sdCardSocket.sdCardChannel?.sink.close();
       await sdCardSocket.setupSdCardWebSocket(
@@ -623,13 +664,20 @@ class CaptureProvider extends ChangeNotifier
           sdCardSocket.sdCardChannel?.sink.add(value); //replace
           SharedPreferencesUtil().currentStorageBytes = 0;
           SharedPreferencesUtil().previousStorageBytes = 0;
-          clearFileFromDevice(sdCardFileNum);
+          _clearFileFromDevice(sdCardFileNum);
         } else {
           //bad bit
           debugPrint('Error bit returned');
         }
-      } else if (value.length == 83) {
-        totalBytesReceived += 80;
+      } else if (value.length >= 80) {
+        //enforce a min packet size, large
+        if (value.length == 83) {
+          totalBytesReceived += 80;
+          currentTotalBytesReceived += 80;
+        } else {
+          totalBytesReceived += value.length;
+          currentTotalBytesReceived += value.length;
+        }
         if (sdCardSocket.sdCardConnectionState != WebsocketConnectionStatus.connected) {
           debugPrint('websocket provider state: ${sdCardSocket.sdCardConnectionState}');
           //means we are disconnected, stop all transmission. attempt reconnection
@@ -638,7 +686,7 @@ class CaptureProvider extends ChangeNotifier
             return;
           }
           sdCardIsDownloading = false;
-          pauseFileFromDevice(sdCardFileNum);
+          _pauseFileFromDevice(sdCardFileNum);
           debugPrint('paused file from device');
           //attempt reconnection
           sdCardSocket.sdCardChannel?.sink.close();
@@ -656,7 +704,7 @@ class CaptureProvider extends ChangeNotifier
             debugPrint('sdCardReconnectionTimer');
             if (sdCardSocket.sdCardConnectionState == WebsocketConnectionStatus.connected) {
               sdCardIsDownloading = true;
-              getFileFromDevice(sdCardFileNum, totalBytesReceived);
+              _getFileFromDevice(sdCardFileNum, totalBytesReceived);
             }
           });
 
@@ -666,28 +714,29 @@ class CaptureProvider extends ChangeNotifier
 
         sdCardSocket.sdCardChannel?.sink.add(value);
         sdCardSecondsReceived = ((totalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
+        currentSdCardSecondsReceived = ((currentTotalBytesReceived.toDouble() / 80.0) / 100.0) * 2.2;
         SharedPreferencesUtil().currentStorageBytes = totalBytesReceived;
       }
       notifyListeners();
     });
 
-    getFileFromDevice(sdCardFileNum, totalBytesReceived);
+    _getFileFromDevice(sdCardFileNum, totalBytesReceived);
     //  notifyListeners();
   }
 
-  Future getFileFromDevice(int fileNum, int offset) async {
+  Future _getFileFromDevice(int fileNum, int offset) async {
     sdCardFileNum = fileNum;
     int command = 0;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, offset);
   }
 
-  Future clearFileFromDevice(int fileNum) async {
+  Future _clearFileFromDevice(int fileNum) async {
     sdCardFileNum = fileNum;
     int command = 1;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
   }
 
-  Future pauseFileFromDevice(int fileNum) async {
+  Future _pauseFileFromDevice(int fileNum) async {
     sdCardFileNum = fileNum;
     int command = 3;
     _writeToStorage(_recordingDevice!.id, sdCardFileNum, command, 0);
@@ -718,7 +767,7 @@ class CaptureProvider extends ChangeNotifier
     return connection.getStorageList();
   }
 
-  void setsdCardReady(bool value) {
+  void _setsdCardReady(bool value) {
     sdCardReady = value;
     notifyListeners();
   }
