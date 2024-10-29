@@ -131,9 +131,6 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-        # if language == 'es': # TODO: consider it later.
-        #     language = 'multi'
-
         def on_open(self, open, **kwargs):
             print("Connection Open")
 
