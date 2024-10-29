@@ -804,11 +804,9 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // If watch is recording and necklace wants to start
+    // Stop current recording if it's different from the new source
     if (recordingState == RecordingState.record &&
-        recordingSource == RecordingSource.watch &&
-        newSource == RecordingSource.necklace) {
-      // Stop watch recording
+        recordingSource != newSource) {
       await stopStreamRecording();
     }
 
@@ -818,10 +816,8 @@ class CaptureProvider extends ChangeNotifier
         await streamDeviceRecording();
         break;
       case RecordingSource.watch:
-        if (recordingState != RecordingState.record) {
-          updateRecordingSource(RecordingSource.watch);
-          await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
-        }
+        updateRecordingSource(RecordingSource.watch);
+        await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
         break;
       case RecordingSource.phone:
         await streamRecording();
