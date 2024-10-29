@@ -138,6 +138,8 @@ int main(void)
 	int err;
     //for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording 
     uint32_t reset_reas = NRF_POWER->RESETREAS;
+    NRF_POWER->DCDCEN=1;
+    NRF_POWER->DCDCEN0=1;
     
     NRF_POWER->RESETREAS=1;
     bool from_usb_event = (reset_reas & VBUS_DETECT);

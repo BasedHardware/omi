@@ -269,6 +269,7 @@ void check_button_level(struct k_work *work_item)
                 if (is_off)
                 {
                     bt_off();
+                    k_msleep(1);
                     turnoff_all();
                 }
                 current_button_state = GRACE;
@@ -390,6 +391,8 @@ void turnoff_all()
     set_led_blue(false);
 	set_led_red(false);
     set_led_green(false);
+    mic_off();
+    sd_off();
     play_haptic_milli(100);
     k_msleep(10);
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);

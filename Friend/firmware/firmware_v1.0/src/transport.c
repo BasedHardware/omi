@@ -311,7 +311,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
+        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
