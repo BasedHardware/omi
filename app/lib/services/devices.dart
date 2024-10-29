@@ -96,13 +96,10 @@ class DeviceService implements IDeviceService {
     _status = DeviceServiceStatus.ready;
 
     if (await _watchManager.isWatchAvailable()) {
-      final watchDevice = BtDevice(
-        id: 'apple_watch',
-        name: 'Apple Watch',
-        type: DeviceType.watch,
-      );
+      final watchDevice = BtDevice.watch();
       if (!_devices.any((d) => d.id == watchDevice.id)) {
         _devices.add(watchDevice);
+        onDevices(_devices);
       }
     }
   }
