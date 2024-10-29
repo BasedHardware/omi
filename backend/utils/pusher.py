@@ -1,5 +1,11 @@
+import uuid
 import os
+from datetime import datetime, timezone, timedelta
+from enum import Enum
 
+import opuslib
+import webrtcvad
+from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
@@ -20,25 +26,10 @@ PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 async def connect_to_transcript_pusher(uid: str):
     try:
-        print("Connecting to Pusher transcripts WebSocket...")
+        print("Connecting to Pusher transcripts trigger WebSocket...")
         ws_host = PusherAPI.replace("http", "ws")
         socket = await websockets.connect(f"{ws_host}/v1/trigger/transcript/listen?uid={uid}")
-        print("Connected to Pusher transcripts WebSocket.")
-
-        async def on_message():
-            try:
-                async for message in socket:
-                    print(f"Pusher transcripts WebSocket recived {message} ")
-            except websockets.exceptions.ConnectionClosedOK:
-                print("Pusher transcripts WebSocket connection closed normally.")
-            except Exception as e:
-                print(f"Error receiving from Pusher transcripts WebSocket: {e}")
-            finally:
-                if not socket.closed:
-                    await socket.close()
-                    print("Pusher transcripts WebSocket closed in on_message.")
-
-        asyncio.create_task(on_message())
+        print("Connected to Pusher transcripts trigger WebSocket.")
         return socket
     except Exception as e:
         print(f"Exception in connect_to_transcript_pusher: {e}")
@@ -50,21 +41,6 @@ async def connect_to_audio_bytes_pusher(uid: str, sample_rate: int = 8000):
         ws_host = PusherAPI.replace("http", "ws")
         socket = await websockets.connect(f"{ws_host}/v1/trigger/audio-bytes/listen?uid={uid}&sample_rate={sample_rate}")
         print("Connected to Pusher audio bytes trigger WebSocket.")
-
-        async def on_message():
-            try:
-                async for message in socket:
-                    print(f"Pusher audio bytes WebSocket recived {message} ")
-            except websockets.exceptions.ConnectionClosedOK:
-                print("Pusher audio bytes WebSocket connection closed normally.")
-            except Exception as e:
-                print(f"Error receiving from Pusher audio bytes WebSocket: {e}")
-            finally:
-                if not socket.closed:
-                    await socket.close()
-                    print("Pusher audio bytes WebSocket closed in on_message.")
-
-        asyncio.create_task(on_message())
         return socket
     except Exception as e:
         print(f"Exception in connect_to_audio_bytes_pusher: {e}")
