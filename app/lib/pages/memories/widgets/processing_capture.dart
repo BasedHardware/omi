@@ -315,6 +315,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         return Icons.watch;
       case RecordingSource.phone:
         return Icons.phone_android;
+      default:
+        return Icons.help_outline;
     }
   }
 }
