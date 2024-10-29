@@ -33,6 +33,50 @@ const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805
 
 const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
 
+enum DeviceType {
+  necklace,
+  frame,
+  watch,
+}
+
+class BtDevice {
+  final String id;
+  final String name;
+  final DeviceType type;
+
+  const BtDevice({
+    required this.id,
+    required this.name,
+    required this.type,
+  });
+
+  factory BtDevice.fromScanResult(ScanResult result) {
+    // Determine device type from services
+    DeviceType type;
+    if (result.advertisementData.serviceUuids.contains(friendServiceUuid)) {
+      type = DeviceType.necklace;
+    } else if (result.advertisementData.serviceUuids.contains(frameServiceUuid)) {
+      type = DeviceType.frame;
+    } else {
+      type = DeviceType.watch;
+    }
+
+    return BtDevice(
+      id: result.device.remoteId.str,
+      name: result.device.platformName,
+      type: type,
+    );
+  }
+
+  factory BtDevice.watch() {
+    return const BtDevice(
+      id: 'apple_watch',
+      name: 'Apple Watch',
+      type: DeviceType.watch,
+    );
+  }
+}
+
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {
