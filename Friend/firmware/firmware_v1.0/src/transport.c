@@ -157,7 +157,6 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
-
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -173,7 +172,7 @@ int accel_start()
 		LOG_ERR("LSM6DSL: not ready");
 		return 0;
 	}
-    odr_attr.val1 = 52;
+    odr_attr.val1 = 10;
 	odr_attr.val2 = 0;
 
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
