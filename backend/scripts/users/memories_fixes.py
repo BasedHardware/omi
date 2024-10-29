@@ -1,5 +1,3 @@
-# - P3
-# - Include speechmatics to the game
 import os
 
 import firebase_admin

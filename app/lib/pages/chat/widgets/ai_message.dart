@@ -117,17 +117,17 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeSting,
+      messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateMemory: updateMemory,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, date: message.createdAt);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting, sendMessage: sendMessage);
+        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeSting);
+    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString);
   }
 }
 
@@ -277,6 +277,7 @@ class NormalMessageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SelectionArea(
           child: showTypingIndicator
@@ -389,7 +390,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                       ),
                     );
-                    //TODO: Not needed anymore I guess because memories are stored in provider and read from there only
                     if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
                       ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
                       widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
