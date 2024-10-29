@@ -804,25 +804,14 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Stop current recording if it's different from the new source
+    // If watch is recording and necklace wants to start
     if (recordingState == RecordingState.record &&
-        recordingSource != newSource) {
+        recordingSource == RecordingSource.watch &&
+        newSource == RecordingSource.necklace) {
       await stopStreamRecording();
     }
 
-    // Start new recording
-    switch (newSource) {
-      case RecordingSource.necklace:
-        await streamDeviceRecording();
-        break;
-      case RecordingSource.watch:
-        updateRecordingSource(RecordingSource.watch);
-        await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
-        break;
-      case RecordingSource.phone:
-        await streamRecording();
-        break;
-    }
+    updateRecordingSource(newSource);
   }
 
   // Update the UI state based on recording source
@@ -843,6 +832,12 @@ class CaptureProvider extends ChangeNotifier
 
   // Add watch-specific method
   Future<void> processRawAudioData(Uint8List audioData) async {
+    // Don't process if necklace is recording
+    if (recordingSource == RecordingSource.necklace &&
+        recordingState == RecordingState.record) {
+      return;
+    }
+
     if (_socket?.state == SocketServiceState.connected) {
       _socket?.send(audioData);
 
