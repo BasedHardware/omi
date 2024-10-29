@@ -159,5 +159,6 @@ class WatchManager {
     _connectionStateController.close();
     _errorController.close();
     _logger.log('WatchManager disposed');
+	_watchConnectionController.close();
   }
 }
