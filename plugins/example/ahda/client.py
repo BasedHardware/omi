@@ -18,6 +18,8 @@ COMMAND_TIMEOUT = 8  # Seconds to wait after the last word to finalize the comma
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "index.html")
 
+from models import EndpointResponse
+
 chat = ChatOpenAI(model='gpt-4o', temperature=0)
 
 # Use requests to get raw text from URL
@@ -28,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # AHDA Utils
-def sendToPC(uid, response):
+def send_to_pc(uid, response):
     ahda_url = get_ahda_url(uid)
     if not ahda_url:
         raise ValueError('AHDA URL not configured for this UID')
@@ -41,10 +43,11 @@ def sendToPC(uid, response):
         resp.raise_for_status()
         return {'message': 'Webhook sent successfully'}
     except requests.RequestException as e:
+        send_debug_to_pc(uid, f"Error sending webhook: {e}")
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
-def sendLiveTranscriptToPC(uid, response):
+def send_live_transcript_to_pc(uid, response):
     ahda_url = get_ahda_url(uid)
     if not ahda_url:
         raise ValueError('AHDA URL not configured for this UID')
@@ -60,7 +63,23 @@ def sendLiveTranscriptToPC(uid, response):
         logger.error(f"Error sending webhook: {e}")
         return {'message': f'Failed to send webhook: {e}'}
 
-@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'])
+def send_debug_to_pc(uid, response):
+    ahda_url = get_ahda_url(uid)
+    if not ahda_url:
+        raise ValueError('AHDA URL not configured for this UID')
+    payload = {
+        'uid': uid,
+        'response': response
+    }
+    try:
+        resp = requests.post(ahda_url + "/debug", json=payload)
+        resp.raise_for_status()
+        return {'message': 'Webhook sent successfully'}
+    except requests.RequestException as e:
+        logger.error(f"Error sending webhook: {e}")
+        return {'message': f'Failed to send webhook: {e}'}
+
+@router.post('/ahda/send-webhook', tags=['ahda', 'realtime'], response_model=EndpointResponse)
 async def send_ahda_webhook(
     uid: str = Query(...), 
     data: dict = Body(...),
@@ -92,6 +111,7 @@ async def send_ahda_webhook(
     async def finalize_command(uid):
         final_command = active_sessions[uid]["command"].strip()
         if final_command:
+            send_debug_to_pc(uid, "Finalizing command: " + final_command)
             logger.info(f"Final command for session {uid}: {final_command}")
             await call_chatgpt_to_generate_code(final_command, uid)
         # Reset session
@@ -101,11 +121,13 @@ async def send_ahda_webhook(
 
     for segment in segments:
         text = segment.get("text", "").strip().lower()
-        sendLiveTranscriptToPC(uid, text)
+        send_live_transcript_to_pc(uid, text)
+        send_debug_to_pc(uid, "Received segment: " + text)
         logger.info(f"Received segment: {text} (session_id: {uid})")
 
         if not active_sessions[uid]["active"]:
             if KEYWORD in text:
+                send_debug_to_pc(uid, "Activation keyword detected!")
                 logger.info("Activation keyword detected!")
                 active_sessions[uid]["active"] = True
                 active_sessions[uid]["command"] = text
@@ -130,6 +152,7 @@ async def send_ahda_webhook(
             # Append to the existing command
             active_sessions[uid]["command"] += " " + text
             active_sessions[uid]["last_received_time"] = asyncio.get_event_loop().time()
+            send_debug_to_pc(uid, "Aggregating command: " + active_sessions[uid]["command"].strip())
             logger.info(f"Aggregating command: '{active_sessions[uid]['command'].strip()}'")
 
             # Cancel the previous timer and set a new one
@@ -154,8 +177,10 @@ async def call_chatgpt_to_generate_code(command, uid):
             ("human", command),
         ]
         ai_msg = chat.invoke(messages)
-        return sendToPC(uid, ai_msg)
+        send_debug_to_pc(uid, "ChatGPT-4 response: " + ai_msg.content)
+        return send_to_pc(uid, ai_msg.content)
     except Exception as e:
+        send_debug_to_pc(uid, f"Error calling ChatGPT-4: {e}")
         logger.error(f"Error calling ChatGPT-4: {e}")
         return {"type": "error", "content": str(e)}
 
@@ -171,6 +196,7 @@ def is_setup_completed(uid: str):
     ahda_url = get_ahda_url(uid)
     ahda_os = get_ahda_os(uid)
 
+    send_debug_to_pc(uid, f"Checking AHDA setup: {ahda_url}, {ahda_os}")
     return {'is_setup_completed': ahda_url is not None and ahda_os is not None}
 
 @router.post('/ahda/configure', tags=['ahda'])
