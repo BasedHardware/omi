@@ -1,10 +1,12 @@
 import UIKit
 import Flutter
 import UserNotifications
+import WatchConnectivity
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
+  private var watchSession: WCSession?
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -27,6 +29,9 @@ import UserNotifications
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
 
+    setupWatchConnectivity()
+    setupMethodChannel()
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -41,14 +46,14 @@ import UserNotifications
 
   private func handleSetNotificationOnKillService(call: FlutterMethodCall) {
     NSLog("handleMethodCall: setNotificationOnKillService")
-    
+
     if let args = call.arguments as? Dictionary<String, Any> {
       notificationTitleOnKill = args["title"] as? String
       notificationBodyOnKill = args["description"] as? String
     }
-    
+
   }
-    
+
 
   override func applicationWillTerminate(_ application: UIApplication) {
     // If title and body are nil, then we don't need to show notification.
@@ -69,6 +74,55 @@ import UserNotifications
         NSLog("Failed to show notification on kill service => error: \(error.localizedDescription)")
       } else {
         NSLog("Show notification on kill now")
+      }
+    }
+  }
+
+  private func setupMethodChannel() {
+    let controller = window?.rootViewController as! FlutterViewController
+    methodChannel = FlutterMethodChannel(
+      name: "com.friend.watch",
+      binaryMessenger: controller.binaryMessenger)
+  }
+
+  private func setupWatchConnectivity() {
+    if WCSession.isSupported() {
+      watchSession = WCSession.default
+      watchSession?.delegate = self
+      watchSession?.activate()
+    }
+  }
+}
+
+extension AppDelegate: WCSessionDelegate {
+  func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+    print("Watch session activation completed: \(activationState.rawValue)")
+  }
+
+  func sessionDidBecomeInactive(_ session: WCSession) {
+    print("Watch session became inactive")
+  }
+
+  func sessionDidDeactivate(_ session: WCSession) {
+    print("Watch session deactivated")
+  }
+
+  func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+    if let audioData = message["audioData"] as? Data {
+      DispatchQueue.main.async {
+        self.methodChannel?.invokeMethod(
+          "audioDataReceived",
+          arguments: FlutterStandardTypedData(bytes: audioData)
+        )
+      }
+    } else if let status = message["status"] as? String {
+      switch status {
+      case "recording_started":
+        methodChannel?.invokeMethod("recordingStatus", arguments: true)
+      case "recording_stopped":
+        methodChannel?.invokeMethod("recordingStatus", arguments: false)
+      default:
+        break
       }
     }
   }
