@@ -17,6 +17,7 @@ class WatchRecordingWidget extends StatelessWidget {
             color: Colors.grey.shade900,
             borderRadius: BorderRadius.circular(16.0),
           ),
+          semanticsLabel: isRecording ? 'Watch is currently recording' : 'Watch is connected',
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
