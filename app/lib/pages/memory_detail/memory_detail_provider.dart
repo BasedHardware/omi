@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -148,10 +151,28 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
+  bool hasMemorySummaryRatingSet = false;
+  Timer? _ratingTimer;
+  bool showRatingUI = false;
+
+  void setShowRatingUi(bool value) {
+    showRatingUI = value;
+    notifyListeners();
+  }
+
+  void setMemoryRating(int value) {
+    setMemorySummaryRating(memory.id, value);
+    hasMemorySummaryRatingSet = true;
+    setShowRatingUi(false);
+  }
+
   Future initMemory() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
+    _ratingTimer?.cancel();
+    showRatingUI = false;
+    hasMemorySummaryRatingSet = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
@@ -178,6 +199,19 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
       // });
     }
     appsList = appProvider!.apps;
+    if (!memory.discarded) {
+      getHasMemorySummaryRating(memory.id).then((value) {
+        hasMemorySummaryRatingSet = value;
+        notifyListeners();
+        if (!hasMemorySummaryRatingSet) {
+          _ratingTimer = Timer(const Duration(seconds: 5), () {
+            showRatingUI = true;
+            notifyListeners();
+          });
+        }
+      });
+    }
+
     // updateLoadingState(false);
     notifyListeners();
   }
