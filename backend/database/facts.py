@@ -8,7 +8,7 @@ from ._client import db
 
 
 def get_facts(uid: str, limit: int = 100, offset: int = 0):
-    # TODO: how to query more
+    print('get_facts', uid, limit, offset)
     facts_ref = db.collection('users').document(uid).collection('facts')
     facts_ref = (
         facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -17,9 +17,7 @@ def get_facts(uid: str, limit: int = 100, offset: int = 0):
     )
     facts_ref = facts_ref.limit(limit).offset(offset)
     facts = [doc.to_dict() for doc in facts_ref.stream()]
-    print('get_facts', len(facts))
     result = [fact for fact in facts if fact['user_review'] is not False]
-    print('get_facts', len(result))
     return result
 
 

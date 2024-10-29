@@ -25,7 +25,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   List<ServerMemory> processingMemories = [];
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _wal => ServiceManager.instance().wal;
 
   List<Wal> _missingWals = [];
   List<Wal> get missingWals => _missingWals;
@@ -40,12 +40,12 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   List<SyncedMemoryPointer> syncedMemoriesPointers = [];
 
   MemoryProvider() {
-    _walService.subscribe(this, this);
+    _wal.subscribe(this, this);
     _preload();
   }
 
   _preload() async {
-    _missingWals = await _walService.getMissingWals();
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
@@ -329,19 +329,19 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   @override
   void dispose() {
     _processingMemoryWatchTimer?.cancel();
-    _walService.unsubscribe(this);
+    _wal.unsubscribe(this);
     super.dispose();
   }
 
   @override
-  void onNewMissingWal(Wal wal) async {
-    _missingWals = await _walService.getMissingWals();
+  void onMissingWalUpdated() async {
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
   @override
   void onWalSynced(Wal wal, {ServerMemory? memory}) async {
-    _missingWals = await _walService.getMissingWals();
+    _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
@@ -354,9 +354,11 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   }
 
   Future syncWals() async {
+    debugPrint("provider > syncWals");
+
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
-    var res = await _walService.syncAll(progress: this);
+    var res = await _wal.getSyncs().syncAll(progress: this);
     if (res != null) {
       if (res.newMemoryIds.isNotEmpty || res.updatedMemoryIds.isNotEmpty) {
         await getSyncedMemoriesData(res);

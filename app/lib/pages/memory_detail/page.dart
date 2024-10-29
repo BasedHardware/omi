@@ -221,18 +221,21 @@ class SummaryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, bool>(
-      selector: (context, provider) => provider.memory.discarded,
-      builder: (context, isDiscaarded, child) {
-        return ListView(
-          shrinkWrap: true,
-          children: [
-            const GetSummaryWidgets(),
-            isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
-            const GetGeolocationWidgets(),
-          ],
-        );
-      },
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Selector<MemoryDetailProvider, bool>(
+        selector: (context, provider) => provider.memory.discarded,
+        builder: (context, isDiscaarded, child) {
+          return ListView(
+            shrinkWrap: true,
+            children: [
+              const GetSummaryWidgets(),
+              isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
+              const GetGeolocationWidgets(),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -263,7 +266,7 @@ class TranscriptWidgets extends StatelessWidget {
             SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
             provider.memory.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
-                    text: (provider.memory.externalIntegration?.text ?? '').decodeSting,
+                    text: (provider.memory.externalIntegration?.text ?? '').decodeString,
                     maxLines: 10000,
                     linkColor: Colors.grey.shade300,
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),

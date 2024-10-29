@@ -37,31 +37,31 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [App setup](https://docs.omi.me/get_started/Setup/)
-- [Buying Guide](https://docs.omi.me/assembly/Buying_Guide/)
-- [Build the device](https://docs.omi.me/assembly/Build_the_device/)
-- [Install firmware](https://docs.omi.me/assembly/Install_firmware/)
-- [3rd Party Integrations](https://docs.omi.me/developer/plugins/Introduction/).
+- [App setup](https://docs.omi.me/docs/get_started/Setup/)
+- [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
+- [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
+- [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
+- [3rd Party Integrations](https://docs.omi.me/docs/developer/apps/Introduction).
 
 ## Contributions
 
-* Check out our [contributions guide](https://docs.omi.me/developer/Contribution/).
+* Check out our [contributions guide](https://docs.omi.me/docs/developer/Contribution/).
 * Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
 * Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
-* Join the [Discord](https://discord.gg/based-hardware-1192313062041067520).
-* Build your own [Plugins/Integrations](https://docs.omi.me/developer/plugins/Introduction/).
+* Join the [Discord](https://discord.gg/omi).
+* Build your own [Plugins/Integrations](https://docs.omi.me/docs/developer/apps/Introduction).
 
 [//]: # (## More links:)
 
 [//]: # ()
 
-[//]: # (- [Contributing]&#40;https://docs.omi.me/developer/Contribution/&#41;)
+[//]: # (- [Contributing]&#40;https://docs.omi.me/docs/developer/Contribution/&#41;)
 
-[//]: # (- [Support]&#40;https://docs.omi.me/info/Support/&#41;)
+[//]: # (- [Support]&#40;https://docs.omi.me/docs/info/Support/;)
 
-[//]: # (- [BLE Protocol]&#40;https://docs.omi.me/developer/Protocol/&#41;)
+[//]: # (- [BLE Protocol]&#40;https://docs.omi.me/docs/developer/Protocol/&#41;)
 
-[//]: # (- [Plugins]&#40;https://docs.omi.me/developer/Plugins/&#41;)
+[//]: # (- [Plugins]&#40;https://docs.omi.me/docs/developer/Plugins/&#41;)
 
 ## Made by the Community, with -❤️-:
 
