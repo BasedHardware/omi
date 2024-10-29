@@ -46,11 +46,9 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
           MarkdownBody(
             shrinkWrap: true,
             styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-              a: const TextStyle(fontSize: 18, height: 1.2),
-              p: const TextStyle(fontSize: 16, height: 1.2),
-              blockquote: const TextStyle(
-                fontSize: 16,
-                height: 1.2,
+              a: widget.style,
+              p: widget.style,
+              blockquote: widget.style.copyWith(
                 backgroundColor: Colors.transparent,
                 color: Colors.black,
               ),
@@ -58,9 +56,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 color: Colors.grey.shade800,
                 borderRadius: BorderRadius.circular(4),
               ),
-              code: const TextStyle(
-                fontSize: 16,
-                height: 1.2,
+              code: widget.style.copyWith(
                 backgroundColor: Colors.transparent,
                 decoration: TextDecoration.none,
                 color: Colors.white,
