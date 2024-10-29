@@ -204,7 +204,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
         hasMemorySummaryRatingSet = value;
         notifyListeners();
         if (!hasMemorySummaryRatingSet) {
-          _ratingTimer = Timer(const Duration(seconds: 5), () {
+          _ratingTimer = Timer(const Duration(seconds: 15), () {
+            setMemorySummaryRating(memory.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });
