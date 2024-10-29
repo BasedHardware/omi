@@ -796,4 +796,48 @@ class CaptureProvider extends ChangeNotifier
     _recordingSource = source;
     notifyListeners();
   }
+
+  Future<void> handleRecordingRequest(RecordingSource newSource) async {
+    // If necklace is recording, don't allow other sources
+    if (recordingState == RecordingState.record &&
+        recordingSource == RecordingSource.necklace) {
+      return;
+    }
+
+    // If watch is recording and necklace wants to start
+    if (recordingState == RecordingState.record &&
+        recordingSource == RecordingSource.watch &&
+        newSource == RecordingSource.necklace) {
+      // Stop watch recording
+      await stopStreamRecording();
+    }
+
+    // Start new recording
+    switch (newSource) {
+      case RecordingSource.necklace:
+        await streamDeviceRecording();
+        break;
+      case RecordingSource.watch:
+        if (recordingState != RecordingState.record) {
+          updateRecordingSource(RecordingSource.watch);
+          await changeAudioRecordProfile(BleAudioCodec.pcm16, 16000);
+        }
+        break;
+      case RecordingSource.phone:
+        await streamRecording();
+        break;
+    }
+  }
+
+  // Update the UI state based on recording source
+  String getRecordingSourceText() {
+    switch (recordingSource) {
+      case RecordingSource.necklace:
+        return "Recording from Necklace";
+      case RecordingSource.watch:
+        return "Recording from Watch";
+      case RecordingSource.phone:
+        return "Recording from Phone";
+    }
+  }
 }
