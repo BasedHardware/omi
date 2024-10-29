@@ -200,7 +200,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 @router.post('/v1/users/analytics/memory_summary', tags=['v1'])
 def set_memory_summary_rating(
         memory_id: str,
-        value: int,  # 0, 1
+        value: int,  # 0, 1, -1 (shown)
         uid: str = Depends(auth.get_current_user_uid),
 ):
     set_memory_summary_rating_score(uid, memory_id, value)
@@ -212,4 +212,7 @@ def get_memory_summary_rating(
         memory_id: str,
         _: str = Depends(auth.get_current_user_uid),
 ):
-    return {'has_rating': get_memory_summary_rating_score(memory_id) is not None}
+    rating = get_memory_summary_rating_score(memory_id)
+    if not rating:
+        return {'has_rating': False}
+    return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
