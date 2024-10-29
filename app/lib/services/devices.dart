@@ -202,6 +202,11 @@ class DeviceService implements IDeviceService {
   bool mutex = false;
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+    if (deviceId == 'apple_watch') {
+      // Let WatchConnectivity handle the connection
+      return null;
+    }
+
     while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -209,19 +214,6 @@ class DeviceService implements IDeviceService {
 
     debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} ${force}");
     try {
-      // Handle watch connection
-      if (deviceId == 'apple_watch') {
-        await _watchManager.initialize();
-        return DeviceConnection(
-          device: BtDevice(
-            id: 'apple_watch',
-            name: 'Apple Watch',
-            type: DeviceType.watch,
-          ),
-          status: DeviceConnectionState.connected,
-        );
-      }
-
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
