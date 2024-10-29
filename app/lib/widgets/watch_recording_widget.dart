@@ -10,8 +10,7 @@ class WatchRecordingWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<CaptureProvider>(
       builder: (context, provider, _) {
-        final isRecording = provider.recordingState == RecordingState.record &&
-                           provider.recordingSource == RecordingSource.watch;
+        final isRecording = provider.isWatchRecording;
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
