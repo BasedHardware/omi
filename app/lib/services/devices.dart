@@ -75,6 +75,22 @@ class DeviceService implements IDeviceService {
       return;
     }
 
+    // Check if necklace is already connected
+    final hasConnectedNecklace = _devices.any((d) =>
+      d.type == DeviceType.necklace &&
+      _connection?.device.id == d.id &&
+      _connection?.status == DeviceConnectionState.connected
+    );
+
+    // Only add watch if no necklace is connected
+    if (!hasConnectedNecklace && await _watchManager.isWatchAvailable()) {
+      final watchDevice = BtDevice.watch();
+      if (!_devices.any((d) => d.id == watchDevice.id)) {
+        _devices.add(watchDevice);
+        onDevices(_devices);
+      }
+    }
+
     // Listen to scan results, always re-emits previous results
     var discoverSubscription = FlutterBluePlus.scanResults.listen(
       (results) async {
@@ -94,14 +110,6 @@ class DeviceService implements IDeviceService {
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
-
-    if (await _watchManager.isWatchAvailable()) {
-      final watchDevice = BtDevice.watch();
-      if (!_devices.any((d) => d.id == watchDevice.id)) {
-        _devices.add(watchDevice);
-        onDevices(_devices);
-      }
-    }
   }
 
   Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
