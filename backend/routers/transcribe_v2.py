@@ -236,29 +236,54 @@ async def _websocket_util(
                 _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
     async def create_pusher_task_handler():
-        # transcript
-        transcript_ws = await connect_to_transcript_pusher(uid)
+        nonlocal websocket_active
 
-        # audio bytes
+        # Transcript
+        transcript_ws = await connect_to_transcript_pusher(uid)
+        segment_buffers = []
+
+        def transcript_send(segments):
+            nonlocal segment_buffers
+            segment_buffers.extend(segments)
+
+        async def transcript_consume():
+            nonlocal websocket_active
+            nonlocal segment_buffers
+            while websocket_active:
+                await asyncio.sleep(1)
+                if len(segment_buffers) > 0:
+                    try:
+                        await transcript_ws.send(json.dumps(segment_buffers))
+                        segment_buffers = []
+                    except websockets.exceptions.ConnectionClosed as e:
+                        print(f"Pusher transcripts Connection closed: {e}")
+                    except Exception as e:
+                        print(f"Pusher transcripts failed: {e}")
+
+        # Audio bytes
         audio_bytes_ws = None
+        audio_buffers = bytearray()
         audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
         if audio_bytes_webhook_delay_seconds:
             audio_bytes_ws = await connect_to_audio_bytes_pusher(uid, sample_rate)
 
-        async def transcript_send(segments):
-            # print(f"transcript_send ${len(segments)}")
-            try:
-                await transcript_ws.send(json.dumps(segments))
-            except websockets.exceptions.ConnectionClosed as e:
-                print(f"Pusher Transcript Connection closed: {e}")
+        def audio_bytes_send(audio_bytes):
+            nonlocal audio_buffers
+            audio_buffers.extend(audio_bytes)
 
-        async def audio_bytes_send(audio_buffer):
-            # print(f"audio_bytes_send ${len(audio_buffer)}")
-            if audio_bytes_ws:
-                try:
-                    await audio_bytes_ws.send(audio_buffer)
-                except websockets.exceptions.ConnectionClosed as e:
-                    print(f"Pusher Audio Bytes Connection closed: {e}")
+        async def audio_bytes_consume():
+            nonlocal websocket_active
+            nonlocal audio_buffers
+            while websocket_active:
+                await asyncio.sleep(1)
+                if len(audio_buffers) > 0:
+                    try:
+                        await audio_bytes_ws.send(audio_buffers.copy())
+                        audio_buffers = bytearray()
+                    except websockets.exceptions.ConnectionClosed as e:
+                        print(f"Pusher audio_bytes Connection closed: {e}")
+                    except Exception as e:
+                        print(f"Pusher audio_bytes failed: {e}")
 
         async def close(code: int = 1000):
             if transcript_ws:
@@ -267,9 +292,10 @@ async def _websocket_util(
             if audio_bytes_ws:
                 await audio_bytes_ws.close(code)
 
-        return (close, transcript_send, audio_bytes_send if audio_bytes_ws else None)
+        return (close, transcript_send, transcript_consume,
+                audio_bytes_send if audio_bytes_ws else None, audio_bytes_consume if audio_bytes_ws else None)
 
-    pusher_close, transcript_send, audio_bytes_send = await create_pusher_task_handler()
+    pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = await create_pusher_task_handler()
 
     def stream_transcript(segments):
         nonlocal websocket
@@ -302,7 +328,7 @@ async def _websocket_util(
 
         # Send to external trigger
         if transcript_send:
-            asyncio.run_coroutine_threadsafe(transcript_send(segments), loop)
+            transcript_send(segments)
 
         memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
         memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
@@ -401,7 +427,7 @@ async def _websocket_util(
 
                 # Send to external trigger
                 if audio_bytes_send:
-                    asyncio.run_coroutine_threadsafe(audio_bytes_send(data), loop)
+                    audio_bytes_send(data)
 
         except WebSocketDisconnect:
             print("WebSocket disconnected")
@@ -458,7 +484,14 @@ async def _websocket_util(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket)
         )
         heartbeat_task = asyncio.create_task(send_heartbeat())
-        await asyncio.gather(receive_task, heartbeat_task)
+
+        # consumer
+        consume_tasks = [asyncio.create_task(transcript_consume())]
+        if audio_bytes_consume:
+            consume_tasks.append(asyncio.create_task(audio_bytes_consume()))
+
+        tasks = [receive_task, heartbeat_task] + consume_tasks
+        await asyncio.gather(*tasks)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
