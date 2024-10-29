@@ -297,44 +297,64 @@ async def _websocket_util(
 
     pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = await create_pusher_task_handler()
 
+    realtime_segment_buffers = []
+
     def stream_transcript(segments):
+        nonlocal realtime_segment_buffers
+        realtime_segment_buffers.extend(segments)
+
+    async def stream_transcript_process():
+        nonlocal websocket_active
+        nonlocal realtime_segment_buffers
         nonlocal websocket
         nonlocal seconds_to_trim
 
-        if not segments or len(segments) == 0:
-            return
+        while websocket_active or len(realtime_segment_buffers) > 0:
+            try:
+                time.sleep(0.3)  # 300ms
 
-        # Align the start, end segment
-        if seconds_to_trim is None:
-            seconds_to_trim = segments[0]["start"]
+                segments = realtime_segment_buffers.copy()
+                realtime_segment_buffers = []
 
-        finished_at = datetime.now(timezone.utc)
-        asyncio.run_coroutine_threadsafe(create_memory_on_segment_received_task(finished_at), loop)
+                if not segments or len(segments) == 0:
+                    return
 
-        # Segments aligning duration seconds.
-        if seconds_to_add:
-            for i, segment in enumerate(segments):
-                segment["start"] += seconds_to_add
-                segment["end"] += seconds_to_add
-                segments[i] = segment
-        elif seconds_to_trim:
-            for i, segment in enumerate(segments):
-                segment["start"] -= seconds_to_trim
-                segment["end"] -= seconds_to_trim
-                segments[i] = segment
+                # Align the start, end segment
+                if seconds_to_trim is None:
+                    seconds_to_trim = segments[0]["start"]
 
-        # Send to client
-        asyncio.run_coroutine_threadsafe(websocket.send_json(segments), loop)
+                finished_at = datetime.now(timezone.utc)
+                await create_memory_on_segment_received_task(finished_at)
 
-        # Send to external trigger
-        if transcript_send:
-            transcript_send(segments)
+                # Segments aligning duration seconds.
+                if seconds_to_add:
+                    for i, segment in enumerate(segments):
+                        segment["start"] += seconds_to_add
+                        segment["end"] += seconds_to_add
+                        segments[i] = segment
+                elif seconds_to_trim:
+                    for i, segment in enumerate(segments):
+                        segment["start"] -= seconds_to_trim
+                        segment["end"] -= seconds_to_trim
+                        segments[i] = segment
 
-        memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
-        memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
-        memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+                # Combine
+                segments = [segment.to_dict() for segment in TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])]
 
-        # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
+                # Send to client
+                await websocket.send_json(segments)
+
+                # Send to external trigger
+                if transcript_send:
+                    transcript_send(segments)
+
+                memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
+                memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
+                memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+
+                # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
+            except Exception as e:
+                print(f'Could not process transcript: error {e}')
 
     soniox_socket = None
     speechmatics_socket = None
@@ -483,6 +503,7 @@ async def _websocket_util(
         receive_task = asyncio.create_task(
             receive_audio(deepgram_socket, deepgram_socket2, soniox_socket, speechmatics_socket)
         )
+        stream_transcript_task = asyncio.create_task(stream_transcript_process)
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
         # consumer
@@ -490,7 +511,7 @@ async def _websocket_util(
         if audio_bytes_consume:
             consume_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
-        tasks = [receive_task, heartbeat_task] + consume_tasks
+        tasks = [receive_task, stream_transcript_task, heartbeat_task] + consume_tasks
         await asyncio.gather(*tasks)
 
     except Exception as e:
