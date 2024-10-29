@@ -10,11 +10,11 @@ class WatchRecordingWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, WatchManager>(
       builder: (context, provider, watchManager, _) {
-        return StreamBuilder<WatchConnectionState>(
-          stream: watchManager.connectionState,
+        return StreamBuilder<String>(
+          stream: watchManager.errors,
           builder: (context, snapshot) {
-            final connectionState = snapshot.data ?? WatchConnectionState.disconnected;
-            final isRecording = provider.isWatchRecording;
+            final hasError = snapshot.hasData;
+            final errorMessage = snapshot.data;
 
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -22,26 +22,33 @@ class WatchRecordingWidget extends StatelessWidget {
                 color: Colors.grey.shade900,
                 borderRadius: BorderRadius.circular(16.0),
               ),
-              semanticsLabel: _getSemanticLabel(connectionState, isRecording),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Row(
                   children: [
-                    _buildStatusIcon(connectionState, isRecording),
+                    Icon(
+                      hasError ? Icons.error_outline : Icons.watch,
+                      color: hasError ? Colors.red :
+                             (provider.isWatchRecording ? Colors.red : Colors.grey),
+                      size: 22,
+                    ),
                     const SizedBox(width: 12),
-                    _buildStatusText(context, connectionState, isRecording),
-                    if (connectionState == WatchConnectionState.error) ...[
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: Colors.white),
-                        onPressed: () => watchManager.initialize(),
-                        tooltip: 'Retry connection',
+                    Expanded(
+                      child: Text(
+                        hasError ? errorMessage! :
+                        (provider.isWatchRecording ? 'Recording from Watch' : 'Watch Connected'),
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ],
-                    if (isRecording && connectionState == WatchConnectionState.connected) ...[
-                      const Spacer(),
-                      _buildRecordingIndicator(context),
-                    ],
+                    ),
+                    if (hasError)
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () => watchManager.initialize(),
+                        color: Colors.white,
+                      ),
                   ],
                 ),
               ),
@@ -49,110 +56,6 @@ class WatchRecordingWidget extends StatelessWidget {
           },
         );
       },
-    );
-  }
-
-  String _getSemanticLabel(WatchConnectionState state, bool isRecording) {
-    switch (state) {
-      case WatchConnectionState.connected:
-        return isRecording ? 'Watch is currently recording' : 'Watch is connected';
-      case WatchConnectionState.connecting:
-        return 'Watch is connecting';
-      case WatchConnectionState.error:
-        return 'Watch connection error';
-      case WatchConnectionState.disconnected:
-        return 'Watch is disconnected';
-    }
-  }
-
-  Widget _buildStatusIcon(WatchConnectionState state, bool isRecording) {
-    switch (state) {
-      case WatchConnectionState.connected:
-        return Icon(
-          Icons.watch,
-          color: isRecording ? Colors.red : Colors.grey,
-          size: 22,
-        );
-      case WatchConnectionState.connecting:
-        return const SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-          ),
-        );
-      case WatchConnectionState.error:
-        return const Icon(
-          Icons.error_outline,
-          color: Colors.red,
-          size: 22,
-        );
-      case WatchConnectionState.disconnected:
-        return const Icon(
-          Icons.watch_off,
-          color: Colors.grey,
-          size: 22,
-        );
-    }
-  }
-
-  Widget _buildStatusText(BuildContext context, WatchConnectionState state, bool isRecording) {
-    String text;
-    Color backgroundColor = Colors.grey.shade800;
-
-    switch (state) {
-      case WatchConnectionState.connected:
-        text = isRecording ? 'Recording from Watch' : 'Watch Connected';
-        break;
-      case WatchConnectionState.connecting:
-        text = 'Connecting to Watch...';
-        break;
-      case WatchConnectionState.error:
-        text = 'Watch Connection Error';
-        backgroundColor = Colors.red.withOpacity(0.2);
-        break;
-      case WatchConnectionState.disconnected:
-        text = 'Watch Disconnected';
-        break;
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
-
-  Widget _buildRecordingIndicator(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(
-            color: Colors.red,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          'Recording',
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                color: Colors.red,
-              ),
-        ),
-      ],
     );
   }
 }
