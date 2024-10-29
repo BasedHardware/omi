@@ -15,6 +15,7 @@ import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/services/watch_manager.dart';
 
 class MemoryCaptureWidget extends StatefulWidget {
   const MemoryCaptureWidget({super.key});
@@ -128,6 +129,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   Widget? _getMemoryHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
+    var watchManager = context.read<WatchManager>();
 
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
@@ -139,18 +141,47 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
+    bool isWatchRecording = captureProvider.recordingState == RecordingState.record &&
+        captureProvider.recordingSource == RecordingSource.watch;
+
     // print(
     //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
 
     // Left
     Widget? left;
-    if (isUsingPhoneMic || !isHavingDesireDevice) {
-      left = Center(
-        child: getPhoneMicRecordingButton(
-          context,
-          () => _toggleRecording(context, captureProvider),
-          captureProvider.recordingState,
-        ),
+    if (isUsingPhoneMic || isWatchRecording || !isHavingDesireDevice) {
+      left = Row(
+        children: [
+          if (!isWatchRecording)
+            Center(
+              child: getPhoneMicRecordingButton(
+                context,
+                () => _toggleRecording(context, captureProvider),
+                captureProvider.recordingState,
+              ),
+            ),
+          if (isWatchRecording)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.watch, size: 18, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Recording from Watch',
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       );
     } else if (!deviceServiceStateOk && !transcriptServiceStateOk && !isHavingTranscript && !isHavingDesireDevice) {
       return null; // not using phone mic, not ready
