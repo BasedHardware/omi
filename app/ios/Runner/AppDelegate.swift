@@ -79,7 +79,10 @@ import WatchConnectivity
   }
 
   private func setupMethodChannel() {
-    let controller = window?.rootViewController as! FlutterViewController
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      return
+    }
+
     methodChannel = FlutterMethodChannel(
       name: "com.friend.watch",
       binaryMessenger: controller.binaryMessenger)
