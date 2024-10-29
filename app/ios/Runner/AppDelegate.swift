@@ -121,6 +121,8 @@ extension AppDelegate: WCSessionDelegate {
         methodChannel?.invokeMethod("recordingStatus", arguments: true)
       case "recording_stopped":
         methodChannel?.invokeMethod("recordingStatus", arguments: false)
+      case "wal_sync_complete":
+        methodChannel?.invokeMethod("walSyncStatus", arguments: true)
       default:
         break
       }
