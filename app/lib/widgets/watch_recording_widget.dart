@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/utils/enums.dart';
 import 'package:provider/provider.dart';
 
 class WatchRecordingWidget extends StatelessWidget {
-  const WatchRecordingWidget({Key? key}) : super(key: key);
+  const WatchRecordingWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
