@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:friend_private/services/logger_service.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/models/capture_provider.dart';
 
 class WatchManager {
   static const MethodChannel _channel = MethodChannel('com.friend.watch');
@@ -9,6 +10,8 @@ class WatchManager {
 
   bool _isRecording = false;
   bool get isRecording => _isRecording;
+
+  CaptureProvider? _captureProvider;
 
   factory WatchManager() => _instance;
   WatchManager._internal() {
@@ -72,6 +75,15 @@ class WatchManager {
   }
 
   void _notifyRecordingStateChanged() {
-    // Notify your state management system
+    if (_captureProvider != null) {
+      _captureProvider!.updateRecordingState(
+        _isRecording ? RecordingState.record : RecordingState.stop
+      );
+      _captureProvider!.updateRecordingSource(RecordingSource.watch);
+    }
+  }
+
+  void setCaptureProvider(CaptureProvider provider) {
+    _captureProvider = provider;
   }
 }
