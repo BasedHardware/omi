@@ -836,4 +836,19 @@ class CaptureProvider extends ChangeNotifier
         return "Recording from Phone";
     }
   }
+
+  bool get isWatchRecording =>
+    recordingState == RecordingState.record &&
+    recordingSource == RecordingSource.watch;
+
+  // Add watch-specific method
+  Future<void> processRawAudioData(Uint8List audioData) async {
+    if (_socket?.state == SocketServiceState.connected) {
+      _socket?.send(audioData);
+
+      if (!hasTranscripts) {
+        setHasTranscripts(true);
+      }
+    }
+  }
 }
