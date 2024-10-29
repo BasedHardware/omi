@@ -129,8 +129,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   Widget? _getMemoryHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
-    var watchManager = context.read<WatchManager>();
-
     bool internetConnectionStateOk = connectivityProvider.isConnected;
     bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
