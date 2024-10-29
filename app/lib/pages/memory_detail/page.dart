@@ -9,6 +9,7 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
 import 'package:friend_private/widgets/transcript.dart';
 import 'package:provider/provider.dart';
+import 'package:tuple/tuple.dart';
 
 import 'memory_detail_provider.dart';
 
@@ -223,15 +225,69 @@ class SummaryTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: Selector<MemoryDetailProvider, bool>(
-        selector: (context, provider) => provider.memory.discarded,
-        builder: (context, isDiscaarded, child) {
-          return ListView(
-            shrinkWrap: true,
+      child: Selector<MemoryDetailProvider, Tuple3<bool, bool, Function(int)>>(
+        selector: (context, provider) =>
+            Tuple3(provider.memory.discarded, provider.showRatingUI, provider.setMemoryRating),
+        builder: (context, data, child) {
+          return Stack(
             children: [
-              const GetSummaryWidgets(),
-              isDiscaarded ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
-              const GetGeolocationWidgets(),
+              ListView(
+                shrinkWrap: true,
+                children: [
+                  const GetSummaryWidgets(),
+                  data.item1 ? const ReprocessDiscardedWidget() : const GetAppsWidgets(),
+                  const GetGeolocationWidgets(),
+                  const SizedBox(height: 120)
+                ],
+              ),
+              data.item2
+                  ? Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          shape: BoxShape.rectangle,
+                          border: Border.all(color: Colors.grey.shade500),
+                          borderRadius: BorderRadius.circular(32),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                        width: 260,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Was the summary good?',
+                              style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  onPressed: () {
+                                    data.item3(0);
+                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                  },
+                                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 30, color: Colors.red),
+                                ),
+                                const SizedBox(width: 32),
+                                IconButton(
+                                  onPressed: () {
+                                    data.item3(1);
+                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
+                                  },
+                                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 30, color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink()
             ],
           );
         },
