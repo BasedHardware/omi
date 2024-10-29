@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -28,6 +29,12 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
+enum RecordingSource {
+  phone,
+  watch,
+  necklace,
+}
+
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctipSegmentSocketServiceListener {
@@ -53,6 +60,9 @@ class CaptureProvider extends ChangeNotifier
   InternetStatus? _internetStatus;
 
   get internetStatus => _internetStatus;
+
+  RecordingSource _recordingSource = RecordingSource.necklace;
+  RecordingSource get recordingSource => _recordingSource;
 
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
@@ -769,6 +779,21 @@ class CaptureProvider extends ChangeNotifier
 
   void _setsdCardReady(bool value) {
     sdCardReady = value;
+    notifyListeners();
+  }
+
+  void processRawAudioData(Uint8List audioData) {
+    if (_socket?.state == SocketServiceState.connected) {
+      _socket?.send(audioData);
+
+      if (!hasTranscripts) {
+        setHasTranscripts(true);
+      }
+    }
+  }
+
+  void updateRecordingSource(RecordingSource source) {
+    _recordingSource = source;
     notifyListeners();
   }
 }
