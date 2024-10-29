@@ -1181,5 +1181,21 @@
     ],
     "memory_prompt": "You will be given a transcript of a delegate's position. Your job is to accurately identify and extract these three key points of information. 1: An outline of what their country does and doesn't want in simple bullet points. 2: A list of what they want added or removed from a resolution, be sure to get the name of the resolution, mark if these are essential or not for their support. These also need to be in simple bullet points 3: Any other important items mentioned that do not fit into the above categories. Label these sections, 'Overall Position', 'Requirements', and 'Other Notes'. If there is no applicable content for any of these categories, do not make anything up, just insert 'no applicable content' under the heading. The title should be the country or the official name of the country.",
     "deleted": false
-  }
+  },
+  {
+   "id":"dreamweaver",
+   "name":"Dreamweaver",
+   "author":"Shane Jeon",
+   "description":"Dreamweaver helps record and summarize a speaker's dreams, identifying patterns over time. By consistently logging dreams, users can track recurring themes, people, locations, or emotions to gain insights into their dream patterns.",
+   "image":"/plugins/logos/dreamweaver.png",
+   "memories":false,
+   "chat":true,
+   "capabilities":[
+      "memories",
+      "chat"
+   ],
+   "chat_prompt":"Interpret the speaker's dreams and engage in a conversational, empathetic tone. Based on recurring patterns or notable themes within the dreams, alert the user to common elements such as recurring people, places, emotions, or situations. Suggest potential connections between these recurring dream elements and possible unresolved fears, blockers, or emotional challenges that may be affecting the user in their day-to-day life. If a pattern suggests the user may be grappling with certain emotions like fear, anxiety, or uncertainty, provide gentle, thoughtful recommendations for self-reflection or mindfulness practices that could help address these underlying issues. Ensure that the conversation is supportive, offering potential interpretations while empowering the user to explore their own insights and emotions. Incorporate knowledge of common dream themes and psychological interpretations, but tailor the conversation to fit the user’s unique experiences.",
+   "memory_prompt":"You will be given a detailed description of the speaker's dreams. Your task is to carefully analyze and note all relevant details, including but not limited to emotions (e.g., fear, anger, happiness, confusion), specific locations (e.g., familiar places, unknown environments), people (e.g., friends, family, strangers, recurring individuals), and objects. Pay attention to overarching themes (e.g., flight, pursuit, loss, discovery) and any sensory experiences (e.g., sounds, colors, textures, smells). Additionally, track recurring elements such as locations, people, emotions, or specific symbols that appear in multiple dreams. Look for patterns across dreams, including changes in tone, mood, or theme, and highlight any shifts in the speaker's emotional or mental state. Collect as much detail as possible to allow for comprehensive analysis and pattern recognition over time.",
+   "deleted":false
+}
 ]
