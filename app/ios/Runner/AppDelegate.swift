@@ -121,11 +121,17 @@ extension AppDelegate: WCSessionDelegate {
     } else if let status = message["status"] as? String {
       switch status {
       case "recording_started":
-        methodChannel?.invokeMethod("recordingStatus", arguments: true)
+        DispatchQueue.main.async {
+          self.methodChannel?.invokeMethod("recordingStatus", arguments: true)
+        }
       case "recording_stopped":
-        methodChannel?.invokeMethod("recordingStatus", arguments: false)
+        DispatchQueue.main.async {
+          self.methodChannel?.invokeMethod("recordingStatus", arguments: false)
+        }
       case "wal_sync_complete":
-        methodChannel?.invokeMethod("walSyncStatus", arguments: true)
+        DispatchQueue.main.async {
+          self.methodChannel?.invokeMethod("walSyncStatus", arguments: true)
+        }
       default:
         break
       }
