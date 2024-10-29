@@ -73,3 +73,32 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
     );
   }
 }
+
+class DeviceWidget extends StatelessWidget {
+  final BtDevice device;
+
+  @override
+  Widget build(BuildContext context) {
+    // Add watch-specific UI
+    if (device.type == DeviceType.watch) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              Icons.watch,
+              color: device.isConnected ? Colors.blue : Colors.grey,
+            ),
+            const SizedBox(width: 8),
+            Text(device.name),
+            if (device.isConnected)
+              const Icon(Icons.check_circle, color: Colors.green),
+          ],
+        ),
+      );
+    }
+
+    // Return existing device widget UI
+    return YourExistingDeviceWidget(device);
+  }
+}
