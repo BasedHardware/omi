@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
@@ -75,3 +77,23 @@ def delete_user_data(uid: str):
     # delete user
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
+
+
+def set_memory_summary_rating_score(uid: str, memory_id: str, rating: int):
+    # doc_id = document_id_from_seed('memory_summary')
+    db.collection('analytics').document(memory_id).set({
+        'id': memory_id,
+        'memory_id': memory_id,
+        'uid': uid,
+        'rating': rating,
+        'created_at': datetime.now(timezone.utc),
+        'type': 'memory_summary',
+    })
+
+
+def get_memory_summary_rating_score(memory_id: str):
+    doc_ref = db.collection('analytics').document(memory_id)
+    doc = doc_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
