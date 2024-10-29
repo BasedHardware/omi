@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/services/logger_service.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/models/capture_provider.dart';
+import 'package:friend_private/services/wal_service.dart';
 
 class WatchManager {
   static const MethodChannel _channel = MethodChannel('com.friend.watch');
@@ -13,8 +14,10 @@ class WatchManager {
 
   CaptureProvider? _captureProvider;
 
+  final IWalService _walService;
+
   factory WatchManager() => _instance;
-  WatchManager._internal() {
+  WatchManager._internal() : _walService = ServiceManager.instance().wal {
     _setupMethodCallHandler();
   }
 
@@ -39,8 +42,14 @@ class WatchManager {
 
   Future<void> _handleAudioData(Uint8List audioData) async {
     try {
-      // Process audio data using your existing pipeline
       if (_captureProvider?.transcriptServiceReady ?? false) {
+        // Process audio through WAL if supported
+        if (_captureProvider!.isWalSupported) {
+          _walService.getSyncs().phone.onByteStream(audioData);
+          _walService.getSyncs().phone.onBytesSync(audioData);
+        }
+
+        // Process through capture provider
         await _captureProvider?.processRawAudioData(audioData);
       }
     } catch (e) {
