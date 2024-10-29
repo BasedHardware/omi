@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
+import 'package:friend_private/services/watch_manager.dart';
 
 abstract class IDeviceService {
   void start();
@@ -53,6 +54,8 @@ class DeviceService implements IDeviceService {
 
   DateTime? _firstConnectedAt;
 
+  final WatchManager _watchManager = WatchManager();
+
   @override
   Future<void> discover({
     String? desirableDeviceId,
@@ -91,6 +94,17 @@ class DeviceService implements IDeviceService {
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
     _status = DeviceServiceStatus.ready;
+
+    if (await _watchManager.isWatchAvailable()) {
+      final watchDevice = BtDevice(
+        id: 'apple_watch',
+        name: 'Apple Watch',
+        type: DeviceType.watch,
+      );
+      if (!_devices.any((d) => d.id == watchDevice.id)) {
+        _devices.add(watchDevice);
+      }
+    }
   }
 
   Future<void> _onBleDiscovered(List<ScanResult> results, String? desirableDeviceId) async {
@@ -195,6 +209,19 @@ class DeviceService implements IDeviceService {
 
     debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} ${force}");
     try {
+      // Handle watch connection
+      if (deviceId == 'apple_watch') {
+        await _watchManager.initialize();
+        return DeviceConnection(
+          device: BtDevice(
+            id: 'apple_watch',
+            name: 'Apple Watch',
+            type: DeviceType.watch,
+          ),
+          status: DeviceConnectionState.connected,
+        );
+      }
+
       // Not force
       if (!force && _connection != null) {
         if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
