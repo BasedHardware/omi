@@ -1,38 +1,36 @@
-import 'package:flutter/services.dart';
 import 'dart:async';
-import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
 
 enum WatchConnectionState {
   disconnected,
   connecting,
   connected,
-  error
+  error,
 }
 
 class WatchManager {
-  static const MethodChannel _channel = MethodChannel('com.friend.watch');
-  static final WatchManager _instance = WatchManager._internal();
-  final _logger = LoggerService();
 
   factory WatchManager() => _instance;
   WatchManager._internal();
+  static const MethodChannel _channel = MethodChannel('com.friend.watch');
+  static final WatchManager _instance = WatchManager._internal();
+  final LoggerService _logger = LoggerService();
 
   bool _isInitialized = false;
   CaptureProvider? _captureProvider;
   IWalService get _wal => ServiceManager.instance().wal;
 
-  // Connection state management
-  final _connectionStateController = StreamController<WatchConnectionState>.broadcast();
+  final StreamController<WatchConnectionState> _connectionStateController =
+      StreamController<WatchConnectionState>.broadcast();
   Stream<WatchConnectionState> get connectionState => _connectionStateController.stream;
   WatchConnectionState _currentState = WatchConnectionState.disconnected;
 
-  // Error handling
-  final _errorController = StreamController<String>.broadcast();
+  final StreamController<String> _errorController = StreamController<String>.broadcast();
   Stream<String> get errors => _errorController.stream;
 
   void setCaptureProvider(CaptureProvider provider) {
@@ -40,12 +38,14 @@ class WatchManager {
   }
 
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      return;
+    }
 
     try {
       _connectionStateController.add(WatchConnectionState.connecting);
 
-      await _channel.invokeMethod('initializeWatchConnection');
+      await _channel.invokeMethod<void>('initializeWatchConnection');
       _channel.setMethodCallHandler(_handleMethodCall);
 
       _isInitialized = true;
@@ -153,6 +153,7 @@ class WatchManager {
     }
   }
 
+  @override
   void dispose() {
     _isInitialized = false;
     _captureProvider = null;
