@@ -111,7 +111,7 @@ export default async function SleekPluginList() {
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">App List</h1>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Omi App Marketplace</h1>
         {/* <button
           variant="outline"
           size="icon"
@@ -131,6 +131,7 @@ export default async function SleekPluginList() {
           <PluginCard key={plugin.id} plugin={plugin} stat={stats.find((s) => s.id == plugin.id)} />
         ))}
       </div>
+      
     </div>
   );
 }

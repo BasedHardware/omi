@@ -22,6 +22,7 @@ import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
@@ -189,6 +190,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setProviders(app, memory)) ?? MemoryDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -306,7 +308,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 class CustomErrorWidget extends StatelessWidget {
   final String errorMessage;
 
-  CustomErrorWidget({required this.errorMessage});
+  const CustomErrorWidget({super.key, required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {

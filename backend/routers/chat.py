@@ -8,10 +8,10 @@ import database.chat as chat_db
 from database.plugins import record_plugin_usage
 from models.chat import Message, SendMessageRequest, MessageSender
 from models.plugin import UsageHistoryType
-from utils.llm import qa_rag, initial_chat_message
+from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
-from utils.retrieval.rag import retrieve_rag_context
+from utils.retrieval.graph import execute_graph_chat
 
 router = APIRouter()
 
@@ -31,18 +31,16 @@ def filter_messages(messages, plugin_id):
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    message = Message(id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human',
-                      type='text')
+    print('send_message', data.text, plugin_id, uid)
+    message = Message(
+        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
+    )
     chat_db.add_message(uid, message.dict())
-
     plugin = get_plugin_by_id(plugin_id)
     plugin_id = plugin.id if plugin else None
 
-    messages = [Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]
-    messages = filter_messages(messages, plugin_id)
-
-    context_str, memories = retrieve_rag_context(uid, messages)
-    response: str = qa_rag(uid, context_str, messages, plugin)
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    response, memories = execute_graph_chat(uid, messages)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -51,13 +49,12 @@ def send_message(
         sender='ai',
         plugin_id=plugin_id,
         type='text',
-        # only store the 5 most relevant memories
         memories_id=[m.id for m in (memories if len(memories) < 5 else memories[:5])],
     )
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if plugin_id:
-        record_plugin_usage(uid, plugin.id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+        record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     return ai_message
 

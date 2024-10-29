@@ -8,6 +8,7 @@ from _multion import router as multion_router
 from basic import memory_created as basic_memory_created_router
 from oauth import memory_created as oauth_memory_created_router
 from zapier import memory_created as zapier_memory_created_router
+from ahda import client as ahda_realtime_transcription_router
 
 # from advanced import openglass as advanced_openglass_router
 
@@ -49,6 +50,7 @@ def api():
 app.include_router(basic_memory_created_router.router)
 app.include_router(oauth_memory_created_router.router)
 app.include_router(zapier_memory_created_router.router)
+app.include_router(ahda_realtime_transcription_router.router)
 
 # app.include_router(basic_realtime_router.router)
 # app.include_router(advanced_realtime_router.router)

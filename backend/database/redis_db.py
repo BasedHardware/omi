@@ -227,9 +227,40 @@ def get_in_progress_memory_id(uid: str) -> str:
 def set_user_webhook_db(uid: str, wtype: str, url: str):
     r.set(f'users:{uid}:developer:webhook:{wtype}', url)
 
+def disable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(False).lower())
+
+def enable_user_webhook_db(uid: str, wtype: str):
+    r.set(f'users:{uid}:developer:webhook_status:{wtype}', str(True).lower())
+
+def user_webhook_status_db(uid: str, wtype: str):
+    status = r.get(f'users:{uid}:developer:webhook_status:{wtype}')
+    if status is None:
+        return None
+    return status.decode() == str(True).lower()
+
 
 def get_user_webhook_db(uid: str, wtype: str) -> str:
     url = r.get(f'users:{uid}:developer:webhook:{wtype}')
     if not url:
         return ''
     return url.decode()
+
+
+def get_filter_category_items(uid: str, category: str) -> List[str]:
+    val = r.smembers(f'users:{uid}:filters:{category}')
+    if not val:
+        return []
+    return [x.decode() for x in val]
+
+
+def add_filter_category_item(uid: str, category: str, item: str):
+    r.sadd(f'users:{uid}:filters:{category}', item)
+
+
+def remove_filter_category_item(uid: str, category: str, item: str):
+    r.srem(f'users:{uid}:filters:{category}', item)
+
+
+def remove_all_filter_category_items(uid: str, category: str):
+    r.delete(f'users:{uid}:filters:{category}')

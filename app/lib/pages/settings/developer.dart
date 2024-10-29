@@ -13,6 +13,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'widgets/appbar_with_banner.dart';
+import 'widgets/toggle_section_widget.dart';
+
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -22,26 +25,9 @@ class DeveloperSettingsPage extends StatefulWidget {
 
 class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => DeveloperModeProvider(),
-      child: const _DeveloperSettingsPage(),
-    );
-  }
-}
-
-class _DeveloperSettingsPage extends StatefulWidget {
-  const _DeveloperSettingsPage();
-
-  @override
-  State<_DeveloperSettingsPage> createState() => __DeveloperSettingsPageState();
-}
-
-class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
-  @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
     });
     super.initState();
   }
@@ -54,25 +40,38 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
         builder: (context, provider, child) {
           return Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: const Text('Developer Settings'),
-              actions: [
-                TextButton(
-                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4.0),
-                    child: Text(
-                      'Save',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+            appBar: AppBarWithBanner(
+              appBar: AppBar(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                title: const Text('Developer Settings'),
+                actions: [
+                  TextButton(
+                    onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text(
+                        'Save',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                      ),
                     ),
+                  )
+                ],
+              ),
+              showAppBar: provider.savingSettingsLoading,
+              child: Container(
+                color: Colors.green,
+                child: const Center(
+                  child: Text(
+                    'Syncing Developer Settings...',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
-                )
-              ],
+                ),
+              ),
             ),
             body: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ListView(
+                shrinkWrap: true,
                 children: [
                   const SizedBox(height: 32),
                   const Padding(
@@ -85,7 +84,7 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Center(
                     child: Container(
                       height: 60,
@@ -181,37 +180,39 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = false);
                           },
                   ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Google Cloud Bucket',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Export new memories audio to Google Cloud Storage.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextField(
-                    controller: provider.gcpCredentialsController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    enabled: true,
-                    decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  TextField(
-                    controller: provider.gcpBucketNameController,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('GCP Bucket Name'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                  // -------------------------- Comment GCS ------------------
+                  // const SizedBox(height: 16),
+                  // Divider(color: Colors.grey.shade500),
+                  // const SizedBox(height: 32),
+                  // const Text(
+                  //   'Google Cloud Bucket',
+                  //   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  // ),
+                  // const SizedBox(height: 8),
+                  // Text(
+                  //   'Export new memories audio to Google Cloud Storage.',
+                  //   style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
+                  // ),
+                  // const SizedBox(height: 16.0),
+                  // TextField(
+                  //   controller: provider.gcpCredentialsController,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enableSuggestions: false,
+                  //   enabled: true,
+                  //   decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
+                  // TextField(
+                  //   controller: provider.gcpBucketNameController,
+                  //   obscureText: false,
+                  //   autocorrect: false,
+                  //   enabled: true,
+                  //   enableSuggestions: false,
+                  //   decoration: _getTextFieldDecoration('GCP Bucket Name'),
+                  //   style: const TextStyle(color: Colors.white),
+                  // ),
+                  // ----------------------- Comment GCS --------------------
                   // KEEP ME?
                   // ListTile(
                   //   title: const Text('Import Memories'),
@@ -266,18 +267,17 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                   // ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Events Webhooks',
+                        'Webhooks',
                         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                       ),
+                      Spacer(),
                       GestureDetector(
                         onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/developer/plugins/Integrations/'));
+                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
                           MixpanelManager().pageOpened('Advanced Mode Docs');
                         },
                         child: const Padding(
@@ -294,59 +294,90 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'On memory created:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  const SizedBox(
+                    height: 10,
                   ),
-                  TextField(
-                    controller: provider.webhookOnMemoryCreated,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.memoryEventsToggled,
+                    sectionTitle: 'Memory Events',
+                    sectionDescription: 'Triggers when a new memory is created.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookOnMemoryCreated,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    onSectionEnabledChanged: provider.onMemoryEventsToggled,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Real-time transcript received:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.transcriptsToggled,
+                      sectionTitle: 'Real-time Transcript',
+                      sectionDescription: 'Triggers when a new transcript is received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookOnTranscriptReceived,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onTranscriptsToggled),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.audioBytesToggled,
+                      sectionTitle: 'Realtime Audio Bytes',
+                      sectionDescription: 'Triggers when audio bytes are received.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookAudioBytes,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        TextField(
+                          controller: provider.webhookAudioBytesDelay,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          keyboardType: TextInputType.number,
+                          decoration: _getTextFieldDecoration('Every x seconds'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onAudioBytesToggled),
+                  ToggleSectionWidget(
+                    isSectionEnabled: provider.daySummaryToggled,
+                    sectionTitle: 'Day Summary',
+                    sectionDescription: 'Triggers when day summary is generated.',
+                    options: [
+                      TextField(
+                        controller: provider.webhookDaySummary,
+                        obscureText: false,
+                        autocorrect: false,
+                        enabled: true,
+                        enableSuggestions: false,
+                        decoration: _getTextFieldDecoration('Endpoint URL'),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    onSectionEnabledChanged: provider.onDaySummaryToggled,
                   ),
-                  TextField(
-                    controller: provider.webhookOnTranscriptReceived,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Realtime audio bytes:',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                  TextField(
-                    controller: provider.webhookAudioBytes,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    decoration: _getTextFieldDecoration('Endpoint URL'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  TextField(
-                    controller: provider.webhookAudioBytesDelay,
-                    obscureText: false,
-                    autocorrect: false,
-                    enabled: true,
-                    enableSuggestions: false,
-                    keyboardType: TextInputType.number,
-                    decoration: _getTextFieldDecoration('Every x seconds'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
+
                   // const Text(
                   //   'Websocket Real-time audio bytes:',
                   //   style: TextStyle(color: Colors.white, fontSize: 16),
@@ -382,9 +413,14 @@ class __DeveloperSettingsPageState extends State<_DeveloperSettingsPage> {
                     value: provider.localSyncEnabled,
                     onChanged: provider.onLocalSyncEnabledChanged,
                   ),
-                  const SizedBox(height: 64),
+                  const SizedBox(height: 36),
+                  const Text(
+                    'Pilot Features',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    'Joan Only Features (Be careful)',
+                    'These features are tests and no support is guaranteed.',
                     style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
                   ),
                   const SizedBox(height: 16.0),

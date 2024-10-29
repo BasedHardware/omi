@@ -96,7 +96,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 children: [
                   SizedBox(height: widget.app.ratingAvg != null ? 4 : 0),
                   Text(
-                    widget.app.description,
+                    widget.app.description.decodeString,
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                 ],
@@ -209,7 +209,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      (widget.app.memoryPrompt ?? '').decodeSting,
+                      (widget.app.memoryPrompt ?? '').decodeString,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -228,7 +228,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      widget.app.chatPrompt ?? '',
+                      (widget.app.chatPrompt ?? '').decodeString,
                       style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
                     ),
                   )
@@ -252,7 +252,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   style: TextStyle(color: Colors.grey, fontSize: 18),
                                 ),
                               )
-                            : SizedBox(),
+                            : const SizedBox(),
                       ],
                     ),
                   )
@@ -424,7 +424,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
               child: GestureDetector(
-                onTap: (){
+                onTap: () {
                   routeToPage(context, AppAnalytics(app: widget.app));
                 },
                 child: const Text(
