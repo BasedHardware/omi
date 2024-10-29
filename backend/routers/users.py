@@ -1,6 +1,5 @@
 import threading
 import uuid
-from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -57,6 +56,7 @@ def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends
 @router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
 def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_user_webhook_db(uid, wtype)}
+
 
 @router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
 def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
@@ -191,3 +191,25 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
         memory = get_memory(uid, memory_id)
     memory = Memory(**memory)
     return {'result': followup_question_prompt(memory.transcript_segments)}
+
+
+# **************************************
+# ************* Analytics **************
+# **************************************
+
+@router.post('/v1/users/analytics/memory_summary', tags=['v1'])
+def set_memory_summary_rating(
+        memory_id: str,
+        value: int,  # 0, 1
+        uid: str = Depends(auth.get_current_user_uid),
+):
+    set_memory_summary_rating_score(uid, memory_id, value)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/analytics/memory_summary', tags=['v1'])
+def get_memory_summary_rating(
+        memory_id: str,
+        _: str = Depends(auth.get_current_user_uid),
+):
+    return {'has_rating': get_memory_summary_rating_score(memory_id) is not None}
