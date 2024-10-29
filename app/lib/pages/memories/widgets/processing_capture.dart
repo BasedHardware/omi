@@ -231,6 +231,34 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       );
     }
 
+    // Add recording source indicator
+    if (captureProvider.recordingState == RecordingState.record) {
+      left = Row(
+        children: [
+          Icon(
+            _getRecordingSourceIcon(captureProvider.recordingSource),
+            color: Colors.red,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              captureProvider.getRecordingSourceText(),
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     // Right
     Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
@@ -277,6 +305,17 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         ],
       ),
     );
+  }
+
+  IconData _getRecordingSourceIcon(RecordingSource source) {
+    switch (source) {
+      case RecordingSource.necklace:
+        return Icons.mic;
+      case RecordingSource.watch:
+        return Icons.watch;
+      case RecordingSource.phone:
+        return Icons.phone_android;
+    }
   }
 }
 
