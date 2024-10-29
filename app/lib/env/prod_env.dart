@@ -43,4 +43,8 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'INTERCOM_ANDROID_API_KEY', obfuscate: true)
   final String? intercomAndroidApiKey = _ProdEnv.intercomAndroidApiKey;
+
+  // Add watch-specific config
+  static const bool enableWatchSupport = true;
+  static const int watchAudioSampleRate = 16000;
 }
