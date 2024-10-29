@@ -17,6 +17,12 @@ class WatchManager {
   CaptureProvider? _captureProvider;
   IWalService get _wal => ServiceManager.instance().wal;
 
+  bool _isWatchConnected = false;
+  bool get isWatchConnected => _isWatchConnected;
+
+  final _watchConnectionController = StreamController<bool>.broadcast();
+  Stream<bool> get watchConnectionStream => _watchConnectionController.stream;
+
   void setCaptureProvider(CaptureProvider provider) {
     _captureProvider = provider;
   }
@@ -45,6 +51,10 @@ class WatchManager {
             _captureProvider?.updateRecordingState(RecordingState.stop);
           }
         }
+        break;
+      case 'watchConnectionChanged':
+        _isWatchConnected = call.arguments as bool;
+        _watchConnectionController.add(_isWatchConnected);
         break;
     }
   }
