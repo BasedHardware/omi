@@ -236,3 +236,35 @@ Future<String> getFollowUpQuestion({String memoryId = '0'}) async {
   }
   return '';
 }
+
+/*Analytics*/
+
+Future<bool> setMemorySummaryRating(String memoryId, int value, {String? reason}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$memoryId&value=$value&reason=$reason',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setMemorySummaryRating response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> getHasMemorySummaryRating(String memoryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$memoryId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('getHasMemorySummaryRating response: ${response.body}');
+
+  try {
+    var jsonResponse = jsonDecode(response.body);
+    return jsonResponse['has_rating'] as bool? ?? false;
+  } catch (e) {
+    return false;
+  }
+}
