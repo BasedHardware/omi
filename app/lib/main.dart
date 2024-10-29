@@ -42,6 +42,7 @@ import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
+import 'package:friend_private/services/watch_manager.dart';
 
 Future<bool> _init() async {
   // Service manager
@@ -191,6 +192,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          Provider<WatchManager>(
+            create: (_) {
+              final watchManager = WatchManager();
+              watchManager.initialize();
+              return watchManager;
+            },
+            dispose: (_, manager) => manager.dispose(),
+          ),
+          ChangeNotifierProxyProvider2<WatchManager, CaptureProvider>(
+            create: (context) => CaptureProvider(),
+            update: (context, watchManager, captureProvider, previous) {
+              watchManager.setCaptureProvider(captureProvider ?? previous!);
+              return captureProvider ?? previous!;
+            },
+          ),
         ],
         builder: (context, child) {
           return WithForegroundTask(
