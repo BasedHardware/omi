@@ -29,8 +29,8 @@ import WatchConnectivity
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     }
 
-    setupWatchConnectivity()
     setupMethodChannel()
+    setupWatchConnectivity()
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
