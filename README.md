@@ -63,8 +63,6 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 [//]: # (- [Plugins]&#40;https://docs.omi.me/docs/developer/Plugins/&#41;)
 
-## Made by the Community, with -❤️-:
-
 ## Licensing
 
 Omi is available under <a href="https://github.com/BasedHardware/omi/blob/main/LICENSE">MIT License</a>
