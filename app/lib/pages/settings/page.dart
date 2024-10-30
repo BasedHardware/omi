@@ -107,12 +107,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 //   icon: Icons.integration_instructions,
                 // ),
                 // const SizedBox(height: 8),
-                getItemAddOn2(
-                  'Calendar Integration',
-                  () => routeToPage(context, const CalendarPage()),
-                  icon: Icons.calendar_month,
-                ),
-                const SizedBox(height: 20),
+                // getItemAddOn2(
+                //   'Calendar Integration',
+                //   () => routeToPage(context, const CalendarPage()),
+                //   icon: Icons.calendar_month,
+                // ),
+                // const SizedBox(height: 20),
                 getItemAddOn2(
                   'About Omi',
                   () => routeToPage(context, const AboutOmiPage()),

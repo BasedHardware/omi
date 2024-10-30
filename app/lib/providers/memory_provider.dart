@@ -1,15 +1,12 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/features/calendar.dart';
 
 class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerMemory> memories = [];
@@ -28,11 +25,14 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
   IWalService get _wal => ServiceManager.instance().wal;
 
   List<Wal> _missingWals = [];
+
   List<Wal> get missingWals => _missingWals;
+
   int get missingWalsInSeconds =>
       _missingWals.isEmpty ? 0 : _missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
   double _walsSyncedProgress = 0.0;
+
   double get walsSyncedProgress => _walsSyncedProgress;
 
   bool isSyncing = false;
@@ -153,22 +153,21 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     var mem = await getMemories();
     memories = mem;
     memories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    createEventsForMemories();
     setLoadingMemories(false);
     notifyListeners();
     return memories;
   }
 
-  void createEventsForMemories() {
-    for (var memory in memories) {
-      if (memory.structured.events.isNotEmpty &&
-          !memory.structured.events.first.created &&
-          memory.startedAt != null &&
-          memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
-        _handleCalendarCreation(memory);
-      }
-    }
-  }
+  // void createEventsForMemories() {
+  //   for (var memory in memories) {
+  //     if (memory.structured.events.isNotEmpty &&
+  //         !memory.structured.events.first.created &&
+  //         memory.startedAt != null &&
+  //         memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
+  //       _handleCalendarCreation(memory);
+  //     }
+  //   }
+  // }
 
   Future getMoreMemoriesFromServer() async {
     if (memories.length % 50 != 0) return;
@@ -267,26 +266,26 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
     notifyListeners();
   }
 
-  _handleCalendarCreation(ServerMemory memory) {
-    if (!SharedPreferencesUtil().calendarEnabled) return;
-    if (SharedPreferencesUtil().calendarType != 'auto') return;
-
-    List<Event> events = memory.structured.events;
-    if (events.isEmpty) return;
-
-    List<int> indexes = events.mapIndexed((index, e) => index).toList();
-    setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-    for (var i = 0; i < events.length; i++) {
-      if (events[i].created) continue;
-      events[i].created = true;
-      CalendarUtil().createEvent(
-        events[i].title,
-        events[i].startsAt,
-        events[i].duration,
-        description: events[i].description,
-      );
-    }
-  }
+  // _handleCalendarCreation(ServerMemory memory) {
+  //   if (!SharedPreferencesUtil().calendarEnabled) return;
+  //   if (SharedPreferencesUtil().calendarType != 'auto') return;
+  //
+  //   List<Event> events = memory.structured.events;
+  //   if (events.isEmpty) return;
+  //
+  //   List<int> indexes = events.mapIndexed((index, e) => index).toList();
+  //   setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
+  //   for (var i = 0; i < events.length; i++) {
+  //     if (events[i].created) continue;
+  //     events[i].created = true;
+  //     CalendarUtil().createEvent(
+  //       events[i].title,
+  //       events[i].startsAt,
+  //       events[i].duration,
+  //       description: events[i].description,
+  //     );
+  //   }
+  // }
 
   /////////////////////////////////////////////////////////////////
   ////////// Delete Memory With Undo Functionality ///////////////
