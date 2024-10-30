@@ -45,3 +45,14 @@ async def connect_to_audio_bytes_pusher(uid: str, sample_rate: int = 8000):
     except Exception as e:
         print(f"Exception in connect_to_audio_bytes_pusher: {e}")
         raise
+
+async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
+    try:
+        print("Connecting to Pusher transcripts trigger WebSocket...")
+        ws_host = PusherAPI.replace("http", "ws")
+        socket = await websockets.connect(f"{ws_host}/v1/trigger/listen?uid={uid}&sample_rate={sample_rate}")
+        print("Connected to Pusher transcripts trigger WebSocket.")
+        return socket
+    except Exception as e:
+        print(f"Exception in connect_to_transcript_pusher: {e}")
+        raise
