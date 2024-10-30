@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:friend_private/pages/settings/widgets/appbar_with_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/services/services.dart';
@@ -28,6 +29,18 @@ class WalListItem extends StatefulWidget {
 }
 
 class _WalListItemState extends State<WalListItem> {
+  double calculateProgress(DateTime? startedAt, int eta) {
+    if (startedAt == null) {
+      return 0.0;
+    }
+    if (eta == 0) {
+      return 0.01;
+    }
+    final elapsed = DateTime.now().difference(startedAt).inSeconds;
+    final progress = elapsed / eta;
+    return progress.clamp(0.0, 1.0);
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -58,86 +71,51 @@ class _WalListItemState extends State<WalListItem> {
                 ServiceManager.instance().wal.getSyncs().deleteWal(wal);
               },
               child: Padding(
-                padding: const EdgeInsetsDirectional.all(16),
+                padding: const EdgeInsetsDirectional.all(0),
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _getWalHeader(),
+                    ListTile(
+                      leading: Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Text(widget.wal.device == "phone" ? "📱" : "💾",
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                      ),
+                      title: Text(
+                        secondsToHumanReadable(widget.wal.seconds),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      subtitle: Text(
+                        dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      trailing: widget.wal.isSyncing
+                          ? Text(
+                              "${widget.wal.syncEtaSeconds != null ? "${widget.wal.syncEtaSeconds}s" : "Calculating"} ETA",
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                            )
+                          : TextButton(
+                              onPressed: () {
+                                context.read<MemoryProvider>().setSyncCompleted(false);
+                                context.read<MemoryProvider>().syncWal(widget.wal);
+                              },
+                              child: const Text('Sync', style: TextStyle(color: Colors.white))),
+                    ),
+                    if (widget.wal.isSyncing)
+                      LinearProgressIndicator(
+                        value: calculateProgress(
+                            widget.wal.syncStartedAt ?? DateTime.now(), widget.wal.syncEtaSeconds ?? 0),
+                        backgroundColor: Colors.grey[800],
+                        color: Colors.white,
+                        minHeight: 4,
+                      ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  _getWalHeader() {
-    final wal = widget.wal;
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(wal.device == "phone" ? "📱" : "💾",
-              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              "${wal.seconds}s",
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(
-            width: 16,
-          ),
-          wal.isSyncing
-              ? Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        (wal.syncEtaSeconds ?? 0) > 0
-                            ? Text(
-                                "${wal.syncEtaSeconds}s ETA",
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall!
-                                    .copyWith(color: Colors.white, fontStyle: FontStyle.italic),
-                              )
-                            : const SizedBox.shrink(),
-                        const SizedBox(
-                          width: 12,
-                        ),
-                        const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : Expanded(
-                  child: Text(
-                    dateTimeFormat('MMM d, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    maxLines: 1,
-                    textAlign: TextAlign.end,
-                  ),
-                )
-        ],
       ),
     );
   }
@@ -250,16 +228,31 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       canPop: true,
       onPopInvoked: (didPop) {
         var provider = Provider.of<MemoryProvider>(context, listen: false);
-        if (provider.isSyncing) {
-        } else {
+        if (!provider.isSyncing) {
           provider.clearSyncResult();
         }
       },
       child: Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Sync Memories'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+          appBar: AppBarWithBanner(
+            appBar: AppBar(
+              title: const Text('Sync Memories'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            showAppBar: memoryProvider.isSyncing || memoryProvider.syncCompleted,
+            child: Container(
+              color: Colors.green,
+              child: Center(
+                child: Text(
+                  memoryProvider.isSyncing
+                      ? 'Syncing Memories'
+                      : memoryProvider.syncCompleted
+                          ? 'Memories Synced Successfully 🎉'
+                          : '',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -299,7 +292,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                         }
                       },
                       child: const Text(
-                        'Sync Now',
+                        'Sync All',
                         style: TextStyle(color: Colors.white, fontSize: 16),
                       ),
                     ),
@@ -315,7 +308,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       memoryProvider.isSyncing
                           ? Container(
                               padding: const EdgeInsets.all(12.0),
-                              margin: const EdgeInsets.only(left: 16.0, right: 16.0),
+                              margin: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade900,
                                 borderRadius: BorderRadius.circular(16.0),
@@ -353,7 +346,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                       ),
                                       SizedBox(width: 12),
                                       Text(
-                                        'Finalizing your memories',
+                                        'Finalizing synced memories',
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                         textAlign: TextAlign.center,
                                       ),
@@ -410,8 +403,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 60)),
+                const SliverToBoxAdapter(child: SizedBox(height: 50)),
                 WalsListWidget(wals: memoryProvider.missingWals),
+                const SliverToBoxAdapter(child: SizedBox(height: 50)),
               ],
             ),
           ),
@@ -423,6 +417,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
 
 Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
   var groupedWals = <DateTime, List<Wal>>{};
+  wals.sort((a, b) => b.timerStart.compareTo(a.timerStart));
   for (var wal in wals) {
     var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
