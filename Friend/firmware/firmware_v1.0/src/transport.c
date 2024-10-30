@@ -140,6 +140,7 @@ void broadcast_accel(struct k_work *work_item) {
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 
+struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
@@ -175,6 +176,23 @@ int accel_start()
     odr_attr.val1 = 10;
 	odr_attr.val2 = 0;
 
+
+
+    if (gpio_is_ready_dt(&accel_gpio_pin)) 
+    {
+		printk("Speaker Pin ready\n");
+	}
+    else 
+    {
+		printk("Error setting up speaker Pin\n");
+        return -1;
+	}
+	if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    {
+		printk("Error setting up Haptic Pin\n");
+        return -1;
+	}
+    gpio_pin_set_dt(&accel_gpio_pin, 1);
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
 		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
     {
@@ -838,4 +856,10 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
         k_sleep(K_MSEC(1));
     }
     return 0;
+}
+
+
+void accel_off()
+{
+    gpio_pin_set_dt(&accel_gpio_pin, 0);
 }

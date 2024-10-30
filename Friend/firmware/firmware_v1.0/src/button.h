@@ -14,4 +14,6 @@ void register_button_service();
 void turnoff_all();
 FSM_STATE_T get_current_button_state();
 
+void force_button_state(FSM_STATE_T state);
+
 #endif

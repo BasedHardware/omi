@@ -14,6 +14,7 @@
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
+extern bool from_wakeup;
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static struct gpio_callback button_cb_data;
@@ -182,7 +183,7 @@ void check_button_level(struct k_work *work_item)
            {
              is_off = false;
              bt_on();
-             play_haptic_milli(100);
+             play_haptic_milli(50);
            }
         }
     }
@@ -215,7 +216,14 @@ void check_button_level(struct k_work *work_item)
                 notify_long_tap();
                 //Fire the long mode notify and enter a grace period
                 //turn off herre
-                is_off = !is_off;
+                if(!from_wakeup)
+                {
+                    is_off = !is_off;
+                }
+                else
+                {
+                    from_wakeup = false;
+                }
                 if (is_off)
                 {
                     bt_off();
@@ -264,12 +272,18 @@ void check_button_level(struct k_work *work_item)
             if (inc_count_1 > threshold) 
             {
                 notify_long_tap();
-                is_off = !is_off;
+                if(!from_wakeup)
+                {
+                    is_off = !is_off;
+                }
+                else
+                {
+                    from_wakeup = false;
+                }
                 //Fire the notify and enter a grace period
                 if (is_off)
                 {
                     bt_off();
-                    k_msleep(1);
                     turnoff_all();
                 }
                 current_button_state = GRACE;
@@ -388,16 +402,24 @@ FSM_STATE_T get_current_button_state()
 
 void turnoff_all()
 {
+
+    mic_off();
+    sd_off();
+    speaker_off();
+    accel_off();
+    play_haptic_milli(50);
+    k_msleep(100);
     set_led_blue(false);
 	set_led_red(false);
     set_led_green(false);
-    mic_off();
-    sd_off();
-    play_haptic_milli(100);
-    k_msleep(10);
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);
     gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_LEVEL_INACTIVE);
     //maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR= 0xFFFFFFFF;    
     NRF_POWER->SYSTEMOFF=1;
+}
+
+void force_button_state(FSM_STATE_T state)
+{
+    current_button_state = state;
 }

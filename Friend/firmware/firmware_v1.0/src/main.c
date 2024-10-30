@@ -6,6 +6,7 @@
 #include "led.h"
 #include "config.h"
 #include "codec.h"
+#include "button.h"
 // #include "nfc.h"
 #include "sdcard.h"
 #include "storage.h"
@@ -87,6 +88,7 @@ void activate_everything_no_lights()
     set_mic_callback(mic_handler);
     err = mic_start();
     err = init_usb();
+
 }
 
 void set_led_state()
@@ -131,7 +133,7 @@ void set_led_state()
 	}
 
 }
-
+bool from_wakeup = false;
 // Main loop
 int main(void)
 {
@@ -157,12 +159,16 @@ int main(void)
     }
     else if (from_wakeup)
     {
-        k_msleep(100);
+ 
         is_off = false;
         usb_charge = false;
+        force_button_state(GRACE);
+        k_msleep(1000);
         activate_everything_no_lights(); 
         bt_on();       
         play_haptic_milli(100);
+
+
     }
     else
     {
@@ -272,6 +278,9 @@ int main(void)
         LOG_ERR("Failed to initialize power supply: %d", err);
     }
 
+    // button_init();
+    // register_button_service();
+    // activate_button_work();
 
 
     LOG_INF("Omi firmware initialized successfully\n");
