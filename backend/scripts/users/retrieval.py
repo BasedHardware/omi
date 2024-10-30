@@ -9,7 +9,7 @@ from models.memory import Memory
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
-load_dotenv('../../.dev.env')
+load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 from database._client import get_users_uid
@@ -24,7 +24,7 @@ if __name__ == '__main__':
         for memory in memories:
             threads.append(threading.Thread(target=save_structured_vector, args=(uid, Memory(**memory), True)))
 
-        chunks = [threads[i:i + 10] for i in range(0, len(threads), 10)]
+        chunks = [threads[i:i + 30] for i in range(0, len(threads), 30)]
         for chunk in chunks:
             [t.start() for t in chunk]
             [t.join() for t in chunk]
