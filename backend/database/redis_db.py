@@ -267,3 +267,12 @@ def remove_filter_category_item(uid: str, category: str, item: str):
 
 def remove_all_filter_category_items(uid: str, category: str):
     r.delete(f'users:{uid}:filters:{category}')
+
+
+def save_migrated_retrieval_memory_id(memory_id: str):
+    r.sadd('migrated_retrieval_memory_ids', memory_id)
+    r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
+
+
+def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
+    return r.sismember('migrated_retrieval_memory_ids', memory_id)
