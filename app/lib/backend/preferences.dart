@@ -123,7 +123,7 @@ class SharedPreferencesUtil {
 
   set localSyncEnabled(bool value) => saveBool('localSyncEnabled', value);
 
-  bool get localSyncEnabled => getBool('localSyncEnabled') ?? false;
+  bool get localSyncEnabled => getBool('localSyncEnabled') ?? true;
 
   bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation') ?? true;
 
