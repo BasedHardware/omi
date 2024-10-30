@@ -295,7 +295,7 @@ async def _websocket_util(
     async def create_pusher_task_handler():
         nonlocal websocket_active
 
-        ws = await connect_to_trigger_pusher(uid)
+        ws = await connect_to_trigger_pusher(uid, sample_rate)
 
         # Transcript
         transcript_ws = ws
