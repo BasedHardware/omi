@@ -11,12 +11,11 @@ import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/test_prompts.dart';
-import 'package:friend_private/pages/settings/calendar.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/features/calendar.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
@@ -276,6 +275,11 @@ class EventsListWidget extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return ListTile(
+                  onTap: () {
+                    AppSnackbar.showSnackbar(
+                      'This integration is being deprecated. Please use the new Google Calendar app.',
+                    );
+                  },
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     event.title,
@@ -287,37 +291,6 @@ class EventsListWidget extends StatelessWidget {
                       '${dateTimeFormat('MMM d, yyyy', event.startsAt)} at ${dateTimeFormat('h:mm a', event.startsAt)} ~ ${minutesConversion(event.duration)}',
                       style: const TextStyle(color: Colors.grey, fontSize: 15),
                     ),
-                  ),
-                  trailing: IconButton(
-                    onPressed: event.created
-                        ? null
-                        : () {
-                            var calEnabled = SharedPreferencesUtil().calendarEnabled;
-                            var calSelected = SharedPreferencesUtil().calendarId.isNotEmpty;
-                            if (!calEnabled || !calSelected) {
-                              routeToPage(context, const CalendarPage());
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(!calEnabled
-                                    ? 'Enable calendar integration to add events'
-                                    : 'Select a calendar to add events to'),
-                              ));
-                              return;
-                            }
-                            context.read<MemoryDetailProvider>().updateEventState(true, idx);
-                            setMemoryEventsState(provider.memory.id, [idx], [true]);
-                            CalendarUtil().createEvent(
-                              event.title,
-                              event.startsAt,
-                              event.duration,
-                              description: event.description,
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Event added! It may take a few minutes to show up in your calendar. 📆'),
-                              ),
-                            );
-                          },
-                    icon: Icon(event.created ? Icons.check : Icons.add, color: Colors.white),
                   ),
                 );
               },

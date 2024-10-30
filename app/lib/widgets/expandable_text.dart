@@ -63,7 +63,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            data: widget.isExpanded ? widget.text : widget.text.substring(0, 300),
+            data: widget.isExpanded ? widget.text : widget.text.length > 300 ?widget.text.substring(0, 300): widget.text,
           ),
           // Text(
           //   widget.text,
