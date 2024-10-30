@@ -577,7 +577,7 @@
       "setup_instructions_file_path": "/plugins/instructions/notion-crm/README.md",
       "auth_steps": [
         {
-          "name": "Auhtorize Notion Account",
+          "name": "Authorize Notion Account",
           "url": "https://based-hardware--plugins-api.modal.run/setup-notion-crm"
         }
       ]
