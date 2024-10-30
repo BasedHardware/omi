@@ -37,6 +37,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   bool isSyncing = false;
   bool syncCompleted = false;
+  List<bool> multipleSyncs = [];
   bool isFetchingMemories = false;
   List<SyncedMemoryPointer> syncedMemoriesPointers = [];
 
@@ -356,7 +357,7 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   Future syncWals() async {
     debugPrint("provider > syncWals");
-
+    setSyncCompleted(false);
     _walsSyncedProgress = 0.0;
     setIsSyncing(true);
     var res = await _wal.getSyncs().syncAll(progress: this);
@@ -365,10 +366,31 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
         await getSyncedMemoriesData(res);
       }
     }
-    syncCompleted = true;
+    setSyncCompleted(true);
     setIsSyncing(false);
     notifyListeners();
     return;
+  }
+
+  Future syncWal(Wal wal) async {
+    debugPrint("provider > syncWal ${wal.id}");
+    appendMultipleSyncs(true);
+    _walsSyncedProgress = 0.0;
+    var res = await _wal.getSyncs().syncWal(wal: wal, progress: this);
+    if (res != null) {
+      if (res.newMemoryIds.isNotEmpty || res.updatedMemoryIds.isNotEmpty) {
+        print('Synced memories: ${res.newMemoryIds} ${res.updatedMemoryIds}');
+        await getSyncedMemoriesData(res);
+      }
+    }
+    removeMultipleSyncs();
+    notifyListeners();
+    return;
+  }
+
+  void setSyncCompleted(bool value) {
+    syncCompleted = value;
+    notifyListeners();
   }
 
   Future getSyncedMemoriesData(SyncLocalFilesResponse syncResult) async {
@@ -463,6 +485,27 @@ class MemoryProvider extends ChangeNotifier implements IWalServiceListener, IWal
 
   void setIsSyncing(bool value) {
     isSyncing = value;
+    notifyListeners();
+  }
+
+  void appendMultipleSyncs(bool value) {
+    setIsSyncing(true);
+    multipleSyncs.add(value);
+    notifyListeners();
+  }
+
+  void removeMultipleSyncs() {
+    if (multipleSyncs.isNotEmpty) {
+      multipleSyncs.removeLast();
+    } else {
+      setIsSyncing(false);
+      setSyncCompleted(true);
+    }
+    notifyListeners();
+  }
+
+  void clearMultipleSyncs() {
+    multipleSyncs.clear();
     notifyListeners();
   }
 
