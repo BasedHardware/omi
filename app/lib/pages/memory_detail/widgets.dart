@@ -99,7 +99,7 @@ class GetSummaryWidgets extends StatelessWidget {
                 ? const SizedBox.shrink()
                 : SelectionArea(
                     child: Text(
-                      memory.structured.overview,
+                      memory.structured.overview.decodeString,
                       style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                     ),
                   ),
@@ -282,7 +282,7 @@ class EventsListWidget extends StatelessWidget {
                   },
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    event.title,
+                    event.title.decodeString,
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   subtitle: Padding(
