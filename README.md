@@ -65,10 +65,6 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ## Made by the Community, with -❤️-:
 
-<a href="https://github.com/BasedHardware/Omi/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=BasedHardware/Omi" />
-</a>
-
 ## Licensing
 
 Omi is available under <a href="https://github.com/BasedHardware/omi/blob/main/LICENSE">MIT License</a>
