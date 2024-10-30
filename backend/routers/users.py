@@ -20,7 +20,6 @@ from utils.webhooks import webhook_first_time_setup
 router = APIRouter()
 
 
-# TODO: url should be /v1/users
 @router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(uid: str = Depends(auth.get_current_user_uid)):
     try:
@@ -73,23 +72,23 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
 @router.get('/v1/users/developer/webhooks/status', tags=['v1'])
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
-    audioBytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
-    if audioBytes is None:
-        audioBytes = webhook_first_time_setup(uid, WebhookType.audio_bytes)
-    memoryCreated = user_webhook_status_db(uid, WebhookType.memory_created)
-    if memoryCreated is None:
-        memoryCreated = webhook_first_time_setup(uid, WebhookType.memory_created)
-    realtimeTranscript = user_webhook_status_db(uid, WebhookType.realtime_transcript)
-    if realtimeTranscript is None:
-        realtimeTranscript = webhook_first_time_setup(uid, WebhookType.realtime_transcript)
-    daySummary = user_webhook_status_db(uid, WebhookType.day_summary)
-    if daySummary is None:
-        daySummary = webhook_first_time_setup(uid, WebhookType.day_summary)
+    audio_bytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
+    if audio_bytes is None:
+        audio_bytes = webhook_first_time_setup(uid, WebhookType.audio_bytes)
+    memory_created = user_webhook_status_db(uid, WebhookType.memory_created)
+    if memory_created is None:
+        memory_created = webhook_first_time_setup(uid, WebhookType.memory_created)
+    realtime_transcript = user_webhook_status_db(uid, WebhookType.realtime_transcript)
+    if realtime_transcript is None:
+        realtime_transcript = webhook_first_time_setup(uid, WebhookType.realtime_transcript)
+    day_summary = user_webhook_status_db(uid, WebhookType.day_summary)
+    if day_summary is None:
+        day_summary = webhook_first_time_setup(uid, WebhookType.day_summary)
     return {
-        'audio_bytes': audioBytes,
-        'memory_created': memoryCreated,
-        'realtime_transcript': realtimeTranscript,
-        'day_summary': daySummary
+        'audio_bytes': audio_bytes,
+        'memory_created': memory_created,
+        'realtime_transcript': realtime_transcript,
+        'day_summary': day_summary
     }
 
 
@@ -213,6 +212,7 @@ def get_memory_summary_rating(
         _: str = Depends(auth.get_current_user_uid),
 ):
     rating = get_memory_summary_rating_score(memory_id)
+    # TODO: later ask reason, a set of options, if user says good, whats the best, if bad, whats the worst
     if not rating:
         return {'has_rating': False}
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
