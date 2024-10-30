@@ -19,12 +19,16 @@ def memory_created_webhook(uid, memory: Memory):
         if not webhook_url:
             return
         webhook_url += f'?uid={uid}'
-        response = requests.post(
-            webhook_url,
-            json=memory.as_dict_cleaned_dates(),
-            headers={'Content-Type': 'application/json'}
-        )
-        print('memory_created_webhook:', response.status_code)
+        try:
+            response = requests.post(
+                webhook_url,
+                json=memory.as_dict_cleaned_dates(),
+                headers={'Content-Type': 'application/json'},
+                timeout=30,
+            )
+            print('memory_created_webhook:', webhook_url, response.status_code)
+        except Exception as e:
+            print(f"Error sending memory created to developer webhook: {e}")
     else:
         return
 
@@ -36,16 +40,20 @@ def day_summary_webhook(uid, summary: str):
         if not webhook_url:
             return
         webhook_url += f'?uid={uid}'
-        response = requests.post(
-            webhook_url,
-            json={
-                'summary': summary,
-                'uid': uid,
-                'created_at': datetime.now().isoformat()
-            },
-            headers={'Content-Type': 'application/json'}
-        )
-        print('day_summary_webhook:', response.status_code)
+        try:
+            response = requests.post(
+                webhook_url,
+                json={
+                    'summary': summary,
+                    'uid': uid,
+                    'created_at': datetime.now().isoformat()
+                },
+                headers={'Content-Type': 'application/json'},
+                timeout=30,
+            )
+            print('day_summary_webhook:', webhook_url, response.status_code)
+        except Exception as e:
+            print(f"Error sending day summary to developer webhook: {e}")
     else:
         return
 
@@ -64,7 +72,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 headers={'Content-Type': 'application/json'},
                 timeout=15,
             )
-            print('realtime_transcript_webhook:', response.status_code)
+            print('realtime_transcript_webhook:', webhook_url, response.status_code)
         except Exception as e:
             print(f"Error sending realtime transcript to developer webhook: {e}")
     else:
@@ -99,7 +107,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
             response = requests.post(webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
-            print('send_audio_bytes_developer_webhook:', response.status_code)
+            print('send_audio_bytes_developer_webhook:', webhook_url, response.status_code)
         except Exception as e:
             print(f"Error sending audio bytes to developer webhook: {e}")
     else:
