@@ -1239,5 +1239,18 @@
     "memory_prompt": "From the transcript, identify potential habits or goals mentioned by the user. Suggest simple, daily micro-habits that align with these goals.",
     "chat_prompt": "Act as a habit coach. Suggest simple daily habits based on past conversations, provide motivation to stay consistent, and track progress over time. Offer reminders and feedback to help the user build sustainable routines.",
     "deleted": false
+  },
+  {
+    "id": "grocery-list",
+    "name": "Grocery List",
+    "author": "Salman M",
+    "description": "Never forget the milk again! This clever plugin listens to your daily chats, picks up on the grocery items you need, and builds your shopping list automatically. It’s smart enough to know what’s important—so you don’t have to. Just talk, and let the app do the remembering!",
+    "image": "/plugins/logos/grocery-list.jpeg",
+    "memories": true,
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "Analyze the following conversation and extract all grocery items that the speakers explicitly mention needing to purchase or add to a shopping list. Focus on items associated with an intention to buy, and disregard any casual or unrelated mentions of food items. List these items plainly, one per line, without additional commentary or conversation details.",
+    "deleted": false
   }
 ]
