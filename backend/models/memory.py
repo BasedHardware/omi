@@ -203,8 +203,9 @@ class Memory(BaseModel):
 
     def as_dict_cleaned_dates(self):
         memory_dict = self.dict()
-        memory_dict['structured']['events'] = [event['start'].isoformat() for event in
-                                               memory_dict['structured']['events']]
+        memory_dict['structured']['events'] = [
+            {**event, 'start': event['start'].isoformat()} for event in memory_dict['structured']['events']
+        ]
         memory_dict['created_at'] = memory_dict['created_at'].isoformat()
         memory_dict['started_at'] = memory_dict['started_at'].isoformat() if memory_dict['started_at'] else None
         memory_dict['finished_at'] = memory_dict['finished_at'].isoformat() if memory_dict['finished_at'] else None
