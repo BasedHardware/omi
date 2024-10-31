@@ -1252,5 +1252,31 @@
     ],
     "memory_prompt": "Analyze the following conversation and extract all grocery items that the speakers explicitly mention needing to purchase or add to a shopping list. Focus on items associated with an intention to buy, and disregard any casual or unrelated mentions of food items. List these items plainly, one per line, without additional commentary or conversation details.",
     "deleted": false
+  },
+  {
+    "id": "qna-coach",
+    "name": "QnA Coach",
+    "author": "Akshay Kripalani",
+    "description": "Identifies key questions that weren't asked during an interview or Q&A session, helping you get a more complete understanding.",
+    "image": "/plugins/logos/qna-coach.png",
+    "memories": true,
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "From the transcript provided, analyze the transcript and identify the main topic of conversation, focusing on the key themes and concepts discussed. Then, analyze the conversation to identify any questions asked about said topic.  Consider questions grounded in the topic of the conversation that aim to uncover deeper insights about the subject and enhance the questioner's understanding. \n\nProvide at most 3 high quality, thought-provoking questions that could have been asked during this interview or Q&A session.  Focus on questions that could be asked specifically to the person being interviewed and that are likely to lead to further exploration of the topic. \n\nIt is imperative that questions be hyper-specific and not generalized. Encourage questions that are: \n- Open-ended, allowing for detailed responses. \n- Lead to critical thinking. \n- Connected, building on previous answers and leading to further exploration. \n\nIf no such questions are found, simply state 'No relevant questions were identified'. YOUR OUTPUT MUST CONTAIN ONLY THE QUESTIONS SHOULD YOU SEE THEM.",
+    "deleted": false
+  },
+  {
+    "id": "actionable-insights",
+    "name": "Actionable Insights",
+    "author": "Akshay Kripalani",
+    "description": "Extracts key lessons from conversations, providing one or two specific actions to improve your daily life, free from general advice.",
+    "image": "/plugins/logos/actionable-insights.jpeg",
+    "memories": true,
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": "From the transcript provided, analyze the transcript and identify the main topic of conversation, focusing on the key themes and concepts discussed. Then, analyze the conversation to identify any lessons that the user can learn from this conversation.  Consider lessons grounded in the topic of the conversation that aim to uncover insights about the user, and provide actionable change they can implement IN DAILY LIFE. Takeaways must be HYPERSPECIFIC and tell the user EXACTLY WHAT ONE THING THEY CAN LEARN FROM THIS CONVERSATION. It is IMPERATIVE to AVOID GENERAL ADVICE THAT IS SEEN AS COMMON SENSE. Examples of GOOD ADVICE include: 'your particular action of <some action> could use improvement in <area>; you could have phrased <sentence> in a better way by <changes>'.  Examples of BAD ADVICE include: 'challenge your biases; be more inclusive, be more respectful'. Your advice must be such that it is something the user can take action on RIGHT AWAY AND IMPROVE THEIR LIFE. Provide only ONE or AT MAX 2 IF REQUIRED takeaways. If the user mentions learning something, include that. If nothing very specific is mentioned, simply state 'No specific learning'. YOUR OUTPUT MUST ONLY CONTAIN THE LEARNING AND THE LEARNING ONLY.",
+    "deleted": false
   }
 ]
