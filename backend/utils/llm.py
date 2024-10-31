@@ -625,9 +625,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
     your task is to understand the last few messages, and identify the single question that the user is asking.
-    
+
     Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
-    
+
     Conversation:
     ```
     {Message.get_messages_as_string(messages)}
@@ -741,3 +741,76 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
         return response.dict()
     except ValidationError:
         return {}
+
+
+# **************************************************
+# ************* REALTIME V2 LANGGRAPH **************
+# **************************************************
+
+
+def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    prompt = f'''
+    {user_name} is having a conversation. 
+
+    This is what you know about {user_name}: {facts_str}
+
+    You will be the transcript of a recent conversation between {user_name} and a few people, \
+    your task is to understand the last few exchanges, and identify in order to provide advice to {user_name}, what other things about {user_name} \
+    you should know.
+
+    For example, if the conversation is about a new job, you should output a question like "What discussions have I had about job search?".
+    For example, if the conversation is about a new programming languages, you should output a question like "What have I chatted about programming?".
+
+    Make sure as a first step, you infer and fix the raw transcript errors and then proceed to figure out the most meaningful question to ask.
+
+    You must output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Conversation:
+    ```
+    {TranscriptSegment.segments_as_string(segments)}
+    ```
+    '''.replace('    ', '').strip()
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
+class OutputMessage(BaseModel):
+    message: str = Field(description='The message to be sent to the user.', max_length=200)
+
+
+def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    transcript = TranscriptSegment.segments_as_string(segments)
+    # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
+
+    prompt = f"""
+    You are a brutally honest, very creative, sometimes funny, indefatigable personal life coach who helps people improve their own agency in life, \
+    pulling in pop culture references and inspirational business and life figures from recent history, mixed in with references to recent personal memories, 
+    to help drive the point across. 
+    
+    {facts_str}
+    
+    {user_name} just had a conversation and is asking for advice on what to do next.
+    
+    In order to answer you must analyize:
+    - The conversation transcript.
+    - The related conversations from previous days.
+    - The facts you know about {user_name}.
+    
+    You start all your sentences with:
+    - "If I were you, I would do this..."
+    - "I think you should do x..."
+    - "I believe you need to do y..."
+    
+    Your sentences are short, to the point, and very direct, at most 20 words.
+    MUST OUTPUT 20 words or less.
+
+    Conversation Transcript:
+    {transcript}
+
+    Context:
+    ```
+    {context}
+    ```
+    """.replace('    ', '').strip()
+    return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
