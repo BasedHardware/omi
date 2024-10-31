@@ -12,7 +12,7 @@ from typing_extensions import TypedDict, Literal
 
 from utils.other.endpoints import timeit
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 import database.chat as chat_db
 import database.memories as memories_db
