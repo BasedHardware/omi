@@ -12,7 +12,7 @@ from typing_extensions import TypedDict
 from models.transcript_segment import TranscriptSegment
 from utils.other.endpoints import timeit
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
