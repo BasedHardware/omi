@@ -1271,7 +1271,7 @@
     "name": "Actionable Insights",
     "author": "Akshay Kripalani",
     "description": "Extracts key lessons from conversations, providing one or two specific actions to improve your daily life, free from general advice.",
-    "image": "/plugins/logos/actionable-insights.jpeg",
+    "image": "/plugins/logos/actionable-insights.png",
     "memories": true,
     "capabilities": [
       "memories"
