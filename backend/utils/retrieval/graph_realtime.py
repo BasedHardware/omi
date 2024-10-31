@@ -52,6 +52,7 @@ def extract_question(state: GraphState):
 
 def retrieve_topics_of_interest(state: GraphState):
     print('retrieve_topics_of_interest')
+    # TODO: use a different extractor without question but the conversation input?
     filters = {
         'people': get_filter_category_items(state.get('uid'), 'people'),
         'topics': get_filter_category_items(state.get('uid'), 'topics'),
@@ -101,16 +102,9 @@ workflow.add_edge('extract_question', 'retrieve_topics_of_interest')
 workflow.add_node("retrieve_topics_of_interest", retrieve_topics_of_interest)
 workflow.add_edge('retrieve_topics_of_interest', 'query_vectors')
 
-# workflow.add_edge(START, 'retrieve_dates_of_interest')
-# workflow.add_node("retrieve_dates_of_interest", retrieve_dates_of_interest)
-# workflow.add_edge('retrieve_dates_of_interest', 'query_vectors')
-
 workflow.add_node('query_vectors', query_vectors)
-
 workflow.add_edge('query_vectors', 'provide_answer')
-
 workflow.add_node('provide_answer', provide_answer)
-
 workflow.add_edge('provide_answer', END)
 
 checkpointer = MemorySaver()
