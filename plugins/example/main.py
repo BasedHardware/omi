@@ -50,7 +50,7 @@ def api():
 app.include_router(basic_memory_created_router.router)
 app.include_router(oauth_memory_created_router.router)
 app.include_router(zapier_memory_created_router.router)
-app.include_router(ahda_realtime_transcription_router.router)
+#app.include_router(ahda_realtime_transcription_router.router)
 
 # app.include_router(basic_realtime_router.router)
 # app.include_router(advanced_realtime_router.router)
