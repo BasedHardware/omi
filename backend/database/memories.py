@@ -62,10 +62,6 @@ def update_memory_title(uid: str, memory_id: str, title: str):
     memory_ref.update({'structured.title': title})
 
 
-# memory = get_memory('TtCJi59JTVXHmyUC6vUQ1d9U6cK2', '0a17a8c6-3bbf-448c-b619-a40c6d696b45')
-# print(json.dumps(memory['transcript_segments']))
-
-
 def delete_memory(uid, memory_id):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
