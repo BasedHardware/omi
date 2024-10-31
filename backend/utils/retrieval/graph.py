@@ -176,22 +176,22 @@ def _pretty_print_conversation(messages: List[Message]):
 
 
 if __name__ == '__main__':
-    def _send_message(text: str, sender: str = 'human'):
-        message = Message(
-            id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
-            type='text'
-        )
-        chat_db.add_message(uid, message.dict())
+    # uid = 'ccQJWj5mwhSY1dwjS1FPFBfKIXe2'
+    # def _send_message(text: str, sender: str = 'human'):
+    #     message = Message(
+    #         id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
+    #         type='text'
+    #     )
+    #     chat_db.add_message(uid, message.dict())
 
 
-    # graph.get_graph().draw_png('workflow.png')
-    uid = 'ccQJWj5mwhSY1dwjS1FPFBfKIXe2'
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    _pretty_print_conversation(messages)
-    # print(messages[-1].text)
-    # _send_message('Check again, Im pretty sure I had some')
-    # raise Exception()
-    start_time = time.time()
-    result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
-    print('result:', result.get('answer'))
-    print('time:', time.time() - start_time)
+    graph.get_graph().draw_png('workflow.png')
+    # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    # _pretty_print_conversation(messages)
+    # # print(messages[-1].text)
+    # # _send_message('Check again, Im pretty sure I had some')
+    # # raise Exception()
+    # start_time = time.time()
+    # result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
+    # print('result:', result.get('answer'))
+    # print('time:', time.time() - start_time)
