@@ -802,7 +802,7 @@
     "name": "Participant Analysis",
     "author": "Findirfin",
     "description": "Lists and Collects information about the people in this conversation",
-    "image": "/plugins/logos/participant-analysis.jpeg",
+    "image": "/plugins/logos/participant-analysis.jpg",
     "capabilities": [
       "memories"
     ],
