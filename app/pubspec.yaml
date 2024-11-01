@@ -30,6 +30,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
   sign_in_button: ^3.2.0
+  dotted_border: ^2.1.0
 
   # Firebase
   firebase_core: 3.3.0
@@ -92,6 +93,7 @@ dependencies:
   flutter_silero_vad:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
+  image_picker: ^1.1.2
 
 
 dependency_overrides:
