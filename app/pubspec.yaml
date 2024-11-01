@@ -126,6 +126,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   flutter_flavorizr: ^2.2.3
+  mockito: ^5.4.4
 
 
 flutter_launcher_icons:
