@@ -3,12 +3,24 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i4;
-import 'dart:ui' as _i5;
+import 'dart:async' as _i5;
+import 'dart:ui' as _i6;
 
-import 'package:firebase_auth/firebase_auth.dart' as _i3;
-import 'package:friend_private/providers/auth_provider.dart' as _i2;
+import 'package:firebase_auth/firebase_auth.dart' as _i4;
+import 'package:friend_private/backend/preferences.dart' as _i12;
+import 'package:friend_private/backend/schema/app.dart' as _i10;
+import 'package:friend_private/backend/schema/bt_device/bt_device.dart' as _i2;
+import 'package:friend_private/backend/schema/memory.dart' as _i13;
+import 'package:friend_private/backend/schema/message.dart' as _i14;
+import 'package:friend_private/backend/schema/person.dart' as _i15;
+import 'package:friend_private/providers/app_provider.dart' as _i9;
+import 'package:friend_private/providers/auth_provider.dart' as _i3;
+import 'package:friend_private/providers/connectivity_provider.dart' as _i7;
+import 'package:friend_private/services/wals.dart' as _i16;
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart'
+    as _i8;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i11;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -23,17 +35,27 @@ import 'package:mockito/mockito.dart' as _i1;
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
+class _FakeBtDevice_0 extends _i1.SmartFake implements _i2.BtDevice {
+  _FakeBtDevice_0(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
 /// A class which mocks [AuthenticationProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockAuthenticationProvider extends _i1.Mock
-    implements _i2.AuthenticationProvider {
+    implements _i3.AuthenticationProvider {
   MockAuthenticationProvider() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  set user(_i3.User? _user) => super.noSuchMethod(
+  set user(_i4.User? _user) => super.noSuchMethod(
         Invocation.setter(
           #user,
           _user,
@@ -81,26 +103,26 @@ class MockAuthenticationProvider extends _i1.Mock
       ) as bool);
 
   @override
-  _i4.Future<void> onGoogleSignIn(dynamic Function()? onSignIn) =>
+  _i5.Future<void> onGoogleSignIn(dynamic Function()? onSignIn) =>
       (super.noSuchMethod(
         Invocation.method(
           #onGoogleSignIn,
           [onSignIn],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> onAppleSignIn(dynamic Function()? onSignIn) =>
+  _i5.Future<void> onAppleSignIn(dynamic Function()? onSignIn) =>
       (super.noSuchMethod(
         Invocation.method(
           #onAppleSignIn,
           [onSignIn],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
   void openTermsOfService() => super.noSuchMethod(
@@ -130,7 +152,7 @@ class MockAuthenticationProvider extends _i1.Mock
       );
 
   @override
-  void addListener(_i5.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i6.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
           [listener],
@@ -139,7 +161,7 @@ class MockAuthenticationProvider extends _i1.Mock
       );
 
   @override
-  void removeListener(_i5.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i6.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #removeListener,
           [listener],
@@ -164,4 +186,1618 @@ class MockAuthenticationProvider extends _i1.Mock
         ),
         returnValueForMissingStub: null,
       );
+}
+
+/// A class which mocks [ConnectivityProvider].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockConnectivityProvider extends _i1.Mock
+    implements _i7.ConnectivityProvider {
+  MockConnectivityProvider() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  bool get isConnected => (super.noSuchMethod(
+        Invocation.getter(#isConnected),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  bool get previousConnection => (super.noSuchMethod(
+        Invocation.getter(#previousConnection),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  bool get hasListeners => (super.noSuchMethod(
+        Invocation.getter(#hasListeners),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i5.Future<void> init() => (super.noSuchMethod(
+        Invocation.method(
+          #init,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  bool isInternetConnected(_i8.InternetStatus? result) => (super.noSuchMethod(
+        Invocation.method(
+          #isInternetConnected,
+          [result],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void addListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #addListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void removeListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #removeListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void notifyListeners() => super.noSuchMethod(
+        Invocation.method(
+          #notifyListeners,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+}
+
+/// A class which mocks [AppProvider].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockAppProvider extends _i1.Mock implements _i9.AppProvider {
+  MockAppProvider() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  List<_i10.App> get apps => (super.noSuchMethod(
+        Invocation.getter(#apps),
+        returnValue: <_i10.App>[],
+      ) as List<_i10.App>);
+
+  @override
+  set apps(List<_i10.App>? _apps) => super.noSuchMethod(
+        Invocation.setter(
+          #apps,
+          _apps,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get filterChat => (super.noSuchMethod(
+        Invocation.getter(#filterChat),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set filterChat(bool? _filterChat) => super.noSuchMethod(
+        Invocation.setter(
+          #filterChat,
+          _filterChat,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get filterMemories => (super.noSuchMethod(
+        Invocation.getter(#filterMemories),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set filterMemories(bool? _filterMemories) => super.noSuchMethod(
+        Invocation.setter(
+          #filterMemories,
+          _filterMemories,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get filterExternal => (super.noSuchMethod(
+        Invocation.getter(#filterExternal),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set filterExternal(bool? _filterExternal) => super.noSuchMethod(
+        Invocation.setter(
+          #filterExternal,
+          _filterExternal,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get searchQuery => (super.noSuchMethod(
+        Invocation.getter(#searchQuery),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#searchQuery),
+        ),
+      ) as String);
+
+  @override
+  set searchQuery(String? _searchQuery) => super.noSuchMethod(
+        Invocation.setter(
+          #searchQuery,
+          _searchQuery,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  List<bool> get appLoading => (super.noSuchMethod(
+        Invocation.getter(#appLoading),
+        returnValue: <bool>[],
+      ) as List<bool>);
+
+  @override
+  set appLoading(List<bool>? _appLoading) => super.noSuchMethod(
+        Invocation.setter(
+          #appLoading,
+          _appLoading,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get selectedChatAppId => (super.noSuchMethod(
+        Invocation.getter(#selectedChatAppId),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#selectedChatAppId),
+        ),
+      ) as String);
+
+  @override
+  set selectedChatAppId(String? _selectedChatAppId) => super.noSuchMethod(
+        Invocation.setter(
+          #selectedChatAppId,
+          _selectedChatAppId,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get loading => (super.noSuchMethod(
+        Invocation.getter(#loading),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set loading(bool? _loading) => super.noSuchMethod(
+        Invocation.setter(
+          #loading,
+          _loading,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get hasListeners => (super.noSuchMethod(
+        Invocation.getter(#hasListeners),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void setSelectedChatAppId(String? appId) => super.noSuchMethod(
+        Invocation.method(
+          #setSelectedChatAppId,
+          [appId],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void setAppLoading(
+    int? index,
+    bool? value,
+  ) =>
+      super.noSuchMethod(
+        Invocation.method(
+          #setAppLoading,
+          [
+            index,
+            value,
+          ],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void clearSearchQuery() => super.noSuchMethod(
+        Invocation.method(
+          #clearSearchQuery,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i5.Future<dynamic> getApps() => (super.noSuchMethod(
+        Invocation.method(
+          #getApps,
+          [],
+        ),
+        returnValue: _i5.Future<dynamic>.value(),
+      ) as _i5.Future<dynamic>);
+
+  @override
+  void setAppsFromCache() => super.noSuchMethod(
+        Invocation.method(
+          #setAppsFromCache,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void updatePrefApps() => super.noSuchMethod(
+        Invocation.method(
+          #updatePrefApps,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void setApps() => super.noSuchMethod(
+        Invocation.method(
+          #setApps,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void initialize(bool? filterChatOnly) => super.noSuchMethod(
+        Invocation.method(
+          #initialize,
+          [filterChatOnly],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i5.Future<void> toggleApp(
+    String? appId,
+    bool? isEnabled,
+    int? idx,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #toggleApp,
+          [
+            appId,
+            isEnabled,
+            idx,
+          ],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  void updateSearchQuery(String? query) => super.noSuchMethod(
+        Invocation.method(
+          #updateSearchQuery,
+          [query],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void toggleFilterChat() => super.noSuchMethod(
+        Invocation.method(
+          #toggleFilterChat,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void toggleFilterMemories() => super.noSuchMethod(
+        Invocation.method(
+          #toggleFilterMemories,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void toggleFilterExternal() => super.noSuchMethod(
+        Invocation.method(
+          #toggleFilterExternal,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void setLoadingState(bool? value) => super.noSuchMethod(
+        Invocation.method(
+          #setLoadingState,
+          [value],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void addListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #addListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void removeListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #removeListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void notifyListeners() => super.noSuchMethod(
+        Invocation.method(
+          #notifyListeners,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+}
+
+/// A class which mocks [SharedPreferencesUtil].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockSharedPreferencesUtil extends _i1.Mock
+    implements _i12.SharedPreferencesUtil {
+  MockSharedPreferencesUtil() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  set uid(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #uid,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get uid => (super.noSuchMethod(
+        Invocation.getter(#uid),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#uid),
+        ),
+      ) as String);
+
+  @override
+  set btDevice(_i2.BtDevice? value) => super.noSuchMethod(
+        Invocation.setter(
+          #btDevice,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i2.BtDevice get btDevice => (super.noSuchMethod(
+        Invocation.getter(#btDevice),
+        returnValue: _FakeBtDevice_0(
+          this,
+          Invocation.getter(#btDevice),
+        ),
+      ) as _i2.BtDevice);
+
+  @override
+  set deviceName(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #deviceName,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get deviceName => (super.noSuchMethod(
+        Invocation.getter(#deviceName),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#deviceName),
+        ),
+      ) as String);
+
+  @override
+  set deviceCodec(_i2.BleAudioCodec? value) => super.noSuchMethod(
+        Invocation.setter(
+          #deviceCodec,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i2.BleAudioCodec get deviceCodec => (super.noSuchMethod(
+        Invocation.getter(#deviceCodec),
+        returnValue: _i2.BleAudioCodec.pcm16,
+      ) as _i2.BleAudioCodec);
+
+  @override
+  bool get deviceIsV2 => (super.noSuchMethod(
+        Invocation.getter(#deviceIsV2),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set deviceIsV2(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #deviceIsV2,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get openAIApiKey => (super.noSuchMethod(
+        Invocation.getter(#openAIApiKey),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#openAIApiKey),
+        ),
+      ) as String);
+
+  @override
+  set openAIApiKey(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #openAIApiKey,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set notificationsEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #notificationsEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get notificationsEnabled => (super.noSuchMethod(
+        Invocation.getter(#notificationsEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set locationEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #locationEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get locationEnabled => (super.noSuchMethod(
+        Invocation.getter(#locationEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  String get gcpCredentials => (super.noSuchMethod(
+        Invocation.getter(#gcpCredentials),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#gcpCredentials),
+        ),
+      ) as String);
+
+  @override
+  set gcpCredentials(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #gcpCredentials,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get gcpBucketName => (super.noSuchMethod(
+        Invocation.getter(#gcpBucketName),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#gcpBucketName),
+        ),
+      ) as String);
+
+  @override
+  set gcpBucketName(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #gcpBucketName,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get webhookOnMemoryCreated => (super.noSuchMethod(
+        Invocation.getter(#webhookOnMemoryCreated),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#webhookOnMemoryCreated),
+        ),
+      ) as String);
+
+  @override
+  set webhookOnMemoryCreated(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #webhookOnMemoryCreated,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get webhookOnTranscriptReceived => (super.noSuchMethod(
+        Invocation.getter(#webhookOnTranscriptReceived),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#webhookOnTranscriptReceived),
+        ),
+      ) as String);
+
+  @override
+  set webhookOnTranscriptReceived(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #webhookOnTranscriptReceived,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get webhookAudioBytes => (super.noSuchMethod(
+        Invocation.getter(#webhookAudioBytes),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#webhookAudioBytes),
+        ),
+      ) as String);
+
+  @override
+  set webhookAudioBytes(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #webhookAudioBytes,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get webhookAudioBytesDelay => (super.noSuchMethod(
+        Invocation.getter(#webhookAudioBytesDelay),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#webhookAudioBytesDelay),
+        ),
+      ) as String);
+
+  @override
+  set webhookDaySummary(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #webhookDaySummary,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get webhookDaySummary => (super.noSuchMethod(
+        Invocation.getter(#webhookDaySummary),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#webhookDaySummary),
+        ),
+      ) as String);
+
+  @override
+  set webhookAudioBytesDelay(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #webhookAudioBytesDelay,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set devModeJoanFollowUpEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #devModeJoanFollowUpEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get devModeJoanFollowUpEnabled => (super.noSuchMethod(
+        Invocation.getter(#devModeJoanFollowUpEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set memoryEventsToggled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #memoryEventsToggled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get memoryEventsToggled => (super.noSuchMethod(
+        Invocation.getter(#memoryEventsToggled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set transcriptsToggled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #transcriptsToggled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get transcriptsToggled => (super.noSuchMethod(
+        Invocation.getter(#transcriptsToggled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set audioBytesToggled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #audioBytesToggled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get audioBytesToggled => (super.noSuchMethod(
+        Invocation.getter(#audioBytesToggled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set daySummaryToggled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #daySummaryToggled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get daySummaryToggled => (super.noSuchMethod(
+        Invocation.getter(#daySummaryToggled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set localSyncEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #localSyncEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get localSyncEnabled => (super.noSuchMethod(
+        Invocation.getter(#localSyncEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  bool get showSummarizeConfirmation => (super.noSuchMethod(
+        Invocation.getter(#showSummarizeConfirmation),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set showSummarizeConfirmation(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #showSummarizeConfirmation,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get recordingsLanguage => (super.noSuchMethod(
+        Invocation.getter(#recordingsLanguage),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#recordingsLanguage),
+        ),
+      ) as String);
+
+  @override
+  set recordingsLanguage(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #recordingsLanguage,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get transcriptionModel => (super.noSuchMethod(
+        Invocation.getter(#transcriptionModel),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#transcriptionModel),
+        ),
+      ) as String);
+
+  @override
+  set transcriptionModel(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #transcriptionModel,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get useFriendApiKeys => (super.noSuchMethod(
+        Invocation.getter(#useFriendApiKeys),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set useFriendApiKeys(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #useFriendApiKeys,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get onboardingCompleted => (super.noSuchMethod(
+        Invocation.getter(#onboardingCompleted),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set onboardingCompleted(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #onboardingCompleted,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get customWebsocketUrl => (super.noSuchMethod(
+        Invocation.getter(#customWebsocketUrl),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#customWebsocketUrl),
+        ),
+      ) as String);
+
+  @override
+  set customWebsocketUrl(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #customWebsocketUrl,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get optInAnalytics => (super.noSuchMethod(
+        Invocation.getter(#optInAnalytics),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set optInAnalytics(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #optInAnalytics,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get optInEmotionalFeedback => (super.noSuchMethod(
+        Invocation.getter(#optInEmotionalFeedback),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set optInEmotionalFeedback(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #optInEmotionalFeedback,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get devModeEnabled => (super.noSuchMethod(
+        Invocation.getter(#devModeEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set devModeEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #devModeEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get permissionStoreRecordingsEnabled => (super.noSuchMethod(
+        Invocation.getter(#permissionStoreRecordingsEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set permissionStoreRecordingsEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #permissionStoreRecordingsEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get hasSpeakerProfile => (super.noSuchMethod(
+        Invocation.getter(#hasSpeakerProfile),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set hasSpeakerProfile(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #hasSpeakerProfile,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get showDiscardedMemories => (super.noSuchMethod(
+        Invocation.getter(#showDiscardedMemories),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set showDiscardedMemories(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #showDiscardedMemories,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int get currentStorageBytes => (super.noSuchMethod(
+        Invocation.getter(#currentStorageBytes),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  set currentStorageBytes(int? value) => super.noSuchMethod(
+        Invocation.setter(
+          #currentStorageBytes,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int get previousStorageBytes => (super.noSuchMethod(
+        Invocation.getter(#previousStorageBytes),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  set previousStorageBytes(int? value) => super.noSuchMethod(
+        Invocation.setter(
+          #previousStorageBytes,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int get enabledAppsCount => (super.noSuchMethod(
+        Invocation.getter(#enabledAppsCount),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  int get enabledAppsIntegrationsCount => (super.noSuchMethod(
+        Invocation.getter(#enabledAppsIntegrationsCount),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  List<_i10.App> get appsList => (super.noSuchMethod(
+        Invocation.getter(#appsList),
+        returnValue: <_i10.App>[],
+      ) as List<_i10.App>);
+
+  @override
+  set appsList(List<_i10.App>? value) => super.noSuchMethod(
+        Invocation.setter(
+          #appsList,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get selectedChatAppId => (super.noSuchMethod(
+        Invocation.getter(#selectedChatAppId),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#selectedChatAppId),
+        ),
+      ) as String);
+
+  @override
+  set selectedChatAppId(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #selectedChatAppId,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  List<_i13.ServerMemory> get cachedMemories => (super.noSuchMethod(
+        Invocation.getter(#cachedMemories),
+        returnValue: <_i13.ServerMemory>[],
+      ) as List<_i13.ServerMemory>);
+
+  @override
+  set cachedMemories(List<_i13.ServerMemory>? value) => super.noSuchMethod(
+        Invocation.setter(
+          #cachedMemories,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  List<_i14.ServerMessage> get cachedMessages => (super.noSuchMethod(
+        Invocation.getter(#cachedMessages),
+        returnValue: <_i14.ServerMessage>[],
+      ) as List<_i14.ServerMessage>);
+
+  @override
+  set cachedMessages(List<_i14.ServerMessage>? value) => super.noSuchMethod(
+        Invocation.setter(
+          #cachedMessages,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  List<_i15.Person> get cachedPeople => (super.noSuchMethod(
+        Invocation.getter(#cachedPeople),
+        returnValue: <_i15.Person>[],
+      ) as List<_i15.Person>);
+
+  @override
+  set cachedPeople(List<_i15.Person>? value) => super.noSuchMethod(
+        Invocation.setter(
+          #cachedPeople,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set modifiedMemoryDetails(_i13.ServerMemory? value) => super.noSuchMethod(
+        Invocation.setter(
+          #modifiedMemoryDetails,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get backupsEnabled => (super.noSuchMethod(
+        Invocation.getter(#backupsEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set backupsEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #backupsEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get lastDailySummaryDay => (super.noSuchMethod(
+        Invocation.getter(#lastDailySummaryDay),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#lastDailySummaryDay),
+        ),
+      ) as String);
+
+  @override
+  set lastDailySummaryDay(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #lastDailySummaryDay,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  set scriptCategoriesAndEmojisExecuted(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #scriptCategoriesAndEmojisExecuted,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get scriptCategoriesAndEmojisExecuted => (super.noSuchMethod(
+        Invocation.getter(#scriptCategoriesAndEmojisExecuted),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set scriptMemoryVectorsExecuted(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #scriptMemoryVectorsExecuted,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get scriptMemoryVectorsExecuted => (super.noSuchMethod(
+        Invocation.getter(#scriptMemoryVectorsExecuted),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set scriptMigrateMemoriesToBack(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #scriptMigrateMemoriesToBack,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get scriptMigrateMemoriesToBack => (super.noSuchMethod(
+        Invocation.getter(#scriptMigrateMemoriesToBack),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set pageToShowFromNotification(int? value) => super.noSuchMethod(
+        Invocation.setter(
+          #pageToShowFromNotification,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int get pageToShowFromNotification => (super.noSuchMethod(
+        Invocation.getter(#pageToShowFromNotification),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  set subPageToShowFromNotification(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #subPageToShowFromNotification,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get subPageToShowFromNotification => (super.noSuchMethod(
+        Invocation.getter(#subPageToShowFromNotification),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#subPageToShowFromNotification),
+        ),
+      ) as String);
+
+  @override
+  set calendarPermissionAlreadyRequested(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #calendarPermissionAlreadyRequested,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get calendarPermissionAlreadyRequested => (super.noSuchMethod(
+        Invocation.getter(#calendarPermissionAlreadyRequested),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set calendarEnabled(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #calendarEnabled,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get calendarEnabled => (super.noSuchMethod(
+        Invocation.getter(#calendarEnabled),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set calendarId(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #calendarId,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get calendarId => (super.noSuchMethod(
+        Invocation.getter(#calendarId),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#calendarId),
+        ),
+      ) as String);
+
+  @override
+  set calendarType(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #calendarType,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get calendarType => (super.noSuchMethod(
+        Invocation.getter(#calendarType),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#calendarType),
+        ),
+      ) as String);
+
+  @override
+  bool get firstTranscriptMade => (super.noSuchMethod(
+        Invocation.getter(#firstTranscriptMade),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set firstTranscriptMade(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #firstTranscriptMade,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get authToken => (super.noSuchMethod(
+        Invocation.getter(#authToken),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#authToken),
+        ),
+      ) as String);
+
+  @override
+  set authToken(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #authToken,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int get tokenExpirationTime => (super.noSuchMethod(
+        Invocation.getter(#tokenExpirationTime),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  set tokenExpirationTime(int? value) => super.noSuchMethod(
+        Invocation.setter(
+          #tokenExpirationTime,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get email => (super.noSuchMethod(
+        Invocation.getter(#email),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#email),
+        ),
+      ) as String);
+
+  @override
+  set email(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #email,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get givenName => (super.noSuchMethod(
+        Invocation.getter(#givenName),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#givenName),
+        ),
+      ) as String);
+
+  @override
+  set givenName(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #givenName,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get familyName => (super.noSuchMethod(
+        Invocation.getter(#familyName),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#familyName),
+        ),
+      ) as String);
+
+  @override
+  set familyName(String? value) => super.noSuchMethod(
+        Invocation.setter(
+          #familyName,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  String get fullName => (super.noSuchMethod(
+        Invocation.getter(#fullName),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.getter(#fullName),
+        ),
+      ) as String);
+
+  @override
+  set locationPermissionRequested(bool? value) => super.noSuchMethod(
+        Invocation.setter(
+          #locationPermissionRequested,
+          value,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get locationPermissionRequested => (super.noSuchMethod(
+        Invocation.getter(#locationPermissionRequested),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  set wals(List<_i16.Wal>? wals) => super.noSuchMethod(
+        Invocation.setter(
+          #wals,
+          wals,
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  List<_i16.Wal> get wals => (super.noSuchMethod(
+        Invocation.getter(#wals),
+        returnValue: <_i16.Wal>[],
+      ) as List<_i16.Wal>);
+
+  @override
+  _i5.Future<void> btDeviceSet(_i2.BtDevice? value) => (super.noSuchMethod(
+        Invocation.method(
+          #btDeviceSet,
+          [value],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<dynamic> setDeviceCodec(_i2.BleAudioCodec? value) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setDeviceCodec,
+          [value],
+        ),
+        returnValue: _i5.Future<dynamic>.value(),
+      ) as _i5.Future<dynamic>);
+
+  @override
+  String gptCompletionCache(String? key) => (super.noSuchMethod(
+        Invocation.method(
+          #gptCompletionCache,
+          [key],
+        ),
+        returnValue: _i11.dummyValue<String>(
+          this,
+          Invocation.method(
+            #gptCompletionCache,
+            [key],
+          ),
+        ),
+      ) as String);
+
+  @override
+  dynamic setGptCompletionCache(
+    String? key,
+    String? value,
+  ) =>
+      super.noSuchMethod(Invocation.method(
+        #setGptCompletionCache,
+        [
+          key,
+          value,
+        ],
+      ));
+
+  @override
+  dynamic enableApp(String? value) => super.noSuchMethod(Invocation.method(
+        #enableApp,
+        [value],
+      ));
+
+  @override
+  dynamic disableApp(String? value) => super.noSuchMethod(Invocation.method(
+        #disableApp,
+        [value],
+      ));
+
+  @override
+  _i15.Person? getPersonById(String? id) =>
+      (super.noSuchMethod(Invocation.method(
+        #getPersonById,
+        [id],
+      )) as _i15.Person?);
+
+  @override
+  dynamic addCachedPerson(_i15.Person? person) =>
+      super.noSuchMethod(Invocation.method(
+        #addCachedPerson,
+        [person],
+      ));
+
+  @override
+  dynamic removeCachedPerson(String? personId) =>
+      super.noSuchMethod(Invocation.method(
+        #removeCachedPerson,
+        [personId],
+      ));
+
+  @override
+  dynamic replaceCachedPerson(_i15.Person? person) =>
+      super.noSuchMethod(Invocation.method(
+        #replaceCachedPerson,
+        [person],
+      ));
+
+  @override
+  _i5.Future<bool> saveString(
+    String? key,
+    String? value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveString,
+          [
+            key,
+            value,
+          ],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  String? getString(String? key) => (super.noSuchMethod(Invocation.method(
+        #getString,
+        [key],
+      )) as String?);
+
+  @override
+  _i5.Future<bool> saveInt(
+    String? key,
+    int? value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveInt,
+          [
+            key,
+            value,
+          ],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  int? getInt(String? key) => (super.noSuchMethod(Invocation.method(
+        #getInt,
+        [key],
+      )) as int?);
+
+  @override
+  _i5.Future<bool> saveBool(
+    String? key,
+    bool? value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveBool,
+          [
+            key,
+            value,
+          ],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  bool? getBool(String? key) => (super.noSuchMethod(Invocation.method(
+        #getBool,
+        [key],
+      )) as bool?);
+
+  @override
+  _i5.Future<bool> saveDouble(
+    String? key,
+    double? value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveDouble,
+          [
+            key,
+            value,
+          ],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  double? getDouble(String? key) => (super.noSuchMethod(Invocation.method(
+        #getDouble,
+        [key],
+      )) as double?);
+
+  @override
+  _i5.Future<bool> saveStringList(
+    String? key,
+    List<String>? value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveStringList,
+          [
+            key,
+            value,
+          ],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  List<String>? getStringList(String? key) =>
+      (super.noSuchMethod(Invocation.method(
+        #getStringList,
+        [key],
+      )) as List<String>?);
+
+  @override
+  _i5.Future<bool> remove(String? key) => (super.noSuchMethod(
+        Invocation.method(
+          #remove,
+          [key],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  _i5.Future<bool> clear() => (super.noSuchMethod(
+        Invocation.method(
+          #clear,
+          [],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
 }
