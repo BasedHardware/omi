@@ -880,32 +880,4 @@ class WalService implements IWalService, IWalSyncListener {
       s.onWalSynced(wal, memory: memory);
     }
   }
-
-  Future<void> handleWatchRecording(List<int> audioData) async {
-    if (_status != WalServiceStatus.ready) return;
-
-    try {
-      // Create WAL entry for watch recording
-      final timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final wal = Wal(
-        timerStart: timerStart,
-        device: "apple_watch",
-        codec: "pcm16",
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.inProgress,
-        storage: WalStorage.mem,
-      );
-
-      // Add audio data
-      wal.data.add(audioData);
-
-      // Add to WAL syncs
-      _syncs.phone.onByteStream(audioData);
-      _syncs.phone.onBytesSync(audioData);
-
-    } catch (e, stackTrace) {
-      debugPrint('Error handling watch recording: $e\n$stackTrace');
-    }
-  }
 }

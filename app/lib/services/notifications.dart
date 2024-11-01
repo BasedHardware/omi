@@ -213,30 +213,6 @@ class NotificationService {
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
   }
-
-  void showWatchConnectionNotification({required bool connected}) {
-    showNotification(
-      id: 1001,
-      title: connected ? 'Apple Watch Connected' : 'Apple Watch Disconnected',
-      body: connected
-        ? 'Your Apple Watch is now connected and ready to record'
-        : 'Apple Watch connection lost. Please check your connection.',
-      wakeUpScreen: !connected,
-    );
-  }
-
-  void showWatchRecordingNotification({required bool isRecording}) {
-    if (isRecording) {
-      showNotification(
-        id: 1002,
-        title: 'Recording from Apple Watch',
-        body: 'Your Apple Watch is now recording audio',
-        wakeUpScreen: false,
-      );
-    } else {
-      clearNotification(1002);
-    }
-  }
 }
 
 class NotificationUtil {

@@ -4,6 +4,13 @@ platform :ios, '15.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# Add script to download XCFrameworks
+def download_xcframework(url, name)
+  system("curl -L #{url} -o #{name}.xcframework.zip")
+  system("unzip -o #{name}.xcframework.zip")
+  system("rm #{name}.xcframework.zip")
+end
+
 project 'Runner', {
   'Debug-prod' => :debug,
   'Profile-prod' => :release,
@@ -30,6 +37,10 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_ios_podfile_setup
 
+# Download XCFrameworks before installing pods
+download_xcframework("https://github.com/sbooth/opus-binary-xcframework/releases/download/0.2.0/opus.xcframework.zip", "opus")
+download_xcframework("https://github.com/sbooth/ogg-binary-xcframework/releases/download/0.1.0/ogg.xcframework.zip", "ogg")
+
 target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
@@ -42,42 +53,26 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+      
+      # Add framework search paths for manually added XCFrameworks
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= ['$(inherited)']
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] << '$(PROJECT_DIR)'
+      
+      # Add specific settings for opus and ogg
+      config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
+      config.build_settings['OTHER_LDFLAGS'] << '-framework opus'
+      config.build_settings['OTHER_LDFLAGS'] << '-framework ogg'
+      
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
-
-        # dart: PermissionGroup.notification
         'PERMISSION_NOTIFICATIONS=1',
-
-        # dart: PermissionGroup.bluetooth
         'PERMISSION_BLUETOOTH=1',
-        
-        ## The 'PERMISSION_LOCATION' macro enables the `locationWhenInUse` and `locationAlways` permission. If
-        ## the application only requires `locationWhenInUse`, only specify the `PERMISSION_LOCATION_WHENINUSE`
-        ## macro.
-        ##
-        ## dart: [PermissionGroup.location, PermissionGroup.locationAlways, PermissionGroup.locationWhenInUse]
         'PERMISSION_LOCATION=1',
         'PERMISSION_LOCATION_WHENINUSE=1',
         'PERMISSION_LOCATION_ALWAYS=1',
-
-        ## dart: PermissionGroup.calendarFullAccess
         'PERMISSION_EVENTS_FULL_ACCESS=1',
-
-        ## dart: PermissionGroup.calendar
         'PERMISSION_EVENTS=1',
       ]
-
     end
   end
-#   ################  Awesome Notifications pod modification 1 ###################
-#   awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
-#   require awesome_pod_file
-#   update_awesome_pod_build_settings(installer)
-#   ################  Awesome Notifications pod modification 1 ###################
 end
-#
-# ################  Awesome Notifications pod modification 2 ###################
-# awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
-# require awesome_pod_file
-# update_awesome_main_target_settings('Runner', File.dirname(File.realpath(__FILE__)), flutter_root)
-# ################  Awesome Notifications pod modification 2 ###################

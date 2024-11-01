@@ -139,25 +139,3 @@ class ForegroundUtil {
     }
   }
 }
-
-class AudioForegroundService {
-  // Add watch recording state
-  bool _isWatchRecording = false;
-
-  Future<void> startWatchRecording() async {
-    if (!_isWatchRecording) {
-      _isWatchRecording = true;
-      await startForegroundService(
-        'Recording from Apple Watch',
-        'Tap to return to app',
-      );
-    }
-  }
-
-  Future<void> stopWatchRecording() async {
-    if (_isWatchRecording) {
-      _isWatchRecording = false;
-      await stopForegroundService();
-    }
-  }
-}

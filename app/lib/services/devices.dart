@@ -5,10 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
-import 'package:friend_private/services/watch_manager.dart';
-import 'package:friend_private/services/devices/models.dart' show friendServiceUuid, frameServiceUuid;
-import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:friend_private/services/devices/models.dart';
 
 abstract class IDeviceService {
   void start();
@@ -56,23 +53,43 @@ class DeviceService implements IDeviceService {
 
   DateTime? _firstConnectedAt;
 
-  final WatchManager _watchManager = WatchManager();
-
-  final _logger = Logger.instance;
-
   @override
   Future<void> discover({
     String? desirableDeviceId,
     int timeout = 5,
   }) async {
-    await _handleWatchDiscovery();
+    debugPrint("Device discovering...");
+    if (_status != DeviceServiceStatus.ready) {
+      throw Exception("Device service is not ready, may busying or stop");
+    }
 
-    // Continue with existing discovery logic
+    if (!(await FlutterBluePlus.isSupported)) {
+      throw Exception("Bluetooth is not supported");
+    }
+
+    if (FlutterBluePlus.isScanningNow) {
+      debugPrint("Device service is scanning...");
+      return;
+    }
+
+    // Listen to scan results, always re-emits previous results
+    var discoverSubscription = FlutterBluePlus.scanResults.listen(
+      (results) async {
+        await _onBleDiscovered(results, desirableDeviceId);
+      },
+      onError: (e) {
+        debugPrint('bleFindDevices error: $e');
+      },
+    );
+    FlutterBluePlus.cancelWhenScanComplete(discoverSubscription);
+
+    // Only look for devices that implement Friend or Frame main service
+    _status = DeviceServiceStatus.scanning;
+    await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
     await FlutterBluePlus.startScan(
       timeout: Duration(seconds: timeout),
       withServices: [Guid(friendServiceUuid), Guid(frameServiceUuid)],
     );
-
     _status = DeviceServiceStatus.ready;
   }
 
@@ -171,17 +188,6 @@ class DeviceService implements IDeviceService {
   bool mutex = false;
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
-    // Handle watch connection
-    if (deviceId == 'apple_watch') {
-      if (await _watchManager.isWatchAvailable()) {
-        return DeviceConnection(
-          device: BtDevice.watch(),
-          status: DeviceConnectionState.connected,
-        );
-      }
-      return null;
-    }
-
     while (mutex) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -242,31 +248,5 @@ class DeviceService implements IDeviceService {
   @override
   DateTime? getFirstConnectedAt() {
     return _firstConnectedAt;
-  }
-
-  Future<void> _handleWatchDiscovery() async {
-    try {
-      if (await _watchManager.isWatchAvailable()) {
-        final watchDevice = BtDevice.watch();
-        if (!_devices.any((d) => d.id == watchDevice.id)) {
-          _devices.add(watchDevice);
-          onDevices(_devices);
-        }
-      } else {
-        // Remove watch device if it exists but is no longer available
-        _devices.removeWhere((d) => d.type == DeviceType.watch);
-        onDevices(_devices);
-      }
-    } catch (e) {
-      _logger.error('Error handling watch discovery', e);
-    }
-  }
-
-  BtDevice createWatchDevice() {
-    return BtDevice(
-      id: 'apple_watch',
-      name: 'Apple Watch',
-      type: DeviceType.watch,
-    );
   }
 }

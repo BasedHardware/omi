@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -6,8 +5,6 @@ import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/frame_connection.dart';
 import 'package:friend_private/services/devices/models.dart';
 import 'package:friend_private/utils/logger.dart';
-import 'package:friend_private/utils/enums.dart';
-import 'dart:math' show min;
 
 enum BleAudioCodec {
   pcm16,
@@ -98,86 +95,253 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
 enum DeviceType {
   friend,
   openglass,
-  necklace,
   frame,
-  watch,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
 class BtDevice {
-  final String id;
-  final String name;
-  final DeviceType type;
-  final DeviceConnectionState? status;
-  final String? firmwareRevision;
-  final String? hardwareRevision;
-  final String? modelNumber;
-  final String? manufacturerName;
+  String name;
+  String id;
+  DeviceType type;
+  int rssi;
+  String? _modelNumber;
+  String? _firmwareRevision;
+  String? _hardwareRevision;
+  String? _manufacturerName;
 
-  const BtDevice({
-    required this.id,
-    required this.name,
-    required this.type,
-    this.status = DeviceConnectionState.disconnected,
-    this.firmwareRevision,
-    this.hardwareRevision,
-    this.modelNumber,
-    this.manufacturerName,
-  });
+  BtDevice(
+      {required this.name,
+      required this.id,
+      required this.type,
+      required this.rssi,
+      String? modelNumber,
+      String? firmwareRevision,
+      String? hardwareRevision,
+      String? manufacturerName}) {
+    _modelNumber = modelNumber;
+    _firmwareRevision = firmwareRevision;
+    _hardwareRevision = hardwareRevision;
+    _manufacturerName = manufacturerName;
+  }
 
-  factory BtDevice.empty() {
-    return const BtDevice(
-      id: '',
-      name: '',
-      type: DeviceType.friend,
+  // create an empty device
+  BtDevice.empty()
+      : name = '',
+        id = '',
+        type = DeviceType.friend,
+        rssi = 0,
+        _modelNumber = '',
+        _firmwareRevision = '',
+        _hardwareRevision = '',
+        _manufacturerName = '';
+
+  // getters
+  String get modelNumber => _modelNumber ?? 'Unknown';
+  String get firmwareRevision => _firmwareRevision ?? 'Unknown';
+  String get hardwareRevision => _hardwareRevision ?? 'Unknown';
+  String get manufacturerName => _manufacturerName ?? 'Unknown';
+
+  // set details
+  set modelNumber(String modelNumber) => _modelNumber = modelNumber;
+  set firmwareRevision(String firmwareRevision) => _firmwareRevision = firmwareRevision;
+  set hardwareRevision(String hardwareRevision) => _hardwareRevision = hardwareRevision;
+  set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
+
+  String getShortId() => BtDevice.shortId(id);
+
+  static shortId(String id) {
+    try {
+      return id.replaceAll(':', '').split('-').last.substring(0, 6);
+    } catch (e) {
+      return id.length > 6 ? id.substring(0, 6) : id;
+    }
+  }
+
+  BtDevice copyWith(
+      {String? name,
+      String? id,
+      DeviceType? type,
+      int? rssi,
+      String? modelNumber,
+      String? firmwareRevision,
+      String? hardwareRevision,
+      String? manufacturerName}) {
+    return BtDevice(
+      name: name ?? this.name,
+      id: id ?? this.id,
+      type: type ?? this.type,
+      rssi: rssi ?? this.rssi,
+      modelNumber: modelNumber ?? _modelNumber,
+      firmwareRevision: firmwareRevision ?? _firmwareRevision,
+      hardwareRevision: hardwareRevision ?? _hardwareRevision,
+      manufacturerName: manufacturerName ?? _manufacturerName,
     );
   }
 
-  String getShortId() {
-    return id.substring(0, min(8, id.length));
+  Future updateDeviceInfo(DeviceConnection? conn) async {
+    if (conn == null) {
+      return this;
+    }
+    return await getDeviceInfo(conn);
   }
 
-  static String shortId(String id) {
-    return id.substring(0, min(8, id.length));
+  Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
+    if (conn == null) {
+      if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
+        var device = SharedPreferencesUtil().btDevice;
+        return copyWith(
+          id: device.id,
+          name: device.name,
+          type: device.type,
+          rssi: device.rssi,
+          modelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+        );
+      } else {
+        return BtDevice.empty();
+      }
+    }
+
+    if (type == DeviceType.friend) {
+      return await _getDeviceInfoFromFriend(conn);
+    } else if (type == DeviceType.openglass) {
+      return await _getDeviceInfoFromFriend(conn);
+    } else if (type == DeviceType.frame) {
+      return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
+    } else {
+      return await _getDeviceInfoFromFriend(conn);
+    }
   }
 
+  Future _getDeviceInfoFromFriend(DeviceConnection conn) async {
+    var modelNumber = 'Friend';
+    var firmwareRevision = '1.0.2';
+    var hardwareRevision = 'Seeed Xiao BLE Sense';
+    var manufacturerName = 'Based Hardware';
+    var t = DeviceType.friend;
+    try {
+      var deviceInformationService = await conn.getService(deviceInformationServiceUuid);
+      if (deviceInformationService != null) {
+        var modelNumberCharacteristic = conn.getCharacteristic(deviceInformationService, modelNumberCharacteristicUuid);
+        if (modelNumberCharacteristic != null) {
+          modelNumber = String.fromCharCodes(await modelNumberCharacteristic.read());
+        }
+
+        var firmwareRevisionCharacteristic =
+            conn.getCharacteristic(deviceInformationService, firmwareRevisionCharacteristicUuid);
+        if (firmwareRevisionCharacteristic != null) {
+          firmwareRevision = String.fromCharCodes(await firmwareRevisionCharacteristic.read());
+        }
+
+        var hardwareRevisionCharacteristic =
+            conn.getCharacteristic(deviceInformationService, hardwareRevisionCharacteristicUuid);
+        if (hardwareRevisionCharacteristic != null) {
+          hardwareRevision = String.fromCharCodes(await hardwareRevisionCharacteristic.read());
+        }
+
+        var manufacturerNameCharacteristic =
+            conn.getCharacteristic(deviceInformationService, manufacturerNameCharacteristicUuid);
+        if (manufacturerNameCharacteristic != null) {
+          manufacturerName = String.fromCharCodes(await manufacturerNameCharacteristic.read());
+        }
+      }
+
+      if (type == DeviceType.openglass) {
+        t = DeviceType.openglass;
+      } else {
+        final friendService = await conn.getService(friendServiceUuid);
+        if (friendService != null) {
+          var imageCaptureControlCharacteristic =
+              conn.getCharacteristic(friendService, imageDataStreamCharacteristicUuid);
+          if (imageCaptureControlCharacteristic != null) {
+            t = DeviceType.openglass;
+          }
+        }
+      }
+    } on PlatformException catch (e) {
+      Logger.error('Device Disconnected while getting device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: t,
+    );
+  }
+
+  Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
+    await conn.init();
+    return copyWith(
+      modelNumber: conn.modelNumber,
+      firmwareRevision: conn.firmwareRevision,
+      hardwareRevision: conn.hardwareRevision,
+      manufacturerName: conn.manufacturerName,
+      type: DeviceType.frame,
+    );
+  }
+
+  // from BluetoothDevice
+  Future fromBluetoothDevice(BluetoothDevice device) async {
+    var rssi = await device.readRssi();
+    return BtDevice(
+      name: device.platformName,
+      id: device.remoteId.str,
+      type: DeviceType.friend,
+      rssi: rssi,
+    );
+  }
+
+  // from ScanResult
+  static fromScanResult(ScanResult result) {
+    DeviceType? deviceType;
+    if (result.advertisementData.serviceUuids.contains(Guid(friendServiceUuid))) {
+      deviceType = DeviceType.friend;
+    } else if (result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid))) {
+      deviceType = DeviceType.frame;
+    }
+    if (deviceType != null) {
+      cachedDevicesMap[result.device.remoteId.toString()] = deviceType;
+    } else if (cachedDevicesMap.containsKey(result.device.remoteId.toString())) {
+      deviceType = cachedDevicesMap[result.device.remoteId.toString()];
+    }
+    return BtDevice(
+      name: result.device.platformName,
+      id: result.device.remoteId.str,
+      type: deviceType ?? DeviceType.friend,
+      rssi: result.rssi,
+    );
+  }
+
+  // from json
+  static fromJson(Map<String, dynamic> json) {
+    return BtDevice(
+      name: json['name'],
+      id: json['id'],
+      type: DeviceType.values[json['type']],
+      rssi: json['rssi'],
+      modelNumber: json['modelNumber'],
+      firmwareRevision: json['firmwareRevision'],
+      hardwareRevision: json['hardwareRevision'],
+      manufacturerName: json['manufacturerName'],
+    );
+  }
+
+  // to json
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
-      'type': type.toString(),
-      'status': status?.toString(),
+      'id': id,
+      'type': type.index,
+      'rssi': rssi,
+      'modelNumber': modelNumber,
       'firmwareRevision': firmwareRevision,
       'hardwareRevision': hardwareRevision,
-      'modelNumber': modelNumber,
       'manufacturerName': manufacturerName,
     };
-  }
-
-  factory BtDevice.fromJson(Map<String, dynamic> json) {
-    return BtDevice(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      type: DeviceType.values.firstWhere(
-        (e) => e.toString() == json['type'],
-        orElse: () => DeviceType.friend,
-      ),
-      status: json['status'] == null
-          ? null
-          : DeviceConnectionState.values.firstWhere(
-              (e) => e.toString() == json['status'],
-              orElse: () => DeviceConnectionState.disconnected,
-            ),
-      firmwareRevision: json['firmwareRevision'] as String?,
-      hardwareRevision: json['hardwareRevision'] as String?,
-      modelNumber: json['modelNumber'] as String?,
-      manufacturerName: json['manufacturerName'] as String?,
-    );
-  }
-
-  Future<BtDevice> getDeviceInfo(DeviceConnection connection) async {
-    // Implementation to get device info
-    return this;
   }
 }
