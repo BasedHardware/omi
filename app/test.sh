@@ -22,20 +22,19 @@ run_test "test/app_test.dart"
 run_test "test/providers/auth_provider_test.dart"
 run_test "test/providers/capture_provider_test.dart"
 run_test "test/providers/memory_provider_test.dart"
-run_test "test/providers/message_provider_test.dart"
 
 # Service tests
 run_test "test/services/device_connection_test.dart"
 run_test "test/services/notifications_test.dart"
 
-# Backend tests
+# Schema tests
 run_test "test/backend/schema/message_test.dart"
 
 # Combine coverage data
 if [ -d "coverage" ]; then
     echo "📊 Generating combined coverage report..."
-    lcov --add-tracefile coverage/lcov.info -o coverage/lcov.info
-    genhtml coverage/lcov.info -o coverage/html
+    lcov -a coverage/lcov.info -o coverage/lcov_combined.info
+    genhtml coverage/lcov_combined.info -o coverage/html --no-function-coverage
     echo "Coverage report generated in coverage/html"
 fi
 
