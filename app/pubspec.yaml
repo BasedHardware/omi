@@ -11,7 +11,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
+
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
@@ -20,7 +20,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # UI 
+  # UI
   auto_size_text: 3.0.0
   lottie: ^3.1.2
   expandable_text: ^2.3.0
@@ -124,8 +124,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   envied_generator: ^0.5.4+1
-  build_runner: ^2.4.11
+  build_runner: ^2.4.8
   flutter_flavorizr: ^2.2.3
+  mockito: ^5.4.4
 
 
 flutter_launcher_icons:

@@ -20,13 +20,18 @@
 11. Add the necessary keys in the env file (OpenAI, Deepgram, Redis, set ADMIN_KEY to 123)
 12.  Run the command `pip install -r requirements.txt` to install required dependencies
 13. Sign Up on [ngrok](https://ngrok.com/) and follow the steps to configure it
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal 
+14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal
 	```
 	ngrok http --domain=example.ngrok-free.app 8000
 	```
 15. Run the following command to start the server
 	```
 	uvicorn main:app --reload --env-file .env
+	```
+	Sometimes if using pyenv, you might need to run uvicorn from venv
+	```
+	source .venv/bin/activate
+	.venv/bin/uvicorn main:app --reload --env-file .env
 	```
 16. If you get any error mentioning `no internet connection or something while downloading models`, then add the following lines in the `utils/stt/vad.py` file after the import statements.
 	```

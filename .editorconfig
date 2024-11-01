@@ -1,0 +1,31 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# All files
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+trim_trailing_whitespace = true
+
+# Dart files
+[*.dart]
+indent_style = space
+indent_size = 2
+
+# Swift files
+[*.swift]
+indent_style = space
+indent_size = 4
+
+# iOS project files
+[*.{xcodeproj,xcworkspace}/**]
+indent_style = space
+indent_size = 2
+
+# iOS storyboard and plist files
+[*.{storyboard,plist,entitlements,xcscheme}]
+indent_style = space
+indent_size = 2

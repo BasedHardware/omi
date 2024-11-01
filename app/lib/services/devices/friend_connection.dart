@@ -6,13 +6,12 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 import 'package:friend_private/services/devices/errors.dart';
-import 'package:friend_private/services/devices/models.dart';
 import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/logger.dart';
+import 'package:friend_private/utils/constants.dart';
 
 class FriendDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;

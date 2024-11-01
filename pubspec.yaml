@@ -1,0 +1,23 @@
+name: friend_private
+description: Friend app
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  provider: ^6.1.2
+  flutter_provider_utilities: ^1.0.6
+
+  # All other dependencies from app/pubspec.yaml should be moved here
+  # ...
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mockito: ^5.4.4
+  build_runner: ^2.4.8

@@ -28,6 +28,7 @@ import 'package:friend_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart';
 
 enum RecordingSource {
   phone,
@@ -61,8 +62,11 @@ class CaptureProvider extends ChangeNotifier
 
   get internetStatus => _internetStatus;
 
-  RecordingSource _recordingSource = RecordingSource.necklace;
-  RecordingSource get recordingSource => _recordingSource;
+  DeviceType? _recordingSource;
+  RecordingState _recordingState = RecordingState.stop;
+  DeviceConnectionState _deviceConnectionState = DeviceConnectionState.disconnected;
+
+  get recordingSource => _recordingSource;
 
   CaptureProvider() {
     _internetStatusListener = PureCore().internetConnection.onStatusChange.listen((InternetStatus status) {
@@ -89,13 +93,11 @@ class CaptureProvider extends ChangeNotifier
 
   get storageStream => _storageStream;
 
-  RecordingState recordingState = RecordingState.stop;
-
   bool _transcriptServiceReady = false;
 
   bool get transcriptServiceReady => _transcriptServiceReady && _internetStatus == InternetStatus.connected;
 
-  bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
+  bool get recordingDeviceServiceReady => _recordingDevice != null || _recordingState == RecordingState.record;
 
   // -----------------------
   // Memory creation variables
@@ -319,7 +321,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void updateRecordingState(RecordingState state) {
-    recordingState = state;
+    _recordingState = state;
     notifyListeners();
   }
 
@@ -782,7 +784,13 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void processRawAudioData(Uint8List audioData) {
+  Future<void> processRawAudioData(Uint8List audioData) async {
+    // Don't process if necklace is recording
+    if (_recordingSource == RecordingSource.necklace &&
+        _recordingState == RecordingState.record) {
+      return;
+    }
+
     if (_socket?.state == SocketServiceState.connected) {
       _socket?.send(audioData);
 
@@ -799,14 +807,14 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> handleRecordingRequest(RecordingSource newSource) async {
     // If necklace is recording, don't allow other sources
-    if (recordingState == RecordingState.record &&
-        recordingSource == RecordingSource.necklace) {
+    if (_recordingState == RecordingState.record &&
+        _recordingSource == RecordingSource.necklace) {
       return;
     }
 
     // If watch is recording and necklace wants to start
-    if (recordingState == RecordingState.record &&
-        recordingSource == RecordingSource.watch &&
+    if (_recordingState == RecordingState.record &&
+        _recordingSource == RecordingSource.watch &&
         newSource == RecordingSource.necklace) {
       await stopStreamRecording();
     }
@@ -816,34 +824,19 @@ class CaptureProvider extends ChangeNotifier
 
   // Update the UI state based on recording source
   String getRecordingSourceText() {
-    switch (recordingSource) {
-      case RecordingSource.necklace:
+    switch (_recordingSource) {
+      case DeviceType.necklace:
         return "Recording from Necklace";
-      case RecordingSource.watch:
+      case DeviceType.watch:
         return "Recording from Watch";
-      case RecordingSource.phone:
+      case DeviceType.phone:
         return "Recording from Phone";
+      default:
+        return "Not Recording";
     }
   }
 
   bool get isWatchRecording =>
-    recordingState == RecordingState.record &&
-    recordingSource == RecordingSource.watch;
-
-  // Add watch-specific method
-  Future<void> processRawAudioData(Uint8List audioData) async {
-    // Don't process if necklace is recording
-    if (recordingSource == RecordingSource.necklace &&
-        recordingState == RecordingState.record) {
-      return;
-    }
-
-    if (_socket?.state == SocketServiceState.connected) {
-      _socket?.send(audioData);
-
-      if (!hasTranscripts) {
-        setHasTranscripts(true);
-      }
-    }
-  }
+    _recordingState == RecordingState.record &&
+    _recordingSource == DeviceType.watch;
 }
