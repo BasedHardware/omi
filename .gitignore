@@ -50,6 +50,8 @@ dist/
 **/ios/Runner/GoogleService-Info.plist
 **/ios/Config/*
 **/ios/Config/**/*
+**/ios/ogg.xcframework
+****/ios/opus.xcframework
 
 # macOS specific
 **/macos/**/Pods/
@@ -63,6 +65,7 @@ dist/
 **/macos/.generated/
 **/macos/Runner.xcworkspace
 **/macos/**/GeneratedPluginRegistrant.*
+**/macos/Runner/GoogleService-Info.plist
 
 # Linux specific
 **/linux/.dart_tool/
@@ -112,6 +115,7 @@ src/recordings
 
 # test output
 test/recordings
+app/coverage
 
 # Flutter
 env.g.dart
