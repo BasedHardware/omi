@@ -88,6 +88,7 @@ dependencies:
   just_audio: ^0.9.39
   frame_sdk: ^0.0.7
   web_socket_channel: ^3.0.1
+  audio_session: ^0.1.21
   talker_flutter:
   flutter_silero_vad:
     git:
