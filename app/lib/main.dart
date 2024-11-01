@@ -298,7 +298,24 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         if (SharedPreferencesUtil().onboardingCompleted && authProvider.user != null) {
           return const HomePageWrapper();
         } else {
-          return const OnboardingWrapper();
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: IntrinsicHeight(
+                    child: DefaultTextStyle(
+                      style: Theme.of(context).textTheme.bodyMedium!,
+                      child: const OnboardingWrapper(),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
         }
       },
     );
@@ -314,60 +331,72 @@ class CustomErrorWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 50.0,
-            ),
-            const SizedBox(height: 10.0),
-            const Text(
-              'Something went wrong! Please try again later.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10.0),
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.all(16),
-              height: 200,
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 63, 63, 63),
-                borderRadius: BorderRadius.circular(10),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 50.0,
               ),
-              child: Text(
-                errorMessage,
-                textAlign: TextAlign.start,
-                style: const TextStyle(fontSize: 16.0),
+              const SizedBox(height: 16.0),
+              const Text(
+                'Something went wrong! Please try again later.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
               ),
-            ),
-            const SizedBox(height: 10.0),
-            SizedBox(
-              width: 210,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: errorMessage));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Error message copied to clipboard'),
-                    ),
-                  );
-                },
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text('Copy error message'),
-                    SizedBox(width: 10),
-                    Icon(Icons.copy_rounded),
-                  ],
+              const SizedBox(height: 16.0),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 63, 63, 63),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(
+                    errorMessage,
+                    textAlign: TextAlign.start,
+                    style: const TextStyle(fontSize: 16.0),
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16.0),
+              SizedBox(
+                width: 210,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: errorMessage));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Error message copied to clipboard'),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Copy error message',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.copy_rounded, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
