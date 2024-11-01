@@ -11,7 +11,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
+
   # State Management
   provider: ^6.1.2
   flutter_provider_utilities: ^1.0.6
@@ -20,7 +20,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # UI 
+  # UI
   auto_size_text: 3.0.0
   lottie: ^3.1.2
   expandable_text: ^2.3.0
@@ -156,23 +156,23 @@ flutter:
   fonts:
     - family: 'SF Pro Display'
       fonts:
-        - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
+        - asset: assets/fonts/SFProDisplayThinItalic.otf
           weight: 100
           style: italic
-        - asset: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
+        - asset: assets/fonts/SFProDisplayLightItalic.otf
           weight: 300
           style: italic
-        - asset: assets/fonts/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
+        - asset: assets/fonts/SFProDisplayRegular.otf
+        - asset: assets/fonts/SFProDisplayHeavyItalic.otf
           style: italic
-        - asset: assets/fonts/SFPRODISPLAYMEDIUM.OTF
+        - asset: assets/fonts/SFProDisplayMedium.otf
           weight: 500
-        - asset: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
+        - asset: assets/fonts/SFProDisplaySemiboldItalic.otf
           weight: 600
           style: italic
-        - asset: assets/fonts/SFPRODISPLAYBOLD.OTF
+        - asset: assets/fonts/SFProDisplayBold.otf
           weight: 700
-        - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
+        - asset: assets/fonts/SFProDisplayBlackItalic.otf
           weight: 900
           style: italic
 
