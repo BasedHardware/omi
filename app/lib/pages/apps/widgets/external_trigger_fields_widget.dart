@@ -1,0 +1,176 @@
+import 'package:flutter/material.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:provider/provider.dart';
+
+class ExternalTriggerFieldsWidget extends StatelessWidget {
+  const ExternalTriggerFieldsWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AddAppProvider>(builder: (context, provider, child) {
+      if (!provider.isCapabilitySelected('External Integration')) {
+        return const SizedBox.shrink();
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField(
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+                borderSide: BorderSide(
+                  color: Colors.white,
+                ),
+              ),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.api,
+                      color: WidgetStateColor.resolveWith(
+                          (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  const Text(
+                    'Trigger Event',
+                  ),
+                ],
+              ),
+              labelStyle: const TextStyle(
+                color: Colors.grey,
+              ),
+              floatingLabelStyle: const TextStyle(
+                color: Colors.white,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'Memory Creation',
+                child: Text('Memory Creation'),
+              ),
+              DropdownMenuItem(
+                value: 'Transcript Processed',
+                child: Text('Transcript Processed'),
+              ),
+            ],
+            onChanged: (v) {},
+          ),
+          const SizedBox(
+            height: 16,
+          ),
+          TextFormField(
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+                borderSide: BorderSide(
+                  color: Colors.white,
+                ),
+              ),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.link,
+                      color: WidgetStateColor.resolveWith(
+                          (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  const Text(
+                    'Webhook URL',
+                  ),
+                ],
+              ),
+              hintText: 'https://your-webhook-url.com/',
+              labelStyle: const TextStyle(
+                color: Colors.grey,
+              ),
+              floatingLabelStyle: const TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 16,
+          ),
+          TextFormField(
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+                borderSide: BorderSide(
+                  color: Colors.white,
+                ),
+              ),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified_user_rounded,
+                      color: WidgetStateColor.resolveWith(
+                          (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  const Text(
+                    'Setup Completed URL',
+                  ),
+                ],
+              ),
+              hintText: 'https://your-setup-completed-url.com/',
+              labelStyle: const TextStyle(
+                color: Colors.grey,
+              ),
+              floatingLabelStyle: const TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 16,
+          ),
+          TextFormField(
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+                borderSide: BorderSide(
+                  color: Colors.white,
+                ),
+              ),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.integration_instructions,
+                      color: WidgetStateColor.resolveWith(
+                          (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  const Text(
+                    'Setup Instructions URL',
+                  ),
+                ],
+              ),
+              hintText: 'https://your-setup-instructions-url.com/',
+              labelStyle: const TextStyle(
+                color: Colors.grey,
+              ),
+              floatingLabelStyle: const TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+}
