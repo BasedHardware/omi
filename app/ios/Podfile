@@ -1,6 +1,10 @@
 # Uncomment this line to define a global platform for your project
 platform :ios, '15.0'
 
+# Move these to the top level, before any target definitions
+use_frameworks! :linkage => :static
+use_modular_headers!
+
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
@@ -54,29 +58,39 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_ios_podfile_setup
 
+# Add Firebase pods with explicit modular headers setting
+pod 'Firebase/Core', :modular_headers => true
+pod 'Firebase/Analytics', :modular_headers => true
+pod 'GoogleUtilities', :modular_headers => true
+pod 'FirebaseCoreInternal', :modular_headers => true
+
 # Download XCFrameworks before installing pods
 download_xcframework("https://github.com/sbooth/opus-binary-xcframework/releases/download/0.2.0/opus.xcframework.zip", "opus")
 download_xcframework("https://github.com/sbooth/ogg-binary-xcframework/releases/download/0.1.0/ogg.xcframework.zip", "ogg")
 
 target 'Runner' do
-	use_frameworks! :linkage => :static
-	use_modular_headers!
-
 	flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
 post_install do |installer|
 	installer.pods_project.targets.each do |target|
 		flutter_additional_ios_build_settings(target)
+
+		# Force Swift modules for all pods
 		target.build_configurations.each do |config|
+			config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+			config.build_settings['DEFINES_MODULE'] = 'YES'
 			config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+
 			# Add framework search paths for manually added XCFrameworks
 			config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= ['$(inherited)']
 			config.build_settings['FRAMEWORK_SEARCH_PATHS'] << '$(PROJECT_DIR)'
+
 			# Add specific settings for opus and ogg
 			config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
 			config.build_settings['OTHER_LDFLAGS'] << '-framework opus'
 			config.build_settings['OTHER_LDFLAGS'] << '-framework ogg'
+
 			config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
 				'$(inherited)',
 
