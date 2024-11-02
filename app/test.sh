@@ -34,21 +34,30 @@ run_test() {
 echo "🔨 Generating mocks..."
 dart run build_runner build --delete-conflicting-outputs
 
-# Run working tests
-echo "📋 Running tests..."
+echo "📋 Running all tests..."
 
-# Schema tests
-echo "📦 Running schema tests..."
-run_test "test/backend/schema/message_test.dart"
+# Core tests
+echo "📦 Running core tests..."
+run_test "test/app_test.dart"
 
 # Provider tests
 echo "📦 Running provider tests..."
+run_test "test/providers/auth_provider_test.dart"
 run_test "test/providers/capture_provider_test.dart"
 run_test "test/providers/memory_provider_test.dart"
 
 # Service tests
 echo "📦 Running service tests..."
 run_test "test/services/device_connection_test.dart"
+run_test "test/services/notifications_test.dart"
+
+# Schema tests
+echo "📦 Running schema tests..."
+run_test "test/backend/schema/message_test.dart"
+
+# Integration tests
+echo "📦 Running integration tests..."
+run_test "test/integration_test/app_test.dart"
 
 # Generate coverage report if tests passed
 if [ $EXIT_CODE -eq 0 ]; then
@@ -58,10 +67,20 @@ if [ $EXIT_CODE -eq 0 ]; then
         echo "📊 Generating coverage report..."
         lcov -a coverage/lcov.info -o coverage/lcov_combined.info
         genhtml coverage/lcov_combined.info -o coverage/html
+
+        # Print coverage summary
+        echo "📊 Coverage Summary:"
+        lcov --summary coverage/lcov_combined.info
+
         echo "Coverage report generated in coverage/html"
     fi
 else
     echo "❌ Some tests failed!"
 fi
+
+# Print summary
+echo "📝 Test Summary:"
+echo "- Total tests attempted: 8"
+echo "- Failed tests: $([[ $EXIT_CODE == 0 ]] && echo "0" || echo "Some")"
 
 exit $EXIT_CODE
