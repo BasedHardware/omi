@@ -6,18 +6,44 @@ import requests
 import torch
 from fastapi import HTTPException
 from pydub import AudioSegment
+from typing import List, Tuple
 
 from database import redis_db
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-(get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
 
 
 class SpeechState(str, Enum):
     speech_found = 'speech_found'
     no_speech = 'no_speech'
+
+
+def load_silero_vad():
+    """Load the Silero VAD model with proper error handling"""
+    try:
+        # Set up GitHub authentication if token exists
+        if github_token := os.environ.get('GITHUB_TOKEN'):
+            print("VAD: Configuring GitHub token")
+            # Configure git to use token for authentication
+            os.environ['GITHUB_TOKEN'] = github_token
+
+        print("VAD: Loading Silero model")
+        model, utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad',
+            model='silero_vad',
+            force_reload=False,
+            trust_repo=True,
+            verbose=False
+        )
+        print("VAD: Model loaded successfully")
+        return model, utils
+    except Exception as e:
+        print(f"VAD: Error loading Silero model: {e}")
+        raise
+
+# Load the model once at module level
+model, utils = load_silero_vad()
 
 
 def is_speech_present(data, vad_iterator, window_size_samples=256):
@@ -87,7 +113,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
         return False
 
 
-def apply_vad_for_speech_profile(file_path: str):
+def apply_vad_for_speech_profile(file_path: str) -> List[Tuple[float, float]]:
     print('apply_vad_for_speech_profile', file_path)
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
