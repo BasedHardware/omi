@@ -10,6 +10,12 @@ class PromptTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       maxLines: null,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Please enter a valid prompt';
+        }
+        return null;
+      },
       controller: controller,
       decoration: InputDecoration(
         border: const OutlineInputBorder(

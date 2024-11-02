@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:friend_private/utils/other/validators.dart';
 import 'package:provider/provider.dart';
 
 class ExternalTriggerFieldsWidget extends StatelessWidget {
@@ -14,7 +15,11 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(
+            height: 20,
+          ),
           DropdownButtonFormField(
+            value: provider.triggerEvent,
             decoration: InputDecoration(
               border: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -55,13 +60,24 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                 value: 'Transcript Processed',
                 child: Text('Transcript Processed'),
               ),
+              DropdownMenuItem(
+                value: 'Audio Bytes',
+                child: Text('Audio Bytes'),
+              ),
             ],
-            onChanged: (v) {},
+            onChanged: provider.setTriggerEvent,
           ),
           const SizedBox(
-            height: 16,
+            height: 20,
           ),
           TextFormField(
+            controller: provider.webhookUrlController,
+            validator: (value) {
+              if (value == null || isValidUrl(value)) {
+                return 'Please enter a valid webhook URL';
+              }
+              return null;
+            },
             decoration: InputDecoration(
               border: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -96,9 +112,16 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(
-            height: 16,
+            height: 20,
           ),
           TextFormField(
+            controller: provider.setupCompletedController,
+            validator: (value) {
+              if (value == null || isValidUrl(value)) {
+                return 'Please enter a valid URL';
+              }
+              return null;
+            },
             decoration: InputDecoration(
               border: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -133,9 +156,16 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             ),
           ),
           const SizedBox(
-            height: 16,
+            height: 20,
           ),
           TextFormField(
+            controller: provider.instructionsController,
+            validator: (value) {
+              if (value == null || isValidUrl(value)) {
+                return 'Please enter a valid webhook URL';
+              }
+              return null;
+            },
             decoration: InputDecoration(
               border: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
