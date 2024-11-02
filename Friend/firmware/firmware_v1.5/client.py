@@ -11,7 +11,8 @@ from scipy.signal import stft, istft
 
 DEVICE_NAME = "Super"
 SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
-CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
+SEND_AUDIO_CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
+RECEIVE_AUDIO_CHARACTERISTIC_UUID = "19B10003-E8F2-537E-4F6C-D104768A1214"
 
 CODEC = "mulaw"  # "pcm" or "mulaw" 
 SAMPLE_RATE = 8000  # Sample rate for the audio
@@ -118,7 +119,8 @@ async def main():
         print("Connected to AudioRecorder")
         services = await client.get_services()
         audio_service = services.get_service(SERVICE_UUID)
-        audio_characteristic = audio_service.get_characteristic(CHARACTERISTIC_UUID)
+        send_audio_characteristic = audio_service.get_characteristic(SEND_AUDIO_CHARACTERISTIC_UUID)
+        receive_audio_characteristic = audio_service.get_characteristic(RECEIVE_AUDIO_CHARACTERISTIC_UUID)
 
         audio_data_capture = bytearray()
         audio_data_receive = bytearray()
@@ -131,20 +133,20 @@ async def main():
             audio_data_receive.extend(data[3:])
 
         async def capture_audio():
-            await client.start_notify(audio_characteristic.uuid, handle_captured_audio)
+            await client.start_notify(send_audio_characteristic.uuid, handle_captured_audio)
             print("Capturing audio...")
             await asyncio.sleep(CAPTURE_TIME)
             print("Capture complete")
-            await client.stop_notify(audio_characteristic.uuid)
+            await client.stop_notify(send_audio_characteristic.uuid)
             asyncio.ensure_future(process_audio(audio_data_capture.copy()))
             audio_data_capture.clear()
 
         async def receive_audio():
-            await client.start_notify(audio_characteristic.uuid, handle_received_audio)
+            await client.start_notify(receive_audio_characteristic.uuid, handle_received_audio)
             print("Receiving audio...")
             await asyncio.sleep(CAPTURE_TIME)
             print("Receive complete")
-            await client.stop_notify(audio_characteristic.uuid)
+            await client.stop_notify(receive_audio_characteristic.uuid)
             asyncio.ensure_future(process_audio(audio_data_receive.copy()))
             audio_data_receive.clear()
         

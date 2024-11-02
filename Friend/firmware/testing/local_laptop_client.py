@@ -2,6 +2,7 @@ import asyncio
 import bleak
 from bleak import BleakClient
 import wave
+import pyaudio
 from datetime import datetime
 import numpy as np
 import time
@@ -11,7 +12,8 @@ from scipy.signal import stft, istft
 
 DEVICE_NAME = "Friend"
 SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
-CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
+SEND_AUDIO_CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
+RECEIVE_AUDIO_CHARACTERISTIC_UUID = "19B10003-E8F2-537E-4F6C-D104768A1214"
 
 CODEC = "pcm"  # "pcm" or "mulaw" 
 SAMPLE_RATE = 8000  # Sample rate for the audio
@@ -103,6 +105,17 @@ async def main():
                 wav_file.setframerate(SAMPLE_RATE)
                 wav_file.writeframes(filtered_audio_data.tobytes())  # Ensure data is in bytes format
 
+    def play_audio(audio_data):
+        """Play received audio using PyAudio."""
+        p = pyaudio.PyAudio()
+        stream = p.open(format=p.get_format_from_width(SAMPLE_WIDTH),
+                        channels=CHANNELS,
+                        rate=SAMPLE_RATE,
+                        output=True)
+        stream.write(audio_data)
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
 
     async def process_audio(audio_data):
         if len(audio_data) == 0:
@@ -112,42 +125,55 @@ async def main():
         filtered_audio_data = filter_audio_data(audio_data)
         export_audio_data(filtered_audio_data, audio_data, ".wav")
         export_audio_data(filtered_audio_data, audio_data, ".txt")
+
+        # Play back the audio we just captured
+        play_audio(filtered_audio_data.tobytes())
         pass
 
     async with BleakClient(audio_recorder.address, services=[SERVICE_UUID], disconnect_callback=handle_ble_disconnect) as client:
         print("Connected to AudioRecorder")
         services = await client.get_services()
         audio_service = services.get_service(SERVICE_UUID)
-        audio_characteristic = audio_service.get_characteristic(CHARACTERISTIC_UUID)
+        send_audio_characteristic = audio_service.get_characteristic(SEND_AUDIO_CHARACTERISTIC_UUID)
+        receive_audio_characteristic = audio_service.get_characteristic(RECEIVE_AUDIO_CHARACTERISTIC_UUID)
 
-        audio_data = bytearray()
+        audio_data_send = bytearray()
         # end_signal = b"\xFF"
+        audio_data_receive = bytearray()
 
-        def handle_audio_data(sender, data):
+        def handle_send_audio_data(sender, data):
             # print("---handle_audio_data---")
             # print(f"Received {len(data)} bytes at {time.time()}")
-            audio_data.extend(data[3:])
+            audio_data_send.extend(data[3:])
             # if data == [end_signal]:
             #     print(f"End signal received after {len(audio_data)} bytes")
             
 
+        def handle_receive_audio_data(sender, data):
+            # Capture incoming audio data
+            audio_data_receive.extend(data[3:])
+            print(f"Playing received audio of length: {len(data)}")
+            play_audio(data)  # Play received audio immediately
+
         async def record_audio():
-            await client.start_notify(audio_characteristic.uuid, handle_audio_data)
+            await client.start_notify(send_audio_characteristic.uuid, handle_send_audio_data)
             print("Recording audio...")
             await asyncio.sleep(CAPTURE_TIME)
             print("Recording stopped")
-            await client.stop_notify(audio_characteristic.uuid)
+            await client.stop_notify(send_audio_characteristic.uuid)
+        
+        async def receive_and_play_audio():
+            await client.start_notify(receive_audio_characteristic.uuid, handle_receive_audio_data)
+            print("Receiving and playing audio...")
+            await asyncio.sleep(CAPTURE_TIME)
+            print("Receiving audio stopped")
+            await client.stop_notify(receive_audio_characteristic.uuid)
         
         async def record_and_process():
             while True:
                 await record_audio()
-                print(len(audio_data))
-                asyncio.ensure_future(process_audio(audio_data.copy()))
-                audio_data.clear()
-                
-        await record_and_process()
-        
-        # await record_audio()
-        
+                asyncio.ensure_future(process_audio(audio_data_send.copy()))
+                audio_data_send.clear()
+        await asyncio.gather(receive_and_play_audio(), record_and_process())
   
 asyncio.run(main())

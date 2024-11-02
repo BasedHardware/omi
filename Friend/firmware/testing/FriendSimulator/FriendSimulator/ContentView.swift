@@ -11,9 +11,11 @@ import AVFoundation
 struct ContentView: View {
     
     @State var audioEngine = AVAudioEngine()
+    @State var audioPlayerNode = AVAudioPlayerNode()
     @ObservedObject var bleManager = BLEManager()
    
     @State var recording = false
+    @State var chatting = false;
     var body: some View {
         // TODO: switches to choose between possible audio formats
         // and publish those on the proper characteristic
@@ -24,32 +26,52 @@ struct ContentView: View {
             Button() {
                 if recording {
                     stopRecording()
+                    stopChatting()
                 } else {
                     startRecording()
                 }
             } label: {
                 Label(recording ? "stop" : "record", systemImage: recording ? "stop.circle" : "record.circle")
             }
+
+            Button() {
+                if chatting {
+                    stopChatting()
+                    stopRecording()
+                } else {
+                    startChatting()
+                    startRecording()
+                }
+            } label: {
+                Label(chatting ? "stop" : "chat", systemImage: recording ? "stop.circle" : "record.circle")
+            }
         }
         .padding()
         .onAppear() {
             bleManager.start()
             setupAudio()
+            bleManager.onAudioDataReceived = handleReceivedAudio
         }
     }
     
     func setupAudio() {
-        let friendFormat = AVAudioFormat.init(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
+        let friendFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
 
+        // Add playback node for received audio
+        audioEngine.attach(audioPlayerNode)
+        
+        // Check the main mixer's output format and connect audioPlayerNode with matching format
+        let mixerOutputFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
+        audioEngine.connect(audioPlayerNode, to: audioEngine.mainMixerNode, format: mixerOutputFormat)
+        
         let input = audioEngine.inputNode
         let bus = 0
         let inputFormat = input.inputFormat(forBus: bus)
         
-        let formatConverter =  AVAudioConverter(from:inputFormat, to: friendFormat!)
+        let formatConverter = AVAudioConverter(from: inputFormat, to: friendFormat!)
         
+        // Tap to send audio data over Bluetooth
         input.installTap(onBus: bus, bufferSize: 160, format: inputFormat) { (buffer, time) in
-            // Note: implementation may choose other size that requested (and in fact it does) -> need to split later before sending over BLE
-
             if !recording {
                 return
             }
@@ -68,11 +90,8 @@ struct ContentView: View {
                 
                 if error != nil {
                     print(error!.localizedDescription)
-                }
-                else {
+                } else {
                     var dataLeft = pcmBuffer!.dataInt()
-                    
-                    // TODO: this is ugly, must implement proper background sending
                     while !dataLeft.isEmpty {
                         let block = dataLeft.prefix(160)
                         bleManager.writeAudio(block)
@@ -83,7 +102,7 @@ struct ContentView: View {
             }
         }
         
-        //run the engine
+        // Run the audio engine
         audioEngine.prepare()
         try! audioEngine.start()
     }
@@ -94,6 +113,31 @@ struct ContentView: View {
     
     func stopRecording() {
         recording = false
+    }
+    
+    func startChatting() {
+        chatting = true
+    }
+    
+    func stopChatting() {
+        chatting = false
+    }
+    
+    func handleReceivedAudio(_ data: Data) {
+        guard let friendFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true) else { return }
+        
+        let frameCount = AVAudioFrameCount(data.count) / friendFormat.streamDescription.pointee.mBytesPerFrame
+        let buffer = AVAudioPCMBuffer(pcmFormat: friendFormat, frameCapacity: frameCount)!
+        buffer.frameLength = frameCount
+
+        data.withUnsafeBytes { (audioBytes: UnsafePointer<Int16>) in
+            buffer.int16ChannelData!.pointee.assign(from: audioBytes, count: Int(frameCount))
+        }
+        
+        audioPlayerNode.scheduleBuffer(buffer, at: nil, options: .interrupts, completionHandler: nil)
+        if !audioPlayerNode.isPlaying {
+            audioPlayerNode.play()
+        }
     }
 }
 
