@@ -7,26 +7,34 @@
 - pip (Python package manager)
 - git
 - ffmpeg
-- Google Cloud SDK
+- Google Cloud SDK (and a Google Cloud Project with billing enabled)
 - Redis instance (e.g., [Upstash](https://upstash.com/))
 - [ngrok](https://ngrok.com/) for local development
 
 ### Required Accounts
 - Google Cloud Project with Firebase enabled
 - OpenAI API account
-- Deepgram account
+- Deepgram account (used for speech-to-text)
 - Redis instance (Upstash recommended)
 - GitHub account (for API access)
 
 ## Installation Steps
 
+### 1. Installing Prerequisites
+
+1. Install Python packages (_if it doesn’t exist_):
+   ```bash
+   brew install pip ffmpeg git
+   ```
+
 ### 1. Google Cloud Setup
-1. Install Google Cloud SDK:
+1. Install Google Cloud SDK (or use nix envdir):
    ```bash
    brew install google-cloud-sdk   # macOS with Homebrew
    ```
 
 2. Configure Google Cloud:
+   
    ```bash
    gcloud auth login
    gcloud config set project <project-id>
@@ -36,6 +44,7 @@
    > This generates application_default_credentials.json in ~/.config/gcloud/
 
 3. Enable required Google Cloud APIs:
+   > Login to the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard).
    - Cloud Resource Manager
    - Firebase Management API
    - Cloud Storage
@@ -84,13 +93,19 @@
 
 ### 4. Running the Server
 
-1. Configure ngrok:
+1. Sign up for [ngrok](https://ngrok.com/) and install the ngrok CLI:
+   ```bash
+   brew install ngrok
+   ```
+
+2. Launch ngrok:
+	> During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal. 
    ```bash
    ngrok http --domain=your-domain.ngrok-free.app 8000
    ```
    > Replace your-domain with your ngrok static domain
 
-2. Start the server:
+4. Start the server:
    ```bash
    uvicorn main:app --reload --env-file .env
    ```
