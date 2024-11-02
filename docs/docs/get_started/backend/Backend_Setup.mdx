@@ -20,7 +20,7 @@ Before you start, make sure you have the following:
     - **Hugging Face:** For voice activity detection ([huggingface.co](https://huggingface.co/))
     - **GitHub:[optional]** For firmware updates ([github.com](https://github.com/))
     - **Google Maps API Key:** 🗺️ (Optional) For location features
-    
+
 **Note:** If you are not very experienced in backend development, we recommend installing [Homebrew](https://docs.brew.sh/Installation) (for macOS or Linux) or [Chocolatey](https://chocolatey.org/install) (for Windows).
 
 ## I. Setting Up Google Cloud & Firebase ☁️
@@ -72,7 +72,7 @@ Before you start, make sure you have the following:
        ```bash
        git clone https://github.com/BasedHardware/Omi.git
        cd Omi
-       cd backend 
+       cd backend
        ```
 
 3. **Set up the Environment File: 📝**
@@ -101,14 +101,14 @@ Before you start, make sure you have the following:
     - Follow their instructions to authenticate Ngrok with your account
     - During the onboarding, Ngrok will provide you with a command to create a tunnel to your localhost. Modify the port in the command to `8000` (the default port for the backend). For example:
       ```bash
-      ngrok http --domain=example.ngrok-free.app 8000 
+      ngrok http --domain=example.ngrok-free.app 8000
       ```
     - Run this command in your terminal. Ngrok will provide you with a public URL (like `https://example.ngrok-free.app`) that points to your local backend
 
 2. **Start the Backend Server: 🖥️**
     - In your terminal, run:
       ```bash
-      uvicorn main:app --reload --env-file .env 
+      uvicorn main:app --reload --env-file .env
       ```
         - `--reload` automatically restarts the server when code changes are saved, making development easier
         - `--env-file .env` loads environment variables from your `.env` file
@@ -139,7 +139,10 @@ Here's a detailed explanation of each environment variable you need to define in
 
 - **`HUGGINGFACE_TOKEN`:** Your Hugging Face Hub API token, used to download models for speech processing (like voice activity detection)
 - **`BUCKET_SPEECH_PROFILES`:**  The name of the Google Cloud Storage bucket where user speech profiles are stored
-- **`BUCKET_BACKUPS`:** The name of the Google Cloud Storage bucket used for backups (if applicable)
+- **`BUCKET_MEMORIES_RECORDINGS`:**  The name of the Google Cloud Storage bucket where memory recordings are stored
+- **`BUCKET_POSTPROCESSING`:**  The name of the Google Cloud Storage bucket where post-processing files are stored
+- **`BUCKET_TEMPORAL_SYNC_LOCAL`:** _(optional)_ The name of the Google Cloud Storage bucket where temporary sync files are stored
+- **`BUCKET_BACKUPS`:** _(optional)_ The name of the Google Cloud Storage bucket where backups are stored
 - **`GOOGLE_APPLICATION_CREDENTIALS`:**  The path to your Google Cloud service account credentials file (`google-credentials.json`). This file is generated in step 3 of **I. Setting Up Google Cloud &
   Firebase**
 - **`PINECONE_API_KEY`:** Your Pinecone API key, used for vector database operations. Storing Memory Embeddings: Each memory is converted into a numerical representation (embedding). Pinecone
