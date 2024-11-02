@@ -206,7 +206,7 @@ class App {
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+  String getImageUrl() => image;
 
   Map<String, dynamic> toJson() {
     return {

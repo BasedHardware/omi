@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
@@ -8,9 +9,12 @@ import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
+
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/plugins',
+    url: '${Env.apiBaseUrl}v3/plugins',
     headers: {},
     body: '',
     method: 'GET',
@@ -131,5 +135,31 @@ Future<double> getAppMoneyMade(String pluginId) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return 0;
+  }
+}
+
+Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/plugins/add'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'plugin_data': jsonEncode(appData)});
+  print(jsonEncode(appData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      throw Exception('Failed to submit app. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred submitAppServer: $e');
+    throw Exception('An error occurred submitAppServer: $e');
   }
 }
