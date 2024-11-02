@@ -1,39 +1,121 @@
-# Setup
-1. Install the google-cloud-sdk `brew install google-cloud-sdk` or if you use nix envdir, it should be installed for you
+# Backend Setup Guide
 
-2. You will need to have your own Google Cloud Project (please refer to the App Docs on how to setup Firebase). If you did setup Firebase for the App, then you'll already have a Project in Google Cloud.
- Make sure you have the `Cloud Resource Manager` and `Firebase Management API` permissions at the minimum in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard)
-3. Run the following commands one by one
-	```
-	gcloud auth login
-	gcloud config set project <project-id>
-	gcloud auth application-default login --project <project-id>
-	```
-	Replace `<project-id>` with your Google Cloud Project ID
-	This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python, so you don’t have to manually add any env for the service account.
-5. Install Python (use brew if on mac) (or with nix env it will be done for you)
-6. Install `pip` (if it doesn’t exist)
-7. Install `git `and `ffmpeg` (use brew if on mac) (again nix env installs this for you)
-8. Move to the backend directory (`cd backend`)
-9. Run the command `cat .env.template > .env`
-10. For Redis (you can use [upstash](https://upstash.com/), sign up and create a free instance)
-11. Add the necessary keys in the env file (OpenAI, Deepgram, Redis, set ADMIN_KEY to 123)
-12.  Run the command `pip install -r requirements.txt` to install required dependencies
-13. Sign Up on [ngrok](https://ngrok.com/) and follow the steps to configure it
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal 
-	```
-	ngrok http --domain=example.ngrok-free.app 8000
-	```
-15. Run the following command to start the server
-	```
-	uvicorn main:app --reload --env-file .env
-	```
-16. If you get any error mentioning `no internet connection or something while downloading models`, then add the following lines in the `utils/stt/vad.py` file after the import statements.
-	```
-	import ssl
-	ssl._create_default_https_context = ssl._create_unverified_context
-	```
-17. Now try running the `uvicorn main:app --reload --env-file .env` command again.
-18. Assign the url given by ngrok in the app’s env to `API_BASE_URL`
-19. Now your app should be using your local backend
+## Prerequisites
+
+### Required Software
+- Python 3.10 or higher
+- pip (Python package manager)
+- git
+- ffmpeg
+- Google Cloud SDK
+- Redis instance (e.g., [Upstash](https://upstash.com/))
+- [ngrok](https://ngrok.com/) for local development
+
+### Required Accounts
+- Google Cloud Project with Firebase enabled
+- OpenAI API account
+- Deepgram account
+- Redis instance (Upstash recommended)
+- GitHub account (for API access)
+
+## Installation Steps
+
+### 1. Google Cloud Setup
+1. Install Google Cloud SDK:
+   ```bash
+   brew install google-cloud-sdk   # macOS with Homebrew
+   ```
+
+2. Configure Google Cloud:
+   ```bash
+   gcloud auth login
+   gcloud config set project <project-id>
+   gcloud auth application-default login --project <project-id>
+   ```
+   > Replace `<project-id>` with your Google Cloud Project ID
+   > This generates application_default_credentials.json in ~/.config/gcloud/
+
+3. Enable required Google Cloud APIs:
+   - Cloud Resource Manager
+   - Firebase Management API
+   - Cloud Storage
+   - Firestore
+
+### 2. Local Environment Setup
+1. Clone the repository and navigate to backend:
+   ```bash
+   cd backend
+   ```
+
+2. Create Python virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Unix/macOS
+   # or
+   .venv\Scripts\activate     # Windows
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Create environment file:
+   ```bash
+   cp .env.template .env
+   ```
+
+### 3. Configuration
+
+1. Required Environment Variables:
+   - `GOOGLE_APPLICATION_CREDENTIALS`: Path to google-credentials.json
+   - `BUCKET_SPEECH_PROFILES`: GCS bucket for speech profiles
+   - `BUCKET_MEMORIES_RECORDINGS`: GCS bucket for memory recordings
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `DEEPGRAM_API_KEY`: Your Deepgram API key
+   - `REDIS_DB_HOST`, `REDIS_DB_PORT`, `REDIS_DB_PASSWORD`: Redis connection details
+   - `ADMIN_KEY`: Set to any value for local development
+
+2. Optional Environment Variables:
+   - `BUCKET_POSTPROCESSING`: For audio post-processing
+   - `BUCKET_TEMPORAL_SYNC_LOCAL`: For temporary sync files
+   - `BUCKET_BACKUPS`: For backups
+   - Other variables as listed in .env.template
+
+### 4. Running the Server
+
+1. Configure ngrok:
+   ```bash
+   ngrok http --domain=your-domain.ngrok-free.app 8000
+   ```
+   > Replace your-domain with your ngrok static domain
+
+2. Start the server:
+   ```bash
+   uvicorn main:app --reload --env-file .env
+   ```
+
+### 5. Troubleshooting
+
+If you encounter SSL certificate errors with model downloads:
+```python
+# Add to utils/stt/vad.py after imports
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+```
+
+## Development Notes
+
+- The server runs on port 8000 by default
+- Use the ngrok URL in your app's environment as `API_BASE_URL`
+- Required directories are created automatically on startup
+- Check logs for initialization status of various services
+
+## Additional Resources
+
+- [Google Cloud Console](https://console.cloud.google.com)
+- [Firebase Console](https://console.firebase.google.com)
+- [OpenAI API Documentation](https://platform.openai.com/docs)
+- [Deepgram Documentation](https://developers.deepgram.com)
+- [Upstash Redis Documentation](https://docs.upstash.com/redis)
 
