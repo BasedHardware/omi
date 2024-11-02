@@ -332,74 +332,34 @@ class CustomErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 50.0,
-              ),
-              const SizedBox(height: 16.0),
-              const Text(
-                'Something went wrong! Please try again later.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16.0),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 200),
-                decoration: BoxDecoration(
-                  color: const Color.fromARGB(255, 63, 63, 63),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(
-                    errorMessage,
-                    textAlign: TextAlign.start,
-                    style: const TextStyle(fontSize: 16.0),
-                  ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 50.0,
+            ),
+            const SizedBox(height: 16.0),
+            const Text(
+              'Something went wrong! Please try again later.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16.0),
+            Expanded(
+              child: SingleChildScrollView(
+                key: const Key('error_message_scroll_view'),
+                child: Text(
+                  errorMessage,
+                  style: const TextStyle(fontSize: 16.0),
                 ),
               ),
-              const SizedBox(height: 16.0),
-              SizedBox(
-                width: 210,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: errorMessage));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Error message copied to clipboard'),
-                      ),
-                    );
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Copy error message',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(Icons.copy_rounded, size: 20),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
