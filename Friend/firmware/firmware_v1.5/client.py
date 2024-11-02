@@ -120,34 +120,34 @@ async def main():
         audio_service = services.get_service(SERVICE_UUID)
         audio_characteristic = audio_service.get_characteristic(CHARACTERISTIC_UUID)
 
-        audio_data = bytearray()
-        # end_signal = b"\xFF"
+        audio_data_capture = bytearray()
+        audio_data_receive = bytearray()
 
-        def handle_audio_data(sender, data):
-            # print("---handle_audio_data---")
-            # print(f"Received {len(data)} bytes at {time.time()}")
-            audio_data.extend(data[3:])
-            # if data == [end_signal]:
-            #     print(f"End signal received after {len(audio_data)} bytes")
-            
+        def handle_captured_audio(sender, data):
+            audio_data_capture.extend(data[3:])
+        
+        def handle_received_audio(sender, data):
+            print(f"Received {len(data)} bytes of received audio.")
+            audio_data_receive.extend(data[3:])
 
-        async def record_audio():
-            await client.start_notify(audio_characteristic.uuid, handle_audio_data)
-            print("Recording audio...")
+        async def capture_audio():
+            await client.start_notify(audio_characteristic.uuid, handle_captured_audio)
+            print("Capturing audio...")
             await asyncio.sleep(CAPTURE_TIME)
-            print("Recording stopped")
+            print("Capture complete")
             await client.stop_notify(audio_characteristic.uuid)
+            asyncio.ensure_future(process_audio(audio_data_capture.copy()))
+            audio_data_capture.clear()
+
+        async def receive_audio():
+            await client.start_notify(audio_characteristic.uuid, handle_received_audio)
+            print("Receiving audio...")
+            await asyncio.sleep(CAPTURE_TIME)
+            print("Receive complete")
+            await client.stop_notify(audio_characteristic.uuid)
+            asyncio.ensure_future(process_audio(audio_data_receive.copy()))
+            audio_data_receive.clear()
         
-        async def record_and_process():
-            while True:
-                await record_audio()
-                print(len(audio_data))
-                asyncio.ensure_future(process_audio(audio_data.copy()))
-                audio_data.clear()
-                
-        await record_and_process()
-        
-        # await record_audio()
-        
+        await asyncio.gather(receive_audio(), capture_audio())
   
 asyncio.run(main())
