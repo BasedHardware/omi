@@ -1,6 +1,5 @@
 import json
 import os
-
 import firebase_admin
 from fastapi import FastAPI
 
@@ -9,32 +8,39 @@ from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, 
     speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
 from utils.other.notifications import start_cron_job
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
-else:
-    firebase_admin.initialize_app()
+print("\nFastAPI: Starting initialization...")
+
+# Initialize Firebase using application default credentials
+firebase_admin.initialize_app()
+print("FastAPI: Firebase initialized")
 
 app = FastAPI()
-app.include_router(transcribe_v2.router)
-app.include_router(memories.router)
-app.include_router(facts.router)
-app.include_router(chat.router)
-app.include_router(plugins.router)
-app.include_router(speech_profile.router)
-# app.include_router(screenpipe.router)
-app.include_router(workflow.router)
-app.include_router(notifications.router)
-app.include_router(workflow.router)
-app.include_router(agents.router)
-app.include_router(users.router)
-app.include_router(processing_memories.router)
-app.include_router(trends.router)
 
-app.include_router(firmware.router)
-app.include_router(sdcard.router)
-app.include_router(sync.router)
+# Include routers with logging
+print("FastAPI: Registering routes")
+routers = [
+    (transcribe_v2.router, "transcribe_v2"),
+    (memories.router, "memories"),
+    (facts.router, "facts"),
+    (chat.router, "chat"),
+    (plugins.router, "plugins"),
+    (speech_profile.router, "speech_profile"),
+    (workflow.router, "workflow"),
+    (notifications.router, "notifications"),
+    (agents.router, "agents"),
+    (users.router, "users"),
+    (processing_memories.router, "processing_memories"),
+    (trends.router, "trends"),
+    (firmware.router, "firmware"),
+    (sdcard.router, "sdcard"),
+    (sync.router, "sync")
+]
+
+for router, name in routers:
+    print(f"FastAPI: Including router - {name}")
+    app.include_router(router)
+
+print("FastAPI: All routes registered")
 
 modal_app = App(
     name='backend',
@@ -46,6 +52,16 @@ image = (
     .pip_install_from_requirements('requirements.txt')
 )
 
+# Create required directories
+paths = ['_temp', '_samples', '_segments', '_speech_profiles']
+for path in paths:
+    if not os.path.exists(path):
+        os.makedirs(path)
+print("FastAPI: Created required directories")
+
+print("\n" + "="*50)
+print("🚀 Backend ready and running!")
+print("="*50 + "\n")
 
 @modal_app.function(
     image=image,
@@ -59,17 +75,9 @@ image = (
 def api():
     return app
 
-
-paths = ['_temp', '_samples', '_segments', '_speech_profiles']
-for path in paths:
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
 @modal_app.function(image=image, schedule=Cron('* * * * *'))
 async def notifications_cronjob():
     await start_cron_job()
-
 
 @app.post('/webhook')
 async def webhook(data: dict):
