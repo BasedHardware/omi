@@ -23,6 +23,10 @@ yarn.lock
 build/
 dist/
 
+# Google Services
+**/GoogleService-Info.plist
+**/google-services.json
+
 # Android specific
 **/android/**/build/
 **/android/.gradle
@@ -32,9 +36,6 @@ dist/
 **/android/**/gradle-wrapper.jar
 **/android/**/local.properties
 **/android/**/GeneratedPluginRegistrant.java
-**/android/app/google-services.json
-**/android/app/src/dev/google-services.json
-**/android/app/src/prod/google-services.json
 
 # iOS specific
 **/ios/**/Pods/
@@ -47,11 +48,10 @@ dist/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
 **/ios/**/xcuserdata
-**/ios/Runner/GoogleService-Info.plist
 **/ios/Config/*
 **/ios/Config/**/*
 **/ios/ogg.xcframework
-****/ios/opus.xcframework
+**/ios/opus.xcframework
 
 # macOS specific
 **/macos/**/Pods/
