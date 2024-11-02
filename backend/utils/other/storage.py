@@ -234,3 +234,11 @@ def _get_signed_url(blob, minutes):
     signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET")
     cache_signed_url(blob.name, signed_url, minutes * 60)
     return signed_url
+
+
+def upload_plugin_logo(file_path: str, plugin_id: str):
+    bucket = storage_client.bucket('omi_plugins')
+    path = f'{plugin_id}.png'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/omi_plugins/{path}'
