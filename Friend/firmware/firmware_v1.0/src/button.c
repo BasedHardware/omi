@@ -125,7 +125,7 @@ static inline void notify_unpress()
 static inline void notify_tap() 
 {
     final_button_state[0] = SINGLE_TAP;
-    LOG_INF("tap");
+    LOG_INF("single tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
