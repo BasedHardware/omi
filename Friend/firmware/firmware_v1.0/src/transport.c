@@ -866,7 +866,7 @@ void start_voice_interaction() {
     }
 }
 
-void stop_voice_interaction() {
+void stop_voice_interaction(void) {
     if (voice_interaction_active) {
         voice_interaction_active = false;
         LOG_INF("Voice interaction stopped");
