@@ -626,10 +626,8 @@ bool write_to_storage(void) {//max possible packing
 }
 
 extern bool is_off;
-static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
 
 void update_file_size() 
 {
