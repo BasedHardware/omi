@@ -345,3 +345,30 @@ def get_closest_memory_to_timestamps(
     return closest_memory
 
 # get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)
+
+class MemoriesDB:
+    def __init__(self, db_client):
+        self.db = db_client
+        self.collection = self.db.get_collection("memories")
+
+    async def create_memory(self, memory_data: dict) -> dict:
+        result = await self.collection.insert_one(memory_data)
+        return await self.collection.find_one({"_id": result.inserted_id})
+
+    async def get_memory(self, memory_id: str) -> Optional[dict]:
+        return await self.collection.find_one({"memory_id": memory_id})
+
+    async def get_user_memories(self, user_id: str) -> List[dict]:
+        cursor = self.collection.find({"user_id": user_id})
+        return await cursor.to_list(length=None)
+
+    async def update_memory(self, memory_id: str, updates: dict) -> dict:
+        await self.collection.update_one({"memory_id": memory_id}, {"$set": updates})
+        return await self.get_memory(memory_id)
+
+    async def search_memories(self, user_id: str, query: str) -> List[dict]:
+        cursor = self.collection.find({
+            "user_id": user_id,
+            "content": {"$regex": query, "$options": "i"}
+        })
+        return await cursor.to_list(length=None)
