@@ -59,6 +59,9 @@ static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_U
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+static struct bt_uuid_128 voice_interaction_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10004, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 voice_interaction_rx_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10005, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
@@ -68,7 +71,18 @@ static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
-    
+
+    BT_GATT_CHARACTERISTIC(&voice_interaction_uuid.uuid,
+        BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        NULL, NULL, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+
+    BT_GATT_CHARACTERISTIC(&voice_interaction_rx_uuid.uuid,
+        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+        BT_GATT_PERM_WRITE,
+        NULL, voice_interaction_write_handler, NULL),
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -706,9 +720,11 @@ extern struct bt_gatt_service storage_service;
 int bt_on()
 {
     int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    // bt_gatt_service_register(&storage_service);
-
+    if (err) {
+        return err;
+    }
+    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    return err;
 }
 
 //periodic advertising
@@ -804,8 +820,22 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    while (!write_to_tx_queue(buffer, size))
-    {
+    if (is_off) {
+        return -EPERM; // Device is sleeping
+    }
+
+    if (voice_interaction_active) {
+        // Send through voice interaction characteristic
+        struct bt_conn *conn = get_current_connection();
+        if (conn) {
+            int index = 6; // Index of voice interaction characteristic
+            bt_gatt_notify(conn, &audio_service.attrs[index], buffer, size);
+        }
+        return 0;
+    }
+
+    // Normal audio handling
+    while (!write_to_tx_queue(buffer, size)) {
         k_sleep(K_MSEC(1));
     }
     return 0;
