@@ -15,14 +15,14 @@ class CapabilitiesChipsWidget extends StatelessWidget {
         children: [
           ChoiceChip(
             label: const Text('Chat'),
-            selected: provider.isCapabilitySelected('Chat'),
+            selected: provider.isCapabilitySelected('chat'),
             backgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
             showCheckmark: true,
             onSelected: (bool selected) {
-              provider.addOrRemoveCapability('Chat');
+              provider.addOrRemoveCapability('chat');
             },
           ),
           const SizedBox(
@@ -30,14 +30,14 @@ class CapabilitiesChipsWidget extends StatelessWidget {
           ),
           ChoiceChip(
             label: const Text('Memories'),
-            selected: provider.isCapabilitySelected('Memories'),
+            selected: provider.isCapabilitySelected('memories'),
             showCheckmark: true,
             backgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
             onSelected: (bool selected) {
-              provider.addOrRemoveCapability('Memories');
+              provider.addOrRemoveCapability('memories');
             },
           ),
           const SizedBox(
@@ -45,14 +45,14 @@ class CapabilitiesChipsWidget extends StatelessWidget {
           ),
           ChoiceChip(
             label: const Text('External Integration'),
-            selected: provider.isCapabilitySelected('External Integration'),
+            selected: provider.isCapabilitySelected('external_integration'),
             showCheckmark: true,
             backgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
             onSelected: (bool selected) {
-              provider.addOrRemoveCapability('External Integration');
+              provider.addOrRemoveCapability('external_integration');
             },
           ),
         ],
