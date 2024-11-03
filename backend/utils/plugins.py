@@ -118,16 +118,20 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         else:
             url += '?uid=' + uid
 
-        response = requests.post(url, json=memory_dict, timeout=30,)  # TODO: failing?
-        if response.status_code != 200:
-            print('Plugin integration failed', plugin.id, 'result:', response.content)
+        try:
+            response = requests.post(url, json=memory_dict, timeout=30,)  # TODO: failing?
+            if response.status_code != 200:
+                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                return
+
+            record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration, memory_id=memory.id)
+
+            # print('response', response.json())
+            if message := response.json().get('message', ''):
+                results[plugin.id] = message
+        except Exception as e:
+            print(f"Plugin integration error: {e}")
             return
-
-        record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration, memory_id=memory.id)
-
-        print('response', response.json())
-        if message := response.json().get('message', ''):
-            results[plugin.id] = message
 
     for plugin in filtered_plugins:
         threads.append(threading.Thread(target=_single, args=(plugin,)))

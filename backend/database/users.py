@@ -98,3 +98,8 @@ def get_memory_summary_rating_score(memory_id: str):
     if doc.exists:
         return doc.to_dict()
     return None
+
+
+def get_all_ratings():
+    ratings = db.collection('analytics').where('type', '==', 'memory_summary').stream()
+    return [rating.to_dict() for rating in ratings]
