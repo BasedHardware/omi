@@ -70,16 +70,6 @@ class HTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-class MockResponse:
-    def __init__(self, status_code=200, json_data=None, text="", headers=None):
-        self.status_code = status_code
-        self._json_data = json_data or {}
-        self.text = text
-        self.headers = headers or {}
-
-    def json(self):
-        return self._json_data
-
 # Mock all external dependencies
 mock_protobuf = MagicMock()
 mock_protobuf.internal = MagicMock()
