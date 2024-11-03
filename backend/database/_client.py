@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 from google.cloud import firestore
+from google.cloud.firestore_v1 import AsyncClient
 from google.oauth2 import credentials
 from google.auth import default
 
@@ -51,18 +52,40 @@ if not project_id:
 
 print(f"Firebase: Initializing with project ID: {project_id}")
 
-# Initialize Firestore client
-db = firestore.Client(project=project_id)
+def get_firestore():
+    """Get Firestore client"""
+    return firestore.Client(project=project_id)
+
+def get_async_firestore():
+    """Get Async Firestore client"""
+    return AsyncClient(project=project_id)
+
+# Initialize default client
+db = get_firestore()
+
+def transaction(func):
+    """Decorator to handle Firestore transactions"""
+    def wrapper(*args, **kwargs):
+        return db.transaction(lambda t: func(t, *args, **kwargs))
+    return wrapper
 
 def get_users_uid():
     users_ref = db.collection('users')
     return [str(doc.id) for doc in users_ref.stream()]
 
-def document_id_from_seed(seed: str) -> uuid.UUID:
+def document_id_from_seed(seed: str) -> str:
     """Avoid repeating the same data"""
     seed_hash = hashlib.sha256(seed.encode('utf-8')).digest()
     generated_uuid = uuid.UUID(bytes=seed_hash[:16], version=4)
     return str(generated_uuid)
 
-# Export project_id to be used by other modules
-__all__ = ['db', 'get_users_uid', 'document_id_from_seed', 'project_id']
+# Export all needed functions
+__all__ = [
+    'db', 
+    'get_firestore',
+    'get_async_firestore',
+    'transaction',
+    'get_users_uid',
+    'document_id_from_seed',
+    'project_id'
+]
