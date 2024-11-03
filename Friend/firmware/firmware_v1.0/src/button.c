@@ -84,12 +84,19 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
 
 #define DEFAULT_STATE 0
-#define SINGLE_TAP 1
-#define DOUBLE_TAP 2
-#define LONG_TAP 3
-#define BUTTON_PRESS 4
-#define BUTTON_RELEASE 5
+#define SINGLE_TAP 1    // Quick press and release
+#define DOUBLE_TAP 2    // Two quick presses - Currently used for voice interaction
+#define LONG_TAP 3      // Long press - Currently used for sleep/wake
+#define BUTTON_PRESS 4  // Button down event
+#define BUTTON_RELEASE 5 // Button up event
 
+// FSM States
+typedef enum {
+    IDLE,
+    ONE_PRESS,
+    TWO_PRESS,
+    GRACE
+} FSM_STATE_T;
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
