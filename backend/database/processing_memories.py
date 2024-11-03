@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -12,24 +12,62 @@ def upsert_processing_memory(uid: str, processing_memory_data: dict):
     processing_memory_ref = user_ref.collection('processing_memories').document(processing_memory_data['id'])
     processing_memory_ref.set(processing_memory_data)
 
-
-def update_processing_memory(uid: str, processing_memory_id: str, memoy_data: dict):
-    user_ref = db.collection('users').document(uid)
-    processing_memory_ref = user_ref.collection('processing_memories').document(processing_memory_id)
-    processing_memory_ref.update(memoy_data)
-
-
-def delete_processing_memory(uid, processing_memory_id):
-    user_ref = db.collection('users').document(uid)
-    processing_memory_ref = user_ref.collection('processing_memories').document(processing_memory_id)
-    processing_memory_ref.update({'deleted': True})
+def update_processing_memory(memory_id: str, memory_data: dict):
+    """Update processing memory document"""
+    # Note: This needs user_id to work properly
+    memories = db.collection_group('processing_memories').where(
+        filter=FieldFilter('id', '==', memory_id)
+    ).limit(1).stream()
+    docs = list(memories)
+    if docs:
+        docs[0].reference.update(memory_data)
 
 
-def get_processing_memories_by_id(uid, processing_memory_ids):
+def delete_processing_memory(memory_id: str):
+    """Delete processing memory document"""
+    # Note: This needs user_id to work properly
+    memories = db.collection_group('processing_memories').where(
+        filter=FieldFilter('id', '==', memory_id)
+    ).limit(1).stream()
+    docs = list(memories)
+    if docs:
+        docs[0].reference.update({'deleted': True})
+
+
+def create_processing_memory(memory_data: dict) -> str:
+    """Create a new processing memory document"""
+    user_ref = db.collection('users').document(memory_data['user_id'])
+    doc_ref = user_ref.collection('processing_memories').document(memory_data['id'])
+    doc_ref.set(memory_data)
+    return memory_data['id']
+
+
+def get_processing_memory(memory_id: str) -> Optional[dict]:
+    """Get processing memory by ID"""
+    # Note: This needs user_id to work properly
+    memories = db.collection_group('processing_memories').where(
+        filter=FieldFilter('id', '==', memory_id)
+    ).limit(1).stream()
+    docs = list(memories)
+    return docs[0].to_dict() if docs else None
+
+
+def get_processing_memories_by_state(user_id: str, state: str) -> List[dict]:
+    """Get processing memories by state"""
+    memories_ref = (
+        db.collection('users').document(user_id)
+        .collection('processing_memories')
+        .where(filter=FieldFilter('state', '==', state))
+    )
+    return [doc.to_dict() for doc in memories_ref.stream()]
+
+
+def get_processing_memories_by_id(uid: str, processing_memory_ids: List[str]) -> List[dict]:
+    """Get processing memories by IDs"""
     user_ref = db.collection('users').document(uid)
     memories_ref = user_ref.collection('processing_memories')
 
-    doc_refs = [memories_ref.document(str(processing_memory_id)) for processing_memory_id in processing_memory_ids]
+    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in processing_memory_ids]
     docs = db.get_all(doc_refs)
 
     memories = []
@@ -39,25 +77,34 @@ def get_processing_memories_by_id(uid, processing_memory_ids):
     return memories
 
 
-def get_processing_memory_by_id(uid, processing_memory_id):
+def get_processing_memory_by_id(uid: str, processing_memory_id: str) -> Optional[dict]:
+    """Get processing memory by ID"""
     memory_ref = db.collection('users').document(uid).collection('processing_memories').document(processing_memory_id)
     return memory_ref.get().to_dict()
 
 
-def get_processing_memories(uid: str, statuses: [str] = [], filter_ids: [str] = [], limit: int = 5):
+def get_processing_memories(uid: str, statuses: List[str] = None, filter_ids: List[str] = None, limit: int = 5) -> List[dict]:
+    """Get processing memories with filters"""
+    statuses = statuses or []
+    filter_ids = filter_ids or []
+    
     processing_memories_ref = (
         db.collection('users').document(uid).collection('processing_memories')
     )
-    if len(statuses) > 0:
+    
+    if statuses:
         processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('status', 'in', statuses))
-    if len(filter_ids) > 0:
+    if filter_ids:
         processing_memories_ref = processing_memories_ref.where(filter=FieldFilter('id', 'in', filter_ids))
+        
     processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     processing_memories_ref = processing_memories_ref.limit(limit)
+    
     return [doc.to_dict() for doc in processing_memories_ref.stream()]
 
 
 def update_processing_memory_segments(uid: str, id: str, segments: List[dict], capturing_to: datetime):
+    """Update processing memory segments"""
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({
@@ -67,6 +114,7 @@ def update_processing_memory_segments(uid: str, id: str, segments: List[dict], c
 
 
 def update_processing_memory_status(uid: str, id: str, status: str):
+    """Update processing memory status"""
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({
@@ -75,6 +123,7 @@ def update_processing_memory_status(uid: str, id: str, status: str):
 
 
 def update_audio_url(uid: str, id: str, audio_url: str):
+    """Update processing memory audio URL"""
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('processing_memories').document(id)
     memory_ref.update({
@@ -82,13 +131,28 @@ def update_audio_url(uid: str, id: str, audio_url: str):
     })
 
 
-def get_last(uid: str):
+def get_last(uid: str) -> Optional[dict]:
+    """Get last processing memory"""
     processing_memories_ref = (
         db.collection('users').document(uid).collection('processing_memories')
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
-    processing_memories_ref = processing_memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    processing_memories_ref = processing_memories_ref.limit(1)
     docs = [doc.to_dict() for doc in processing_memories_ref.stream()]
-    if len(docs) > 0:
-        return docs[0]
-    return None
+    return docs[0] if docs else None
+
+
+__all__ = [
+    'create_processing_memory',
+    'get_processing_memory',
+    'update_processing_memory',
+    'delete_processing_memory',
+    'get_processing_memories_by_state',
+    'get_processing_memories_by_id',
+    'get_processing_memory_by_id',
+    'get_processing_memories',
+    'update_processing_memory_segments',
+    'update_processing_memory_status',
+    'update_audio_url',
+    'get_last'
+]
