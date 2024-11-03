@@ -856,8 +856,8 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
 
 bool voice_interaction_active = false;
 
-void start_voice_interaction() {
-    if (!is_off) {  // Only start if device is awake
+void start_voice_interaction(void) {
+    if (!is_off) {
         voice_interaction_active = true;
         LOG_INF("Voice interaction started");
 
