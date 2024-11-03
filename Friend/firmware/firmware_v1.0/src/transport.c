@@ -859,10 +859,13 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
         // Send through voice interaction characteristic
         struct bt_conn *conn = get_current_connection();
         if (conn) {
-            int index = 6; // Index of voice interaction characteristic
-            bt_gatt_notify(conn, &audio_service.attrs[index], buffer, size);
+            int err = bt_gatt_notify(conn, &audio_service.attrs[6], buffer, size);
+            if (err) {
+                LOG_ERR("Failed to send voice data: %d", err);
+            }
+            return err;
         }
-        return 0;
+        return -ENOTCONN;
     }
 
     // Normal audio handling
@@ -880,7 +883,15 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
                                              uint8_t flags) {
     if (!is_off) {
         LOG_INF("Received voice response data: %d bytes", len);
-        speak_stream(len, buf);
+        if (len == 4) {
+            // This is the size packet
+            uint32_t size = *((uint32_t *)buf);
+            LOG_INF("Expected voice response size: %d bytes", size);
+            return len;
+        }
+
+        // Process audio data
+        return speak_stream(len, buf);
     }
     return len;
 }
