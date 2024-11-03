@@ -1,6 +1,4 @@
 import re
-from typing import Optional
-from fastapi import HTTPException
 
 def validate_uid(uid: str) -> bool:
     """Validate Firebase UID format"""
@@ -20,5 +18,58 @@ def validate_audio_file(file_content: bytes, max_size_mb: int = 10) -> bool:
     # Check WAV header
     if not file_content.startswith(b'RIFF') or b'WAVE' not in file_content[:12]:
         raise HTTPException(status_code=400, detail="Invalid audio file format")
+
+def validate_email(email) -> bool:
+    """
+    Validate an email address.
     
-    return True 
+    Args:
+        email: The email address to validate
+        
+    Returns:
+        bool: True if email is valid, False otherwise
+    """
+    if not isinstance(email, str):
+        return False
+        
+    try:
+        # Basic checks
+        if not email or len(email) > 254:
+            return False
+
+        # Split into local and domain parts
+        parts = email.split('@')
+        if len(parts) != 2:  # Must have exactly one @
+            return False
+            
+        local, domain = parts
+
+        # Local part checks
+        if not local or len(local) > 64 or ' ' in local:
+            return False
+
+        # Domain checks
+        if not domain or '.' not in domain:
+            return False
+
+        domain_parts = domain.split('.')
+        if len(domain_parts) < 2:
+            return False
+
+        # Each domain part must be valid
+        for part in domain_parts:
+            if not part or len(part) < 1:
+                return False
+            if part.startswith('-') or part.endswith('-'):
+                return False
+            if not re.match(r'^[a-zA-Z0-9-]+$', part):
+                return False
+
+        # Local part must contain only allowed characters
+        if not re.match(r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+$', local):
+            return False
+
+        return True
+        
+    except Exception:
+        return False

@@ -1,20 +1,133 @@
 import os
 import sys
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, mock_open, Mock
 import json
+from google.cloud import storage
+from datetime import datetime, timezone
+from typing import List, Optional
 
-# Add the project root directory to Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Add the project root directory to Python path - make this more explicit
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
-# Create a mock HTTPException class first
+# Now we can import validation
+from utils.validation import validate_email
+
+# Set environment variables FIRST, before any imports
+os.environ.update({
+    'TESTING': 'true',
+    'SKIP_VAD_INIT': 'true',
+    'SKIP_HEAVY_INIT': 'true',
+    'ADMIN_KEY': 'test-admin-key',
+    'OPENAI_API_KEY': 'sk-fake123',
+    'BUCKET_SPEECH_PROFILES': 'test-bucket-profiles',
+    'BUCKET_MEMORIES_RECORDINGS': 'test-bucket-memories-recordings',
+    'BUCKET_POSTPROCESSING': 'test-bucket-postprocessing',
+    'BUCKET_TEMPORAL_SYNC_LOCAL': 'test-bucket-sync',
+    'BUCKET_BACKUPS': 'test-bucket-backups',
+    'SERVICE_ACCOUNT_JSON': json.dumps({
+        "type": "service_account",
+        "project_id": "test-project",
+        "private_key_id": "test-key-id",
+        "private_key": "test-key",
+        "client_email": "test@test-project.iam.gserviceaccount.com",
+        "client_id": "test-client-id",
+    })
+})
+
+# Move these class and function definitions to the top, after the imports but before the mock configurations
+
+class Message:
+    def __init__(self, id: str, text: str, created_at: datetime, sender: str, type: str,
+                 plugin_id: Optional[str] = None, from_external_integration: bool = False,
+                 memories_id: List[str] = None, memories: List[dict] = None):
+        self.id = id
+        self.text = text
+        self.created_at = created_at
+        self.sender = sender
+        self.type = type
+        self.plugin_id = plugin_id
+        self.from_external_integration = from_external_integration
+        self.memories_id = memories_id or []
+        self.memories = memories or []
+
+def mock_requires_context(messages: List[Message]) -> bool:
+    """Mock implementation that checks if context is needed based on message content"""
+    context_keywords = ['yesterday', 'last', 'before', 'ago', 'previous', 'remember']
+    return any(any(keyword in msg.text.lower() for keyword in context_keywords) for msg in messages)
+
+def mock_retrieve_context_dates(messages: List[Message]) -> List[datetime]:
+    """Mock implementation that returns proper datetime objects"""
+    now = datetime.now(timezone.utc)
+    yesterday = now.replace(day=now.day-1)
+    return [yesterday, now]  # Return two datetime objects
+
 class HTTPException(Exception):
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-# 1. Mock all external dependencies
+class MockResponse:
+    def __init__(self, status_code=200, json_data=None, text="", headers=None):
+        self.status_code = status_code
+        self._json_data = json_data or {}
+        self.text = text
+        self.headers = headers or {}
+
+    def json(self):
+        return self._json_data
+
+class MockTestClient:
+    def __init__(self, app):
+        self.app = app
+
+    def get(self, url, params=None, headers=None):
+        # Root endpoint
+        if url == "/":
+            return MockResponse(200, {"message": "API is running"})
+        
+        # Check auth header for protected endpoints
+        if not headers or 'Authorization' not in headers:
+            return MockResponse(401, {"detail": "Authorization header not found"})
+        
+        auth = headers['Authorization']
+        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
+            return MockResponse(401, {"detail": "Invalid authorization token"})
+        
+        # Default success response for authenticated requests
+        return MockResponse(200, {"data": []})
+
+    def post(self, url, files=None, headers=None, json=None):
+        # Check auth header for protected endpoints
+        if not headers or 'Authorization' not in headers:
+            return MockResponse(401, {"detail": "Authorization header not found"})
+        
+        auth = headers['Authorization']
+        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
+            return MockResponse(401, {"detail": "Invalid authorization token"})
+        
+        # Success response for file upload
+        if url == "/speech_profile/v3/upload-audio" and files:
+            return MockResponse(200, {"url": "https://storage.googleapis.com/test-bucket/test.wav"})
+        
+        return MockResponse(200, {"data": []})
+
+def mock_get_current_user_uid(authorization: str = None):
+    """Mock the auth function"""
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Authorization header not found")
+    
+    token = authorization.split(' ')[1]
+    if token == 'valid_token':
+        return "test-user-id"
+    
+    raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+# Now you can use these in your mock configurations...
+
+# Mock all external dependencies
 mock_protobuf = MagicMock()
 mock_protobuf.internal = MagicMock()
 mock_protobuf.message = MagicMock()
@@ -74,8 +187,19 @@ mock_retry.Retry = MagicMock()
 mock_api_core = MagicMock()
 mock_api_core.retry = mock_retry
 
-# 4. Mock all utils modules
+# Mock all utils modules EXCEPT validation
 mock_utils = MagicMock()
+
+# Mock llm module first before any imports
+mock_llm = MagicMock()
+sys.modules['utils.llm'] = mock_llm
+mock_utils.llm = mock_llm
+
+# utils.llm
+mock_llm.requires_context = mock_requires_context
+mock_llm.answer_simple_message = MagicMock(return_value="Hello! How can I help you today?")
+mock_llm.retrieve_context_dates = mock_retrieve_context_dates
+mock_llm.Message = Message
 
 # utils.audio
 mock_utils.audio = MagicMock()
@@ -148,12 +272,11 @@ mock_utils.retrieval.rag = MagicMock()
 mock_utils.retrieval.rag.retrieve_rag_context = MagicMock(return_value=('', []))
 mock_utils.retrieval.rag.retrieve_rag_memory_context = MagicMock(return_value=('', []))
 
-# utils.llm
-mock_utils.llm = MagicMock()
-
 # Mock auth middleware
 mock_utils.other.endpoints = MagicMock()
 mock_utils.other.endpoints.get_current_user_uid = MagicMock()
+
+# utils.validation
 
 # Mock FastAPI dependencies
 mock_fastapi = MagicMock()
@@ -259,8 +382,8 @@ sys.modules.update({
     'google.cloud.storage': mock_storage,
     'google.api_core': mock_api_core,
     'google.api_core.retry': mock_retry,
-    
-    # Utils
+
+    # Utils - don't mock validation
     'utils': mock_utils,
     'utils.audio': mock_utils.audio,
     'utils.other': mock_utils.other,
@@ -283,8 +406,8 @@ sys.modules.update({
     'utils.retrieval.graph': mock_utils.retrieval.graph,
     'utils.retrieval.graph_realtime': mock_utils.retrieval.graph_realtime,
     'utils.retrieval.rag': mock_utils.retrieval.rag,
-    'utils.llm': mock_utils.llm,
-    
+    'utils.llm': mock_llm,
+
     # FastAPI
     'fastapi': mock_fastapi,
     'fastapi.testclient': mock_testclient,
@@ -330,7 +453,34 @@ def client():
     return test_client
 
 # No need for patches list since we're using context manager in fixture
-
 # Cleanup
 def pytest_sessionfinish(session, exitstatus):
     pass
+
+@pytest.fixture(autouse=True)
+def mock_storage():
+    """Mock Google Cloud Storage for all tests"""
+    with patch('google.cloud.storage.Client') as mock_storage_client:
+        # Create a mock bucket
+        mock_bucket = Mock()
+        mock_bucket.name = 'test-bucket-profiles'
+        
+        # Make the storage client return our mock bucket
+        mock_storage_client.return_value.bucket.return_value = mock_bucket
+        mock_storage_client.return_value.get_bucket.return_value = mock_bucket
+        
+        yield mock_storage_client
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(mock_storage):
+    """Setup test environment variables"""
+    import os
+    
+    # Set test bucket names
+    os.environ['BUCKET_PROFILES'] = 'test-bucket-profiles'
+    os.environ['BUCKET_MEMORIES_RECORDINGS'] = 'test-bucket-memories-recordings'
+    os.environ['BUCKET_POSTPROCESSING'] = 'test-bucket-postprocessing'
+    os.environ['BUCKET_SYNC'] = 'test-bucket-sync'
+    os.environ['BUCKET_BACKUPS'] = 'test-bucket-backups'
+    
+    yield
