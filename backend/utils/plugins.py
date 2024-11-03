@@ -5,7 +5,7 @@ import requests
 
 import database.notifications as notification_db
 from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage
+from database.plugins import record_plugin_usage, get_private_plugins_db, get_public_plugins_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
 from models.memory import Memory, MemorySource
@@ -34,6 +34,20 @@ def weighted_rating(plugin):
     v = plugin.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
 
+
+def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
+    private_plugins = get_private_plugins_db(uid)
+    private_plugins = [Plugin(**plugin) for plugin in private_plugins]
+    public_plugins = get_public_plugins_db()
+    public_plugins = [Plugin(**plugin) for plugin in public_plugins]
+    data: List[Plugin] = private_plugins + public_plugins
+    user_enabled = set(get_enabled_plugins(uid))
+    plugins = []
+    for plugin in data:
+        plugin_dict = plugin.dict()
+        plugin_dict['enabled'] = plugin.id in user_enabled
+        plugins.append(Plugin(**plugin_dict))
+    return plugins
 
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
     # print('get_plugins_data', uid, include_reviews)
@@ -79,7 +93,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     if not memory or memory.discarded:
         return []
 
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    plugins: List[Plugin] = get_plugins_data_from_db(uid)
     filtered_plugins = [plugin for plugin in plugins if
                         plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
