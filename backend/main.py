@@ -5,12 +5,17 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from middleware.rate_limit import RateLimitMiddleware
 from modal import Image, App, asgi_app, Secret, Cron
 
 # Check if we're running tests
 TESTING = 'pytest' in sys.modules or os.getenv('TESTING') == 'true'
 SKIP_VAD_INIT = os.getenv('SKIP_VAD_INIT') == 'true'
 SKIP_HEAVY_INIT = os.getenv('SKIP_HEAVY_INIT') == 'true'
+ENABLE_SWAGGER = os.getenv('ENABLE_SWAGGER', '').lower() == 'true'
+ENABLE_RATE_LIMIT = os.getenv('ENABLE_RATE_LIMIT', '').lower() == 'true'
 
 print("\nFastAPI: Starting initialization...")
 
@@ -19,7 +24,20 @@ if not TESTING:
     firebase_admin.initialize_app()
     print("FastAPI: Firebase initialized")
 
-app = FastAPI()
+# Move the router imports before using them
+# Include all routers
+from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
+    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
+
+# Create FastAPI app with custom configuration
+app = FastAPI(
+    title="Omi API",
+    description="API for Omi backend services",
+    version="1.0.0",
+    docs_url=None if not ENABLE_SWAGGER else "/docs",
+    redoc_url=None if not ENABLE_SWAGGER else "/redoc",
+    openapi_url=None if not ENABLE_SWAGGER else "/openapi.json"
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -33,11 +51,12 @@ app.add_middleware(
 # Add Gzip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Include all routers
-from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
+# Add rate limiting if enabled
+if ENABLE_RATE_LIMIT:
+    print("FastAPI: Rate limiting enabled")
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 
-# Include all routers
+# Include all routers with tags
 app.include_router(transcribe_v2.router, prefix="/transcribe_v2", tags=["transcribe_v2"])
 app.include_router(memories.router, prefix="/memories", tags=["memories"])
 app.include_router(facts.router, prefix="/facts", tags=["facts"])
@@ -54,9 +73,59 @@ app.include_router(firmware.router, prefix="/firmware", tags=["firmware"])
 app.include_router(sdcard.router, prefix="/sdcard", tags=["sdcard"])
 app.include_router(sync.router, prefix="/sync", tags=["sync"])
 
-@app.get("/")
+@app.get("/", tags=["health"])
 async def root():
+    """Health check endpoint"""
     return {"message": "API is running"}
+
+# Custom OpenAPI schema with security schemes if Swagger is enabled
+if ENABLE_SWAGGER:
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+            
+        openapi_schema = get_openapi(
+            title="Omi API",
+            version="1.0.0",
+            description="API for Omi backend services",
+            routes=app.routes,
+        )
+        
+        # Add security schemes
+        openapi_schema["components"]["securitySchemes"] = {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Enter your Firebase JWT token"
+            }
+        }
+        
+        # Add tag descriptions
+        openapi_schema["tags"] = [
+            {"name": "transcribe_v2", "description": "Real-time and batch transcription services"},
+            {"name": "memories", "description": "Memory storage and retrieval management"},
+            {"name": "facts", "description": "User facts and knowledge base management"},
+            {"name": "chat", "description": "Chat and conversation endpoints"},
+            {"name": "plugins", "description": "External integrations and plugin management"},
+            {"name": "speech_profile", "description": "Voice profile and speaker recognition"},
+            {"name": "workflow", "description": "Workflow and process automation"},
+            {"name": "notifications", "description": "User notifications and alerts"},
+            {"name": "agents", "description": "AI agents and automated assistants"},
+            {"name": "users", "description": "User account and profile management"},
+            {"name": "processing_memories", "description": "Memory processing and analysis"},
+            {"name": "trends", "description": "Analytics and trend analysis"},
+            {"name": "firmware", "description": "Device firmware management"},
+            {"name": "sdcard", "description": "SD card data management"},
+            {"name": "sync", "description": "Data synchronization services"},
+            {"name": "health", "description": "API health check endpoints"},
+            {"name": "webhooks", "description": "Webhook endpoints for external integrations"}
+        ]
+        
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+
+    app.openapi = custom_openapi
 
 # Only create Modal app if not testing
 if not TESTING:
@@ -98,8 +167,17 @@ if not TESTING:
     print("🚀 Backend ready and running!")
     print("="*50 + "\n")
 
-@app.post('/webhook')
+@app.post('/webhook', tags=["webhooks"])
 async def webhook(data: dict):
+    """
+    Webhook endpoint for processing diarization results
+    
+    Args:
+        data: Dictionary containing diarization output
+        
+    Returns:
+        str: Confirmation message
+    """
     diarization = data['output']['diarization']
     joined = []
     for speaker in diarization:
