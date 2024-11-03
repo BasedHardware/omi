@@ -48,27 +48,54 @@ static uint16_t offset;
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
 
-void clear_audio_buffer() {
-    buffer_offset = 0;
-    memset(audio_buffer, 0, sizeof(audio_buffer));
-}
-
-void prune_audio_buffer(size_t required_space) {
-    // Calculate the minimum data needed to discard
-    size_t data_to_discard = required_space + buffer_offset - MAX_BLOCK_SIZE;
-
-    if (data_to_discard >= buffer_offset) {
-        // Clear the entire buffer if required space is more than available data
-        clear_audio_buffer();
-    } else {
-        // Shift remaining data to make exactly the required space
-        memmove(audio_buffer, audio_buffer + data_to_discard, buffer_offset - data_to_discard);
-        buffer_offset -= data_to_discard;
-        printk("Pruned %zu bytes from the audio buffer\n", data_to_discard);
+int speaker_init() 
+{
+    LOG_INF("Speaker init");
+    audio_speaker = device_get_binding("I2S_0");
+    
+    if (!device_is_ready(audio_speaker)) 
+    {
+        LOG_ERR("Speaker device is not supported : %s", audio_speaker->name);
+        return -1;
     }
+    struct i2s_config config = {
+    .word_size= WORD_SIZE, //how long is one left/right word.
+    .channels = NUM_CHANNELS, //how many words in a frame 2 
+    .format = I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED, //format
+    // .format = I2S_FMT_DATA_FORMAT_I2S,
+    .options = I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER | I2S_OPT_BIT_CLK_GATED, //how to configure the mclock
+    .frame_clk_freq = SAMPLE_FREQUENCY, /* Sampling rate */ 
+    .mem_slab = &mem_slab,/* Memory slab to store rx/tx data */
+    .block_size = MAX_BLOCK_SIZE,/* size of ONE memory block in bytes */
+    .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or SYS_FOREVER_MS */
+    };
+    int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
+    if (err) 
+    {
+        LOG_ERR("Failed to configure Speaker (%d)", err);
+        return -1;
+    }
+    err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
+	if (err)
+    {
+		LOG_INF("Failed to allocate memory for speaker%d)", err);
+        return -1;
+	}
+
+	err = k_mem_slab_alloc(&mem_slab, &buzz_buffer, K_MSEC(200));
+	if (err) 
+    {
+		LOG_INF("Failed to allocate for chime (%d)", err);
+        return -1;
+	}
+      
+    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
+    memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
+    return 0;
 }
 
-uint16_t speak(uint16_t len, const void *buf) {
+uint16_t speak(uint16_t len, const void *buf) //direct from bt
+{
     printk("speaker.c - speak invoked\n");
 
     // Extract the flags from the last two bytes of the packet
@@ -129,50 +156,24 @@ uint16_t speak(uint16_t len, const void *buf) {
     return len;
 }
 
-int speaker_init() 
-{
-    LOG_INF("Speaker init");
-    audio_speaker = device_get_binding("I2S_0");
-    
-    if (!device_is_ready(audio_speaker)) 
-    {
-        LOG_ERR("Speaker device is not supported : %s", audio_speaker->name);
-        return -1;
-    }
-    struct i2s_config config = {
-    .word_size= WORD_SIZE, //how long is one left/right word.
-    .channels = NUMBER_OF_CHANNELS, //how many words in a frame 2 
-    .format = I2S_FMT_DATA_FORMAT_LEFT_JUSTIFIED, //format
-    // .format = I2S_FMT_DATA_FORMAT_I2S,
-    .options = I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER | I2S_OPT_BIT_CLK_GATED, //how to configure the mclock
-    .frame_clk_freq = SAMPLE_FREQUENCY, /* Sampling rate */ 
-    .mem_slab = &mem_slab,/* Memory slab to store rx/tx data */
-    .block_size = MAX_BLOCK_SIZE,/* size of ONE memory block in bytes */
-    .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or SYS_FOREVER_MS */
-    };
-    int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
-    if (err) 
-    {
-        LOG_ERR("Failed to configure Speaker (%d)", err);
-        return -1;
-    }
-    err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
-	if (err)
-    {
-		LOG_INF("Failed to allocate memory for speaker%d)", err);
-        return -1;
-	}
+void clear_audio_buffer() {
+    buffer_offset = 0;
+    memset(audio_buffer, 0, sizeof(audio_buffer));
+}
 
-	err = k_mem_slab_alloc(&mem_slab, &buzz_buffer, K_MSEC(200));
-	if (err) 
-    {
-		LOG_INF("Failed to allocate for chime (%d)", err);
-        return -1;
-	}
-      
-    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
-    memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
-    return 0;
+void prune_audio_buffer(size_t required_space) {
+    // Calculate the minimum data needed to discard
+    size_t data_to_discard = required_space + buffer_offset - MAX_BLOCK_SIZE;
+
+    if (data_to_discard >= buffer_offset) {
+        // Clear the entire buffer if required space is more than available data
+        clear_audio_buffer();
+    } else {
+        // Shift remaining data to make exactly the required space
+        memmove(audio_buffer, audio_buffer + data_to_discard, buffer_offset - data_to_discard);
+        buffer_offset -= data_to_discard;
+        printk("Pruned %zu bytes from the audio buffer\n", data_to_discard);
+    }
 }
 
 void switch_buffers() {
