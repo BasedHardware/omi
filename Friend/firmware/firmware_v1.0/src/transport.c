@@ -558,7 +558,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void) 
 // {
