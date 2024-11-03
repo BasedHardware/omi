@@ -163,9 +163,13 @@ static inline void notify_double_tap() {
     }
 }
 
-static inline void notify_long_tap() 
-{
-    final_button_state[0] = LONG_TAP; //button press
+static inline void notify_long_tap() {
+    // If voice interaction is active, stop it first
+    if (voice_interaction_active) {
+        stop_voice_interaction();
+    }
+
+    final_button_state[0] = LONG_TAP;
     LOG_INF("long tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
