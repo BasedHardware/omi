@@ -369,7 +369,12 @@ class MemoriesDB:
         await self.collection.update_one({"memory_id": memory_id}, {"$set": updates})
         return await self.get_memory(memory_id)
 
+import asyncio
+import json
 import re
+import uuid
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional
 
     async def search_memories(self, user_id: str, query: str) -> List[dict]:
         cursor = self.collection.find({
