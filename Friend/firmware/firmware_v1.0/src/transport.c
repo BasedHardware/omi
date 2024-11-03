@@ -848,8 +848,9 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
                                              uint16_t len,
                                              uint16_t offset,
                                              uint8_t flags) {
-    // Handle incoming audio data for voice response using streaming
-    speak_stream(len, buf);
+    if (!is_off) {
+        speak_stream(len, buf);
+    }
     return len;
 }
 
