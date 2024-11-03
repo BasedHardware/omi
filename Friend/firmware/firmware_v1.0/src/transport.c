@@ -45,6 +45,10 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
+static ssize_t voice_interaction_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static const char *phy2str(uint8_t phy);
+
+
 //
 // Service and Characteristic
 //
