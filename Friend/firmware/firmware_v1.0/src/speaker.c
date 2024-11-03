@@ -90,7 +90,12 @@ int speaker_init()
 
 uint16_t speak(uint16_t len, const void *buf) //direct from bt
 {
-	uint16_t amount = 0;
+    // Don't process audio if device is sleeping
+    if (is_off) {
+        return 0;
+    }
+
+    uint16_t amount = 0;
     amount = len;
 	if (len == 4)  //if stage 1 
 	{
