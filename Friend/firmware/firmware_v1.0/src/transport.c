@@ -107,6 +107,15 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 //Acceleration data
 //this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
 //
+struct sensors {
+    struct sensor_value a_x;
+    struct sensor_value a_y;
+    struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
+};
+
 static struct sensors mega_sensor;
 static struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
