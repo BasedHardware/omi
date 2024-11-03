@@ -342,6 +342,9 @@ void check_button_level(struct k_work *work_item)
             if (inc_count_0 == 0 && (inc_count_1 > 0)) 
             {
                 notify_unpress();
+
+                // End voice interaction if it was active
+                stop_voice_interaction();
             }
             inc_count_0++;
             if (inc_count_0 > 1) 
