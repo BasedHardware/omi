@@ -1,17 +1,18 @@
 from firebase_admin import auth
 from fastapi import HTTPException
 from database.redis_db import cache_user_name, get_cached_user_name
+from ._client import get_firestore
 
 def create_user(uid: str, user_data: dict) -> str:
     """Create a new user document"""
-    from ._client import db
+    db = get_firestore()
     user_ref = db.collection('users').document(uid)
     user_ref.set(user_data)
     return uid
 
 def get_user(uid: str) -> dict:
     """Get user document by ID"""
-    from ._client import db
+    db = get_firestore()
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if not user_doc.exists:
@@ -20,13 +21,13 @@ def get_user(uid: str) -> dict:
 
 def delete_user(uid: str):
     """Delete user document"""
-    from ._client import db
+    db = get_firestore()
     user_ref = db.collection('users').document(uid)
     user_ref.delete()
 
 def update_user(uid: str, user_data: dict):
     """Update user document"""
-    from ._client import db
+    db = get_firestore()
     user_ref = db.collection('users').document(uid)
     user_ref.update(user_data)
 

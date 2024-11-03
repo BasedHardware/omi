@@ -52,25 +52,34 @@ if not project_id:
 
 print(f"Firebase: Initializing with project ID: {project_id}")
 
+# Initialize default client
+_db = None
+
 def get_firestore():
     """Get Firestore client"""
-    return firestore.Client(project=project_id)
+    global _db
+    if _db is None:
+        _db = firestore.Client(project=project_id)
+    return _db
 
 def get_async_firestore():
     """Get Async Firestore client"""
     return AsyncClient(project=project_id)
 
-# Initialize default client
-db = get_firestore()
+# Use property to ensure db is initialized on first access
+@property
+def db():
+    return get_firestore()
 
 def transaction(func):
-    """Decorator to handle Firestore transactions"""
+    """Decorator to handle Firestore transactions using run_transaction."""
     def wrapper(*args, **kwargs):
-        return db.transaction(lambda t: func(t, *args, **kwargs))
+        db = get_firestore()
+        return db.run_transaction(lambda t: func(t, *args, **kwargs))
     return wrapper
 
 def get_users_uid():
-    users_ref = db.collection('users')
+    users_ref = get_firestore().collection('users')
     return [str(doc.id) for doc in users_ref.stream()]
 
 def document_id_from_seed(seed: str) -> str:
