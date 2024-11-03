@@ -875,6 +875,7 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
                                              uint16_t offset,
                                              uint8_t flags) {
     if (!is_off) {
+        LOG_INF("Received voice response data: %d bytes", len);
         speak_stream(len, buf);
     }
     return len;
@@ -887,6 +888,10 @@ void start_voice_interaction(void) {
         voice_interaction_active = true;
         LOG_INF("Voice interaction started");
         play_haptic_milli(50);
+
+        // Reset stream buffer
+        stream_buffer_pos = 0;
+        memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
     }
 }
 
@@ -895,6 +900,10 @@ void stop_voice_interaction(void) {
         voice_interaction_active = false;
         LOG_INF("Voice interaction stopped");
         play_haptic_milli(25);
+
+        // Clear stream buffer
+        stream_buffer_pos = 0;
+        memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
     }
 }
 
