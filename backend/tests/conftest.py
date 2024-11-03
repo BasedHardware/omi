@@ -80,41 +80,6 @@ class MockResponse:
     def json(self):
         return self._json_data
 
-class MockTestClient:
-    def __init__(self, app):
-        self.app = app
-
-    def get(self, url, params=None, headers=None):
-        # Root endpoint
-        if url == "/":
-            return MockResponse(200, {"message": "API is running"})
-        
-        # Check auth header for protected endpoints
-        if not headers or 'Authorization' not in headers:
-            return MockResponse(401, {"detail": "Authorization header not found"})
-        
-        auth = headers['Authorization']
-        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
-            return MockResponse(401, {"detail": "Invalid authorization token"})
-        
-        # Default success response for authenticated requests
-        return MockResponse(200, {"data": []})
-
-    def post(self, url, files=None, headers=None, json=None):
-        # Check auth header for protected endpoints
-        if not headers or 'Authorization' not in headers:
-            return MockResponse(401, {"detail": "Authorization header not found"})
-        
-        auth = headers['Authorization']
-        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
-            return MockResponse(401, {"detail": "Invalid authorization token"})
-        
-        # Success response for file upload
-        if url == "/speech_profile/v3/upload-audio" and files:
-            return MockResponse(200, {"url": "https://storage.googleapis.com/test-bucket/test.wav"})
-        
-        return MockResponse(200, {"data": []})
-
 # Mock all external dependencies
 mock_protobuf = MagicMock()
 mock_protobuf.internal = MagicMock()
