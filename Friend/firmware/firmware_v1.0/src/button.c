@@ -43,8 +43,8 @@ static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, u
     }
 
 }
-struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
-struct gpio_dt_spec d5_pin_input = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
+struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT};
+struct gpio_dt_spec d5_pin_input = { .port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin = 5, .dt_flags = GPIO_INPUT | GPIO_INT_EDGE_BOTH };
 
 static uint32_t current_button_time = 0;
 static uint32_t previous_button_time = 0;
