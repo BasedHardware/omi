@@ -12,13 +12,15 @@ import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import './helpers/mock_helper.dart';
 
+import './helpers/mock_helper.dart';
+import 'app_test.mocks.dart';
+
 @GenerateMocks([
   AuthenticationProvider,
   ConnectivityProvider,
   AppProvider,
   SharedPreferencesUtil,
 ])
-import 'app_test.mocks.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
