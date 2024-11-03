@@ -161,6 +161,34 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
     return amount;
 }
 
+// Add new function for streaming audio
+uint16_t speak_stream(uint16_t len, const void *buf) {
+    // Don't process audio if device is sleeping
+    if (is_off) {
+        return 0;
+    }
+
+    uint16_t amount = len;
+
+    // Handle streaming audio
+    if (stream_buffer_pos + len > STREAM_BUFFER_SIZE) {
+        // Buffer full - play what we have
+        i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        stream_buffer_pos = 0;
+    }
+
+    // Add new data to buffer
+    memcpy(stream_buffer + stream_buffer_pos, buf, len);
+    stream_buffer_pos += len;
+
+    // If we have enough data or this is the end, play it
+    if (stream_buffer_pos >= 1024 || len < 400) {
+        i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        stream_buffer_pos = 0;
+    }
+
+    return amount;
+}
 
 void generate_gentle_chime(int16_t *buffer, int num_samples)
 {
