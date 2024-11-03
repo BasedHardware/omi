@@ -36,7 +36,13 @@ static uint16_t offset;
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
 
-int speaker_init() 
+#define STREAM_BUFFER_SIZE 8192
+static uint8_t stream_buffer[STREAM_BUFFER_SIZE];
+static size_t stream_buffer_pos = 0;
+
+extern bool is_off;
+
+int speaker_init()
 {
     LOG_INF("Speaker init");
     audio_speaker = device_get_binding("I2S_0");
