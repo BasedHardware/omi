@@ -8,7 +8,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from middleware.rate_limit import RateLimitMiddleware
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from modal import Image, App, asgi_app, Secret, Cron
+import plistlib
+from pathlib import Path
 
 # Check if we're running tests
 TESTING = 'pytest' in sys.modules or os.getenv('TESTING') == 'true'
@@ -27,7 +31,7 @@ if not TESTING:
 # Move the router imports before using them
 # Include all routers
 from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
+    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, auth
 
 # Create FastAPI app with custom configuration
 app = FastAPI(
@@ -72,11 +76,17 @@ app.include_router(trends.router, prefix="/trends", tags=["trends"])
 app.include_router(firmware.router, prefix="/firmware", tags=["firmware"])
 app.include_router(sdcard.router, prefix="/sdcard", tags=["sdcard"])
 app.include_router(sync.router, prefix="/sync", tags=["sync"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 @app.get("/", tags=["health"])
 async def root():
     """Health check endpoint"""
     return {"message": "API is running"}
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots():
+    """Serve robots.txt to disallow all crawlers"""
+    return f"""User-agent: *\nDisallow: /"""
 
 # Custom OpenAPI schema with security schemes if Swagger is enabled
 if ENABLE_SWAGGER:
@@ -97,9 +107,18 @@ if ENABLE_SWAGGER:
                 "type": "http",
                 "scheme": "bearer",
                 "bearerFormat": "JWT",
-                "description": "Enter your Firebase JWT token"
+                "description": """
+                Enter your Firebase ID token.
+                Format: `Bearer your_token`
+                
+                To get a token, use the Firebase Authentication flow described in the API description.
+                Head to <a href="/auth/login">/auth/login</a> to get started.
+                """
             }
         }
+        
+        # Add global security requirement
+        openapi_schema["security"] = [{"BearerAuth": []}]
         
         # Add tag descriptions
         openapi_schema["tags"] = [
@@ -119,7 +138,8 @@ if ENABLE_SWAGGER:
             {"name": "sdcard", "description": "SD card data management"},
             {"name": "sync", "description": "Data synchronization services"},
             {"name": "health", "description": "API health check endpoints"},
-            {"name": "webhooks", "description": "Webhook endpoints for external integrations"}
+            {"name": "webhooks", "description": "Webhook endpoints for external integrations"},
+            {"name": "auth", "description": "Authentication endpoints"},
         ]
         
         app.openapi_schema = openapi_schema
@@ -210,6 +230,3 @@ if not SKIP_VAD_INIT and not TESTING:
     except (ImportError, AttributeError):
         print("Warning: VAD initialization skipped")
 
-if not SKIP_HEAVY_INIT and not TESTING:
-    # Add other heavy initialization here
-    pass
