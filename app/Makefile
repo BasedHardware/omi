@@ -3,6 +3,7 @@
 test:
 	@echo "🧪 Running tests..."
 	@dart run build_runner build --delete-conflicting-outputs || { echo "❌ Build runner failed"; exit 1; }
+	@[ -x "$(CURDIR)/test.sh" ] || { echo "❌ test.sh not found or not executable"; exit 1; }
 	@if ! "$(CURDIR)/test.sh"; then \
 		echo "❌ Tests failed"; \
 		echo "Please check the test output above for details"; \
