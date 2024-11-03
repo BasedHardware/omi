@@ -3,18 +3,14 @@ from bleak import BleakScanner
 from typing import Optional
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 FRIEND_NAME = "Friend"
-FRIEND_SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"  # Audio service UUID from transport.c
+FRIEND_SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 
 async def find_friend_device(timeout: int = 5) -> Optional[str]:
-    """
-    Specifically scan for Friend devices.
-    Returns the address of the first Friend device found or None.
-    """
+    """Specifically scan for Friend devices."""
     logger.info(f"Scanning for {FRIEND_NAME} devices...")
 
     try:
@@ -28,11 +24,15 @@ async def find_friend_device(timeout: int = 5) -> Optional[str]:
             logger.debug(f"Found device: {d.name} ({d.address})")
 
             if d.name and FRIEND_NAME in d.name:
-                logger.info(f"Found {FRIEND_NAME} device!")
+                logger.info("\nFound Friend Device!")
+                logger.info("─" * 40)
                 logger.info(f"Name: {d.name}")
                 logger.info(f"Address: {d.address}")
-                logger.info(f"RSSI: {d.rssi}dBm")
-                logger.info(f"Metadata: {adv_data}")
+                logger.info(f"RSSI: {adv_data.rssi}dBm")
+                logger.info("\nServices:")
+                for uuid in adv_data.service_uuids:
+                    logger.info(f"  • {uuid}")
+                logger.info("─" * 40)
                 return d.address
 
         logger.warning(f"No {FRIEND_NAME} devices found")
@@ -47,19 +47,26 @@ async def scan_all_devices(timeout: int = 5):
     logger.info("Scanning for all BLE devices...")
 
     try:
-        devices = await BleakScanner.discover(timeout=timeout)
+        devices = await BleakScanner.discover(
+            timeout=timeout,
+            return_adv=True
+        )
 
         if not devices:
             logger.info("No BLE devices found")
             return
 
-        logger.info("\nDiscovered devices:")
-        for d in devices:
+        logger.info("\nDiscovered Devices:")
+        for d, adv_data in devices.values():
+            logger.info("─" * 40)
             logger.info(f"Name: {d.name or 'Unknown'}")
             logger.info(f"Address: {d.address}")
-            logger.info(f"RSSI: {d.rssi}dBm")
-            logger.info(f"Metadata: {d.metadata}")
-            logger.info("-" * 40)
+            logger.info(f"RSSI: {adv_data.rssi}dBm")
+            if adv_data.service_uuids:
+                logger.info("\nServices:")
+                for uuid in adv_data.service_uuids:
+                    logger.info(f"  • {uuid}")
+            logger.info("─" * 40)
 
     except Exception as e:
         logger.error(f"Error during device discovery: {e}")
