@@ -149,6 +149,10 @@ static inline void notify_double_tap() {
 
         // Play feedback sound
         play_haptic_milli(50);
+
+        // Reset state
+        current_button_state = GRACE;
+        reset_count();
     }
 }
 
