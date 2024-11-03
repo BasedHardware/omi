@@ -587,7 +587,7 @@ class MockCaptureProvider extends _i1.Mock implements _i3.CaptureProvider {
   void onInternetSatusChanged(_i12.InternetStatus? status) =>
       super.noSuchMethod(
         Invocation.method(
-          #onInternetSatusChanged,
+          #onInternetStatusChanged,
           [status],
         ),
         returnValueForMissingStub: null,
