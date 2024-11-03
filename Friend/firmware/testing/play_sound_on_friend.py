@@ -2,156 +2,78 @@ import argparse
 import os
 from dotenv import load_dotenv
 import wave
-from deepgram import( DeepgramClient,SpeakOptions,)
-
+from deepgram import DeepgramClient, SpeakOptions
 import asyncio
-import bleak
-import numpy as np
 from bleak import BleakClient
+import numpy as np
 
 load_dotenv()
 
 filename = "output2.wav"
-
-remaining_bytes = 0
-remaining_bytes_b = bytearray()
-packet_size = 400
-total_offset = 0
-device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
-deepgram_api_id="f2e9ebf2f223ae423c88bf601ce1a157699d3005" #enter your deepgram id here
-audio_write_characteristic_uuid = "19B10003-E8F2-537E-4F6C-D104768A1214" #dont change this
-MAX_ALLOWED_SAMPLES = 50000
-
-gain = 5
+device_id = "B9ED2D51-9A40-9329-EB32-10FD2F6FF7A5"  # Enter your device ID here
+deepgram_api_id = "f2e9ebf2f223ae423c88bf601ce1a157699d3005"  # Enter your Deepgram API key here
+audio_write_characteristic_uuid = "19B10003-E8F2-537E-4F6C-D104768A1214"
+SAMPLE_RATE = 8000  # Set sample rate to 8000 Hz
 
 async def main():
-    global remaining_bytes
-    global audio_write_characteristic_uuid
-    parser = argparse.ArgumentParser(description="Accept a string and print it")
-    parser.add_argument("input_string", type=str, help="The string to be printed")
+    parser = argparse.ArgumentParser(description="Convert a string to speech")
+    parser.add_argument("input_string", type=str, help="The string to convert to speech")
     args = parser.parse_args()
-    print(args.input_string) #stage one: get the input string
     SPEAK_OPTIONS = {"text": args.input_string}
 
+    # Generate audio at 8000 Hz using Deepgram
     try:
-    # STEP 1: Create a Deepgram client using the API key from environment variables
-        deepgram = DeepgramClient(api_key=deepgram_api_id) #INSERT YOUT DEEPGRAM KEY HERE
-
-        # STEP 2: Configure the options (such as model choice, audio configuration, etc.)
+        deepgram = DeepgramClient(api_key=deepgram_api_id)
         options = SpeakOptions(
             model="aura-stella-en",
             encoding="linear16",
+            sample_rate=SAMPLE_RATE,
             container="wav"
         )
-
-        # STEP 3: Call the save method on the speak property
         response = deepgram.speak.v("1").save(filename, SPEAK_OPTIONS, options)
         print(response.to_json(indent=4))
 
     except Exception as e:
         print(f"Exception: {e}")
+        return
 
-    file_path = 'output2.wav'
-
-# Open the wav file
-    with wave.open(file_path, 'rb') as wav_file:
-        # Extract raw audio frames
-        frames = wav_file.readframes(wav_file.getnframes())
-        # Get the number of channels
-        num_channels = wav_file.getnchannels()
-        # Get the sample width in bytes
-        sample_width = wav_file.getsampwidth()
-        # Get the frame rate (samples per second)
-        frame_rate = wav_file.getframerate()
-        # Convert the audio frames to a numpy array
+    # Read audio data from the WAV file, skipping the 44-byte header
+    with open(filename, 'rb') as wav_file:
+        wav_file.seek(44)  # Skip the 44-byte header
+        frames = wav_file.read()  # Read the rest of the file as raw PCM data
         audio_data = np.frombuffer(frames, dtype=np.int16)
-        # one channel, 16 bit, 24000
-        print("Channels:", num_channels)
-        print("Sample Width (bytes):", sample_width)
-        print("Frame Rate (samples per second):", frame_rate)
-        print("Audio Data:", audio_data)
-        print("Audio length: ", len(audio_data))
+        audio_data_bytes = audio_data.tobytes()
 
-    # Select every third sample for down-sampling
-    third_samples = audio_data[::3] * gain
+    # Calculate the delay between packets for real-time playback
+    packet_size = 400
+    bytes_per_second = SAMPLE_RATE * 2
+    delay_per_packet = packet_size / bytes_per_second
 
-    # New sample rate (original rate divided by 3)
-    new_sample_rate = frame_rate // 3
-
-    # Convert third_samples to bytes for writing to a new wav file
-    third_samples_bytes = third_samples.tobytes()
-
-    # Write the resampled audio data to a new WAV file
-    new_file_path = 'output_80002.wav'
-    with wave.open(new_file_path, 'wb') as new_wav_file:
-        new_wav_file.setnchannels(num_channels)
-        new_wav_file.setsampwidth(sample_width)
-        new_wav_file.setframerate(new_sample_rate)
-        new_wav_file.writeframes(third_samples_bytes)
-
-    print(f"Resampled audio written to {new_file_path}")
-
-    # Write the third samples to a text file
-    output_file_path = 'every_third_sample2.txt'
-    with open(output_file_path, 'w') as f_:
-        for samples in third_samples:
-            if samples != '':
-                f_.write(f"{samples}\n")
-    
-    print(f"Every third sample written to {output_file_path}")
-    f = open('every_third_sample2.txt','r').read()
-    f = np.array(list(map(int,f.split('\n')[:-1]))).astype(np.int16).tobytes()
-
-    remaining_bytes = np.array([len(f)]).astype(np.uint32)[0]
-    remaining_bytes_b = np.array([len(f)]).astype(np.uint32).tobytes()
-    if (remaining_bytes> MAX_ALLOWED_SAMPLES):
-        print("Array too large to play. Exitting")
-        exit()
-    print("Number of samples about to be sent: ",remaining_bytes)
-    print("about to start...")
+    # Send audio data in packets with an is_first_packet flag
     async with BleakClient(device_id) as client:
-        print(client.address)
-        offset_ = client.mtu_size
-        print(offset_)
-        temp = client.services
-        for service in temp:
-            print(service)
+        print("Connected to Bluetooth device:", client.address)
+        offset = 0
+        is_first_packet = True
 
-        async def on_notify(sender: bleak.BleakGATTCharacteristic, data: bytearray):
-            global remaining_bytes
-            global total_offset
-            global remaining_bytes_b
-            global packet_size
-            global audio_write_characteristic_uuid
-            print(np.frombuffer(data,dtype=np.int16)[0])
-            if (remaining_bytes > packet_size):
-                
-                final_offset = total_offset
-                total_offset = packet_size + total_offset
-                remaining_bytes = remaining_bytes - packet_size
-                print("sending indexes %d to %d",final_offset,final_offset+packet_size)
-                await client.write_gatt_char(audio_write_characteristic_uuid, f[final_offset:(final_offset+packet_size)], response=True)
-                
-            elif (remaining_bytes > 0 and remaining_bytes <= packet_size):
-                print('almost done')
-                print(remaining_bytes)
-                start_idx = total_offset
-                total_offset = remaining_bytes+ total_offset
-                offset_ = remaining_bytes
-                remaining_bytes = 0
-                print("sending indexes",start_idx,start_idx+offset_)
-                await client.write_gatt_char(audio_write_characteristic_uuid, f[start_idx:(start_idx+offset_)], response=True)
-            else:
-                print('done')
-                print(total_offset)
-                print('Shutting down')
-                exit()
-        await client.start_notify(audio_write_characteristic_uuid, on_notify)
-        await asyncio.sleep(1)
-        await client.write_gatt_char(audio_write_characteristic_uuid, remaining_bytes_b, response=True)
-        await asyncio.sleep(1)   
-        while True:
-           await asyncio.sleep(1)
+        # Send packets of audio data
+        while offset < len(audio_data_bytes):
+            end = offset + packet_size
+            is_last_packet = end >= len(audio_data_bytes)
+            packet = audio_data_bytes[offset:end]
+
+            # Append flags for is_first_packet and is_last_packet
+            flags = (b'\x02' if is_first_packet else b'\x00') + (b'\x01' if is_last_packet else b'\x00')
+            packet += flags  # Append both flags to the packet
+
+            print(f"Sending bytes {offset} to {end} (is_first_packet={is_first_packet}, is_last_packet={is_last_packet})")
+            await client.write_gatt_char(audio_write_characteristic_uuid, packet, response=True)
+            offset = end
+            is_first_packet = False  # Reset after first packet
+
+            # Delay to simulate real-time playback speed
+            await asyncio.sleep(delay_per_packet)
+
+        print("Audio transmission complete.")
 
 if __name__ == "__main__":
     asyncio.run(main())

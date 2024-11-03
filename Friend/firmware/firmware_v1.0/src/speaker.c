@@ -10,22 +10,34 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_BLOCK_SIZE   20000 //24000 * 2
-
+#define MAX_BLOCK_SIZE   20000
 #define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
-#define NUMBER_OF_CHANNELS 2
 #define PACKET_SIZE 400
 #define WORD_SIZE 16
 #define NUM_CHANNELS 2
 
 #define PI 3.14159265358979323846
-
 #define MAX_HAPTIC_DURATION 5000
+
+#define AUDIO_END_FLAG 0x01
+#define AUDIO_START_FLAG 0x02
+
+// Define the audio buffer and related variables
+static uint8_t audio_buffer[MAX_BLOCK_SIZE];
+static size_t buffer_offset = 0;   // Tracks the end of valid data in the buffer
+static size_t played_offset = 0;   // Tracks the amount of data already played
+static const struct device *audio_speaker;
+
+static int16_t buffer1[PACKET_SIZE / 2];
+static int16_t buffer2[PACKET_SIZE / 2];
+static int16_t *active_buffer = buffer1;
+static int16_t *fill_buffer = buffer2;
+static bool buffer_ready = false;
+
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 2);
 
-struct device *audio_speaker;
-
+const static struct device *audio_speaker;
 static void* rx_buffer;
 static void* buzz_buffer;
 static int16_t *ptr2;
@@ -35,6 +47,87 @@ static uint16_t current_length;
 static uint16_t offset;
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
+
+void clear_audio_buffer() {
+    buffer_offset = 0;
+    memset(audio_buffer, 0, sizeof(audio_buffer));
+}
+
+void prune_audio_buffer(size_t required_space) {
+    // Calculate the minimum data needed to discard
+    size_t data_to_discard = required_space + buffer_offset - MAX_BLOCK_SIZE;
+
+    if (data_to_discard >= buffer_offset) {
+        // Clear the entire buffer if required space is more than available data
+        clear_audio_buffer();
+    } else {
+        // Shift remaining data to make exactly the required space
+        memmove(audio_buffer, audio_buffer + data_to_discard, buffer_offset - data_to_discard);
+        buffer_offset -= data_to_discard;
+        printk("Pruned %zu bytes from the audio buffer\n", data_to_discard);
+    }
+}
+
+uint16_t speak(uint16_t len, const void *buf) {
+    printk("speaker.c - speak invoked\n");
+
+    // Extract the flags from the last two bytes of the packet
+    const uint8_t *data = (const uint8_t *)buf;
+    uint8_t is_first_packet = data[len - 2] == AUDIO_START_FLAG;
+    uint8_t is_last_packet = data[len - 1] == AUDIO_END_FLAG;
+    size_t audio_data_length = len - 2;  // Exclude the last two bytes (flags)
+
+    // Clear buffer if it's the first packet
+    if (is_first_packet) {
+        printk("Received first packet, clearing audio buffer\n");
+        clear_audio_buffer();
+    }
+
+    // Check and handle buffer overflow by pruning old data if needed
+    if (buffer_offset + audio_data_length * 2 > MAX_BLOCK_SIZE) {
+        printk("Buffer overflow: too much audio data. Pruning old data...\n");
+        prune_audio_buffer(audio_data_length * 2);
+    }
+
+    // Ensure we have enough space after pruning
+    if (buffer_offset + audio_data_length * 2 > MAX_BLOCK_SIZE) {
+        printk("Still not enough space in buffer after pruning\n");
+        return 0;  // Exit if there's still insufficient space
+    }
+
+    const int16_t *input_data = (const int16_t *)data;
+    int16_t *output_data = (int16_t *)&audio_buffer[buffer_offset];
+
+    // Copy and duplicate samples for stereo playback
+    for (size_t i = 0; i < audio_data_length / 2; i++) {
+        int16_t sample = input_data[i];
+        *output_data++ = sample;  // Left channel
+        *output_data++ = sample;  // Right channel
+    }
+
+    buffer_offset += audio_data_length * 2;
+
+    printk("Received packet of length: %u, total buffered: %u\n", audio_data_length, buffer_offset);
+
+    int ret = i2s_buf_write(audio_speaker, audio_buffer, buffer_offset);
+    if (ret < 0) {
+        printk("Failed to write to I2S: %d\n", ret);
+        return 0;
+    }
+
+    ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+    if (ret) {
+        LOG_ERR("Failed to start I2S transmission: %d", ret);
+        return ret;
+    }
+
+    // Reset buffer after playback if it's the last packet
+    if (is_last_packet) {
+        buffer_offset = 0;
+    }
+
+    return len;
+}
 
 int speaker_init() 
 {
@@ -58,11 +151,11 @@ int speaker_init()
     .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or SYS_FOREVER_MS */
     };
     int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
-	if (err) 
+    if (err) 
     {
-		LOG_ERR("Failed to configure Speaker (%d)", err);
+        LOG_ERR("Failed to configure Speaker (%d)", err);
         return -1;
-	}
+    }
     err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
 	if (err)
     {
@@ -82,73 +175,26 @@ int speaker_init()
     return 0;
 }
 
-uint16_t speak(uint16_t len, const void *buf) //direct from bt
-{
-	uint16_t amount = 0;
-    amount = len;
-	if (len == 4)  //if stage 1 
-	{
-        current_length = ((uint32_t *)buf)[0];
-	    LOG_INF("About to write %u bytes", current_length);
-        ptr2 = (int16_t *)rx_buffer;
-        clear_ptr = (int16_t *)rx_buffer;
-	}
-    else 
-    { //if not stage 1
-        if (current_length > PACKET_SIZE) 
-        {
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - PACKET_SIZE;
-            LOG_INF("remaining data: %u", current_length);
-
-            for (int i = 0; i < (int)(len/2); i++) 
-            {
-                *ptr2++ = ((int16_t *)buf)[i];  
-                *ptr2++ = ((int16_t *)buf)[i]; 
-            }
-            offset = offset + len;
-        }
-        else if (current_length < PACKET_SIZE) 
-        {
-            LOG_INF("entered the final stretch");
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - len;
-            LOG_INF("remaining data: %u", current_length);
-            // memcpy(rx_buffer+offset, buf, len);
-            for (int i = 0; i < len/2; i++) 
-            {
-                *ptr2++ = ((int16_t *)buf)[i];  
-                *ptr2++ = ((int16_t *)buf)[i];  
-            }
-            offset = offset + len;
-            LOG_INF("offset: %u", offset);
-            offset = 0;
-            int res= i2s_write(audio_speaker, rx_buffer,  MAX_BLOCK_SIZE);
-            if (res < 0)
-            {
-                printk("Failed to write I2S data: %d\n", res);
-            }
-            i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);// calls are probably non blocking   
-            if (res != 0) 
-            {
-                printk("Failed to drain I2S transmission: %d\n", res);
-            }    
-	        res =  i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-            if (res != 0) 
-            {
-                printk("Failed to drain I2S transmission: %d\n", res);
-            }
-            //clear the buffer
-            k_sleep(K_MSEC(4000));
-
-            memset(clear_ptr, 0, MAX_BLOCK_SIZE);
-
-        }
-
+void switch_buffers() {
+    if (active_buffer == buffer1) {
+        active_buffer = buffer2;
+        fill_buffer = buffer1;
+    } else {
+        active_buffer = buffer1;
+        fill_buffer = buffer2;
     }
-    return amount;
+    buffer_ready = true;
 }
 
+// Function to remove played audio from the buffer
+void remove_played_audio(size_t bytes_played) {
+    if (bytes_played >= buffer_offset) {
+        buffer_offset = 0;  // All data played, clear buffer
+    } else {
+        memmove(audio_buffer, audio_buffer + bytes_played, buffer_offset - bytes_played);
+        buffer_offset -= bytes_played;
+    }
+}
 
 void generate_gentle_chime(int16_t *buffer, int num_samples)
 {

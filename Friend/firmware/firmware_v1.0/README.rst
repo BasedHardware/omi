@@ -50,8 +50,19 @@ To select the appropriate overlay file select the configuration in the nRF Conne
 To enable USB serial debugging:
 
 1. Uncomment the debug lines in `main.c`.
-2. Use the nRF Terminal in VS Code to view debug output.
-3. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
+2. Uncomment nfc.c in CMakeLists.txt
+3. Use the nRF Terminal in VS Code to view debug output.
+4. Full live-code debugging is also supported using the nRF Connect extension however this requires a J-Link debugger device and additional setup.
+
+### Serial Port Listening
+
+Get the name of the serial device
+
+`ls /dev/tty.*`
+
+Listen to it
+
+`screen /dev/tty.usbmodem101 9600``
 
 ## Key Components
 
