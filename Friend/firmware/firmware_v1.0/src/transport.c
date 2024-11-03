@@ -68,12 +68,29 @@ static struct bt_uuid_128 voice_interaction_rx_uuid = BT_UUID_INIT_128(BT_UUID_1
 
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
+        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        audio_data_read_characteristic,
+        NULL,
+        NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid,
+        BT_GATT_CHRC_READ,
+        BT_GATT_PERM_READ,
+        audio_codec_read_characteristic,
+        NULL,
+        NULL),
 #ifdef CONFIG_ENABLE_SPEAKER
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
+        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_WRITE,
+        NULL,
+        audio_data_write_handler,
+        NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 #endif
 
     BT_GATT_CHARACTERISTIC(&voice_interaction_uuid.uuid,
