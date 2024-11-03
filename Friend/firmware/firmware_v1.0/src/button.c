@@ -428,7 +428,3 @@ FSM_STATE_T get_current_button_state()
 {
     return current_button_state;
 }
-
-extern void start_voice_interaction(void);
-extern void stop_voice_interaction(void);
-extern bool voice_interaction_active;
