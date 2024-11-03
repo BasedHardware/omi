@@ -5,9 +5,6 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
-from middleware.rate_limit import RateLimitMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from modal import Image, App, asgi_app, Secret, Cron
@@ -20,6 +17,11 @@ SKIP_VAD_INIT = os.getenv('SKIP_VAD_INIT') == 'true'
 SKIP_HEAVY_INIT = os.getenv('SKIP_HEAVY_INIT') == 'true'
 ENABLE_SWAGGER = os.getenv('ENABLE_SWAGGER', '').lower() == 'true'
 ENABLE_RATE_LIMIT = os.getenv('ENABLE_RATE_LIMIT', '').lower() == 'true'
+
+# Only import OpenAPI components if Swagger is enabled and not testing
+if ENABLE_SWAGGER and not TESTING:
+    from fastapi.openapi.docs import get_swagger_ui_html
+    from fastapi.openapi.utils import get_openapi
 
 print("\nFastAPI: Starting initialization...")
 
@@ -38,9 +40,10 @@ app = FastAPI(
     title="Omi API",
     description="API for Omi backend services",
     version="1.0.0",
-    docs_url=None if not ENABLE_SWAGGER else "/docs",
-    redoc_url=None if not ENABLE_SWAGGER else "/redoc",
-    openapi_url=None if not ENABLE_SWAGGER else "/openapi.json"
+    # Only enable Swagger endpoints if enabled and not testing
+    docs_url="/docs" if (ENABLE_SWAGGER and not TESTING) else None,
+    redoc_url="/redoc" if (ENABLE_SWAGGER and not TESTING) else None,
+    openapi_url="/openapi.json" if (ENABLE_SWAGGER and not TESTING) else None
 )
 
 # Add CORS middleware
@@ -88,8 +91,8 @@ async def robots():
     """Serve robots.txt to disallow all crawlers"""
     return f"""User-agent: *\nDisallow: /"""
 
-# Custom OpenAPI schema with security schemes if Swagger is enabled
-if ENABLE_SWAGGER:
+# Custom OpenAPI schema with security schemes if Swagger is enabled and not testing
+if ENABLE_SWAGGER and not TESTING:
     def custom_openapi():
         if app.openapi_schema:
             return app.openapi_schema

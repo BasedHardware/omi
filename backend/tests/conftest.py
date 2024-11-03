@@ -415,6 +415,11 @@ sys.modules.update({
     'fastapi.middleware.cors': MagicMock(),
     'fastapi.middleware.gzip': MagicMock(),
     'fastapi.websockets': mock_websockets,
+    'fastapi.openapi': MagicMock(),
+    'fastapi.openapi.docs': MagicMock(),
+    'fastapi.openapi.utils': MagicMock(),
+    'fastapi.responses': MagicMock(),
+    'fastapi.staticfiles': MagicMock(),
 })
 
 # 6. Set environment variables
