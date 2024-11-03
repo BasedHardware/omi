@@ -348,8 +348,11 @@ def get_closest_memory_to_timestamps(
 
 class MemoriesDB:
     def __init__(self, db_client):
-        self.db = db_client
-        self.collection = self.db.get_collection("memories")
+        try:
+            self.db = db_client
+            self.collection = self.db.get_collection("memories")
+        except Exception as e:
+            raise ConnectionError(f"Failed to initialize MemoriesDB: {str(e)}")
 
     async def create_memory(self, memory_data: dict) -> dict:
         result = await self.collection.insert_one(memory_data)
