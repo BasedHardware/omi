@@ -173,7 +173,12 @@ uint16_t speak_stream(uint16_t len, const void *buf) {
     // Handle streaming audio
     if (stream_buffer_pos + len > STREAM_BUFFER_SIZE) {
         // Buffer full - play what we have
-        i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        int res = i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        if (res < 0) {
+            LOG_ERR("Failed to write stream data: %d", res);
+        }
+        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
         stream_buffer_pos = 0;
     }
 
@@ -183,7 +188,12 @@ uint16_t speak_stream(uint16_t len, const void *buf) {
 
     // If we have enough data or this is the end, play it
     if (stream_buffer_pos >= 1024 || len < 400) {
-        i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        int res = i2s_write(audio_speaker, stream_buffer, stream_buffer_pos);
+        if (res < 0) {
+            LOG_ERR("Failed to write stream data: %d", res);
+        }
+        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
         stream_buffer_pos = 0;
     }
 
