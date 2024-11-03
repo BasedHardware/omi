@@ -172,9 +172,25 @@ static inline void notify_long_tap() {
     final_button_state[0] = LONG_TAP;
     LOG_INF("long tap");
     struct bt_conn *conn = get_current_connection();
-    if (conn != NULL)
-    { 
+    if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
+
+    // Handle sleep mode
+    is_off = !is_off;
+    play_haptic_milli(100);
+    if (is_off) {
+        bt_disable();
+        int err = bt_le_adv_stop();
+        if (err) {
+            printk("Failed to stop Bluetooth %d\n",err);
+        }
+    } else {
+        int err = bt_enable(NULL);
+        if (err) {
+            printk("Failed to enable Bluetooth %d\n",err);
+        }
+        bt_on();
     }
 }
 
