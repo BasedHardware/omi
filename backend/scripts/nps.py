@@ -29,16 +29,16 @@ def calculate_nps():
     print(f'Answered: {(good + bad) / shown * 100:.2f}%')
     print(f'NPS: {(good - bad) / (good + bad) * 100:.2f} * (Do not rely)')
 
-    # print('------------------')
-    # user_to_avg = {}
-    # for uid, ratings in uid_to_ratings.items():
-    #     cleaned = [r['value'] for r in ratings if r['value'] != -1]
-    #     if not cleaned:
-    #         continue
-    #     print(uid, cleaned)
-    #     user_to_avg[uid] = sum(cleaned) / len(cleaned)
-    #
-    # print(user_to_avg)
+    print('------------------')
+    user_to_avg = {}
+    for uid, ratings in uid_to_ratings.items():
+        cleaned = [r['value'] for r in ratings if r['value'] != -1]
+        if not cleaned:
+            continue
+        print(uid, cleaned)
+        user_to_avg[uid] = sum(cleaned) / len(cleaned)
+
+    print(user_to_avg)
 
     # First analytics at October 30, 2024 at 11:24:23PM UTC-7
     # memory opened event to viewed
