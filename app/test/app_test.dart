@@ -29,7 +29,10 @@ void main() {
     setupFirebaseMocks();
     try {
       Env.init(DevEnv());
-    } catch (_) {}
+    } catch (e) {
+      print('Environment initialization failed: $e');
+      rethrow;
+    }
   });
 
   group('Provider Tests', () {
