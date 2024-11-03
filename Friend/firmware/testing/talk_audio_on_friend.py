@@ -35,8 +35,6 @@ class VoiceInteractionClient:
         self.audio_data = bytearray()
         self.is_recording = False
         self.deepgram = DeepgramClient(api_key=DEEPGRAM_API_KEY)
-        self.remaining_bytes = 0
-        self.total_offset = 0
 
     async def connect(self):
         self.client = BleakClient(DEVICE_ID)
@@ -51,11 +49,17 @@ class VoiceInteractionClient:
                 print(f"    Properties: {char.properties}")
 
     async def setup_notifications(self):
-        # Button notifications
-        await self.client.start_notify(BUTTON_READ_UUID, self.on_button_change)
-        # Voice data notifications
-        await self.client.start_notify(VOICE_INTERACTION_UUID, self.on_voice_data)
-        print("Notifications set up")
+        try:
+            # Button notifications
+            await self.client.start_notify(BUTTON_READ_UUID, self.on_button_change)
+            print("Button notifications set up")
+
+            # Voice data notifications
+            await self.client.start_notify(VOICE_INTERACTION_UUID, self.on_voice_data)
+            print("Voice notifications set up")
+
+        except Exception as e:
+            print(f"Error setting up notifications: {e}")
 
     def on_button_change(self, sender, data):
         button_state = int.from_bytes(data, byteorder='little')
@@ -72,7 +76,8 @@ class VoiceInteractionClient:
 
     def on_voice_data(self, sender, data):
         if self.is_recording:
-            self.audio_data.extend(data[3:])  # Skip header bytes
+            # Skip the first 3 bytes (header)
+            self.audio_data.extend(data[3:])
             print(f"Received {len(data)} bytes of audio data")
 
     async def process_voice_command(self):
@@ -113,28 +118,22 @@ class VoiceInteractionClient:
         except Exception as e:
             print(f"Error processing voice command: {e}")
 
-    async def send_audio_response(self, filename):
-        # Read and process the audio file
-        with wave.open(filename, 'rb') as wav_file:
-            frames = wav_file.readframes(wav_file.getnframes())
-            audio_data = np.frombuffer(frames, dtype=np.int16)
-
-            # Downsample to 8kHz
-            third_samples = audio_data[::3] * GAIN
-            audio_bytes = third_samples.tobytes()
-
+    async def send_audio_response(self, audio_bytes):
+        try:
             # Send size first
             size_bytes = len(audio_bytes).to_bytes(4, byteorder='little')
-            print(f"Sending audio size: {len(audio_bytes)} bytes")
-            await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, size_bytes)
+            await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, size_bytes, response=True)
             await asyncio.sleep(0.1)
 
             # Send audio data in chunks
             for i in range(0, len(audio_bytes), PACKET_SIZE):
                 chunk = audio_bytes[i:i + PACKET_SIZE]
-                await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, chunk)
+                await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, chunk, response=True)
                 print(f"Sent chunk of {len(chunk)} bytes")
                 await asyncio.sleep(0.01)
+
+        except Exception as e:
+            print(f"Error sending audio response: {e}")
 
     async def run(self):
         try:
