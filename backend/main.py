@@ -1,56 +1,90 @@
 import json
 import os
+import sys
 import firebase_admin
 from fastapi import FastAPI
-
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from modal import Image, App, asgi_app, Secret, Cron
-from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
-from utils.other.notifications import start_cron_job
+
+# Check if we're running tests
+TESTING = 'pytest' in sys.modules or os.getenv('TESTING') == 'true'
+SKIP_VAD_INIT = os.getenv('SKIP_VAD_INIT') == 'true'
+SKIP_HEAVY_INIT = os.getenv('SKIP_HEAVY_INIT') == 'true'
 
 print("\nFastAPI: Starting initialization...")
 
 # Initialize Firebase using application default credentials
-firebase_admin.initialize_app()
-print("FastAPI: Firebase initialized")
+if not TESTING:
+    firebase_admin.initialize_app()
+    print("FastAPI: Firebase initialized")
 
 app = FastAPI()
 
-# Include routers with logging
-print("FastAPI: Registering routes")
-routers = [
-    (transcribe_v2.router, "transcribe_v2"),
-    (memories.router, "memories"),
-    (facts.router, "facts"),
-    (chat.router, "chat"),
-    (plugins.router, "plugins"),
-    (speech_profile.router, "speech_profile"),
-    (workflow.router, "workflow"),
-    (notifications.router, "notifications"),
-    (agents.router, "agents"),
-    (users.router, "users"),
-    (processing_memories.router, "processing_memories"),
-    (trends.router, "trends"),
-    (firmware.router, "firmware"),
-    (sdcard.router, "sdcard"),
-    (sync.router, "sync")
-]
-
-for router, name in routers:
-    print(f"FastAPI: Including router - {name}")
-    app.include_router(router)
-
-print("FastAPI: All routes registered")
-
-modal_app = App(
-    name='backend',
-    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-image = (
-    Image.debian_slim()
-    .apt_install('ffmpeg', 'git', 'unzip')
-    .pip_install_from_requirements('requirements.txt')
-)
+
+# Add Gzip compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Include all routers
+from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
+    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync
+
+# Include all routers
+app.include_router(transcribe_v2.router, prefix="/transcribe_v2", tags=["transcribe_v2"])
+app.include_router(memories.router, prefix="/memories", tags=["memories"])
+app.include_router(facts.router, prefix="/facts", tags=["facts"])
+app.include_router(chat.router, prefix="/chat", tags=["chat"])
+app.include_router(plugins.router, prefix="/plugins", tags=["plugins"])
+app.include_router(speech_profile.router, prefix="/speech_profile", tags=["speech_profile"])
+app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(agents.router, prefix="/agents", tags=["agents"])
+app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(processing_memories.router, prefix="/processing_memories", tags=["processing_memories"])
+app.include_router(trends.router, prefix="/trends", tags=["trends"])
+app.include_router(firmware.router, prefix="/firmware", tags=["firmware"])
+app.include_router(sdcard.router, prefix="/sdcard", tags=["sdcard"])
+app.include_router(sync.router, prefix="/sync", tags=["sync"])
+
+@app.get("/")
+async def root():
+    return {"message": "API is running"}
+
+# Only create Modal app if not testing
+if not TESTING:
+    modal_app = App(
+        name='backend',
+        secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
+    )
+    image = (
+        Image.debian_slim()
+        .apt_install('ffmpeg', 'git', 'unzip')
+        .pip_install_from_requirements('requirements.txt')
+    )
+
+    @modal_app.function(
+        image=image,
+        keep_warm=2,
+        memory=(512, 1024),
+        cpu=2,
+        allow_concurrent_inputs=10,
+        timeout=60 * 10,
+    )
+    @asgi_app()
+    def api():
+        return app
+
+    @modal_app.function(image=image, schedule=Cron('* * * * *'))
+    async def notifications_cronjob():
+        await start_cron_job()
 
 # Create required directories
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
@@ -59,25 +93,10 @@ for path in paths:
         os.makedirs(path)
 print("FastAPI: Created required directories")
 
-print("\n" + "="*50)
-print("🚀 Backend ready and running!")
-print("="*50 + "\n")
-
-@modal_app.function(
-    image=image,
-    keep_warm=2,
-    memory=(512, 1024),
-    cpu=2,
-    allow_concurrent_inputs=10,
-    timeout=60 * 10,
-)
-@asgi_app()
-def api():
-    return app
-
-@modal_app.function(image=image, schedule=Cron('* * * * *'))
-async def notifications_cronjob():
-    await start_cron_job()
+if not TESTING:
+    print("\n" + "="*50)
+    print("🚀 Backend ready and running!")
+    print("="*50 + "\n")
 
 @app.post('/webhook')
 async def webhook(data: dict):
@@ -93,7 +112,6 @@ async def webhook(data: dict):
                 joined.append(speaker)
 
     print(data['jobId'], json.dumps(joined))
-    # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
     with open('scripts/stt/diarization.json', 'r') as f:
         diarization_data = json.loads(f.read())
 
@@ -105,5 +123,15 @@ async def webhook(data: dict):
             json.dump(diarization_data, f, indent=2)
     return 'ok'
 
-# opuslib not found? brew install opus &
-# DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH
+# Conditional initialization
+if not SKIP_VAD_INIT and not TESTING:
+    try:
+        from utils.stt import vad
+        if hasattr(vad, 'init_vad'):
+            vad.init_vad()
+    except (ImportError, AttributeError):
+        print("Warning: VAD initialization skipped")
+
+if not SKIP_HEAVY_INIT and not TESTING:
+    # Add other heavy initialization here
+    pass
