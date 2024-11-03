@@ -27,7 +27,13 @@ static struct bt_gatt_attr button_service_attr[] = {
 
 static struct bt_gatt_service button_service = BT_GATT_SERVICE(button_service_attr);
 
-static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+static inline void notify_tap(void);
+static inline void notify_press(void);
+static inline void notify_unpress(void);
+static inline void notify_double_tap(void);
+static inline void notify_long_tap(void);
+
+static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
     if (value == BT_GATT_CCC_NOTIFY)
     {
