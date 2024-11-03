@@ -840,3 +840,50 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
     }
     return 0;
 }
+
+static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
+                                             const struct bt_gatt_attr *attr,
+                                             const void *buf,
+                                             uint16_t len,
+                                             uint16_t offset,
+                                             uint8_t flags) {
+    // Handle incoming audio data for voice response using streaming
+    speak_stream(len, buf);
+    return len;
+}
+
+static bool voice_interaction_active = false;
+
+void start_voice_interaction() {
+    if (!is_off) {  // Only start if device is awake
+        voice_interaction_active = true;
+        LOG_INF("Voice interaction started");
+
+        // Optional: Play feedback sound
+        play_haptic_milli(50);
+    }
+}
+
+void stop_voice_interaction() {
+    if (voice_interaction_active) {
+        voice_interaction_active = false;
+        LOG_INF("Voice interaction stopped");
+
+        // Optional: Play feedback sound
+        play_haptic_milli(25);
+    }
+}
+
+static const char *phy2str(uint8_t phy)
+{
+    switch (phy) {
+    case BT_GAP_LE_PHY_1M:
+        return "1M";
+    case BT_GAP_LE_PHY_2M:
+        return "2M";
+    case BT_GAP_LE_PHY_CODED:
+        return "Coded";
+    default:
+        return "Unknown";
+    }
+}
