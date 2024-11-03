@@ -35,6 +35,14 @@ def get_plugin_usage_history(plugin_id: str):
     return [doc.to_dict() for doc in usage]
 
 
+def get_plugin_by_id_db(plugin_id: str, uid: str = None):
+    if 'private' in plugin_id:
+        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+    else:
+        plugin_ref = db.collection('plugins_data').document(plugin_id)
+    return plugin_ref.get().to_dict()
+
+
 def add_public_plugin(plugin_data: dict):
     plugin_ref = db.collection('plugins_data')
     plugin_ref.add(plugin_data, plugin_data['id'])
@@ -50,26 +58,39 @@ def change_plugin_approval_status(plugin_id: str, approved: bool):
     plugin_ref.update({'approved': approved})
 
 
-def change_plugin_visibility(plugin_id: str, private: bool, was_public: bool, uid: str):
-    if was_public:
+def change_plugin_visibility_db(plugin_id: str, private: bool, was_public: bool, uid: str):
+    if was_public and private:   # public -> private
         plugin_ref = db.collection('plugins_data').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+        plugin['private'] = private
         plugin_ref.set(plugin)
-    else:
+    elif not was_public and not private:    # private -> public
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
         plugin_ref = db.collection('plugins_data').document(plugin_id)
         plugin_ref.set(plugin)
+    else:  # private -> private or public -> public
+        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+        plugin_ref.update({'private': private})
 
 
-def get_plugins_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').stream()
+def get_private_plugins_db(uid: str) -> List:
     private_plugins = db.collection('users').document(uid).collection('plugins').stream()
-    data = [doc.to_dict() for doc in public_plugins] + [doc.to_dict() for doc in private_plugins]
+    data = [doc.to_dict() for doc in private_plugins]
     return data
+
+def get_public_plugins_db() -> List:
+    public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
+    data = [doc.to_dict() for doc in public_plugins]
+    return data
+
+
+def plugin_id_exists_db(plugin_id: str) -> bool:
+    plugin_ref = db.collection('plugins_data').document(plugin_id)
+    return plugin_ref.get().exists
 
 
 # TODO: only temporary, to move from the json file to firestore. Remove after the migration

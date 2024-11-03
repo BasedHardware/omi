@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from collections import defaultdict
 from typing import List
 
@@ -8,7 +9,8 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
 
 from database.plugins import get_plugin_usage_history, add_plugin_script, add_public_plugin, add_private_plugin, \
-    get_plugins_db
+    get_private_plugins_db, get_public_plugins_db, plugin_id_exists_db, change_plugin_approval_status, \
+    get_plugin_by_id_db, change_plugin_visibility_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count, get_generic_cache, set_generic_cache, get_enabled_plugins, \
     get_plugin_installs_count, get_plugin_reviews
@@ -117,18 +119,54 @@ def get_plugin_money_made(plugin_id: str):
     }
 
 
+@router.post('/v2/plugins/enable')
+def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    plugin = Plugin(**plugin)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    if plugin.works_externally() and plugin.external_integration.setup_completed_url:
+        res = requests.get(plugin.external_integration.setup_completed_url + f'?uid={uid}')
+        print('enable_plugin_endpoint', res.status_code, res.content)
+        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
+            raise HTTPException(status_code=400, detail='Plugin setup is not completed')
+    increase_plugin_installs_count(plugin_id)
+    enable_plugin(uid, plugin_id)
+    return {'status': 'ok'}
 
-@router.get('/v3/plugins', tags=['v1'], response_model=List[Plugin])
-def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = False):
-    if data := get_generic_cache('get_plugins_data'):
-        print('get_plugins_data from cache')
-        pass
-    else:
-        # get all plugins from the database
-        data = get_plugins_db(uid)
+
+@router.post('/v2/plugins/disable')
+def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    disable_plugin(uid, plugin_id)
+    decrease_plugin_installs_count(plugin_id)
+    return {'status': 'ok'}
+
+
+@router.get('/v3/plugins', tags=['v3'], response_model=List[Plugin])
+def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+    private_data = []
+    public_data = []
+    all_plugins = []
+    # TODO: Not fetching from cache while testing
+    # if cachedPlugins := get_generic_cache('get_plugins_data'):
+    #     print('get_plugins_data from cache')
+    #     if cachedPlugins is None:
+    #         return []
+    #     else:
+    #         public_data = cachedPlugins
+    #         private_data = get_private_plugins_db(uid)
+    #     pass
+    # else:
+    private_data = get_private_plugins_db(uid)
+    public_data = get_public_plugins_db()
+    # set_generic_cache('get_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
+    all_plugins = private_data + public_data
     plugins = []
-    for plugin in data:
+    for plugin in all_plugins:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
         plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
@@ -147,7 +185,6 @@ def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: 
     return plugins
 
 
-
 @router.get('/v1/migrate-plugins', tags=['v1'])
 def migrate_plugins():
     response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
@@ -158,15 +195,22 @@ def migrate_plugins():
         add_plugin_script(plugin)
 
 
-
 @router.post('/v1/plugins/add', tags=['v1'])
-def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), ):
+def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...),uid = Depends(auth.get_current_user_uid)):
     data = json.loads(plugin_data)
+    data['approved'] = False
+    data['id'] = data['name'].replace(' ', '-').lower()
+    data['uid'] = uid
+    if data['private']:
+        data['id'] = data['id'] + '-private'
+    else:
+        if plugin_id_exists_db(data['id']):
+            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    imgUrl = upload_plugin_logo(file_path,data['id'])
+    imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
     if data.get('private', True):
         print("Adding private plugin")
@@ -174,3 +218,33 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), ):
     else:
         add_public_plugin(data)
     return {'status': 'ok'}
+
+
+@router.post('/v1/plugins/{plugin_id}/approve', tags=['v1'])
+def approve_plugin(plugin_id: str):
+    change_plugin_approval_status(plugin_id, True)
+    return {'status': 'ok'}
+
+
+@router.post('/v1/plugins/{plugin_id}/reject', tags=['v1'])
+def reject_plugin(plugin_id: str):
+    change_plugin_approval_status(plugin_id, False)
+    return {'status': 'ok'}
+
+
+@router.patch('/v1/plugins/{plugin_id}/change-visibility', tags=['v1'])
+def change_plugin_visibility(plugin_id: str, private: bool, uid: str):
+    plugin = get_plugin_by_id_db(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    was_public = not plugin.deleted and not plugin.private
+    change_plugin_visibility_db(plugin_id, private, was_public, uid)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/plugin-categories', tags=['v1'])
+def get_plugin_categories():
+    return ['Conversation Analysis', 'Personality Emulation', 'Health and Wellness', 'Education and Learning',
+            'Communication Improvement', 'Emotional and Mental Support', 'Productivity and Organization',
+            'Entertainment and Fun', 'Financial', 'Travel and Exploration', 'Safety and Security',
+            'Shopping and Commerce', 'Social and Relationships', 'News and Information', 'Utilities and Tools', 'Other']
