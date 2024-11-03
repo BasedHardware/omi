@@ -366,9 +366,11 @@ class MemoriesDB:
         await self.collection.update_one({"memory_id": memory_id}, {"$set": updates})
         return await self.get_memory(memory_id)
 
+import re
+
     async def search_memories(self, user_id: str, query: str) -> List[dict]:
         cursor = self.collection.find({
             "user_id": user_id,
-            "content": {"$regex": query, "$options": "i"}
+            "content": {"$regex": f"^{re.escape(query)}", "$options": "i"}
         })
         return await cursor.to_list(length=None)
