@@ -348,10 +348,16 @@ def get_closest_memory_to_timestamps(
 
 class MemoriesDB:
     def __init__(self, db_client):
-        self.db = db_client
-        self.collection = self.db.get_collection("memories")
+        try:
+            self.db = db_client
+            self.collection = self.db.get_collection("memories")
+        except Exception as e:
+            raise ConnectionError(f"Failed to initialize MemoriesDB: {str(e)}")
 
     async def create_memory(self, memory_data: dict) -> dict:
+        required_fields = ['user_id', 'content']  # Add all required fields
+        if not all(field in memory_data for field in required_fields):
+            raise ValueError(f"Missing required fields: {required_fields}")
         result = await self.collection.insert_one(memory_data)
         return await self.collection.find_one({"_id": result.inserted_id})
 
@@ -376,9 +382,16 @@ class MemoriesDB:
         await self.collection.update_one({"memory_id": memory_id}, {"$set": updates})
         return await self.get_memory(memory_id)
 
+import asyncio
+import json
+import re
+import uuid
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional
+
     async def search_memories(self, user_id: str, query: str) -> List[dict]:
         cursor = self.collection.find({
             "user_id": user_id,
-            "content": {"$regex": query, "$options": "i"}
+            "content": {"$regex": f"^{re.escape(query)}", "$options": "i"}
         })
         return await cursor.to_list(length=None)
