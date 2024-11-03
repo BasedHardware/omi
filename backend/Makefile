@@ -30,7 +30,7 @@ install-test-deps:
 # Development
 .PHONY: run
 run:
-	ENABLE_SWAGGER=true ENABLE_RATE_LIMIT=true $(UVICORN) main:app --reload --env-file .env
+	ENABLE_SWAGGER=true $(UVICORN) main:app --reload --env-file .env
 
 .PHONY: clean
 clean:

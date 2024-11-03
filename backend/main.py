@@ -16,7 +16,6 @@ TESTING = 'pytest' in sys.modules or os.getenv('TESTING') == 'true'
 SKIP_VAD_INIT = os.getenv('SKIP_VAD_INIT') == 'true'
 SKIP_HEAVY_INIT = os.getenv('SKIP_HEAVY_INIT') == 'true'
 ENABLE_SWAGGER = os.getenv('ENABLE_SWAGGER', '').lower() == 'true'
-ENABLE_RATE_LIMIT = os.getenv('ENABLE_RATE_LIMIT', '').lower() == 'true'
 
 # Only import OpenAPI components if Swagger is enabled and not testing
 if ENABLE_SWAGGER and not TESTING:
@@ -57,11 +56,6 @@ app.add_middleware(
 
 # Add Gzip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Add rate limiting if enabled
-if ENABLE_RATE_LIMIT:
-    print("FastAPI: Rate limiting enabled")
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 
 # Include all routers with tags
 app.include_router(transcribe_v2.router, prefix="/transcribe_v2", tags=["transcribe_v2"])
