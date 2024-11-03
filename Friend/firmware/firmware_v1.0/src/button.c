@@ -384,7 +384,7 @@ int button_init()
         return -1;
 	}
 
-	int err2 = gpio_pin_configure_dt(&d5_pin_input,GPIO_INPUT);
+	int err2 = gpio_pin_configure_dt(&d5_pin_input, GPIO_INPUT | GPIO_INT_EDGE_BOTH);
 
 	if (err2 != 0) 
     {
