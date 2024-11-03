@@ -19,6 +19,3 @@ clean:
 	@flutter clean
 	@rm -rf coverage build 2>/dev/null || true
 	@echo "✅ Clean completed successfully"
-	@flutter clean
-	@rm -rf coverage
-	@rm -rf build
