@@ -35,18 +35,33 @@ class VoiceInteractionClient:
         self.audio_data = bytearray()
         self.is_recording = False
         self.deepgram = DeepgramClient(api_key=DEEPGRAM_API_KEY)
+        self.client = None
+        self.is_connected = False
 
     async def connect(self):
-        self.client = BleakClient(DEVICE_ID)
-        await self.client.connect()
-        print(f"Connected to {self.client.address}")
+        while True:
+            try:
+                if not self.is_connected:
+                    print("Attempting to connect...")
+                    self.client = BleakClient(DEVICE_ID, disconnected_callback=self.handle_disconnect)
+                    await self.client.connect()
+                    self.is_connected = True
+                    print(f"Connected to {self.client.address}")
+                    await self.setup_notifications()
+                    print("Ready for voice interaction. Double-tap to start recording.")
+                return
+            except Exception as e:
+                print(f"Connection failed: {e}")
+                await asyncio.sleep(5)  # Wait before retrying
 
-        # Print services and characteristics for debugging
-        for service in self.client.services:
-            print(f"Service: {service.uuid}")
-            for char in service.characteristics:
-                print(f"  Characteristic: {char.uuid}")
-                print(f"    Properties: {char.properties}")
+    def handle_disconnect(self, client):
+        print("Device disconnected!")
+        self.is_connected = False
+        asyncio.create_task(self.reconnect())
+
+    async def reconnect(self):
+        print("Attempting to reconnect...")
+        await self.connect()
 
     async def setup_notifications(self):
         try:
@@ -118,34 +133,46 @@ class VoiceInteractionClient:
         except Exception as e:
             print(f"Error processing voice command: {e}")
 
-    async def send_audio_response(self, audio_bytes):
-        try:
-            # Send size first
-            size_bytes = len(audio_bytes).to_bytes(4, byteorder='little')
-            await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, size_bytes, response=True)
-            await asyncio.sleep(0.1)
+    async def send_audio_response(self, filename):
+        # Read and process the audio file
+        with wave.open(filename, 'rb') as wav_file:
+            frames = wav_file.readframes(wav_file.getnframes())
+            audio_data = np.frombuffer(frames, dtype=np.int16)
 
-            # Send audio data in chunks
-            for i in range(0, len(audio_bytes), PACKET_SIZE):
-                chunk = audio_bytes[i:i + PACKET_SIZE]
-                await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, chunk, response=True)
-                print(f"Sent chunk of {len(chunk)} bytes")
-                await asyncio.sleep(0.01)
+            # Downsample to 8kHz
+            third_samples = audio_data[::3] * GAIN
+            audio_bytes = third_samples.tobytes()
 
-        except Exception as e:
-            print(f"Error sending audio response: {e}")
+            try:
+                # Send size first
+                size_bytes = len(audio_bytes).to_bytes(4, byteorder='little')
+                await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, size_bytes, response=True)
+                await asyncio.sleep(0.1)
+
+                # Send audio data in chunks
+                for i in range(0, len(audio_bytes), PACKET_SIZE):
+                    chunk = audio_bytes[i:i + PACKET_SIZE]
+                    await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, chunk, response=True)
+                    print(f"Sent chunk of {len(chunk)} bytes")
+                    await asyncio.sleep(0.01)
+
+            except Exception as e:
+                print(f"Error sending audio response: {e}")
+                if not self.is_connected:
+                    await self.reconnect()
 
     async def run(self):
         try:
             await self.connect()
-            await self.setup_notifications()
-            print("Ready for voice interaction. Double-tap to start recording.")
             while True:
+                if not self.is_connected:
+                    await self.connect()
                 await asyncio.sleep(1)
         except Exception as e:
             print(f"Error: {e}")
         finally:
-            await self.client.disconnect()
+            if self.client and self.client.is_connected:
+                await self.client.disconnect()
 
 async def main():
     client = VoiceInteractionClient()
