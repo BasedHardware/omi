@@ -359,6 +359,16 @@ class MemoriesDB:
         return await self.collection.find_one({"memory_id": memory_id})
 
     async def get_user_memories(self, user_id: str) -> List[dict]:
+        # TODO: The get_user_memories method fetches all memories without pagination,
+        # which could lead to performance issues with large datasets.
+        # 
+        # # async def get_user_memories(
+        # #     self, user_id: str, skip: int = 0, limit: int = 50
+        # # ) -> List[dict]:
+        # #     cursor = self.collection.find({"user_id": user_id})
+        # #     cursor.skip(skip).limit(limit)
+        # #     return await cursor.to_list(length=limit)
+
         cursor = self.collection.find({"user_id": user_id})
         return await cursor.to_list(length=None)
 
