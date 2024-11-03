@@ -148,28 +148,32 @@ static inline void notify_double_tap() {
         struct bt_conn *conn = get_current_connection();
         if (conn != NULL) {
             bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+
+            // Start voice interaction mode
+            start_voice_interaction();
+
+            // Play feedback sound
+            play_haptic_milli(50);
+        } else {
+            LOG_ERR("No connection available for voice interaction");
         }
-
-        // Start voice interaction mode
-        start_voice_interaction();
-
-        // Play feedback sound
-        play_haptic_milli(50);
-
-        // Reset state
-        current_button_state = GRACE;
-        reset_count();
     }
+
+    // Reset state
+    current_button_state = GRACE;
+    reset_count();
 }
 
 static inline void notify_long_tap() {
-    // If voice interaction is active, stop it first
+    // If voice interaction is active, stop it before sleep
     if (voice_interaction_active) {
+        LOG_INF("Stopping voice interaction before sleep");
         stop_voice_interaction();
     }
 
     final_button_state[0] = LONG_TAP;
-    LOG_INF("long tap");
+    LOG_INF("long tap - toggling sleep mode");
+
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
@@ -178,16 +182,18 @@ static inline void notify_long_tap() {
     // Handle sleep mode
     is_off = !is_off;
     play_haptic_milli(100);
+
     if (is_off) {
+        LOG_INF("Entering sleep mode");
         bt_disable();
         int err = bt_le_adv_stop();
         if (err) {
-            printk("Failed to stop Bluetooth %d\n",err);
+            LOG_ERR("Failed to stop Bluetooth %d", err);
         }
     } else {
         int err = bt_enable(NULL);
         if (err) {
-            printk("Failed to enable Bluetooth %d\n",err);
+            LOG_ERR("Failed to enable Bluetooth %d", err);
         }
         bt_on();
     }
