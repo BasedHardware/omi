@@ -869,8 +869,6 @@ void start_voice_interaction(void) {
     if (!is_off) {
         voice_interaction_active = true;
         LOG_INF("Voice interaction started");
-
-        // Optional: Play feedback sound
         play_haptic_milli(50);
     }
 }
@@ -879,8 +877,6 @@ void stop_voice_interaction(void) {
     if (voice_interaction_active) {
         voice_interaction_active = false;
         LOG_INF("Voice interaction stopped");
-
-        // Optional: Play feedback sound
         play_haptic_milli(25);
     }
 }
