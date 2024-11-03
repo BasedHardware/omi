@@ -139,6 +139,7 @@ class App {
   String description;
   String image;
   Set<String> capabilities;
+  bool private;
 
   String? memoryPrompt;
   String? chatPrompt;
@@ -172,6 +173,7 @@ class App {
     required this.ratingCount,
     required this.enabled,
     required this.deleted,
+    this.private = false,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -203,10 +205,17 @@ class App {
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
       installs: json['installs'] ?? 0,
+      private: json['private'] ?? json['id'].toString().contains('private'),
     );
   }
 
-  String getImageUrl() => image;
+  String getImageUrl() {
+    if (image.startsWith('http')) {
+      return image;
+    } else {
+      return 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+    }
+  }
 
   Map<String, dynamic> toJson() {
     return {

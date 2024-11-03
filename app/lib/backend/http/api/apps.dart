@@ -37,7 +37,7 @@ Future<List<App>> retrieveApps() async {
 
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v2/plugins/enable?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
@@ -156,10 +156,29 @@ Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
       return true;
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
-      throw Exception('Failed to submit app. Status code: ${response.statusCode}');
+      return false;
     }
   } catch (e) {
     debugPrint('An error occurred submitAppServer: $e');
-    throw Exception('An error occurred submitAppServer: $e');
+    return false;
+  }
+}
+
+Future<List<String>> getAppCategories() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugin-categories',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getAppCategories: ${response.body}');
+    var res = jsonDecode(response.body);
+    return res.cast<String>();
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
   }
 }

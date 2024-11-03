@@ -9,7 +9,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<AddAppProvider>(builder: (context, provider, child) {
-      if (!provider.isCapabilitySelected('External Integration')) {
+      if (!provider.isCapabilitySelected('external_integration')) {
         return const SizedBox.shrink();
       }
       return Column(

@@ -59,13 +59,20 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                 ),
                 InkWell(
                   onTap: () {
-                    routeToPage(context, AddAppPage());
+                    routeToPage(context, const AddAppPage());
                   },
                   child: AnimatedMiniBanner(
                       showAppBar: true,
                       height: 10,
-                      child: Text(
-                        'Add Apps',
+                      child: Container(
+                        color: Colors.grey[800],
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Want to feature your app? Click here',
+                                style: TextStyle(color: Colors.white, fontSize: 16)),
+                          ],
+                        ),
                       )),
                 ),
                 Expanded(
