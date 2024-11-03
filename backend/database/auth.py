@@ -1,7 +1,42 @@
 from firebase_admin import auth
-
+from fastapi import HTTPException
 from database.redis_db import cache_user_name, get_cached_user_name
 
+def create_user(uid: str, user_data: dict) -> str:
+    """Create a new user document"""
+    from ._client import db
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(user_data)
+    return uid
+
+def get_user(uid: str) -> dict:
+    """Get user document by ID"""
+    from ._client import db
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user_doc.to_dict()
+
+def delete_user(uid: str):
+    """Delete user document"""
+    from ._client import db
+    user_ref = db.collection('users').document(uid)
+    user_ref.delete()
+
+def update_user(uid: str, user_data: dict):
+    """Update user document"""
+    from ._client import db
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(user_data)
+
+def validate_token(token: str) -> str:
+    """Validate Firebase ID token"""
+    try:
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token['uid']
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 def get_user_from_uid(uid: str):
     try:
@@ -22,10 +57,7 @@ def get_user_from_uid(uid: str):
         'disabled': user.disabled,
     }
 
-
 def get_user_name(uid: str, use_default: bool = True):
-    # if cached_name := get_cached_user_name(uid):
-    #     return cached_name
     default_name = 'The User' if use_default else None
     user = get_user_from_uid(uid)
     if not user:
@@ -41,3 +73,13 @@ def get_user_name(uid: str, use_default: bool = True):
 
     cache_user_name(uid, display_name, ttl=60 * 60)
     return display_name
+
+__all__ = [
+    'create_user',
+    'get_user',
+    'delete_user',
+    'update_user',
+    'validate_token',
+    'get_user_from_uid',
+    'get_user_name'
+]
