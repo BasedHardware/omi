@@ -115,6 +115,11 @@ static inline void notify_unpress()
     { 
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
+
+    // If we were recording, stop
+    if (voice_interaction_active) {
+        stop_voice_interaction();
+    }
 }
 
 static inline void notify_tap() 
