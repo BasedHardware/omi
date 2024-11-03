@@ -97,8 +97,9 @@ uint16_t speak(uint16_t len, const void *buf) //direct from bt
 
     uint16_t amount = 0;
     amount = len;
-	if (len == 4)  //if stage 1 
-	{
+
+    if (len == 4)  //if stage 1
+    {
         current_length = ((uint32_t *)buf)[0];
 	    LOG_INF("About to write %u bytes", current_length);
         ptr2 = (int16_t *)rx_buffer;
