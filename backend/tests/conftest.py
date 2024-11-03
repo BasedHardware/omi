@@ -115,19 +115,6 @@ class MockTestClient:
         
         return MockResponse(200, {"data": []})
 
-def mock_get_current_user_uid(authorization: str = None):
-    """Mock the auth function"""
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Authorization header not found")
-    
-    token = authorization.split(' ')[1]
-    if token == 'valid_token':
-        return "test-user-id"
-    
-    raise HTTPException(status_code=401, detail="Invalid authorization token")
-
-# Now you can use these in your mock configurations...
-
 # Mock all external dependencies
 mock_protobuf = MagicMock()
 mock_protobuf.internal = MagicMock()
