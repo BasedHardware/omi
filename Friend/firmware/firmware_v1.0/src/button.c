@@ -144,14 +144,22 @@ static inline void notify_tap()
     }
 }
 
-static inline void notify_double_tap() 
-{
-    final_button_state[0] = DOUBLE_TAP; //button press
-    LOG_INF("double tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL)
-    { 
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+static inline void notify_double_tap() {
+    // Only start voice interaction if device is not in sleep mode
+    if (!is_off) {
+        final_button_state[0] = DOUBLE_TAP;
+        LOG_INF("double tap - starting voice interaction");
+
+        struct bt_conn *conn = get_current_connection();
+        if (conn != NULL) {
+            bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        }
+
+        // Start voice interaction mode
+        start_voice_interaction();
+
+        // Play feedback sound
+        play_haptic_milli(50);
     }
 }
 
