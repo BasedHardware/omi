@@ -1,6 +1,7 @@
 #ifndef TRANSPORT_H
 #define TRANSPORT_H
 
+#include <zephyr/types.h> // For uint8_t, size_t
 #include <zephyr/drivers/sensor.h>
 typedef struct sensors {
 
@@ -20,7 +21,13 @@ typedef struct sensors {
  * @return 0 if successful, negative errno code if error
  */
 int transport_start();
-int broadcast_audio_packets(uint8_t *buffer, size_t size);
 struct bt_conn *get_current_connection();
+int broadcast_audio_packets(uint8_t *buffer, size_t size);
+
+// Voice interaction function prototypes and variable
+void start_voice_interaction(void);
+void stop_voice_interaction(void);
+extern bool voice_interaction_active;
+
 int bt_on();
 #endif
