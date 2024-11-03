@@ -25,7 +25,11 @@ async def test_upload_with_valid_auth(client):
     try:
         with open(temp_wav.name, 'rb') as wav_file:
             files = {"file": ("test.wav", wav_file, "audio/wav")}
-            headers = {"Authorization": "Bearer valid_token"}
+            # Make sure the Authorization header is properly set
+            headers = {
+                "Authorization": "Bearer valid_token",
+                "Accept": "application/json"
+            }
             response = client.post(
                 "/speech_profile/v3/upload-audio",
                 files=files,
@@ -33,7 +37,11 @@ async def test_upload_with_valid_auth(client):
             )
             print(f"\nUpload response: {response.status_code}")
             print(f"Response body: {response.text}")
-            assert response.status_code == 200
-            assert "url" in response.json()
+            print(f"Response headers: {response.headers}")
+            
+            assert response.status_code == 200, f"Upload failed with status {response.status_code}: {response.text}"
+            response_data = response.json()
+            assert "url" in response_data, "Response should contain a URL"
+            assert response_data["url"].startswith("https://"), "URL should be HTTPS"
     finally:
         os.unlink(temp_wav.name)

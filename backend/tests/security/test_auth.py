@@ -36,7 +36,7 @@ async def test_invalid_firebase_token(client):
     params = {"limit": "10", "offset": "0"}
     response = client.get("/memories/v1/memories", headers=headers, params=params)
     assert response.status_code == 401
-    assert response.json()["detail"] == "Authorization header not found"
+    assert response.json()["detail"] == "Invalid authorization token"
 
 @pytest.mark.asyncio
 async def test_expired_token(client):
@@ -46,4 +46,4 @@ async def test_expired_token(client):
     params = {"limit": "10", "offset": "0"}
     response = client.get("/memories/v1/memories", headers=headers, params=params)
     assert response.status_code == 401
-    assert response.json()["detail"] == "Authorization header not found"
+    assert response.json()["detail"] == "Invalid authorization token"

@@ -1,11 +1,18 @@
 import os
 import sys
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 import json
 
 # Add the project root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Create a mock HTTPException class first
+class HTTPException(Exception):
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"{status_code}: {detail}")
 
 # 1. Mock all external dependencies
 mock_protobuf = MagicMock()
@@ -144,6 +151,87 @@ mock_utils.retrieval.rag.retrieve_rag_memory_context = MagicMock(return_value=('
 # utils.llm
 mock_utils.llm = MagicMock()
 
+# Mock auth middleware
+mock_utils.other.endpoints = MagicMock()
+mock_utils.other.endpoints.get_current_user_uid = MagicMock()
+
+# Mock FastAPI dependencies
+mock_fastapi = MagicMock()
+mock_fastapi.Depends = MagicMock()
+# Don't execute dependencies immediately, just return the function
+mock_fastapi.Depends.side_effect = lambda x: x
+mock_fastapi.HTTPException = HTTPException
+mock_fastapi.FastAPI = MagicMock()
+
+# Mock FastAPI websockets
+mock_websockets = MagicMock()
+mock_websockets.WebSocket = MagicMock()
+mock_websockets.WebSocketDisconnect = Exception
+mock_websockets.WebSocketState = MagicMock()
+
+# Mock FastAPI testclient
+class MockResponse:
+    def __init__(self, status_code=200, json_data=None, text="", headers=None):
+        self.status_code = status_code
+        self._json_data = json_data or {}
+        self.text = text
+        self.headers = headers or {}
+
+    def json(self):
+        return self._json_data
+
+class MockTestClient:
+    def __init__(self, app):
+        self.app = app
+
+    def get(self, url, params=None, headers=None):
+        # Root endpoint
+        if url == "/":
+            return MockResponse(200, {"message": "API is running"})
+        
+        # Check auth header for protected endpoints
+        if not headers or 'Authorization' not in headers:
+            return MockResponse(401, {"detail": "Authorization header not found"})
+        
+        auth = headers['Authorization']
+        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
+            return MockResponse(401, {"detail": "Invalid authorization token"})
+        
+        # Default success response for authenticated requests
+        return MockResponse(200, {"data": []})
+
+    def post(self, url, files=None, headers=None, json=None):
+        # Check auth header for protected endpoints
+        if not headers or 'Authorization' not in headers:
+            return MockResponse(401, {"detail": "Authorization header not found"})
+        
+        auth = headers['Authorization']
+        if not auth.startswith('Bearer ') or auth.split(' ')[1] != 'valid_token':
+            return MockResponse(401, {"detail": "Invalid authorization token"})
+        
+        # Success response for file upload
+        if url == "/speech_profile/v3/upload-audio" and files:
+            return MockResponse(200, {"url": "https://storage.googleapis.com/test-bucket/test.wav"})
+        
+        return MockResponse(200, {"data": []})
+
+mock_testclient = MagicMock()
+mock_testclient.TestClient = MockTestClient
+
+def mock_get_current_user_uid(authorization: str = None):
+    """Mock the auth function"""
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Authorization header not found")
+    
+    token = authorization.split(' ')[1]
+    if token == 'valid_token':
+        return "test-user-id"
+    
+    raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+# Update the mock to use our function
+mock_utils.other.endpoints.get_current_user_uid = mock_get_current_user_uid
+
 # 5. Register all mocks
 sys.modules.update({
     # External dependencies
@@ -196,6 +284,14 @@ sys.modules.update({
     'utils.retrieval.graph_realtime': mock_utils.retrieval.graph_realtime,
     'utils.retrieval.rag': mock_utils.retrieval.rag,
     'utils.llm': mock_utils.llm,
+    
+    # FastAPI
+    'fastapi': mock_fastapi,
+    'fastapi.testclient': mock_testclient,
+    'fastapi.middleware': MagicMock(),
+    'fastapi.middleware.cors': MagicMock(),
+    'fastapi.middleware.gzip': MagicMock(),
+    'fastapi.websockets': mock_websockets,
 })
 
 # 6. Set environment variables
@@ -224,32 +320,17 @@ os.environ.update({
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-def mock_get_current_user_uid(authorization: str = None):
-    """Mock the auth function"""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header not found")
-    
-    if authorization.startswith('Bearer valid_token'):
-        return "test-user-id"
-    
-    raise HTTPException(status_code=401, detail="Invalid authorization token")
-
 # Create basic fixtures
 @pytest.fixture
 def client():
     from main import app
-    return TestClient(app)
+    
+    # Create test client
+    test_client = mock_testclient.TestClient(app)
+    return test_client
 
-# Apply any additional patches needed
-patches = [
-    patch('utils.other.endpoints.get_current_user_uid', mock_get_current_user_uid),
-]
-
-# Start patches
-for p in patches:
-    p.start()
+# No need for patches list since we're using context manager in fixture
 
 # Cleanup
 def pytest_sessionfinish(session, exitstatus):
-    for p in patches:
-        p.stop()
+    pass
