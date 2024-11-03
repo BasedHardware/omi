@@ -355,6 +355,9 @@ class MemoriesDB:
             raise ConnectionError(f"Failed to initialize MemoriesDB: {str(e)}")
 
     async def create_memory(self, memory_data: dict) -> dict:
+        required_fields = ['user_id', 'content']  # Add all required fields
+        if not all(field in memory_data for field in required_fields):
+            raise ValueError(f"Missing required fields: {required_fields}")
         result = await self.collection.insert_one(memory_data)
         return await self.collection.find_one({"_id": result.inserted_id})
 
