@@ -23,6 +23,10 @@
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
+#define STREAM_BUFFER_SIZE 8192
+static uint8_t stream_buffer[STREAM_BUFFER_SIZE];
+static size_t stream_buffer_pos = 0;
+
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
