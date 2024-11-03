@@ -2,7 +2,7 @@
   {
     "id": "side-quest-detector",
     "name": "Side Quest Detector",
-    "author": "Based Hardware",
+    "author": "Vincent Koc",
     "description": "Discovers meaningful side quests in your conversations, rating their difficulty and potential impact. Only surfaces truly valuable opportunities that could lead to interesting outcomes.",
     "image": "/plugins/logos/sidequest.png",
     "capabilities": [

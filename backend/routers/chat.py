@@ -8,6 +8,7 @@ import database.chat as chat_db
 from database.plugins import record_plugin_usage, get_plugin_by_id_db
 from models.chat import Message, SendMessageRequest, MessageSender
 from models.plugin import UsageHistoryType, Plugin
+from models.memory import Memory
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.plugins import get_plugin_by_id
@@ -41,7 +42,16 @@ def send_message(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     response, memories = execute_graph_chat(uid, messages)
-
+    memories_id = []
+    # check if the items in the memories list are dict
+    if memories:
+        converted_memories = []
+        for m in memories[:5]:
+            if isinstance(m, dict):
+                converted_memories.append(Memory(**m))
+            else:
+                converted_memories.append(m)
+        memories_id = [m.id for m in converted_memories]
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=response,
@@ -49,7 +59,7 @@ def send_message(
         sender='ai',
         plugin_id=plugin_id,
         type='text',
-        memories_id=[m.id for m in (memories if len(memories) < 5 else memories[:5])],
+        memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]

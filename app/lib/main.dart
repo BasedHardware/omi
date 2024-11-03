@@ -88,13 +88,12 @@ void main() async {
   // _setupAudioSession();
   bool isAuth = await _init();
   if (Env.instabugApiKey != null) {
-    Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
+    await Instabug.setWelcomeMessageMode(WelcomeMessageMode.disabled);
     runZonedGuarded(
       () async {
         Instabug.init(
           token: Env.instabugApiKey!,
-          invocationEvents: [InvocationEvent.shake, InvocationEvent.screenshot],
-          // invocationEvents: [],
+          invocationEvents: [InvocationEvent.none],
         );
         if (isAuth) {
           Instabug.identifyUser(
