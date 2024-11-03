@@ -852,11 +852,12 @@ struct bt_conn *get_current_connection()
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
     if (is_off) {
-        return -EPERM; // Device is sleeping
+        LOG_WRN("Device is off, cannot broadcast audio");
+        return -EPERM;
     }
 
     if (voice_interaction_active) {
-        // Send through voice interaction characteristic
+        LOG_DBG("Broadcasting voice interaction data: %d bytes", size);
         struct bt_conn *conn = get_current_connection();
         if (conn) {
             int err = bt_gatt_notify(conn, &audio_service.attrs[6], buffer, size);
@@ -865,10 +866,12 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
             }
             return err;
         }
+        LOG_WRN("No connection available for voice data");
         return -ENOTCONN;
     }
 
     // Normal audio handling
+    LOG_DBG("Broadcasting normal audio data: %d bytes", size);
     while (!write_to_tx_queue(buffer, size)) {
         k_sleep(K_MSEC(1));
     }
@@ -891,8 +894,12 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
         }
 
         // Process audio data
-        return speak_stream(len, buf);
+        LOG_INF("Processing audio chunk of %d bytes", len);
+        uint16_t result = speak_stream(len, buf);
+        LOG_INF("Processed %d bytes", result);
+        return result;
     }
+    LOG_WRN("Device is off, ignoring voice data");
     return len;
 }
 
@@ -900,25 +907,29 @@ bool voice_interaction_active = false;
 
 void start_voice_interaction(void) {
     if (!is_off) {
+        LOG_INF("Starting voice interaction");
         voice_interaction_active = true;
-        LOG_INF("Voice interaction started");
         play_haptic_milli(50);
 
         // Reset stream buffer
         stream_buffer_pos = 0;
         memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
+        LOG_INF("Voice interaction started, buffers cleared");
+    } else {
+        LOG_WRN("Cannot start voice interaction while device is off");
     }
 }
 
 void stop_voice_interaction(void) {
+    LOG_INF("Stopping voice interaction (active=%d)", voice_interaction_active);
     if (voice_interaction_active) {
         voice_interaction_active = false;
-        LOG_INF("Voice interaction stopped");
         play_haptic_milli(25);
 
         // Clear stream buffer
         stream_buffer_pos = 0;
         memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
+        LOG_INF("Voice interaction stopped, buffers cleared");
     }
 }
 
