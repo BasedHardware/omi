@@ -3,10 +3,9 @@
 ## Prerequisites
 
 ### Required Software
-- Python 3.10 or higher
-- pip (Python package manager)
-- git
+- Python 3.11
 - ffmpeg
+- opus
 - Google Cloud SDK (and a Google Cloud Project with billing enabled)
 - Redis instance (e.g., [Upstash](https://upstash.com/))
 - [ngrok](https://ngrok.com/) for local development
@@ -17,6 +16,7 @@
 - Deepgram account (used for speech-to-text)
 - Redis instance (Upstash recommended)
 - GitHub account (for API access)
+- Firebase account (for testing)
 
 ## Installation Steps
 
