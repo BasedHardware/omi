@@ -1,5 +1,6 @@
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
@@ -18,8 +19,10 @@ class AddAppPage extends StatefulWidget {
 }
 
 class _AddAppPageState extends State<AddAppPage> {
+  late bool showSubmitAppConfirmation;
   @override
   void initState() {
+    showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await Provider.of<AddAppProvider>(context, listen: false).init();
     });
@@ -261,8 +264,8 @@ class _AddAppPageState extends State<AddAppPage> {
                           items: provider.categories
                               .map(
                                 (category) => DropdownMenuItem(
-                                  value: category,
-                                  child: Text(category),
+                                  value: category.id,
+                                  child: Text(category.title),
                                 ),
                               )
                               .toList(),
@@ -533,12 +536,20 @@ class _AddAppPageState extends State<AddAppPage> {
                                     return ConfirmationDialog(
                                       title: 'Submit App?',
                                       description: provider.privacyLevel == 'public'
-                                          ? 'Once you submit this app, it will be reviewed by our team and made public for everyone to use. Are you sure you want to proceed?'
-                                          : 'Once you submit this app, it will be reviewed by our team and made private for only you to use. Are you sure you want to proceed?',
+                                          ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                                          : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
                                       checkboxText: "Don't show it again",
-                                      checkboxValue: false,
-                                      updateCheckboxValue: (v) {},
+                                      checkboxValue: !showSubmitAppConfirmation,
+                                      updateCheckboxValue: (value) {
+                                        if (value != null) {
+                                          setState(() {
+                                            showSubmitAppConfirmation = !value;
+                                          });
+                                        }
+                                      },
                                       onConfirm: () async {
+                                        SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+
                                         Navigator.pop(context);
                                         await provider.submitApp();
                                       },

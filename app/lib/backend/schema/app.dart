@@ -240,3 +240,30 @@ class App {
 
   static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
 }
+
+class Category {
+  String title;
+  String id;
+  Category({
+    required this.title,
+    required this.id,
+  });
+
+  factory Category.fromJson(Map<String, dynamic> json) {
+    return Category(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<Category> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => Category.fromJson(e)).toList();
+  }
+}

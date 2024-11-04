@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
@@ -31,7 +32,7 @@ class AddAppProvider extends ChangeNotifier {
   String? privacyLevel;
   bool termsAgreed = false;
 
-  List<String> categories = [];
+  List<Category> categories = [];
 
   File? imageFile;
   List<String> capabilities = [];
