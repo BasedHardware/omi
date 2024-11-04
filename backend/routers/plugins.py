@@ -10,7 +10,7 @@ from fastapi.params import File, Form
 
 from database.plugins import get_plugin_usage_history, add_plugin_script, add_public_plugin, add_private_plugin, \
     plugin_id_exists_db, change_plugin_approval_status, \
-    get_plugin_by_id_db, change_plugin_visibility_db
+    get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count, delete_generic_cache
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
@@ -160,7 +160,7 @@ def migrate_plugins():
 
 
 @router.post('/v1/plugins/add', tags=['v1'])
-def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...),uid = Depends(auth.get_current_user_uid)):
+def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(plugin_data)
     data['approved'] = False
     data['id'] = data['name'].replace(' ', '-').lower()
@@ -207,23 +207,38 @@ def change_plugin_visibility(plugin_id: str, private: bool, uid: str):
     return {'status': 'ok'}
 
 
+@router.get('/v1/unapproved-plugins/public', tags=['v1'])
+def get_unapproved_public_plugins():
+    plugins = get_unapproved_public_plugins_db()
+    return plugins
+
+
+@router.get('/v1/plugin-triggers', tags=['v1'])
+def get_plugin_triggers():
+    # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
+    return [
+        {'title': 'Memory Creation', 'id': 'memory_creation'},
+        {'title': 'Transcript Processed','id': 'transcript_processed'}
+    ]
+
+
 @router.get('/v1/plugin-categories', tags=['v1'])
 def get_plugin_categories():
-     return [
-    {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-    {'title': 'Personality Emulation', 'id': 'personality-emulation'},
-    {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
-    {'title': 'Education and Learning', 'id': 'education-and-learning'},
-    {'title': 'Communication Improvement', 'id': 'communication-improvement'},
-    {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
-    {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
-    {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
-    {'title': 'Financial', 'id': 'financial'},
-    {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
-    {'title': 'Safety and Security', 'id': 'safety-and-security'},
-    {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
-    {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
-    {'title': 'News and Information', 'id': 'news-and-information'},
-    {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
-    {'title': 'Other', 'id': 'other'}
-]
+    return [
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Emulation', 'id': 'personality-emulation'},
+        {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
+        {'title': 'Education and Learning', 'id': 'education-and-learning'},
+        {'title': 'Communication Improvement', 'id': 'communication-improvement'},
+        {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
+        {'title': 'Safety and Security', 'id': 'safety-and-security'},
+        {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
+        {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
+        {'title': 'News and Information', 'id': 'news-and-information'},
+        {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'}
+    ]

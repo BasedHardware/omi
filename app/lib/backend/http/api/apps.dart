@@ -182,3 +182,22 @@ Future<List<Category>> getAppCategories() async {
     return [];
   }
 }
+
+Future<List<TriggerEvent>> getTriggerEventsServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugin-triggers',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getTriggerEvents: ${response.body}');
+    var res = jsonDecode(response.body);
+    return TriggerEvent.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
