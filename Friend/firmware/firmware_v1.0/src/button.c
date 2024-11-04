@@ -9,6 +9,8 @@
 #include "button.h"
 #include "transport.h"
 #include "speaker.h"
+#include "codec.h"
+#include "storage.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
@@ -57,6 +59,9 @@ static uint32_t previous_button_time = 0;
 
 const int max_debounce_interval = 700;
 static bool was_pressed = false;
+
+// Add voice interaction state to button FSM
+static bool voice_capture_active = false;
 
 //
 // button
