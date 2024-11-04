@@ -424,4 +424,12 @@ class SharedPreferencesUtil {
   Future<bool> clear() async {
     return await _preferences?.clear() ?? false;
   }
+
+  Future<bool> saveSpeakerName(int speakerId, String name) async {
+    return await saveString('speaker_name_$speakerId', name);
+  }
+
+  String? getSpeakerName(int speakerId) {
+    return getString('speaker_name_$speakerId');
+  }
 }

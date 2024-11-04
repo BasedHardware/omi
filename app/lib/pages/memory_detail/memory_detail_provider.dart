@@ -258,4 +258,32 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     assignMemoryTranscriptSegment(memoryId, segmentIdx);
     notifyListeners();
   }
+
+  Future<void> updateSpeakerName(int speakerId, String newName, bool updateAll) async {
+    toggleEditSegmentLoading(true);
+    
+    try {
+      if (updateAll) {
+        // Update all segments with matching speakerId
+        for (var segment in memory.transcriptSegments) {
+          if (segment.speakerId == speakerId) {
+            segment.speaker = 'SPEAKER_${speakerId.toString().padLeft(2, '0')}';
+            // Store the display name mapping in SharedPreferences
+            await SharedPreferencesUtil().saveSpeakerName(speakerId, newName);
+          }
+        }
+      } else {
+        // Update single segment
+        memory.transcriptSegments[selectedSegmentIndex].speaker = 
+            'SPEAKER_${speakerId.toString().padLeft(2, '0')}';
+        await SharedPreferencesUtil().saveSpeakerName(speakerId, newName);
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      showError('Failed to update speaker name');
+    } finally {
+      toggleEditSegmentLoading(false);
+    }
+  }
 }

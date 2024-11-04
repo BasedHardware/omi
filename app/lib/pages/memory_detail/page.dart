@@ -466,6 +466,25 @@ class EditSegmentWidget extends StatelessWidget {
                   //       )
                   //     : const SizedBox(),
                   const SizedBox(height: 12),
+                  ListTile(
+                    title: Text('Edit Speaker ${provider.memory.transcriptSegments[segmentIdx].speakerId} Name'),
+                    trailing: const Icon(Icons.edit),
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => EditSpeakerNameDialog(
+                          speakerId: provider.memory.transcriptSegments[segmentIdx].speakerId,
+                          onUpdate: (name, updateAll) {
+                            provider.updateSpeakerName(
+                              provider.memory.transcriptSegments[segmentIdx].speakerId,
+                              name,
+                              updateAll,
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
                   CheckboxListTile(
                     title: const Text('Yours'),
                     value: provider.memory.transcriptSegments[segmentIdx].isUser,

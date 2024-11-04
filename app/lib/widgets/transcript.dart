@@ -82,7 +82,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               : 'You'
                           : data.personId != null
                               ? person?.name ?? 'Deleted Person'
-                              : 'Speaker ${data.speakerId}',
+                              : SharedPreferencesUtil().getSpeakerName(data.speakerId) ?? 'Speaker ${data.speakerId}',
                       style: const TextStyle(
                           //  person != null ? speakerColors[person.colorIdx!] :
                           color: Colors.white,
