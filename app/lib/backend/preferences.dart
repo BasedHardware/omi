@@ -129,6 +129,10 @@ class SharedPreferencesUtil {
 
   set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
 
+  bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation') ?? true;
+
+  set showSubmitAppConfirmation(bool value) => saveBool('showSubmitAppConfirmation', value);
+
   String get recordingsLanguage => getString('recordingsLanguage') ?? 'en';
 
   set recordingsLanguage(String value) => saveString('recordingsLanguage', value);

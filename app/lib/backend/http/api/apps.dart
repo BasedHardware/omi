@@ -164,7 +164,7 @@ Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   }
 }
 
-Future<List<String>> getAppCategories() async {
+Future<List<Category>> getAppCategories() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugin-categories',
     headers: {},
@@ -175,7 +175,7 @@ Future<List<String>> getAppCategories() async {
     if (response == null || response.statusCode != 200) return [];
     log('getAppCategories: ${response.body}');
     var res = jsonDecode(response.body);
-    return res.cast<String>();
+    return Category.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
