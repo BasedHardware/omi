@@ -50,4 +50,17 @@ int init_haptic_pin();
  * @return a sound hopefully
  */
 void play_haptic_milli(uint32_t duration);
+
+/**
+ * @brief Endpoint function for streaming audio
+ *
+ * Call this function in the following way (Via ble)
+ * 1. Send a 2 byte packet containing the audio data size
+ * 2. Send to the ble notify id 400 byte packets (with notify), with each 2 bytes being the audio data
+ * 3. Repeat step 2 until the audio data is sent. Then the speaker will automatically play the sound
+ * when the audio data sent is equal to the audio data size sent in step 1
+ *
+ * @return The amount of data successfully sent in bytes.
+ */
+uint16_t speak_stream(uint16_t len, const void *buf);
 #endif

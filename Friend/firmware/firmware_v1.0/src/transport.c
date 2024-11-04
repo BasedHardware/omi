@@ -23,6 +23,10 @@
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
+#define STREAM_BUFFER_SIZE 8192
+static uint8_t stream_buffer[STREAM_BUFFER_SIZE];
+static size_t stream_buffer_pos = 0;
+
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
@@ -45,6 +49,10 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
+static ssize_t voice_interaction_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+static const char *phy2str(uint8_t phy);
+
+
 //
 // Service and Characteristic
 //
@@ -59,16 +67,47 @@ static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_U
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+static struct bt_uuid_128 voice_interaction_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10004, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 voice_interaction_rx_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10005, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
+        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        audio_data_read_characteristic,
+        NULL,
+        NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid,
+        BT_GATT_CHRC_READ,
+        BT_GATT_PERM_READ,
+        audio_codec_read_characteristic,
+        NULL,
+        NULL),
 #ifdef CONFIG_ENABLE_SPEAKER
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
+        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_WRITE,
+        NULL,
+        audio_data_write_handler,
+        NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 #endif
-    
+
+    BT_GATT_CHARACTERISTIC(&voice_interaction_uuid.uuid,
+        BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        NULL, NULL, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+
+    BT_GATT_CHARACTERISTIC(&voice_interaction_rx_uuid.uuid,
+        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+        BT_GATT_PERM_WRITE,
+        NULL, voice_interaction_write_handler, NULL),
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -89,6 +128,15 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 //Acceleration data
 //this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
 //
+struct sensors {
+    struct sensor_value a_x;
+    struct sensor_value a_y;
+    struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
+};
+
 static struct sensors mega_sensor;
 static struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
@@ -540,7 +588,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void) 
 // {
@@ -609,10 +656,8 @@ bool write_to_storage(void) {//max possible packing
 }
 
 extern bool is_off;
-static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
-static int recent_file_size_updated = 0;
 
 void update_file_size() 
 {
@@ -706,9 +751,11 @@ extern struct bt_gatt_service storage_service;
 int bt_on()
 {
     int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    // bt_gatt_service_register(&storage_service);
-
+    if (err) {
+        return err;
+    }
+    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    return err;
 }
 
 //periodic advertising
@@ -804,9 +851,108 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    while (!write_to_tx_queue(buffer, size))
-    {
+    if (is_off) {
+        LOG_WRN("Device is off, cannot broadcast audio");
+        return -EPERM;
+    }
+
+    if (voice_interaction_active) {
+        LOG_DBG("Broadcasting voice interaction data: %d bytes", size);
+        struct bt_conn *conn = get_current_connection();
+        if (conn) {
+            int err = bt_gatt_notify(conn, &audio_service.attrs[6], buffer, size);
+            if (err) {
+                LOG_ERR("Failed to send voice data: %d", err);
+            }
+            return err;
+        }
+        LOG_WRN("No connection available for voice data");
+        return -ENOTCONN;
+    }
+
+    // Normal audio handling
+    LOG_DBG("Broadcasting normal audio data: %d bytes", size);
+    while (!write_to_tx_queue(buffer, size)) {
         k_sleep(K_MSEC(1));
     }
     return 0;
+}
+
+static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
+                                             const struct bt_gatt_attr *attr,
+                                             const void *buf,
+                                             uint16_t len,
+                                             uint16_t offset,
+                                             uint8_t flags) {
+    if (!is_off) {
+        LOG_INF("Voice write: %d bytes", len);
+
+        if (len == 4) {
+            // Size packet
+            uint32_t expected_size = *((uint32_t *)buf);
+            LOG_INF("Expected voice data size: %d", expected_size);
+            return len;
+        }
+
+        // Check buffer space
+        if (voice_buffer_pos + len > VOICE_BUFFER_SIZE) {
+            LOG_WRN("Voice buffer full, playing current data");
+            speak_stream(voice_buffer_pos, voice_rx_buffer);
+            voice_buffer_pos = 0;
+        }
+
+        // Add new data
+        memcpy(voice_rx_buffer + voice_buffer_pos, buf, len);
+        voice_buffer_pos += len;
+
+        // If we have enough data or this is the end packet, play it
+        if (voice_buffer_pos >= 1024 || len < VOICE_PACKET_SIZE) {
+            LOG_INF("Playing voice data: %d bytes", voice_buffer_pos);
+            speak_stream(voice_buffer_pos, voice_rx_buffer);
+            voice_buffer_pos = 0;
+        }
+
+        return len;
+    }
+    return 0;
+}
+
+bool voice_interaction_active = false;
+
+void start_voice_interaction(void) {
+    if (!is_off) {
+        LOG_INF("Starting voice interaction");
+        voice_interaction_active = true;
+        play_haptic_milli(50);
+
+        // Reset buffer
+        voice_buffer_pos = 0;
+        memset(voice_rx_buffer, 0, VOICE_BUFFER_SIZE);
+    }
+}
+
+void stop_voice_interaction(void) {
+    if (voice_interaction_active) {
+        LOG_INF("Stopping voice interaction");
+        voice_interaction_active = false;
+        play_haptic_milli(25);
+
+        // Clear buffer
+        voice_buffer_pos = 0;
+        memset(voice_rx_buffer, 0, VOICE_BUFFER_SIZE);
+    }
+}
+
+static const char *phy2str(uint8_t phy)
+{
+    switch (phy) {
+    case BT_GAP_LE_PHY_1M:
+        return "1M";
+    case BT_GAP_LE_PHY_2M:
+        return "2M";
+    case BT_GAP_LE_PHY_CODED:
+        return "Coded";
+    default:
+        return "Unknown";
+    }
 }
