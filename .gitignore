@@ -23,6 +23,11 @@ yarn.lock
 build/
 dist/
 
+# Coverage
+*/coverage/
+*/htmlcov/
+*.coverage
+
 # Android specific
 **/android/**/build/
 **/android/.gradle

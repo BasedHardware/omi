@@ -1,12 +1,35 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict, List
 
 from google.cloud import firestore
 
-from models.chat import Message
+from models.chat import Message, ChatMessage, ChatSession
 from utils.other.endpoints import timeit
 from ._client import db
+
+
+class ChatDB:
+    def __init__(self, db_client):
+        self.db = db_client
+        self.collection = self.db.get_collection("chat_sessions")
+        self.messages_collection = self.db.get_collection("chat_messages")
+
+    async def create_session(self, session_data: Dict) -> Dict:
+        result = await self.collection.insert_one(session_data)
+        return await self.collection.find_one({"_id": result.inserted_id})
+
+    async def get_session(self, session_id: str) -> Optional[Dict]:
+        return await self.collection.find_one({"session_id": session_id})
+
+    async def add_message(self, message: ChatMessage) -> Dict:
+        message_dict = message.dict()
+        result = await self.messages_collection.insert_one(message_dict)
+        return await self.messages_collection.find_one({"_id": result.inserted_id})
+
+    async def get_session_messages(self, session_id: str) -> List[Dict]:
+        cursor = self.messages_collection.find({"session_id": session_id})
+        return await cursor.to_list(length=None)
 
 
 @timeit

@@ -1,10 +1,31 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+
+
+class FactsDB:
+    def __init__(self, db_client):
+        self.db = db_client
+        self.collection = self.db.get_collection("facts")
+
+    async def create_fact(self, fact_data: dict) -> dict:
+        result = await self.collection.insert_one(fact_data)
+        return await self.collection.find_one({"_id": result.inserted_id})
+
+    async def get_fact(self, fact_id: str) -> Optional[dict]:
+        return await self.collection.find_one({"fact_id": fact_id})
+
+    async def get_user_facts(self, user_id: str) -> List[dict]:
+        cursor = self.collection.find({"user_id": user_id})
+        return await cursor.to_list(length=None)
+
+    async def update_fact(self, fact_id: str, updates: dict) -> dict:
+        await self.collection.update_one({"fact_id": fact_id}, {"$set": updates})
+        return await self.get_fact(fact_id)
 
 
 def get_facts(uid: str, limit: int = 100, offset: int = 0):

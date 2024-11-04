@@ -345,3 +345,53 @@ def get_closest_memory_to_timestamps(
     return closest_memory
 
 # get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)
+
+class MemoriesDB:
+    def __init__(self, db_client):
+        try:
+            self.db = db_client
+            self.collection = self.db.get_collection("memories")
+        except Exception as e:
+            raise ConnectionError(f"Failed to initialize MemoriesDB: {str(e)}")
+
+    async def create_memory(self, memory_data: dict) -> dict:
+        required_fields = ['user_id', 'content']  # Add all required fields
+        if not all(field in memory_data for field in required_fields):
+            raise ValueError(f"Missing required fields: {required_fields}")
+        result = await self.collection.insert_one(memory_data)
+        return await self.collection.find_one({"_id": result.inserted_id})
+
+    async def get_memory(self, memory_id: str) -> Optional[dict]:
+        return await self.collection.find_one({"memory_id": memory_id})
+
+    async def get_user_memories(self, user_id: str) -> List[dict]:
+        # TODO: The get_user_memories method fetches all memories without pagination,
+        # which could lead to performance issues with large datasets.
+        # 
+        # # async def get_user_memories(
+        # #     self, user_id: str, skip: int = 0, limit: int = 50
+        # # ) -> List[dict]:
+        # #     cursor = self.collection.find({"user_id": user_id})
+        # #     cursor.skip(skip).limit(limit)
+        # #     return await cursor.to_list(length=limit)
+
+        cursor = self.collection.find({"user_id": user_id})
+        return await cursor.to_list(length=None)
+
+    async def update_memory(self, memory_id: str, updates: dict) -> dict:
+        await self.collection.update_one({"memory_id": memory_id}, {"$set": updates})
+        return await self.get_memory(memory_id)
+
+import asyncio
+import json
+import re
+import uuid
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional
+
+    async def search_memories(self, user_id: str, query: str) -> List[dict]:
+        cursor = self.collection.find({
+            "user_id": user_id,
+            "content": {"$regex": f"^{re.escape(query)}", "$options": "i"}
+        })
+        return await cursor.to_list(length=None)

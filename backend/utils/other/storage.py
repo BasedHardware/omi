@@ -5,21 +5,66 @@ from typing import List
 
 from google.cloud import storage
 from google.oauth2 import service_account
+from database._client import project_id
 
-from database.redis_db import cache_signed_url, get_cached_signed_url
+print(f"Storage: Initializing with project ID: {project_id}")
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = service_account.Credentials.from_service_account_info(service_account_info)
-    storage_client = storage.Client(credentials=credentials)
-else:
-    storage_client = storage.Client()
-
-speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
-postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
-memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
-syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
-
+def initialize_storage():
+    try:
+        client = storage.Client()
+        
+        # Get bucket names from environment variables
+        bucket_profiles = os.getenv('BUCKET_PROFILES')
+        bucket_memories = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+        bucket_postprocessing = os.getenv('BUCKET_POSTPROCESSING')
+        bucket_sync = os.getenv('BUCKET_SYNC')
+        bucket_backups = os.getenv('BUCKET_BACKUPS')
+        
+        # In test environment, don't verify bucket existence
+        if os.getenv('PYTEST_CURRENT_TEST'):
+            return client
+            
+        # Define required and optional buckets
+        required_buckets = [
+            ('Speech profiles', bucket_profiles),
+            ('Memories recordings', bucket_memories)
+        ]
+        
+        optional_buckets = [
+            ('Postprocessing', bucket_postprocessing),
+            ('Syncing local', bucket_sync),
+            ('Backups', bucket_backups)
+        ]
+        
+        # Verify required buckets exist and are set
+        for bucket_name, bucket_id in required_buckets:
+            if not bucket_id:
+                raise EnvironmentError(f"Required bucket '{bucket_name}' environment variable is not set")
+            try:
+                client.get_bucket(bucket_id)
+            except Exception as e:
+                raise EnvironmentError(f"Error accessing required Google Cloud Storage bucket '{bucket_name}' ({bucket_id}): {str(e)}")
+        
+        # Verify optional buckets if they are set
+        for bucket_name, bucket_id in optional_buckets:
+            if bucket_id:  # Only check if bucket env var is set
+                try:
+                    client.get_bucket(bucket_id)
+                except Exception as e:
+                    print(f"Warning: Optional bucket '{bucket_name}' ({bucket_id}) is not accessible: {str(e)}")
+        
+        # Print bucket configuration
+        print("Storage: Using buckets:")
+        for name, bucket_id in required_buckets:
+            print(f"  - {name} (required): {bucket_id}")
+        for name, bucket_id in optional_buckets:
+            if bucket_id:
+                print(f"  - {name} (optional): {bucket_id}")
+        
+        return client
+        
+    except Exception as e:
+        raise EnvironmentError(f"Error accessing required Google Cloud Storage buckets: {str(e)}")
 
 # *******************************************
 # ************* SPEECH PROFILE **************

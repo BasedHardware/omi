@@ -1,7 +1,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
-
 from pydantic import BaseModel, Field
 
 from models.chat import Message
@@ -34,14 +33,18 @@ class CategoryEnum(str, Enum):
     other = 'other'
 
 
-class UpdateMemory(BaseModel):
-    title: Optional[str] = None
-    overview: Optional[str] = None
+class MemoryType(str, Enum):
+    audio = 'audio'
+    text = 'text'
+    image = 'image'
+    video = 'video'
 
 
 class MemoryPhoto(BaseModel):
-    base64: str
-    description: str
+    id: str
+    url: str
+    created_at: datetime
+    description: Optional[str] = None
 
 
 class PluginResult(BaseModel):
@@ -51,7 +54,7 @@ class PluginResult(BaseModel):
 
 class ActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
-    completed: bool = False  # IGNORE ME from the model parser
+    completed: bool = False
     deleted: bool = False
 
 
@@ -84,7 +87,7 @@ class Structured(BaseModel):
 
     def __str__(self):
         result = (f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"
-                  f"{str(self.overview).capitalize()}\n")
+                 f"{str(self.overview).capitalize()}\n")
 
         if self.action_items:
             result += "Action Items:\n"
@@ -137,6 +140,7 @@ class MemoryStatus(str, Enum):
 
 class PostProcessingModel(str, Enum):
     fal_whisperx = 'fal_whisperx'
+    custom_whisperx = 'custom_whisperx'
 
 
 class MemoryPostProcessing(BaseModel):
@@ -145,14 +149,20 @@ class MemoryPostProcessing(BaseModel):
     fail_reason: Optional[str] = None
 
 
+class MemoryExternalData(BaseModel):
+    text: str
+
+
 class Memory(BaseModel):
     id: str
+    type: MemoryType
+    user_id: str
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    source: Optional[MemorySource] = MemorySource.friend
+    language: Optional[str] = None
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
@@ -160,15 +170,16 @@ class Memory(BaseModel):
     photos: List[MemoryPhoto] = []
 
     plugins_results: List[PluginResult] = []
-
-    external_data: Optional[Dict] = None
+    external_data: Optional[MemoryExternalData] = None
 
     discarded: bool = False
+    updated_at: Optional[datetime] = None
     deleted: bool = False
     visibility: MemoryVisibility = MemoryVisibility.private
 
     processing_memory_id: Optional[str] = None
     status: Optional[MemoryStatus] = MemoryStatus.completed
+    postprocessing: Optional[MemoryPostProcessing] = None
 
     @staticmethod
     def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
@@ -179,15 +190,15 @@ class Memory(BaseModel):
             formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
             if use_transcript:
                 memory_str = (f"Memory #{i + 1}\n"
-                              f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
-                              f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+                            f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                            f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
                 result.append(memory_str.strip())
                 continue
 
             memory_str = (f"Memory #{i + 1}\n"
-                          f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
-                          f"{str(memory.structured.title).capitalize()}\n"
-                          f"{str(memory.structured.overview).capitalize()}\n")
+                        f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                        f"{str(memory.structured.title).capitalize()}\n"
+                        f"{str(memory.structured.overview).capitalize()}\n")
 
             if memory.structured.action_items:
                 memory_str += "Action Items:\n"
@@ -198,7 +209,6 @@ class Memory(BaseModel):
         return "\n\n---------------------\n\n".join(result).strip()
 
     def get_transcript(self, include_timestamps: bool) -> str:
-        # Warn: missing transcript for workflow source
         return TranscriptSegment.segments_as_string(self.transcript_segments, include_timestamps=include_timestamps)
 
     def as_dict_cleaned_dates(self):
@@ -217,12 +227,9 @@ class CreateMemory(BaseModel):
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
-
     photos: List[MemoryPhoto] = []
-
     source: MemorySource = MemorySource.friend
     language: Optional[str] = None
-
     processing_memory_id: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
@@ -240,7 +247,6 @@ class WorkflowCreateMemory(BaseModel):
     text: str
     text_source: WorkflowMemorySource = WorkflowMemorySource.audio
     geolocation: Optional[Geolocation] = None
-
     source: MemorySource = MemorySource.workflow
     language: Optional[str] = None
 
