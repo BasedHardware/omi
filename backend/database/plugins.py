@@ -83,6 +83,11 @@ def get_private_plugins_db(uid: str) -> List:
     return data
 
 
+def get_unapproved_public_plugins_db() -> List:
+    public_plugins = db.collection('plugins_data').where('approved', '==', False).stream()
+    return [doc.to_dict() for doc in public_plugins]
+
+
 def get_public_plugins_db(uid: str) -> List:
     public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
     data = [doc.to_dict() for doc in public_plugins]
