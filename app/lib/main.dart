@@ -191,7 +191,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
-          ChangeNotifierProvider(create: (context) => AddAppProvider()),
+          ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
+            create: (context) => AddAppProvider(),
+            update: (BuildContext context, value, AddAppProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AddAppProvider(),
+          ),
         ],
         builder: (context, child) {
           return WithForegroundTask(
