@@ -201,7 +201,7 @@ class ActionItemsListWidget extends StatelessWidget {
                           height: 22.0,
                           width: 22.0,
                           child: Checkbox(
-                            shape: CircleBorder(),
+                            shape: const CircleBorder(),
                             value: item.completed,
                             onChanged: (value) {
                               if (value != null) {
@@ -527,7 +527,59 @@ class GetAppsWidgets extends StatelessWidget {
                                           },
                                         ),
                                       )
-                                    : const SizedBox.shrink(),
+                                    : ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Container(
+                                          decoration: const BoxDecoration(
+                                            image: DecorationImage(
+                                              image: AssetImage("assets/images/background.png"),
+                                              fit: BoxFit.cover,
+                                            ),
+                                            borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                                          ),
+                                          height: 30,
+                                          width: 30,
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Image.asset(
+                                                "assets/images/herologo.png",
+                                                height: 24,
+                                                width: 24,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        title: const Text(
+                                          'Unknown App',
+                                          maxLines: 1,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        subtitle: const Padding(
+                                          padding: EdgeInsets.only(top: 4.0),
+                                          child: Text(
+                                            'This app is private/deleted, or is not available at the moment',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                                          ),
+                                        ),
+                                        trailing: IconButton(
+                                          icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+                                          onPressed: () {
+                                            Clipboard.setData(ClipboardData(text: appResponse.content.trim()));
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                              content: Text('App response copied to clipboard'),
+                                            ));
+                                            MixpanelManager()
+                                                .copiedMemoryDetails(provider.memory, source: 'App Response');
+                                          },
+                                        ),
+                                      ),
                                 ExpandableTextWidget(
                                   text: appResponse.content.decodeString.trim(),
                                   isExpanded: provider.appResponseExpanded[i],
