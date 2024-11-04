@@ -33,6 +33,14 @@ class _AddAppPageState extends State<AddAppPage> {
         appBar: AppBar(
           title: const Text('Submit Your App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          actions: [
+            IconButton(
+              onPressed: () {
+                provider.clear();
+              },
+              icon: const Icon(Icons.help),
+            ),
+          ],
         ),
         body: provider.isLoading
             ? const Center(
@@ -100,11 +108,14 @@ class _AddAppPageState extends State<AddAppPage> {
                                       const SizedBox(
                                         width: 30,
                                       ),
-                                      Image.file(
-                                        provider.imageFile!,
-                                        height: 60,
-                                        width: 60,
-                                        fit: BoxFit.cover,
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8.0),
+                                        child: Image.file(
+                                          provider.imageFile!,
+                                          height: 60,
+                                          width: 60,
+                                          fit: BoxFit.cover,
+                                        ),
                                       ),
                                       const SizedBox(
                                         width: 30,
