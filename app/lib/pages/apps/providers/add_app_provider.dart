@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AddAppProvider extends ChangeNotifier {
+  AppProvider? appProvider;
+
   GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   TextEditingController appNameController = TextEditingController();
@@ -35,6 +38,10 @@ class AddAppProvider extends ChangeNotifier {
 
   bool isLoading = false;
 
+  void setAppProvider(AppProvider provider) {
+    appProvider = provider;
+  }
+
   Future init() async {
     await getCategories();
     creatorNameController.text = SharedPreferencesUtil().givenName;
@@ -53,6 +60,15 @@ class AddAppProvider extends ChangeNotifier {
     creatorEmailController.clear();
     chatPromptController.clear();
     memoryPromptController.clear();
+    triggerEvent = null;
+    webhookUrlController.clear();
+    setupCompletedController.clear();
+    instructionsController.clear();
+    privacyLevel = null;
+    termsAgreed = false;
+    appCategory = null;
+    imageFile = null;
+    capabilities.clear();
   }
 
   Future<void> getCategories() async {
@@ -88,7 +104,7 @@ class AddAppProvider extends ChangeNotifier {
           return false;
         }
         if (instructionsController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a setup instructions file path for your app');
+          AppSnackbar.showSnackbarError('Please enter a setup instructions URL for your app');
           return false;
         }
       }
@@ -145,7 +161,6 @@ class AddAppProvider extends ChangeNotifier {
     if (isCapabilitySelected('memories')) {
       data['memory_prompt'] = memoryPromptController.text;
     }
-    if (appCategory != null) {}
     if (privacyLevel == 'public') {
       data['private'] = false;
     } else {
@@ -154,6 +169,7 @@ class AddAppProvider extends ChangeNotifier {
     var res = await submitAppServer(imageFile!, data);
     if (res) {
       AppSnackbar.showSnackbarSuccess('App submitted successfully 🚀');
+      appProvider!.getApps();
       clear();
     } else {
       AppSnackbar.showSnackbarError('Failed to submit app. Please try again later');

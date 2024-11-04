@@ -53,15 +53,15 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             ),
             items: const [
               DropdownMenuItem(
-                value: 'Memory Creation',
+                value: 'memory_creation',
                 child: Text('Memory Creation'),
               ),
               DropdownMenuItem(
-                value: 'Transcript Processed',
+                value: 'transcript_processed',
                 child: Text('Transcript Processed'),
               ),
               DropdownMenuItem(
-                value: 'Audio Bytes',
+                value: 'audio_bytes',
                 child: Text('Audio Bytes'),
               ),
             ],
@@ -73,7 +73,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
           TextFormField(
             controller: provider.webhookUrlController,
             validator: (value) {
-              if (value == null || isValidUrl(value)) {
+              if (value == null || !isValidUrl(value)) {
                 return 'Please enter a valid webhook URL';
               }
               return null;
@@ -117,7 +117,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
           TextFormField(
             controller: provider.setupCompletedController,
             validator: (value) {
-              if (value == null || isValidUrl(value)) {
+              if (value == null || !isValidUrl(value)) {
                 return 'Please enter a valid URL';
               }
               return null;
@@ -161,7 +161,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
           TextFormField(
             controller: provider.instructionsController,
             validator: (value) {
-              if (value == null || isValidUrl(value)) {
+              if (value == null || !isValidUrl(value)) {
                 return 'Please enter a valid webhook URL';
               }
               return null;

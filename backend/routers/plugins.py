@@ -9,15 +9,15 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
 
 from database.plugins import get_plugin_usage_history, add_plugin_script, add_public_plugin, add_private_plugin, \
-    get_private_plugins_db, get_public_plugins_db, plugin_id_exists_db, change_plugin_approval_status, \
+    plugin_id_exists_db, change_plugin_approval_status, \
     get_plugin_by_id_db, change_plugin_visibility_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
-    decrease_plugin_installs_count, get_generic_cache, set_generic_cache, get_enabled_plugins, \
-    get_plugin_installs_count, get_plugin_reviews
+    decrease_plugin_installs_count, delete_generic_cache
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType, AuthStep
+from utils.discord import  send_discord_message
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
-from utils.plugins import get_plugins_data, get_plugin_by_id, weighted_rating
+from utils.plugins import get_plugins_data, get_plugin_by_id, weighted_rating, get_plugins_data_from_db
 
 router = APIRouter()
 
@@ -147,42 +147,7 @@ def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_
 
 @router.get('/v3/plugins', tags=['v3'], response_model=List[Plugin])
 def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    private_data = []
-    public_data = []
-    all_plugins = []
-    # TODO: Not fetching from cache while testing
-    # if cachedPlugins := get_generic_cache('get_plugins_data'):
-    #     print('get_plugins_data from cache')
-    #     if cachedPlugins is None:
-    #         return []
-    #     else:
-    #         public_data = cachedPlugins
-    #         private_data = get_private_plugins_db(uid)
-    #     pass
-    # else:
-    private_data = get_private_plugins_db(uid)
-    public_data = get_public_plugins_db()
-    # set_generic_cache('get_plugins_data', public_data, 60 * 10)  # 10 minutes cached
-    user_enabled = set(get_enabled_plugins(uid))
-    all_plugins = private_data + public_data
-    plugins = []
-    for plugin in all_plugins:
-        plugin_dict = plugin
-        plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
-        if include_reviews:
-            reviews = get_plugin_reviews(plugin['id'])
-            sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            plugin_dict['reviews'] = []
-            plugin_dict['user_review'] = reviews.get(uid)
-            plugin_dict['rating_avg'] = rating_avg
-            plugin_dict['rating_count'] = len(sorted_reviews)
-        plugins.append(Plugin(**plugin_dict))
-    if include_reviews:
-        plugins = sorted(plugins, key=weighted_rating, reverse=True)
-
-    return plugins
+    return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
 
 @router.get('/v1/migrate-plugins', tags=['v1'])
@@ -217,6 +182,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...),uid = 
         add_private_plugin(data, data['uid'])
     else:
         add_public_plugin(data)
+    delete_generic_cache('get_public_plugins_data')
     return {'status': 'ok'}
 
 

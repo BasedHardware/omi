@@ -59,14 +59,14 @@ def change_plugin_approval_status(plugin_id: str, approved: bool):
 
 
 def change_plugin_visibility_db(plugin_id: str, private: bool, was_public: bool, uid: str):
-    if was_public and private:   # public -> private
+    if was_public and private:  # public -> private
         plugin_ref = db.collection('plugins_data').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
         plugin['private'] = private
         plugin_ref.set(plugin)
-    elif not was_public and not private:    # private -> public
+    elif not was_public and not private:  # private -> public
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
@@ -82,9 +82,16 @@ def get_private_plugins_db(uid: str) -> List:
     data = [doc.to_dict() for doc in private_plugins]
     return data
 
-def get_public_plugins_db() -> List:
+
+def get_public_plugins_db(uid: str) -> List:
     public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
     data = [doc.to_dict() for doc in public_plugins]
+
+    # Include the doc if it is not approved but uid matches
+    unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
+    print(unapproved)
+    data.extend([doc.to_dict() for doc in unapproved])
+
     return data
 
 
