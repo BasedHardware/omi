@@ -97,7 +97,41 @@ int mic_start()
     return 0;
 }
 
-void set_mic_callback(mix_handler callback) 
+void set_mic_callback(mix_handler callback)
 {
     _callback = callback;
+}
+
+// Add a public function to be called from transport.c
+int mic_configure_for_voice(void) {
+    // Stop PDM first
+    nrfx_pdm_stop();
+    k_msleep(10); // Give hardware time to stop
+
+    // Uninit current config
+    nrfx_pdm_uninit();
+    k_msleep(10);
+
+    // Configure for voice
+    nrfx_pdm_config_t voice_config = NRFX_PDM_DEFAULT_CONFIG(PDM_CLK_PIN, PDM_DIN_PIN);
+    voice_config.gain_l = VOICE_GAIN;
+    voice_config.gain_r = VOICE_GAIN;
+    voice_config.clock_freq = NRF_PDM_FREQ_1032K;
+    voice_config.mode = NRF_PDM_MODE_MONO;
+    voice_config.edge = NRF_PDM_EDGE_LEFTFALLING;
+
+    // Initialize with new config
+    if (nrfx_pdm_init(&voice_config, pdm_irq_handler) != NRFX_SUCCESS) {
+        LOG_ERR("Failed to initialize PDM for voice");
+        return -1;
+    }
+
+    // Start PDM
+    if (nrfx_pdm_start() != NRFX_SUCCESS) {
+        LOG_ERR("Failed to start PDM for voice");
+        nrfx_pdm_uninit();
+        return -1;
+    }
+
+    return 0;
 }
