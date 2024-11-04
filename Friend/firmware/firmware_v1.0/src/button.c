@@ -152,16 +152,21 @@ static inline void notify_double_tap() {
         if (conn != NULL) {
             bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
 
-            // Start voice interaction mode
-            start_voice_interaction();
             if (!voice_interaction_active) {
-                LOG_ERR("Failed to start voice interaction");
-                play_haptic_milli(25); // Error feedback
+                // Start voice interaction
+                start_voice_interaction();
+                k_msleep(10); // Give time for state change
+            } else {
+                // Stop if already active
+                stop_voice_interaction();
+                k_msleep(10);
             }
-        } else {
-            LOG_ERR("No connection available for voice interaction");
         }
     }
+
+    // Reset state
+    current_button_state = GRACE;
+    reset_count();
 }
 
 static inline void notify_long_tap() {
