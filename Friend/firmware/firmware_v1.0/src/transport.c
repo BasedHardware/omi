@@ -21,6 +21,9 @@
 #include "button.h"
 #include "lib/battery/battery.h"
 // #include "friend.h"
+#include "mic.h"
+#include "codec.h"
+
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define STREAM_BUFFER_SIZE 8192
