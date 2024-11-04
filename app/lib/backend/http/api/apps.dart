@@ -71,7 +71,7 @@ Future<void> reviewApp(String appId, double score, {String review = ''}) async {
 
 Future<String> getAppMarkdown(String appMarkdownPath) async {
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$appMarkdownPath',
+    url: appMarkdownPath,
     method: 'GET',
     headers: {},
     body: '',
