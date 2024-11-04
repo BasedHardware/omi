@@ -48,3 +48,27 @@
 &uart0 {
     status = "disabled";
 };
+
+// &qspi {
+//     status = "disabled";
+// };
+
+&i2c0 {
+    lsm6ds3tr_c: lsm6ds3tr-c@6a {
+		compatible = "st,lsm6dsl";
+		reg = <0x6a>;
+		irq-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+        label = "b";
+        // wakeup-source = true;
+	};
+};
+
+&i2c1{
+    status = "disabled";
+};
+
+&temp {
+    status = "disabled";
+};
+

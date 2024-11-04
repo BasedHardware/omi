@@ -6,6 +6,7 @@
 #include "led.h"
 #include "config.h"
 #include "codec.h"
+#include "button.h"
 // #include "nfc.h"
 #include "sdcard.h"
 #include "storage.h"
@@ -13,6 +14,8 @@
 #include "usb.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
+#define VBUS_DETECT (1U << 20)
+#define WAKEUP_DETECT (1U << 16)
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void codec_handler(uint8_t *data, size_t len)
@@ -71,6 +74,23 @@ static void boot_led_sequence(void)
     set_led_green(false);
     set_led_blue(false);
 }
+void activate_everything_no_lights()
+{
+    int err;
+
+    err = led_start();
+    err = transport_start();
+    err = mount_sd_card();
+    err = storage_init();
+    err = init_haptic_pin();
+    set_codec_callback(codec_handler);
+    err = codec_start();
+    set_mic_callback(mic_handler);
+    err = mic_start();
+    err = init_usb();
+
+}
+
 void set_led_state()
 {
 	// Recording and connected state - BLUE
@@ -113,12 +133,46 @@ void set_led_state()
 	}
 
 }
-
+bool from_wakeup = false;
 // Main loop
 int main(void)
 {
 	int err;
+    //for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording 
+    uint32_t reset_reas = NRF_POWER->RESETREAS;
+    NRF_POWER->DCDCEN=1;
+    NRF_POWER->DCDCEN0=1;
+    
+    NRF_POWER->RESETREAS=1;
+    bool from_usb_event = (reset_reas & VBUS_DETECT);
+    bool from_wakeup =  (reset_reas & WAKEUP_DETECT);
+    if (from_usb_event) 
+    {
+        k_msleep(100);
+        printf("from reset \n");
+        is_off = true;
 
+        // usb_charge = true;
+        activate_everything_no_lights();
+        // bt_disable();
+        bt_off();
+    }
+    else if (from_wakeup)
+    {
+ 
+        is_off = false;
+        usb_charge = false;
+        force_button_state(GRACE);
+        k_msleep(1000);
+        activate_everything_no_lights(); 
+        bt_on();       
+        play_haptic_milli(100);
+
+
+    }
+    else
+    {
+    
     LOG_INF("Friend device firmware starting...");
     err = led_start();
     if (err) 
@@ -145,6 +199,7 @@ int main(void)
         set_led_green(false);
         // return err;
     }
+    play_boot_sound();
     err = mount_sd_card();
     if (err)
     {
@@ -222,11 +277,20 @@ int main(void)
     {
         LOG_ERR("Failed to initialize power supply: %d", err);
     }
+
+    // button_init();
+    // register_button_service();
+    // activate_button_work();
+
+
     LOG_INF("Omi firmware initialized successfully\n");
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);
+    printf("reset reas:%d\n",reset_reas);
 
+    }
+    printf("reset reas:%d\n",reset_reas);
 	while (1)
 	{
 		set_led_state();
@@ -235,3 +299,5 @@ int main(void)
 	// Unreachable
 	return 0;
 }
+
+
