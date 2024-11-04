@@ -33,6 +33,7 @@ class AddAppProvider extends ChangeNotifier {
   bool termsAgreed = false;
 
   List<Category> categories = [];
+  List<TriggerEvent> triggerEvents = [];
 
   File? imageFile;
   List<String> capabilities = [];
@@ -45,6 +46,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future init() async {
     await getCategories();
+    await getTriggerEvents();
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
   }
@@ -74,6 +76,11 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getCategories() async {
     categories = await getAppCategories();
+    notifyListeners();
+  }
+
+  Future<void> getTriggerEvents() async {
+    triggerEvents = await getTriggerEventsServer();
     notifyListeners();
   }
 

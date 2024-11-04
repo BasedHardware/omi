@@ -267,3 +267,30 @@ class Category {
     return jsonList.map((e) => Category.fromJson(e)).toList();
   }
 }
+
+class TriggerEvent {
+  String title;
+  String id;
+  TriggerEvent({
+    required this.title,
+    required this.id,
+  });
+
+  factory TriggerEvent.fromJson(Map<String, dynamic> json) {
+    return TriggerEvent(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<TriggerEvent> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => TriggerEvent.fromJson(e)).toList();
+  }
+}

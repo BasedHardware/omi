@@ -51,20 +51,14 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
-            items: const [
-              DropdownMenuItem(
-                value: 'memory_creation',
-                child: Text('Memory Creation'),
-              ),
-              DropdownMenuItem(
-                value: 'transcript_processed',
-                child: Text('Transcript Processed'),
-              ),
-              DropdownMenuItem(
-                value: 'audio_bytes',
-                child: Text('Audio Bytes'),
-              ),
-            ],
+            items: provider.triggerEvents
+                .map(
+                  (event) => DropdownMenuItem(
+                    value: event.id,
+                    child: Text(event.title),
+                  ),
+                )
+                .toList(),
             onChanged: provider.setTriggerEvent,
           ),
           const SizedBox(
