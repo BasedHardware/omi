@@ -50,4 +50,7 @@ int init_haptic_pin();
  * @return a sound hopefully
  */
 void play_haptic_milli(uint32_t duration);
+
+void speaker_off();
+
 #endif

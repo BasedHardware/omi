@@ -23,6 +23,7 @@
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
+#define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
@@ -139,6 +140,7 @@ void broadcast_accel(struct k_work *work_item) {
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 
+struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
@@ -156,7 +158,6 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
-
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -172,9 +173,26 @@ int accel_start()
 		LOG_ERR("LSM6DSL: not ready");
 		return 0;
 	}
-    odr_attr.val1 = 52;
+    odr_attr.val1 = 10;
 	odr_attr.val2 = 0;
 
+
+
+    if (gpio_is_ready_dt(&accel_gpio_pin)) 
+    {
+		printk("Speaker Pin ready\n");
+	}
+    else 
+    {
+		printk("Error setting up speaker Pin\n");
+        return -1;
+	}
+	if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    {
+		printk("Error setting up Haptic Pin\n");
+        return -1;
+	}
+    gpio_pin_set_dt(&accel_gpio_pin, 1);
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
 		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
     {
@@ -310,7 +328,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
+        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
@@ -613,7 +631,7 @@ static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
-
+static uint8_t heartbeat_count = 0;
 void update_file_size() 
 {
     file_num_array[0] = get_file_size(1);
@@ -650,6 +668,7 @@ void pusher(void)
             {
                 printk("updating file size\n");
                 update_file_size();
+                
                 file_size_updated = true;
             }
             if (conn)
@@ -672,10 +691,20 @@ void pusher(void)
             
             if (!valid  && !storage_is_on) 
             {
-                bool result = write_to_storage();
+                bool result = false;
+                if (file_num_array[1] < MAX_STORAGE_BYTES)
+                {
+                result = write_to_storage();
+                }
                 if (result)
                 {
-    
+                 heartbeat_count++;
+                 if (heartbeat_count == 255)
+                 {
+                    update_file_size();
+                    heartbeat_count = 0;
+                    printk("drawing\n");
+                 }
                 }
                 else 
                 {
@@ -703,12 +732,30 @@ extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
+int bt_off()
+{
+   bt_disable();
+   int err = bt_le_adv_stop();
+   if (err)
+   {
+       printk("Failed to stop Bluetooth %d\n",err);
+   }
+   sd_off();
+   mic_off();
+   //everything else off
+
+
+   return 0;
+}
 int bt_on()
 {
-    int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    // bt_gatt_service_register(&storage_service);
+   int err = bt_enable(NULL);
+   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+   bt_gatt_service_register(&storage_service);
+   sd_on();
+   mic_on();
 
+   return 0;
 }
 
 //periodic advertising
@@ -757,7 +804,7 @@ int transport_start()
         LOG_INF("Speaker initialized");
     }
 
-    play_boot_sound();
+
 #endif
     // Start advertising
 
@@ -809,4 +856,10 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
         k_sleep(K_MSEC(1));
     }
     return 0;
+}
+
+
+void accel_off()
+{
+    gpio_pin_set_dt(&accel_gpio_pin, 0);
 }
