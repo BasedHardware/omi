@@ -13,11 +13,10 @@ from database.plugins import get_plugin_usage_history, add_plugin_script, add_pu
     get_plugin_by_id_db, change_plugin_visibility_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count, delete_generic_cache
-from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType, AuthStep
-from utils.discord import  send_discord_message
+from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
-from utils.plugins import get_plugins_data, get_plugin_by_id, weighted_rating, get_plugins_data_from_db
+from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
 
 router = APIRouter()
 
