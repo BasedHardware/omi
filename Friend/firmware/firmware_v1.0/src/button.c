@@ -117,19 +117,17 @@ static inline void notify_press()
     }
 }
 
-static inline void notify_unpress() 
-{
-    final_button_state[0] = BUTTON_RELEASE; 
-    LOG_INF("unpressed");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL)
-    { 
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+static inline void notify_unpress() {
+    if (voice_interaction_active) {
+        LOG_INF("Button released, stopping voice interaction");
+        stop_voice_interaction();
+        k_msleep(10); // Give time for cleanup
     }
 
-    // If we were recording, stop
-    if (voice_interaction_active) {
-        stop_voice_interaction();
+    final_button_state[0] = BUTTON_RELEASE;
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL) {
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
 
@@ -148,7 +146,7 @@ static inline void notify_double_tap() {
     // Only start voice interaction if device is not in sleep mode
     if (!is_off) {
         final_button_state[0] = DOUBLE_TAP;
-        LOG_INF("double tap - starting voice interaction");
+        LOG_INF("Double tap detected");
 
         struct bt_conn *conn = get_current_connection();
         if (conn != NULL) {
@@ -156,17 +154,14 @@ static inline void notify_double_tap() {
 
             // Start voice interaction mode
             start_voice_interaction();
-
-            // Play feedback sound
-            play_haptic_milli(50);
+            if (!voice_interaction_active) {
+                LOG_ERR("Failed to start voice interaction");
+                play_haptic_milli(25); // Error feedback
+            }
         } else {
             LOG_ERR("No connection available for voice interaction");
         }
     }
-
-    // Reset state
-    current_button_state = GRACE;
-    reset_count();
 }
 
 static inline void notify_long_tap() {
