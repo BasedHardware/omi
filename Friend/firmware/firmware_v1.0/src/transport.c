@@ -23,6 +23,7 @@
 // #include "friend.h"
 #include "mic.h"
 #include "codec.h"
+#include <errno.h>
 
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -854,23 +855,13 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
+    if (voice_interaction_active) {
+        return handle_voice_data(buffer, size);
+    }
+
     if (is_off) {
         LOG_WRN("Device is off, cannot broadcast audio");
         return -EPERM;
-    }
-
-    if (voice_interaction_active) {
-        LOG_DBG("Broadcasting voice interaction data: %d bytes", size);
-        struct bt_conn *conn = get_current_connection();
-        if (conn) {
-            int err = bt_gatt_notify(conn, &audio_service.attrs[6], buffer, size);
-            if (err) {
-                LOG_ERR("Failed to send voice data: %d", err);
-            }
-            return err;
-        }
-        LOG_WRN("No connection available for voice data");
-        return -ENOTCONN;
     }
 
     // Normal audio handling
@@ -908,32 +899,90 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
 
 bool voice_interaction_active = false;
 
-void start_voice_interaction(void) {
-    if (!is_off) {
-        LOG_INF("Starting voice interaction");
-        voice_interaction_active = true;
-        play_haptic_milli(50);
+static atomic_t voice_state = ATOMIC_INIT(0);
 
-        // Reset stream buffer
-        stream_buffer_pos = 0;
-        memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
-        LOG_INF("Voice interaction started, buffers cleared");
-    } else {
-        LOG_WRN("Cannot start voice interaction while device is off");
+void start_voice_interaction(void) {
+    if (is_off || !current_connection) {
+        LOG_ERR("Cannot start voice interaction - device off or not connected");
+        return;
     }
+
+    // Use atomic operation to prevent race conditions
+    if (!atomic_cas(&voice_state, 0, 1)) {
+        LOG_WRN("Voice interaction already active");
+        return;
+    }
+
+    LOG_INF("Starting voice interaction");
+
+    // Stop any ongoing audio processing
+    storage_is_on = false;
+
+    // Clear buffers
+    ring_buf_reset(&ring_buf);
+
+    // Configure mic first
+    int err = mic_configure_for_voice();
+    if (err) {
+        LOG_ERR("Failed to configure mic: %d", err);
+        atomic_clear(&voice_state);
+        return;
+    }
+
+    // Start mic last after everything is configured
+    voice_interaction_active = true;
+    err = mic_start();
+    if (err) {
+        LOG_ERR("Failed to start mic: %d", err);
+        voice_interaction_active = false;
+        atomic_clear(&voice_state);
+        return;
+    }
+
+    LOG_INF("Voice interaction started successfully");
 }
 
 void stop_voice_interaction(void) {
-    LOG_INF("Stopping voice interaction (active=%d)", voice_interaction_active);
-    if (voice_interaction_active) {
-        voice_interaction_active = false;
-        play_haptic_milli(25);
-
-        // Clear stream buffer
-        stream_buffer_pos = 0;
-        memset(stream_buffer, 0, STREAM_BUFFER_SIZE);
-        LOG_INF("Voice interaction stopped, buffers cleared");
+    if (!atomic_cas(&voice_state, 1, 0)) {
+        LOG_WRN("Voice interaction not active");
+        return;
     }
+
+    LOG_INF("Stopping voice interaction");
+
+    // Stop voice mode first
+    voice_interaction_active = false;
+
+    // Reset mic
+    mic_start();
+
+    // Clear buffers
+    ring_buf_reset(&ring_buf);
+
+    // Resume normal operation last
+    storage_is_on = true;
+
+    LOG_INF("Voice interaction stopped");
+}
+
+int handle_voice_data(uint8_t *data, size_t len) {
+    if (!atomic_get(&voice_state)) {
+        LOG_WRN("Voice interaction not active");
+        return -EPERM;
+    }
+
+    if (!current_connection) {
+        LOG_ERR("No BLE connection");
+        return -ENOTCONN;
+    }
+
+    // Use voice interaction characteristic
+    int err = bt_gatt_notify(current_connection, &audio_service.attrs[6],
+                            data, len);
+    if (err) {
+        LOG_ERR("Failed to send voice data: %d", err);
+    }
+    return err;
 }
 
 static const char *phy2str(uint8_t phy)
