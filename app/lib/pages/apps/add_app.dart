@@ -5,6 +5,7 @@ import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
@@ -33,14 +34,6 @@ class _AddAppPageState extends State<AddAppPage> {
         appBar: AppBar(
           title: const Text('Submit Your App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
-          actions: [
-            IconButton(
-              onPressed: () {
-                provider.clear();
-              },
-              icon: const Icon(Icons.help),
-            ),
-          ],
         ),
         body: provider.isLoading
             ? const Center(
@@ -71,6 +64,25 @@ class _AddAppPageState extends State<AddAppPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        GestureDetector(
+                          onTap: () {
+                            launchUrl(Uri.parse('https://omi.me/apps/introduction'));
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12.0),
+                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 12, bottom: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(16.0),
+                            ),
+                            child: const ListTile(
+                              title: Text(
+                                'Want to build an app but not sure where to begin? Click here!',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
                         const SizedBox(
                           height: 12,
                         ),
