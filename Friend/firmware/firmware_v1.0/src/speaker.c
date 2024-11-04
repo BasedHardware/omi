@@ -10,7 +10,7 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_BLOCK_SIZE   20000 //24000 * 2
+#define MAX_BLOCK_SIZE   10000 //24000 * 2
 
 #define BLOCK_COUNT 2     
 #define SAMPLE_FREQUENCY 8000
@@ -36,6 +36,9 @@ static uint16_t offset;
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=11, .dt_flags = GPIO_INT_DISABLE};
 
+
+struct gpio_dt_spec speaker_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_INT_DISABLE};
+
 int speaker_init() 
 {
     LOG_INF("Speaker init");
@@ -46,6 +49,24 @@ int speaker_init()
         LOG_ERR("Speaker device is not supported : %s", audio_speaker->name);
         return -1;
     }
+
+
+    if (gpio_is_ready_dt(&speaker_gpio_pin)) 
+    {
+		printk("Speaker Pin ready\n");
+	}
+    else 
+    {
+		printk("Error setting up speaker Pin\n");
+        return -1;
+	}
+	if (gpio_pin_configure_dt(&speaker_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    {
+		printk("Error setting up Haptic Pin\n");
+        return -1;
+	}
+    gpio_pin_set_dt(&speaker_gpio_pin, 1);
+    
     struct i2s_config config = {
     .word_size= WORD_SIZE, //how long is one left/right word.
     .channels = NUMBER_OF_CHANNELS, //how many words in a frame 2 
@@ -79,6 +100,8 @@ int speaker_init()
       
     memset(rx_buffer, 0, MAX_BLOCK_SIZE);
     memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
+
+    
     return 0;
 }
 
@@ -226,13 +249,14 @@ int init_haptic_pin()
 
     return 0;
 }
-
+K_SEM_DEFINE(haptic_sem, 0, 1);
 void haptic_timer_callback(struct k_timer *timer);
 
 K_TIMER_DEFINE(my_status_timer, haptic_timer_callback, NULL);
 
 void haptic_timer_callback(struct k_timer *timer)
 {
+    // k_sem_give(&haptic_sem);
     gpio_pin_set_dt(&haptic_gpio_pin, 0);
 }
 
@@ -244,5 +268,19 @@ void play_haptic_milli(uint32_t duration)
         return;
     }
     gpio_pin_set_dt(&haptic_gpio_pin, 1);
+    // if (k_sem_take(&haptic_sem, K_MSEC(50)) != 0) 
+    // {
+
+    // } 
+    // else
+    // {
     k_timer_start(&my_status_timer, K_MSEC(duration), K_NO_WAIT);
+    // }
 }
+
+void speaker_off()
+{
+
+    gpio_pin_set_dt(&speaker_gpio_pin, 0);
+}
+

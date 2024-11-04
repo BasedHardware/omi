@@ -446,3 +446,14 @@ int get_offset()
 
     return offset_ptr[0];
 }
+
+void sd_off()
+ {
+//    gpio_pin_set_dt(&sd_en_gpio_pin, 0);  
+}
+
+
+void sd_on()
+{
+//    gpio_pin_set_dt(&sd_en_gpio_pin, 1);  
+}
