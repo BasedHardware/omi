@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
@@ -69,6 +70,7 @@ class _AddAppPageState extends State<AddAppPage> {
                       children: [
                         GestureDetector(
                           onTap: () {
+                            MixpanelManager().pageOpened('App Submission Help');
                             launchUrl(Uri.parse('https://omi.me/apps/introduction'));
                           },
                           child: Container(
@@ -548,8 +550,20 @@ class _AddAppPageState extends State<AddAppPage> {
                                         }
                                       },
                                       onConfirm: () async {
+                                        if (provider.privacyLevel == 'private') {
+                                          MixpanelManager().privateAppSubmitted({
+                                            'app_name': provider.appNameController.text,
+                                            'app_category': provider.appCategory,
+                                            'app_capabilities': provider.capabilities,
+                                          });
+                                        } else {
+                                          MixpanelManager().publicAppSubmitted({
+                                            'app_name': provider.appNameController.text,
+                                            'app_category': provider.appCategory,
+                                            'app_capabilities': provider.capabilities,
+                                          });
+                                        }
                                         SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-
                                         Navigator.pop(context);
                                         await provider.submitApp();
                                       },

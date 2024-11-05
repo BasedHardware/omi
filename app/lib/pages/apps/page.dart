@@ -5,6 +5,7 @@ import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
@@ -59,6 +60,7 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                 ),
                 InkWell(
                   onTap: () {
+                    MixpanelManager().pageOpened('Submit App');
                     routeToPage(context, const AddAppPage());
                   },
                   child: AnimatedMiniBanner(
