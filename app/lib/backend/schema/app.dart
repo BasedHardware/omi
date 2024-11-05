@@ -139,6 +139,7 @@ class App {
   String description;
   String image;
   Set<String> capabilities;
+  bool private;
 
   String? memoryPrompt;
   String? chatPrompt;
@@ -172,6 +173,7 @@ class App {
     required this.ratingCount,
     required this.enabled,
     required this.deleted,
+    this.private = false,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -203,10 +205,17 @@ class App {
       deleted: json['deleted'] ?? false,
       enabled: json['enabled'] ?? false,
       installs: json['installs'] ?? 0,
+      private: json['private'] ?? json['id'].toString().contains('private'),
     );
   }
 
-  String getImageUrl() => 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+  String getImageUrl() {
+    if (image.startsWith('http')) {
+      return image;
+    } else {
+      return 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+    }
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -230,4 +239,58 @@ class App {
   }
 
   static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
+}
+
+class Category {
+  String title;
+  String id;
+  Category({
+    required this.title,
+    required this.id,
+  });
+
+  factory Category.fromJson(Map<String, dynamic> json) {
+    return Category(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<Category> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => Category.fromJson(e)).toList();
+  }
+}
+
+class TriggerEvent {
+  String title;
+  String id;
+  TriggerEvent({
+    required this.title,
+    required this.id,
+  });
+
+  factory TriggerEvent.fromJson(Map<String, dynamic> json) {
+    return TriggerEvent(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<TriggerEvent> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => TriggerEvent.fromJson(e)).toList();
+  }
 }

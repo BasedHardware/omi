@@ -279,10 +279,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
             !hasAuthSteps && hasSetupInstructions
                 ? ListTile(
                     onTap: () async {
-                      await routeToPage(
-                        context,
-                        AppSetupInstructions(markdown: instructionsMarkdown ?? ''),
-                      );
+                      if (widget.app.externalIntegration != null) {
+                        if (widget.app.externalIntegration!.setupInstructionsFilePath
+                            .contains('raw.githubusercontent.com')) {
+                          await routeToPage(
+                            context,
+                            AppSetupInstructions(markdown: instructionsMarkdown ?? ''),
+                          );
+                        } else {
+                          await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
+                        }
+                      }
                       checkSetupCompleted();
                     },
                     trailing: const Padding(
