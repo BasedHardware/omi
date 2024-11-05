@@ -71,7 +71,7 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('Want to feature your app? Click here',
+                            Text('Create your own app',
                                 style: TextStyle(color: Colors.white, fontSize: 16)),
                           ],
                         ),
