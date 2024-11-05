@@ -8,7 +8,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
 
-from database.plugins import get_plugin_usage_history, add_plugin_script, add_public_plugin, add_private_plugin, \
+from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
      change_plugin_approval_status, \
     get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
     private_plugin_id_exists_db
@@ -121,14 +121,14 @@ def get_plugin_money_made(plugin_id: str):
     }
 
 
-@router.get('/v1/migrate-plugins', tags=['v1'])
-def migrate_plugins():
-    response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
-    if response.status_code != 200:
-        return []
-    data = response.json()
-    for plugin in data:
-        add_plugin_script(plugin)
+# @router.get('/v1/migrate-plugins', tags=['v1'])
+# def migrate_plugins():
+#     response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
+#     if response.status_code != 200:
+#         return []
+#     data = response.json()
+#     for plugin in data:
+#         add_plugin_script(plugin)
 
 
 @router.post('/v3/plugins', tags=['v1'])
