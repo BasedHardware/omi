@@ -37,7 +37,8 @@ def send_message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
     chat_db.add_message(uid, message.dict())
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    plugin = Plugin(**plugin)
     plugin_id = plugin.id if plugin else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
@@ -78,7 +79,8 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    plugin = Plugin(**plugin)
     text = initial_chat_message(uid, plugin)
 
     ai_message = Message(
@@ -106,60 +108,3 @@ def get_messages(uid: str = Depends(auth.get_current_user_uid)):
     if not messages:
         return [initial_message_util(uid)]
     return messages
-
-@router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def send_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    return initial_message_util_new(uid, plugin_id)
-
-
-@router.post('/v2/messages', tags=['chat'], response_model=Message)
-def send_message(
-        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
-    print('send_message', data.text, plugin_id, uid)
-    message = Message(
-        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
-    )
-    chat_db.add_message(uid, message.dict())
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    print(plugin)
-    plugin = Plugin(**plugin)
-    plugin_id = plugin.id if plugin else None
-    print('plugin_id is', plugin_id)
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, memories = execute_graph_chat(uid, messages)
-
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=response,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        plugin_id=plugin_id,
-        type='text',
-        memories_id=[m.id for m in (memories if len(memories) < 5 else memories[:5])],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    ai_message.memories = memories if len(memories) < 5 else memories[:5]
-    if plugin_id:
-        record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
-    return ai_message
-
-
-def initial_message_util_new(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
-    text = initial_chat_message(uid, plugin)
-
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        plugin_id=plugin_id,
-        from_external_integration=False,
-        type='text',
-        memories_id=[],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    return ai_message
