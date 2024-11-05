@@ -39,15 +39,15 @@ def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Pl
     private_data = []
     public_data = []
     all_plugins = []
-    if cachedPlugins := get_generic_cache('get_public_plugins_data'):
-        print('get_public_plugins_data from cache')
-        public_data = cachedPlugins
-        private_data = get_private_plugins_db(uid)
-        pass
-    else:
-        private_data = get_private_plugins_db(uid)
-        public_data = get_public_plugins_db(uid)
-    set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
+    # if cachedPlugins := get_generic_cache('get_public_plugins_data'):
+    #     print('get_public_plugins_data from cache')
+    #     public_data = cachedPlugins
+    #     private_data = get_private_plugins_db(uid)
+    #     pass
+    # else:
+    private_data = get_private_plugins_db(uid)
+    public_data = get_public_plugins_db(uid)
+    # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_plugins = private_data + public_data
     plugins = []
