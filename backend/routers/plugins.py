@@ -6,7 +6,7 @@ from typing import List
 
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
-from fastapi.params import File, Form
+from fastapi.params import File, Form, Header
 
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
      change_plugin_approval_status, \
@@ -164,13 +164,17 @@ def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: 
     return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
 @router.post('/v1/plugins/{plugin_id}/approve', tags=['v1'])
-def approve_plugin(plugin_id: str):
+def approve_plugin(plugin_id: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_plugin_approval_status(plugin_id, True)
     return {'status': 'ok'}
 
 
 @router.post('/v1/plugins/{plugin_id}/reject', tags=['v1'])
-def reject_plugin(plugin_id: str):
+def reject_plugin(plugin_id: str,secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_plugin_approval_status(plugin_id, False)
     return {'status': 'ok'}
 
@@ -186,7 +190,9 @@ def change_plugin_visibility(plugin_id: str, private: bool, uid: str = Depends(a
 
 
 @router.get('/v1/plugins/public/unapproved', tags=['v1'])
-def get_unapproved_public_plugins():
+def get_unapproved_public_plugins(secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     plugins = get_unapproved_public_plugins_db()
     return plugins
 
