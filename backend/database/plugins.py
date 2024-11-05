@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from typing import List
 
@@ -11,6 +12,8 @@ from ._client import db
 # *****************************
 # ********** CRUD *************
 # *****************************
+
+omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 
 def record_plugin_usage(
         uid: str, plugin_id: str, usage_type: UsageHistoryType, memory_id: str = None, message_id: str = None,
@@ -35,7 +38,7 @@ def get_plugin_usage_history(plugin_id: str):
     return [doc.to_dict() for doc in usage]
 
 
-def get_plugin_by_id_db(plugin_id: str, uid: str = None):
+def get_plugin_by_id_db(plugin_id: str, uid: str):
     if 'private' in plugin_id:
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     else:
@@ -72,9 +75,6 @@ def change_plugin_visibility_db(plugin_id: str, private: bool, was_public: bool,
         plugin_ref.delete()
         plugin_ref = db.collection('plugins_data').document(plugin_id)
         plugin_ref.set(plugin)
-    else:  # private -> private or public -> public
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-        plugin_ref.update({'private': private})
 
 
 def get_private_plugins_db(uid: str) -> List:
@@ -94,7 +94,6 @@ def get_public_plugins_db(uid: str) -> List:
 
     # Include the doc if it is not approved but uid matches
     unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
-    print(unapproved)
     data.extend([doc.to_dict() for doc in unapproved])
 
     return data
@@ -108,11 +107,11 @@ def plugin_id_exists_db(plugin_id: str) -> bool:
 # TODO: only temporary, to move from the json file to firestore. Remove after the migration
 def add_plugin_script(plugin_data: dict):
     img = requests.get("https://raw.githubusercontent.com/BasedHardware/Omi/main/" + plugin_data['image'], stream=True)
-    bucket = storage_client.bucket('omi_plugins')
+    bucket = storage_client.bucket(omi_plugins_bucket)
     path = plugin_data['image'].split('/plugins/logos/')[1]
     blob = bucket.blob(path)
     blob.upload_from_file(img.raw)
-    plugin_data['image'] = f'https://storage.googleapis.com/omi_plugins/{path}'
+    plugin_data['image'] = f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
     plugin_data['private'] = False
     plugin_data['approved'] = True
 
