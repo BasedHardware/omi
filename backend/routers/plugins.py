@@ -155,7 +155,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
         add_private_plugin(data, data['uid'])
     else:
         add_public_plugin(data)
-    delete_generic_cache('get_public_plugins_data')
+    # delete_generic_cache('get_public_plugins_data')
     return {'status': 'ok'}
 
 
