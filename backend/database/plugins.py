@@ -99,13 +99,18 @@ def get_public_plugins_db(uid: str) -> List:
     return data
 
 
-def plugin_id_exists_db(plugin_id: str) -> bool:
+def public_plugin_id_exists_db(plugin_id: str) -> bool:
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     return plugin_ref.get().exists
 
 
-# TODO: only temporary, to move from the json file to firestore. Remove after the migration
-def add_plugin_script(plugin_data: dict):
+def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
+    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+    return plugin_ref.get().exists
+
+
+
+def add_plugin_from_community_json(plugin_data: dict):
     img = requests.get("https://raw.githubusercontent.com/BasedHardware/Omi/main/" + plugin_data['image'], stream=True)
     bucket = storage_client.bucket(omi_plugins_bucket)
     path = plugin_data['image'].split('/plugins/logos/')[1]
@@ -114,7 +119,6 @@ def add_plugin_script(plugin_data: dict):
     plugin_data['image'] = f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
     plugin_data['private'] = False
     plugin_data['approved'] = True
-
     if "external_integration" in plugin_data['capabilities']:
         plugin_data['external_integration'][
             'setup_instructions_file_path'] = "https://raw.githubusercontent.com/BasedHardware/Omi/main/" + \

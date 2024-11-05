@@ -9,8 +9,9 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
 
 from database.plugins import get_plugin_usage_history, add_plugin_script, add_public_plugin, add_private_plugin, \
-    plugin_id_exists_db, change_plugin_approval_status, \
-    get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db
+     change_plugin_approval_status, \
+    get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
+    private_plugin_id_exists_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count, delete_generic_cache
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
@@ -23,7 +24,8 @@ router = APIRouter()
 
 @router.post('/v1/plugins/enable')
 def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    plugin = Plugin(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
@@ -38,7 +40,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
 
 @router.post('/v1/plugins/disable')
 def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    plugin = Plugin(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     disable_plugin(uid, plugin_id)
@@ -118,37 +121,6 @@ def get_plugin_money_made(plugin_id: str):
     }
 
 
-@router.post('/v2/plugins/enable')
-def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    if plugin.works_externally() and plugin.external_integration.setup_completed_url:
-        res = requests.get(plugin.external_integration.setup_completed_url + f'?uid={uid}')
-        print('enable_plugin_endpoint', res.status_code, res.content)
-        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
-            raise HTTPException(status_code=400, detail='Plugin setup is not completed')
-    increase_plugin_installs_count(plugin_id)
-    enable_plugin(uid, plugin_id)
-    return {'status': 'ok'}
-
-
-@router.post('/v2/plugins/disable')
-def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    disable_plugin(uid, plugin_id)
-    decrease_plugin_installs_count(plugin_id)
-    return {'status': 'ok'}
-
-
-@router.get('/v3/plugins', tags=['v3'], response_model=List[Plugin])
-def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    return get_plugins_data_from_db(uid, include_reviews=include_reviews)
-
-
 @router.get('/v1/migrate-plugins', tags=['v1'])
 def migrate_plugins():
     response = requests.get('https://raw.githubusercontent.com/BasedHardware/Omi/main/community-plugins.json')
@@ -159,7 +131,7 @@ def migrate_plugins():
         add_plugin_script(plugin)
 
 
-@router.post('/v1/plugins/add', tags=['v1'])
+@router.post('/v3/plugins', tags=['v1'])
 def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(plugin_data)
     data['approved'] = False
@@ -167,8 +139,10 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data['uid'] = uid
     if data['private']:
         data['id'] = data['id'] + '-private'
+        if private_plugin_id_exists_db(data['id'], uid):
+            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
     else:
-        if plugin_id_exists_db(data['id']):
+        if public_plugin_id_exists_db(data['id']):
             data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
@@ -184,6 +158,10 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     delete_generic_cache('get_public_plugins_data')
     return {'status': 'ok'}
 
+
+@router.get('/v3/plugins', tags=['v3'], response_model=List[Plugin])
+def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+    return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
 @router.post('/v1/plugins/{plugin_id}/approve', tags=['v1'])
 def approve_plugin(plugin_id: str):
