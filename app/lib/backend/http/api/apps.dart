@@ -37,7 +37,7 @@ Future<List<App>> retrieveApps() async {
 
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/plugins/enable?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
@@ -141,7 +141,7 @@ Future<double> getAppMoneyMade(String pluginId) async {
 Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/plugins/add'),
+    Uri.parse('${Env.apiBaseUrl}v3/plugins'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
