@@ -198,8 +198,8 @@ def reject_plugin(plugin_id: str):
 
 
 @router.patch('/v1/plugins/{plugin_id}/change-visibility', tags=['v1'])
-def change_plugin_visibility(plugin_id: str, private: bool, uid: str):
-    plugin = get_plugin_by_id_db(plugin_id)
+def change_plugin_visibility(plugin_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
+    plugin = get_plugin_by_id_db(plugin_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     was_public = not plugin.deleted and not plugin.private
@@ -207,7 +207,7 @@ def change_plugin_visibility(plugin_id: str, private: bool, uid: str):
     return {'status': 'ok'}
 
 
-@router.get('/v1/unapproved-plugins/public', tags=['v1'])
+@router.get('/v1/plugins/public/unapproved', tags=['v1'])
 def get_unapproved_public_plugins():
     plugins = get_unapproved_public_plugins_db()
     return plugins
