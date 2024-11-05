@@ -19,4 +19,12 @@ class AppSnackbar {
       duration: duration,
     );
   }
+
+  static void showSnackbarSuccess(String message, {Duration? duration}) {
+    showSnackbar(
+      message,
+      color: Colors.green,
+      duration: duration,
+    );
+  }
 }
