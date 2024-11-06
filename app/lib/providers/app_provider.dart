@@ -4,6 +4,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_dialog.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class AppProvider extends BaseProvider {
@@ -17,6 +18,9 @@ class AppProvider extends BaseProvider {
   List<bool> appLoading = [];
 
   String selectedChatAppId = 'no_selected';
+
+  bool isAppOwner = false;
+  bool appPublicToggled = false;
 
   void setSelectedChatAppId(String? appId) {
     if (appId == null) {
@@ -50,6 +54,51 @@ class AppProvider extends BaseProvider {
     appLoading = List.filled(apps.length, false);
     setLoadingState(false);
     notifyListeners();
+  }
+
+  Future checkIsAppOwner(String appId) async {
+    if (appId.contains('private')) {
+      isAppOwner = true;
+      appPublicToggled = false;
+    } else {
+      var res = await checkIsAppOwnerServer(appId);
+      isAppOwner = res;
+      appPublicToggled = res;
+    }
+
+    notifyListeners();
+  }
+
+  Future deleteApp(String appId) async {
+    var res = await deleteAppServer(appId);
+    if (res) {
+      apps.removeWhere((app) => app.id == appId);
+      updatePrefApps();
+      setApps();
+      AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
+    } else {
+      AppSnackbar.showSnackbarError('Failed to delete app. Please try again later.');
+    }
+    notifyListeners();
+  }
+
+  void toggleAppPublic(String appId, bool value) {
+    appPublicToggled = value;
+    changeAppVisibilityServer(appId, value);
+    getApps();
+    apps.removeWhere((app) => app.id == appId);
+    updatePrefApps();
+    setApps();
+    AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
+    notifyListeners();
+  }
+
+  bool isAppPublic(String appId) {
+    if (appId.contains('private')) {
+      return false;
+    } else {
+      return true;
+    }
   }
 
   void setAppsFromCache() {
