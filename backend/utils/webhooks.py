@@ -10,6 +10,8 @@ from database.redis_db import get_user_webhook_db, user_webhook_status_db, disab
     enable_user_webhook_db, set_user_webhook_db
 from models.memory import Memory
 from models.users import WebhookType
+import database.notifications as notification_db
+from utils.notifications import send_notification
 
 
 def memory_created_webhook(uid, memory: Memory):
@@ -73,6 +75,13 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 timeout=15,
             )
             print('realtime_transcript_webhook:', webhook_url, response.status_code)
+            response_data = response.json()
+            if not response_data:
+                return
+            message = response_data.get('message', '')
+            if message and len(message) > 5:
+                token = notification_db.get_token_only(uid)
+                send_webhook_notification(token, message)
         except Exception as e:
             print(f"Error sending realtime transcript to developer webhook: {e}")
     else:
@@ -152,3 +161,6 @@ def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
         enable_user_webhook_db(uid, wType)
         res = True
     return res
+
+def send_webhook_notification(token: str, message: str):
+    send_notification(token, "Webhook" + ' says', message)
