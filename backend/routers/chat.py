@@ -11,7 +11,6 @@ from models.plugin import UsageHistoryType, Plugin
 from models.memory import Memory
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
-from utils.plugins import get_plugin_by_id
 from utils.retrieval.graph import execute_graph_chat
 
 router = APIRouter()
