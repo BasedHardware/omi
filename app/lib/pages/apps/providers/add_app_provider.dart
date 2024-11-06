@@ -32,6 +32,8 @@ class AddAppProvider extends ChangeNotifier {
   String? privacyLevel;
   bool termsAgreed = false;
 
+  bool isPrivate = true;
+
   List<Category> categories = [];
   List<TriggerEvent> triggerEvents = [];
 
@@ -69,6 +71,7 @@ class AddAppProvider extends ChangeNotifier {
     instructionsController.clear();
     privacyLevel = null;
     termsAgreed = false;
+    isPrivate = true;
     appCategory = null;
     imageFile = null;
     capabilities.clear();
@@ -132,10 +135,6 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Please select a category for your app');
         return false;
       }
-      if (privacyLevel == null) {
-        AppSnackbar.showSnackbarError('Please select a privacy level for your app');
-        return false;
-      }
       return true;
     } else {
       AppSnackbar.showSnackbarError('Please fill in all the required fields correctly');
@@ -154,6 +153,7 @@ class AddAppProvider extends ChangeNotifier {
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
+      'private': isPrivate,
     };
     if (isCapabilitySelected('external_integration')) {
       data['external_integration'] = {
@@ -168,11 +168,6 @@ class AddAppProvider extends ChangeNotifier {
     }
     if (isCapabilitySelected('memories')) {
       data['memory_prompt'] = memoryPromptController.text;
-    }
-    if (privacyLevel == 'public') {
-      data['private'] = false;
-    } else {
-      data['private'] = true;
     }
     var res = await submitAppServer(imageFile!, data);
     if (res) {
@@ -226,19 +221,19 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPrivacyLevel(String? level) {
-    if (level == null) {
-      return;
-    }
-    privacyLevel = level;
-    notifyListeners();
-  }
-
   void setTermsAgreed(bool? agreed) {
     if (agreed == null) {
       return;
     }
     termsAgreed = agreed;
+    notifyListeners();
+  }
+
+  void setIsPrivate(bool? private) {
+    if (private == null) {
+      return;
+    }
+    isPrivate = private;
     notifyListeners();
   }
 
