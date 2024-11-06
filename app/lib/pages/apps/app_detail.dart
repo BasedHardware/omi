@@ -6,6 +6,7 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
 import 'package:friend_private/pages/apps/instructions.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -15,6 +16,100 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/schema/app.dart';
+
+class ShowAppOptionsSheet extends StatelessWidget {
+  final App app;
+  const ShowAppOptionsSheet({super.key, required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Consumer<AppProvider>(builder: (context, provider, child) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                app.name,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              leading: const Icon(Icons.apps),
+              trailing: IconButton(
+                icon: const Icon(Icons.cancel_outlined),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
+            ),
+            Card(
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+              child: ListTile(
+                title: const Text(
+                  'Keep App Public',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                trailing: Switch(
+                  value: provider.appPublicToggled,
+                  onChanged: (value) {
+                    provider.toggleAppPublic(app.id, value);
+                    Navigator.pop(context);
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+            ),
+            Card(
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+              child: Column(
+                children: [
+                  const ListTile(
+                    title: Text('Edit App'),
+                    leading: Icon(Icons.edit),
+                    onTap: null,
+                  ),
+                  ListTile(
+                    title: const Text('Delete App'),
+                    leading: const Icon(
+                      Icons.delete,
+                    ),
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            provider.deleteApp(app.id);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          },
+                          'Delete App',
+                          'Are you sure you want to delete this app? This action cannot be undone.',
+                          okButtonText: 'Confirm',
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        );
+      }),
+    );
+  }
+}
 
 class AppDetailPage extends StatefulWidget {
   final App app;
@@ -41,6 +136,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppProvider>().checkIsAppOwner(widget.app.id);
+    });
     if (widget.app.worksExternally()) {
       getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
         value = value.replaceAll(
@@ -70,6 +168,30 @@ class _AppDetailPageState extends State<AppDetailPage> {
           title: Text(widget.app.name),
           backgroundColor: Theme.of(context).colorScheme.primary,
           elevation: 0,
+          actions: [
+            context.watch<AppProvider>().isAppOwner
+                ? IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () async {
+                      // open bottom sheet
+                      await showModalBottomSheet(
+                        context: context,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
+                        ),
+                        builder: (context) {
+                          return ShowAppOptionsSheet(
+                            app: widget.app,
+                          );
+                        },
+                      );
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: ListView(

@@ -201,3 +201,57 @@ Future<List<TriggerEvent>> getTriggerEventsServer() async {
     return [];
   }
 }
+
+Future<bool> checkIsAppOwnerServer(String pluginId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/is-owner',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('checkIsAppOwner: ${response.body}');
+    return jsonDecode(response.body)['is_owner'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}
+
+Future changeAppVisibilityServer(String appId, bool makePublic) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$appId/change-visibility?private=${!makePublic}',
+    headers: {},
+    body: '',
+    method: 'PATCH',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('changeAppVisibilityServer: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}
+
+Future deleteAppServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$appId',
+    headers: {},
+    body: '',
+    method: 'DELETE',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('deleteAppServer: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}
