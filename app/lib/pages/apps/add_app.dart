@@ -444,57 +444,19 @@ class _AddAppPageState extends State<AddAppPage> {
                           style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
                         const SizedBox(
-                          height: 20,
+                          height: 8,
                         ),
-                        DropdownButtonFormField(
-                          validator: (value) {
-                            if (value == null) {
-                              return 'Please select a privacy level';
-                            }
-                            return null;
-                          },
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(10)),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: !provider.isPrivate,
+                              onChanged: provider.setIsPrivate,
                             ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(10)),
-                              borderSide: BorderSide(
-                                color: Colors.white,
-                              ),
-                            ),
-                            label: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.privacy_tip,
-                                    color: WidgetStateColor.resolveWith(
-                                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                                const SizedBox(
-                                  width: 8,
-                                ),
-                                const Text(
-                                  'Privacy Level',
-                                ),
-                              ],
-                            ),
-                            labelStyle: const TextStyle(
-                              color: Colors.grey,
-                            ),
-                            floatingLabelStyle: const TextStyle(
-                              color: Colors.white,
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'public',
-                              child: Text('Public'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'private',
-                              child: Text('Private'),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.80,
+                              child: const Text("Make my app public"),
                             ),
                           ],
-                          onChanged: provider.setPrivacyLevel,
                         ),
                         const SizedBox(
                           height: 30,
