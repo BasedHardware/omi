@@ -13,6 +13,7 @@ from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
+from utils.llm import get_metoring_message
 
 
 # ***********************************
@@ -206,11 +207,29 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
             response_data = response.json()
             if not response_data:
                 return
+
+            # message
             message = response_data.get('message', '')
-            print('Plugin', plugin.id, 'response:', message)
+            mentor = response_data.get('mentor', None)
+            print('Plugin', plugin.id, 'response:', message, mentor)
             if message and len(message) > 5:
                 send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
+
+            # proactive_notification
+            if plugin.has_capability("proactive_notification"):
+                mentor = response_data.get('mentor', None)
+                if mentor:
+                    prompt = mentor.get('prompt', '')
+                    if len(prompt) > 0 and len(prompt) <= 5000:
+                        params = mentor.get('params', [])
+                        message = get_metoring_message(uid, prompt, plugin.fitler_proactive_notification_scopes(params))
+                        if message and len(message) > 5:
+                            send_plugin_notification(token, plugin.name, plugin.id, message)
+                            results[plugin.id] = message
+                    elif len(prompt) > 5000:
+                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/5000")
+
         except Exception as e:
             print(f"Plugin integration error: {e}")
             return
@@ -225,6 +244,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         if not message:
             continue
         messages.append(add_plugin_message(message, key, uid))
+
     return messages
 
 

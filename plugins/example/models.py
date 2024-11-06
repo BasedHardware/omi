@@ -65,6 +65,46 @@ class TranscriptSegment(BaseModel):
         return transcript.strip()
 
     @staticmethod
+    def combine_segments(segments: [], new_segments: [], delta_seconds: int = 0):
+        if not new_segments or len(new_segments) == 0:
+            return segments
+
+        joined_similar_segments = []
+        for new_segment in new_segments:
+            if delta_seconds > 0:
+                new_segment.start += delta_seconds
+                new_segment.end += delta_seconds
+
+            if (joined_similar_segments and
+                    (joined_similar_segments[-1].speaker == new_segment.speaker or
+                     (joined_similar_segments[-1].is_user and new_segment.is_user))):
+                joined_similar_segments[-1].text += f' {new_segment.text}'
+                joined_similar_segments[-1].end = new_segment.end
+            else:
+                joined_similar_segments.append(new_segment)
+
+        if (segments and
+                (segments[-1].speaker == joined_similar_segments[0].speaker or
+                 (segments[-1].is_user and joined_similar_segments[0].is_user)) and
+                (joined_similar_segments[0].start - segments[-1].end < 30)):
+            segments[-1].text += f' {joined_similar_segments[0].text}'
+            segments[-1].end = joined_similar_segments[0].end
+            joined_similar_segments.pop(0)
+
+        segments.extend(joined_similar_segments)
+
+        # Speechmatics specific issue with punctuation
+        for i, segment in enumerate(segments):
+            segments[i].text = (
+                segments[i].text.strip()
+                .replace('  ', '')
+                .replace(' ,', ',')
+                .replace(' .', '.')
+                .replace(' ?', '?')
+            )
+        return segments
+
+    @staticmethod
     def can_display_seconds(segments):
         for i in range(len(segments)):
             for j in range(i + 1, len(segments)):
@@ -126,3 +166,12 @@ class EndpointResponse(BaseModel):
 class RealtimePluginRequest(BaseModel):
     session_id: str
     segments: List[TranscriptSegment]
+
+
+class MentorResponse(BaseModel):
+    prompt: str = Field(description="A prompt or a template with the parameters such as {{user_name}} {{user_facts}}.", default='')
+    params: List[str] = Field(description="A list of string that match with proactive notification scopes. ", default=[])
+
+class MentorEndpointResponse(BaseModel):
+    message: str = Field(description="A short message to be sent as notification to the user, if needed.", default='')
+    mentor: MentorResponse = Field(description="An object to guide the system in generating the proactive notification", default=None)

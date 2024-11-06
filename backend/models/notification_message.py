@@ -1,9 +1,8 @@
 
-from typing import  Optional
+from typing import Optional
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field
-
 
 
 class NotificationMessage(BaseModel):
@@ -14,15 +13,15 @@ class NotificationMessage(BaseModel):
     from_integration: str
     type: str
     notification_type: str
-
+    text: Optional[str] = ""
 
     @staticmethod
     def get_message_as_dict(
             message: 'NotificationMessage',
     ) -> dict:
-        
+
         message_dict = message.dict()
-        
+
         # Remove 'plugin_id' if it is None
         if message.plugin_id is None:
             del message_dict['plugin_id']
