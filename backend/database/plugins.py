@@ -1,4 +1,5 @@
 import os
+import random
 from datetime import datetime, timezone
 from typing import List
 
@@ -40,7 +41,10 @@ def get_plugin_usage_history(plugin_id: str):
 
 def get_plugin_by_id_db(plugin_id: str, uid: str):
     if 'private' in plugin_id:
+        print(plugin_id)
+        print(uid)
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+        print(plugin_ref.get().to_dict())
     else:
         plugin_ref = db.collection('plugins_data').document(plugin_id)
     return plugin_ref.get().to_dict()
@@ -56,6 +60,15 @@ def add_private_plugin(plugin_data: dict, uid: str):
     plugin_ref.add(plugin_data, plugin_data['id'])
 
 
+def delete_private_plugin(plugin_id: str, uid: str):
+    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+    plugin_ref.update({'deleted': True})
+
+
+def delete_public_plugin(plugin_id: str):
+    plugin_ref = db.collection('plugins_data').document(plugin_id)
+    plugin_ref.update({'deleted': True})
+
 def change_plugin_approval_status(plugin_id: str, approved: bool):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     plugin_ref.update({'approved': approved})
@@ -66,14 +79,21 @@ def change_plugin_visibility_db(plugin_id: str, private: bool, was_public: bool,
         plugin_ref = db.collection('plugins_data').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+        new_plugin_id = f'{plugin_id}-private'
+        plugin['id'] = new_plugin_id
         plugin['private'] = private
+        plugin_ref = db.collection('users').document(uid).collection('plugins').document(new_plugin_id)
         plugin_ref.set(plugin)
     elif not was_public and not private:  # private -> public
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
-        plugin_ref = db.collection('plugins_data').document(plugin_id)
+        new_plugin_id = plugin_id.split('-private')[0]
+        plugin['id'] = new_plugin_id
+        plugin['private'] = private
+        if public_plugin_id_exists_db(new_plugin_id):
+            new_plugin_id = new_plugin_id + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        plugin_ref = db.collection('plugins_data').document(new_plugin_id)
         plugin_ref.set(plugin)
 
 
@@ -108,6 +128,14 @@ def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
     plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     return plugin_ref.get().exists
 
+
+
+def is_public_plugin_owner_db(plugin_id: str, uid: str) -> bool:
+    plugin_ref = db.collection('plugins_data').document(plugin_id)
+    plugin = plugin_ref.get().to_dict()
+    if plugin is None or 'uid' not in plugin:
+        return False
+    return plugin['uid'] == uid
 
 
 def add_plugin_from_community_json(plugin_data: dict):
