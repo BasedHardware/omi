@@ -17,7 +17,6 @@ from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, G
 from models.message_event import MemoryEvent, MessageEvent
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
-from utils.plugins import trigger_external_integrations, trigger_realtime_integrations
 from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds

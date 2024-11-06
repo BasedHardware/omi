@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form, Header
 
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
-     change_plugin_approval_status, \
+    change_plugin_approval_status, \
     get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
     private_plugin_id_exists_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
@@ -137,7 +137,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data['approved'] = False
     data['id'] = data['name'].replace(' ', '-').lower()
     data['uid'] = uid
-    if data['private']:
+    if 'private' in data and data['private']:
         data['id'] = data['id'] + '-private'
         if private_plugin_id_exists_db(data['id'], uid):
             data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
