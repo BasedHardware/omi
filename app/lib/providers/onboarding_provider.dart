@@ -121,7 +121,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
     if (await Permission.location.serviceStatus.isDisabled) {
-      print('Location service is disabled');
+      debugPrint('Location service is disabled');
       return (false, PermissionStatus.permanentlyDenied);
     } else {
       var res = await Permission.locationWhenInUse.request();
@@ -131,7 +131,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<bool> alwaysAllowLocation() async {
     PermissionStatus locationStatus = await Permission.locationAlways.request();
-    print('alwaysAllowLocation permission status: $locationStatus');
+    debugPrint('alwaysAllowLocation permission status: $locationStatus');
     updateLocationPermission(locationStatus.isGranted);
     return locationStatus.isGranted;
   }
@@ -157,7 +157,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = device.id; // Mark this device as being connected to
       notifyListeners();
       var c = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-      print('Connected to device: ${device.name}');
+      debugPrint('Connected to device: ${device.name}');
       deviceId = device.id;
       //  device = await device.getDeviceInfo(c);
       await SharedPreferencesUtil().btDeviceSet(device);
@@ -188,7 +188,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         notifyInfo('DEVICE_CONNECTED');
       }
     } catch (e) {
-      print('Error connecting to device: $e');
+      debugPrint('Error connecting to device: $e');
       foundDevicesMap.remove(device.id);
       deviceList.removeWhere((element) => element.id == device.id);
       isClicked = false; // Allow clicks again after finishing the operation
