@@ -1334,29 +1334,5 @@
     ],
     "memory_prompt": "From the transcript provided, review the conversation to identify any instances of potential bias or persuasive language, particularly if there are subtle attempts to influence the listener’s beliefs or perceptions. Focus on specific phrases, rhetorical techniques, or language choices that may suggest a bias. However, recognize that some persuasive language may simply be marketing or enthusiasm rather than an attempt to subtly manipulate. Provide a succinct and complete analysis, avoiding excess detail. If bias is present, include hyperspecific examples such as, 'the phrase <example> may subtly promote <viewpoint> by <technique>.' If there are no strong indicators of bias, simply state 'No persuasive bias detected.' YOUR OUTPUT MUST ONLY CONTAIN THE ANALYSIS AND THE ANALYSIS ONLY.",
     "deleted": false
-  },
-  {
-    "id": "mentor-01",
-    "name": "Mentor 01",
-    "author": "@thinh",
-    "description": "Mentor 01 AI-powered mentor, designed to elevate your meetings and help you achieve your goals. With its insightful guidance and real-time support, you'll gain the confidence and skills to excel in every interaction.",
-    "image": "/plugins/logos/mentor_01.jpg",
-    "capabilities": [
-      "external_integration",
-      "proactive_notification"
-    ],
-    "external_integration": {
-      "triggers_on": "transcript_processed",
-      "webhook_url": "https://based-hardware-development--plugins-api.modal.run/mentor",
-      "setup_completed_url": "https://based-hardware-development--plugins-api.modal.run/setup/mentor",
-      "setup_instructions_file_path": "/plugins/instructions/mentor_01/README.md"
-    },
-    "proactive_notification": {
-      "scopes": [
-        "user_name",
-        "user_facts"
-      ]
-    },
-    "deleted": false
   }
 ]

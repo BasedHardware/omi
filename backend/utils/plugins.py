@@ -177,7 +177,7 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    plugins: List[Plugin] = get_plugins_data_from_db(uid, include_reviews=False)
     filtered_plugins = [
         plugin for plugin in plugins if
         plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
