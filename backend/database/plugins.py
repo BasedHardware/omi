@@ -9,12 +9,12 @@ from models.plugin import UsageHistoryType
 from utils.other.storage import storage_client
 from ._client import db
 
-
 # *****************************
 # ********** CRUD *************
 # *****************************
 
 omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
+
 
 def record_plugin_usage(
         uid: str, plugin_id: str, usage_type: UsageHistoryType, memory_id: str = None, message_id: str = None,
@@ -41,10 +41,7 @@ def get_plugin_usage_history(plugin_id: str):
 
 def get_plugin_by_id_db(plugin_id: str, uid: str):
     if 'private' in plugin_id:
-        print(plugin_id)
-        print(uid)
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-        print(plugin_ref.get().to_dict())
     else:
         plugin_ref = db.collection('plugins_data').document(plugin_id)
     return plugin_ref.get().to_dict()
@@ -60,6 +57,16 @@ def add_private_plugin(plugin_data: dict, uid: str):
     plugin_ref.add(plugin_data, plugin_data['id'])
 
 
+def update_public_plugin(plugin_data: dict):
+    plugin_ref = db.collection('plugins_data').document(plugin_data['id'])
+    plugin_ref.update(plugin_data)
+
+
+def update_private_plugin(plugin_data: dict, uid: str):
+    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_data['id'])
+    plugin_ref.update(plugin_data)
+
+
 def delete_private_plugin(plugin_id: str, uid: str):
     plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     plugin_ref.update({'deleted': True})
@@ -68,6 +75,7 @@ def delete_private_plugin(plugin_id: str, uid: str):
 def delete_public_plugin(plugin_id: str):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     plugin_ref.update({'deleted': True})
+
 
 def change_plugin_approval_status(plugin_id: str, approved: bool):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
@@ -127,7 +135,6 @@ def public_plugin_id_exists_db(plugin_id: str) -> bool:
 def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
     plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     return plugin_ref.get().exists
-
 
 
 def is_public_plugin_owner_db(plugin_id: str, uid: str) -> bool:
