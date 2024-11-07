@@ -6,6 +6,7 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
 import 'package:friend_private/pages/apps/instructions.dart';
+import 'package:friend_private/pages/apps/update_app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -58,9 +59,41 @@ class ShowAppOptionsSheet extends StatelessWidget {
                 trailing: Switch(
                   value: provider.appPublicToggled,
                   onChanged: (value) {
-                    provider.toggleAppPublic(app.id, value);
-                    Navigator.pop(context);
-                    Navigator.pop(context);
+                    if (value) {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            provider.toggleAppPublic(app.id, value);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          },
+                          'Make App Public?',
+                          'If you make the app public, it can be used by everyone',
+                          okButtonText: 'Confirm',
+                        ),
+                      );
+                    } else {
+                      showDialog(
+                        context: context,
+                        builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () {
+                            provider.toggleAppPublic(app.id, value);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          },
+                          'Make App Private?',
+                          'If you make the app private now, it will stop working for everyone and will be visible only to you',
+                          okButtonText: 'Confirm',
+                        ),
+                      );
+                    }
                   },
                 ),
               ),
@@ -71,10 +104,16 @@ class ShowAppOptionsSheet extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  const ListTile(
-                    title: Text('Edit App'),
-                    leading: Icon(Icons.edit),
-                    onTap: null,
+                  ListTile(
+                    title: const Text('Update App Details'),
+                    leading: const Icon(Icons.edit),
+                    onTap: () {
+                      routeToPage(
+                          context,
+                          UpdateAppPage(
+                            app: app,
+                          ));
+                    },
                   ),
                   ListTile(
                     title: const Text('Delete App'),
