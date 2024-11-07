@@ -296,7 +296,7 @@ async def _websocket_util(
     def create_pusher_task_handler():
         nonlocal websocket_active
 
-        ws = None
+        pusher_ws = None
 
         # Transcript
         transcript_ws = None
@@ -352,18 +352,20 @@ async def _websocket_util(
                         print(f"Pusher audio_bytes failed: {e}", uid)
 
         async def connect():
+            nonlocal pusher_ws
             nonlocal transcript_ws
             nonlocal audio_bytes_ws
             nonlocal audio_bytes_enabled
-            ws = await connect_to_trigger_pusher(uid, sample_rate)
-            transcript_ws = ws
+            pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
+            transcript_ws = pusher_ws
             if audio_bytes_enabled:
-                audio_bytes_ws = ws
+                audio_bytes_ws = pusher_ws
 
         async def close(code: int = 1000):
-            await ws.close(code)
+            await pusher_ws.close(code)
 
-        return (connect, close, transcript_send, transcript_consume,
+        return (connect, close,
+                transcript_send, transcript_consume,
                 audio_bytes_send if audio_bytes_enabled else None, audio_bytes_consume if audio_bytes_enabled else None)
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
