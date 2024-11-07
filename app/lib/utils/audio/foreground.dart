@@ -13,7 +13,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
 
   @override
-  void onStart(DateTime timestamp) async {
+  Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     debugPrint("Starting foreground task");
     _locationInBackground();
   }
@@ -52,12 +52,12 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    print("Foreground repeat event triggered");
+    debugPrint("Foreground repeat event triggered");
     await _locationInBackground();
   }
 
   @override
-  void onDestroy(DateTime timestamp) async {
+  Future<void> onDestroy(DateTime timestamp) async {
     debugPrint("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
@@ -107,11 +107,10 @@ class ForegroundUtil {
         showNotification: false,
         playSound: false,
       ),
-      foregroundTaskOptions: const ForegroundTaskOptions(
+      foregroundTaskOptions: ForegroundTaskOptions(
         // Warn: 5m, for location tracking. If we want to support other services, we use the differenct interval,
         // such as 1m + self-validation in each service.
-        interval: 60 * 1000 * 5,
-        isOnceEvent: false,
+        eventAction: ForegroundTaskEventAction.repeat(60 * 1000 * 5),
         autoRunOnBoot: false,
         allowWakeLock: true,
         allowWifiLock: true,
