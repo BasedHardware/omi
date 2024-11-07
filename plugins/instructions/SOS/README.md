@@ -7,8 +7,8 @@
 ## Authentication 
 
 
-1. Open (https://sos-auth.vercel.app/)[https://sos-auth.vercel.app/]
-2. Follow directions by inputing your emergenecy contacts
+1. Open [https://sos-auth.vercel.app/](https://sos-auth.vercel.app/)
+2. Follow directions by inputting your emergency contacts
 
 
 ## Troubleshooting
