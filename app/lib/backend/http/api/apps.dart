@@ -164,6 +164,34 @@ Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   }
 }
 
+Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
+  var request = http.MultipartRequest(
+    'PATCH',
+    Uri.parse('${Env.apiBaseUrl}v1/plugins/${appData['id']}'),
+  );
+  if (file != null) {
+    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'plugin_data': jsonEncode(appData)});
+  print(jsonEncode(appData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('updateAppServer Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('An error occurred updateAppServer: $e');
+    return false;
+  }
+}
+
 Future<List<Category>> getAppCategories() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugin-categories',
@@ -195,6 +223,25 @@ Future<List<TriggerEvent>> getTriggerEventsServer() async {
     log('getTriggerEvents: ${response.body}');
     var res = jsonDecode(response.body);
     return TriggerEvent.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
+
+Future<List<NotificationScope>> getNotificationScopesServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/notification-scopes',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getNotificationScopes: ${response.body}');
+    var res = jsonDecode(response.body);
+    return NotificationScope.fromJsonList(res);
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
@@ -253,5 +300,23 @@ Future deleteAppServer(String appId) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return false;
+  }
+}
+
+Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugins/$appId',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getAppDetailsServer: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
   }
 }

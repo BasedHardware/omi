@@ -294,3 +294,30 @@ class TriggerEvent {
     return jsonList.map((e) => TriggerEvent.fromJson(e)).toList();
   }
 }
+
+class NotificationScope {
+  String title;
+  String id;
+  NotificationScope({
+    required this.title,
+    required this.id,
+  });
+
+  factory NotificationScope.fromJson(Map<String, dynamic> json) {
+    return NotificationScope(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<NotificationScope> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => NotificationScope.fromJson(e)).toList();
+  }
+}
