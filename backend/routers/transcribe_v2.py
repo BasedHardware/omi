@@ -293,13 +293,13 @@ async def _websocket_util(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
-    async def create_pusher_task_handler():
+    def create_pusher_task_handler():
         nonlocal websocket_active
 
-        ws = await connect_to_trigger_pusher(uid, sample_rate)
+        ws = None
 
         # Transcript
-        transcript_ws = ws
+        transcript_ws = None
         segment_buffers = []
 
         def transcript_send(segments):
@@ -311,7 +311,7 @@ async def _websocket_util(
             nonlocal segment_buffers
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
-                if len(segment_buffers) > 0:
+                if transcript_ws and len(segment_buffers) > 0:
                     try:
                         # 100|data
                         data = bytearray()
@@ -327,9 +327,7 @@ async def _websocket_util(
         # Audio bytes
         audio_bytes_ws = None
         audio_buffers = bytearray()
-        audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
-        if audio_bytes_webhook_delay_seconds:
-            audio_bytes_ws = ws
+        audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid))
 
         def audio_bytes_send(audio_bytes):
             nonlocal audio_buffers
@@ -340,7 +338,7 @@ async def _websocket_util(
             nonlocal audio_buffers
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
-                if len(audio_buffers) > 0:
+                if audio_bytes_ws and len(audio_buffers) > 0:
                     try:
                         # 101|data
                         data = bytearray()
@@ -353,13 +351,22 @@ async def _websocket_util(
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
 
+        async def connect():
+            nonlocal transcript_ws
+            nonlocal audio_bytes_ws
+            nonlocal audio_bytes_enabled
+            ws = await connect_to_trigger_pusher(uid, sample_rate)
+            transcript_ws = ws
+            if audio_bytes_enabled:
+                audio_bytes_ws = ws
+
         async def close(code: int = 1000):
             await ws.close(code)
 
-        return (close, transcript_send, transcript_consume,
-                audio_bytes_send if audio_bytes_ws else None, audio_bytes_consume if audio_bytes_ws else None)
+        return (connect, close, transcript_send, transcript_consume,
+                audio_bytes_send if audio_bytes_enabled else None, audio_bytes_consume if audio_bytes_enabled else None)
 
-    pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = await create_pusher_task_handler()
+    pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
     async def stream_transcript_process():
         nonlocal websocket_active
@@ -514,12 +521,14 @@ async def _websocket_util(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
-        # consumer
-        consume_tasks = [asyncio.create_task(transcript_consume())]
+        # pusher
+        pusher_tasks = [asyncio.create_task(pusher_connect())]
+        if transcript_consume:
+            pusher_tasks.append(asyncio.create_task(transcript_consume()))
         if audio_bytes_consume:
-            consume_tasks.append(asyncio.create_task(audio_bytes_consume()))
+            pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
-        tasks = [receive_task, stream_transcript_task, heartbeat_task] + consume_tasks
+        tasks = [receive_task, stream_transcript_task, heartbeat_task] + pusher_tasks
         await asyncio.gather(*tasks)
 
     except Exception as e:
