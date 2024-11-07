@@ -8,16 +8,18 @@ import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form, Header
 
+from database.notifications import get_token_only
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
     change_plugin_approval_status, \
     get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
     private_plugin_id_exists_db, add_plugin_from_community_json, is_public_plugin_owner_db, delete_private_plugin, \
-    delete_public_plugin
+    delete_public_plugin, update_private_plugin, update_public_plugin
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count, delete_generic_cache
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
+from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from utils.other.storage import upload_plugin_logo
+from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
 
 router = APIRouter()
@@ -132,7 +134,6 @@ def get_plugin_money_made(plugin_id: str):
 #         add_plugin_from_community_json(plugin)
 
 
-
 @router.get('/v1/plugins/{plugin_id}/is-owner', tags=['v1'])
 def is_plugin_owner(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'is_owner': is_public_plugin_owner_db(plugin_id, uid)}
@@ -167,6 +168,30 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     return {'status': 'ok'}
 
 
+@router.patch('/v1/plugins/{plugin_id}', tags=['v1'])
+def update_plugin(plugin_id: str, plugin_data: str = Form(...), file: UploadFile = File(None),
+                  uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(plugin_data)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    if plugin['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if file:
+        delete_plugin_logo(plugin['image'])
+        os.makedirs(f'_temp/plugins', exist_ok=True)
+        file_path = f"_temp/plugins/{file.filename}"
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        imgUrl = upload_plugin_logo(file_path, plugin_id)
+        data['image'] = imgUrl
+    if data.get('private', True):
+        update_private_plugin(data, uid)
+    else:
+        update_public_plugin(data)
+    return {'status': 'ok'}
+
+
 @router.get('/v3/plugins', tags=['v3'], response_model=List[Plugin])
 def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     return get_plugins_data_from_db(uid, include_reviews=include_reviews)
@@ -185,19 +210,29 @@ def delete_plugin(plugin_id: str, uid: str = Depends(auth.get_current_user_uid))
         delete_public_plugin(plugin_id)
     return {'status': 'ok'}
 
+
 @router.post('/v1/plugins/{plugin_id}/approve', tags=['v1'])
-def approve_plugin(plugin_id: str, secret_key: str = Header(...)):
+def approve_plugin(plugin_id: str, uid: str,secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_plugin_approval_status(plugin_id, True)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    token = get_token_only(uid)
+    if token:
+        send_notification(token, 'App Approved 🎉', f'Your app {plugin["name"]} has been approved and is now available for everyone to use 🥳')
     return {'status': 'ok'}
 
 
 @router.post('/v1/plugins/{plugin_id}/reject', tags=['v1'])
-def reject_plugin(plugin_id: str,secret_key: str = Header(...)):
+def reject_plugin(plugin_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_plugin_approval_status(plugin_id, False)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    token = get_token_only(uid)
+    if token:
+        # TODO: Add reason for rejection in payload and also redirect to the plugin page
+        send_notification(token, 'App Rejected 😔', f'Your app {plugin["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
     return {'status': 'ok'}
 
 
@@ -219,12 +254,29 @@ def get_unapproved_public_plugins(secret_key: str = Header(...)):
     return plugins
 
 
+@router.get('/v1/plugins/{plugin_id}', tags=['v1'])
+def get_plugin_details(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    plugin = get_plugin_by_id_db(plugin_id, uid)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    return plugin
+
+
 @router.get('/v1/plugin-triggers', tags=['v1'])
 def get_plugin_triggers():
     # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
     return [
         {'title': 'Memory Creation', 'id': 'memory_creation'},
-        {'title': 'Transcript Processed','id': 'transcript_processed'}
+        {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        {'title': 'Proactive Notification', 'id': 'proactive_notification'}
+    ]
+
+
+@router.get('/v1/notification-scopes', tags=['v1'])
+def get_notification_scopes():
+    return [
+        {'title': 'User Name', 'id': 'user_name'},
+        {'title': 'User Facts', 'id': 'user_facts'}
     ]
 
 
