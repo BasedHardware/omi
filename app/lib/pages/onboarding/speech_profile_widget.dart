@@ -324,11 +324,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                             style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
                                             textAlign: TextAlign.center,
                                           ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 10),
                                     SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 0.9,
                                         child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted)),
-                                    const SizedBox(height: 14),
+                                    const SizedBox(height: 12),
                                     Text(
                                       provider.message,
                                       style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
