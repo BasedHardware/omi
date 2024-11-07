@@ -111,9 +111,12 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
           TextFormField(
             controller: provider.setupCompletedController,
             validator: (value) {
-              if (value == null || !isValidUrl(value)) {
-                return 'Please enter a valid URL';
+              if (value != null) {
+                if (value.isNotEmpty && !isValidUrl(value)) {
+                  return 'Please enter a valid URL';
+                }
               }
+
               return null;
             },
             decoration: InputDecoration(

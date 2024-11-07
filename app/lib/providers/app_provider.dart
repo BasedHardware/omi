@@ -56,6 +56,16 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void updateLocalApp(App app) {
+    var idx = apps.indexWhere((element) => element.id == app.id);
+    if (idx != -1) {
+      apps[idx] = app;
+      updatePrefApps();
+      setApps();
+    }
+    notifyListeners();
+  }
+
   Future checkIsAppOwner(String appId) async {
     if (appId.contains('private')) {
       isAppOwner = true;
