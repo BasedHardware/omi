@@ -442,15 +442,15 @@
   {
     "id": "insight-extractor",
     "name": "Insight Extractor",
-    "author": "Q8.org AiQ",
-    "description": "Extracts valuable insights and actionable recommendations from conversations across various domains",
+    "author": "QNFO",
+    "description": "Extracts high-value insights and actionable next steps",
     "image": "/plugins/logos/insight-extractor.png",
     "capabilities": [
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, considering the weight of information as indicated by Perplexity. Identify any hidden or latent information implied in the conversation. Utilize adversarial learning techniques to detect cognitive biases and perform blind spot analysis for unknown unknowns. Provide actionable insights and recommendations structured into clear sections, such as 'Key Insights,' 'Latent Information,' 'Potential Biases,' 'Blind Spots,' and 'Recommendations.' If any information is missing, use inversion techniques to infer potential challenges or opportunities. Maintain an objective and supportive tone throughout.",
-    "chat_prompt": "Extracts valuable insights and actionable recommendations from conversations across various domains",
+    "memory_prompt": "You will be given a transcribed conversation. Analyze input for high-value insights. If applicable, output brief bullet list with 1-3 most impactful points. Prioritize non-strategic elements. If not applicable: 'No significant insights identified.'",
+    "chat_prompt": "You are a personal development expert. Analyze input for actionable steps. Output brief bullet list with 1-3 high-impact actions. Optimize for personal growth. If not applicable: 'No actionable steps identified.'",
     "deleted": false
   },
   {
