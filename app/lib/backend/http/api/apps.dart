@@ -211,6 +211,25 @@ Future<List<Category>> getAppCategories() async {
   }
 }
 
+Future<List<AppCapability>> getAppCapabilitiesServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugin-capabilities',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getAppCapabilities: ${response.body}');
+    var res = jsonDecode(response.body);
+    return AppCapability.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
+
 Future<List<TriggerEvent>> getTriggerEventsServer() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugin-triggers',

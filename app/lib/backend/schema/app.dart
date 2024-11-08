@@ -217,6 +217,10 @@ class App {
     }
   }
 
+  List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {
+    return allCapabilities.where((e) => capabilities.contains(e.id)).toList();
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -266,6 +270,44 @@ class Category {
   static List<Category> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => Category.fromJson(e)).toList();
   }
+}
+
+class AppCapability {
+  String title;
+  String id;
+  List<TriggerEvent> triggerEvents = [];
+  List<NotificationScope> notificationScopes = [];
+  AppCapability({
+    required this.title,
+    required this.id,
+    this.triggerEvents = const [],
+    this.notificationScopes = const [],
+  });
+
+  factory AppCapability.fromJson(Map<String, dynamic> json) {
+    return AppCapability(
+      title: json['title'],
+      id: json['id'],
+      triggerEvents: TriggerEvent.fromJsonList(json['triggers'] ?? []),
+      notificationScopes: NotificationScope.fromJsonList(json['scopes'] ?? []),
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+      'triggers': triggerEvents.map((e) => e.toJson()).toList(),
+      'scopes': notificationScopes.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  static List<AppCapability> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => AppCapability.fromJson(e)).toList();
+  }
+
+  bool hasTriggers() => triggerEvents.isNotEmpty;
+  bool hasScopes() => notificationScopes.isNotEmpty;
 }
 
 class TriggerEvent {

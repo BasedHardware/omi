@@ -34,27 +34,33 @@ class AddAppProvider extends ChangeNotifier {
   bool makeAppPublic = false;
 
   List<Category> categories = [];
-  List<TriggerEvent> triggerEvents = [];
-  List<NotificationScope> notificationScopes = [];
 
   File? imageFile;
   String? imageUrl;
   String? updateAppId;
-  List<String> capabilities = [];
+  List<AppCapability> selectedCapabilities = [];
+  List<NotificationScope> selectedScopes = [];
+  List<AppCapability> capabilities = [];
 
   bool isLoading = false;
   bool isUpdating = false;
+  bool isSubmitting = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
   }
 
   Future init() async {
-    await getCategories();
-    await getTriggerEvents();
-    await getNotificationScopes();
+    setIsLoading(true);
+    if (categories.isEmpty) {
+      await getCategories();
+    }
+    if (capabilities.isEmpty) {
+      await getAppCapabilities();
+    }
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
+    setIsLoading(false);
   }
 
   void setIsLoading(bool loading) {
@@ -67,8 +73,16 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setIsSubmitting(bool submitting) {
+    isSubmitting = submitting;
+    notifyListeners();
+  }
+
   Future prepareUpdate(App app) async {
     setIsLoading(true);
+    if (capabilities.isEmpty) {
+      await getAppCapabilities();
+    }
     if (categories.isEmpty) {
       await getCategories();
     }
@@ -80,9 +94,9 @@ class AddAppProvider extends ChangeNotifier {
     appNameController.text = app.name;
     appDescriptionController.text = app.description;
     creatorNameController.text = app.author;
-    creatorEmailController.text = res!['email'];
+    creatorEmailController.text = res['email'];
     makeAppPublic = !app.private;
-    capabilities = app.capabilities.toList();
+    selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
       triggerEvent = app.externalIntegration!.triggersOn;
       webhookUrlController.text = app.externalIntegration!.webhookUrl;
@@ -115,7 +129,9 @@ class AddAppProvider extends ChangeNotifier {
     appCategory = null;
     imageFile = null;
     imageUrl = null;
-    capabilities.clear();
+    selectedScopes.clear();
+    updateAppId = null;
+    selectedCapabilities.clear();
   }
 
   Future<void> getCategories() async {
@@ -123,13 +139,8 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> getTriggerEvents() async {
-    triggerEvents = await getTriggerEventsServer();
-    notifyListeners();
-  }
-
-  Future<void> getNotificationScopes() async {
-    notificationScopes = await getNotificationScopesServer();
+  Future<void> getAppCapabilities() async {
+    capabilities = await getAppCapabilitiesServer();
     notifyListeners();
   }
 
@@ -152,7 +163,7 @@ class AddAppProvider extends ChangeNotifier {
     if (appCategory != category) {
       return true;
     }
-    if (capabilities.length != app.capabilities.length) {
+    if (selectedCapabilities.length != app.capabilities.length) {
       return true;
     }
     if (app.externalIntegration != null) {
@@ -180,6 +191,12 @@ class AddAppProvider extends ChangeNotifier {
 
   bool validateForm() {
     if (formKey.currentState!.validate()) {
+      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+        if (selectedScopes.isEmpty) {
+          AppSnackbar.showSnackbarError('Please select one more core capability for your app to proceed');
+          return false;
+        }
+      }
       if (!termsAgreed) {
         AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
         return false;
@@ -189,39 +206,35 @@ class AddAppProvider extends ChangeNotifier {
         return false;
       }
       if (imageFile == null && imageUrl == null) {
-        print('imageFile: $imageFile');
-        print('imageUrl: $imageUrl');
         AppSnackbar.showSnackbarError('Please select a logo for your app');
         return false;
       }
-      if (isCapabilitySelected('external_integration')) {
-        if (triggerEvent == null) {
-          AppSnackbar.showSnackbarError('Please select a trigger event for your app');
-          return false;
+      for (var capability in selectedCapabilities) {
+        if (capability.title == 'chat') {
+          if (chatPromptController.text.isEmpty) {
+            AppSnackbar.showSnackbarError('Please enter a chat prompt for your app');
+            return false;
+          }
         }
-        if (webhookUrlController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a webhook URL for your app');
-          return false;
+        if (capability.title == 'memories') {
+          if (memoryPromptController.text.isEmpty) {
+            AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
+            return false;
+          }
         }
-        if (setupCompletedController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a setup completed URL for your app');
-          return false;
-        }
-        if (instructionsController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a setup instructions URL for your app');
-          return false;
-        }
-      }
-      if (isCapabilitySelected('chat')) {
-        if (chatPromptController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a chat prompt for your app');
-          return false;
-        }
-      }
-      if (isCapabilitySelected('memories')) {
-        if (memoryPromptController.text.isEmpty) {
-          AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
-          return false;
+        if (capability.title == 'external_integration') {
+          if (triggerEvent == null) {
+            AppSnackbar.showSnackbarError('Please select a trigger event for your app');
+            return false;
+          }
+          if (webhookUrlController.text.isEmpty) {
+            AppSnackbar.showSnackbarError('Please enter a webhook URL for your app');
+            return false;
+          }
+          if (setupCompletedController.text.isEmpty) {
+            AppSnackbar.showSnackbarError('Please enter a setup completed URL for your app');
+            return false;
+          }
         }
       }
       if (appCategory == null) {
@@ -242,26 +255,34 @@ class AddAppProvider extends ChangeNotifier {
       'description': appDescriptionController.text,
       'author': creatorNameController.text,
       'email': creatorEmailController.text,
-      'capabilities': capabilities,
+      'capabilities': selectedCapabilities.map((e) => e.title).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
       'id': updateAppId,
     };
-    if (isCapabilitySelected('external_integration')) {
-      data['external_integration'] = {
-        'triggers_on': triggerEvent,
-        'webhook_url': webhookUrlController.text,
-        'setup_completed_url': setupCompletedController.text,
-        'setup_instructions_file_path': instructionsController.text,
-      };
-    }
-    if (isCapabilitySelected('chat')) {
-      data['chat_prompt'] = chatPromptController.text;
-    }
-    if (isCapabilitySelected('memories')) {
-      data['memory_prompt'] = memoryPromptController.text;
+    for (var capability in selectedCapabilities) {
+      if (capability.id == 'external_integration') {
+        data['external_integration'] = {
+          'triggers_on': triggerEvent,
+          'webhook_url': webhookUrlController.text,
+          'setup_completed_url': setupCompletedController.text,
+          'setup_instructions_file_path': instructionsController.text,
+        };
+      }
+      if (capability.id == 'chat') {
+        data['chat_prompt'] = chatPromptController.text;
+      }
+      if (capability.id == 'memories') {
+        data['memory_prompt'] = memoryPromptController.text;
+      }
+      if (capability.id == 'proactive_notification') {
+        if (data['proactive_notification'] == null) {
+          data['proactive_notification'] = {};
+        }
+        data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
+      }
     }
     var res = await updateAppServer(imageFile, data);
     if (res) {
@@ -278,31 +299,39 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   Future<void> submitApp() async {
-    setIsLoading(true);
+    setIsSubmitting(true);
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
       'author': creatorNameController.text,
       'email': creatorEmailController.text,
-      'capabilities': capabilities,
+      'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
     };
-    if (isCapabilitySelected('external_integration')) {
-      data['external_integration'] = {
-        'triggers_on': triggerEvent,
-        'webhook_url': webhookUrlController.text,
-        'setup_completed_url': setupCompletedController.text,
-        'setup_instructions_file_path': instructionsController.text,
-      };
-    }
-    if (isCapabilitySelected('chat')) {
-      data['chat_prompt'] = chatPromptController.text;
-    }
-    if (isCapabilitySelected('memories')) {
-      data['memory_prompt'] = memoryPromptController.text;
+    for (var capability in selectedCapabilities) {
+      if (capability.id == 'external_integration') {
+        data['external_integration'] = {
+          'triggers_on': triggerEvent,
+          'webhook_url': webhookUrlController.text,
+          'setup_completed_url': setupCompletedController.text,
+          'setup_instructions_file_path': instructionsController.text,
+        };
+      }
+      if (capability.id == 'chat') {
+        data['chat_prompt'] = chatPromptController.text;
+      }
+      if (capability.id == 'memories') {
+        data['memory_prompt'] = memoryPromptController.text;
+      }
+      if (capability.id == 'proactive_notification') {
+        if (data['proactive_notification'] == null) {
+          data['proactive_notification'] = {};
+        }
+        data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
+      }
     }
     var res = await submitAppServer(imageFile!, data);
     if (res) {
@@ -312,7 +341,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       AppSnackbar.showSnackbarError('Failed to submit app. Please try again later');
     }
-    setIsLoading(false);
+    setIsSubmitting(false);
   }
 
   Future pickImage() async {
@@ -336,7 +365,6 @@ class AddAppProvider extends ChangeNotifier {
     try {
       var file = await imagePicker.pickImage(source: ImageSource.gallery);
       if (file != null) {
-        print('file: ${file.path}');
         imageFile = File(file.path);
         imageUrl = null;
       }
@@ -349,21 +377,58 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addOrRemoveCapability(String capability) {
-    if (capabilities.contains(capability)) {
-      capabilities.remove(capability);
+  void addOrRemoveCapability(AppCapability capability) {
+    if (selectedCapabilities.contains(capability)) {
+      selectedCapabilities.remove(capability);
     } else {
-      capabilities.add(capability);
+      selectedCapabilities.add(capability);
     }
     notifyListeners();
   }
 
-  bool isCapabilitySelected(String capability) {
-    return capabilities.contains(capability);
+  bool isCapabilitySelected(AppCapability capability) {
+    return selectedCapabilities.contains(capability);
+  }
+
+  void addOrRemoveScope(NotificationScope scope) {
+    if (selectedScopes.contains(scope)) {
+      selectedScopes.remove(scope);
+    } else {
+      selectedScopes.add(scope);
+    }
+    notifyListeners();
+  }
+
+  bool isScopesSelected(NotificationScope scope) {
+    return selectedScopes.contains(scope);
+  }
+
+  bool isCapabilitySelectedById(String capability) {
+    return selectedCapabilities.any((e) => e.id == capability);
+  }
+
+  List<TriggerEvent> getTriggerEvents() {
+    return selectedCapabilities
+        .where((element) => element.id == 'external_integration')
+        .map((e) => e.triggerEvents)
+        .expand((element) => element)
+        .toList();
+  }
+
+  List<NotificationScope> getNotificationScopes() {
+    return selectedCapabilities
+        .where((item) => item.id == 'proactive_notification')
+        .map((e) => e.notificationScopes)
+        .expand((element) => element)
+        .toList();
   }
 
   bool capabilitySelected() {
-    return capabilities.isNotEmpty;
+    if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
+      return false;
+    } else {
+      return selectedCapabilities.isNotEmpty;
+    }
   }
 
   void setTriggerEvent(String? event) {
@@ -383,7 +448,6 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   void setIsPrivate(bool? value) {
-    print('private: $value');
     if (value == null) {
       return;
     }

@@ -120,21 +120,21 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                       'App Specific Details',
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
-                  if (provider.isCapabilitySelected('chat'))
+                  if (provider.isCapabilitySelectedById('chat'))
                     const SizedBox(
                       height: 20,
                     ),
-                  if (provider.isCapabilitySelected('chat'))
+                  if (provider.isCapabilitySelectedById('chat'))
                     PromptTextField(
                       controller: provider.chatPromptController,
                       label: 'Chat Prompt',
                       icon: Icons.chat,
                     ),
-                  if (provider.isCapabilitySelected('memories'))
+                  if (provider.isCapabilitySelectedById('memories'))
                     const SizedBox(
                       height: 24,
                     ),
-                  if (provider.isCapabilitySelected('memories'))
+                  if (provider.isCapabilitySelectedById('memories'))
                     PromptTextField(
                       controller: provider.memoryPromptController,
                       label: 'Memory Prompt',

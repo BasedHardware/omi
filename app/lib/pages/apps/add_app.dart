@@ -3,6 +3,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
+import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:friend_private/widgets/gradient_button.dart';
@@ -39,22 +40,22 @@ class _AddAppPageState extends State<AddAppPage> {
           title: const Text('Submit Your App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
-        body: provider.isLoading
-            ? const Center(
+        body: provider.isLoading || provider.isSubmitting
+            ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(
+                    const CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
-                    SizedBox(
+                    const SizedBox(
                       height: 14,
                     ),
                     Text(
-                      'Submitting your app...',
-                      style: TextStyle(color: Colors.white),
+                      provider.isSubmitting ? 'Submitting your app...' : 'Hold on, we are preparing the form for you',
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ],
                 ),
@@ -119,31 +120,28 @@ class _AddAppPageState extends State<AddAppPage> {
                             'App Specific Details',
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
-                        if (provider.isCapabilitySelected('chat'))
+                        if (provider.isCapabilitySelectedById('chat'))
                           const SizedBox(
                             height: 20,
                           ),
-                        if (provider.isCapabilitySelected('chat'))
+                        if (provider.isCapabilitySelectedById('chat'))
                           PromptTextField(
                             controller: provider.chatPromptController,
                             label: 'Chat Prompt',
                             icon: Icons.chat,
                           ),
-                        if (provider.isCapabilitySelected('memories'))
+                        if (provider.isCapabilitySelectedById('memories'))
                           const SizedBox(
                             height: 24,
                           ),
-                        if (provider.isCapabilitySelected('memories'))
+                        if (provider.isCapabilitySelectedById('memories'))
                           PromptTextField(
                             controller: provider.memoryPromptController,
                             label: 'Memory Prompt',
                             icon: Icons.memory,
                           ),
                         const ExternalTriggerFieldsWidget(),
-                        if (provider.capabilitySelected())
-                          const SizedBox(
-                            height: 30,
-                          ),
+                        const NotificationScopesChipsWidget(),
                         const Text(
                           'App Privacy',
                           style: TextStyle(color: Colors.white, fontSize: 16),
