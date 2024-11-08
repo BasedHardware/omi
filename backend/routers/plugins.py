@@ -262,6 +262,21 @@ def get_plugin_details(plugin_id: str, uid: str = Depends(auth.get_current_user_
     return plugin
 
 
+@router.get('/v1/plugin-capabilities', tags=['v1'])
+def get_plugin_capabilities():
+    return [
+        {'title': 'Chat', 'id': 'chat'},
+        {'title': 'Memories', 'id': 'memories'},
+        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
+            {'title': 'Memory Creation', 'id': 'memory_creation'},
+            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ]},
+        {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
+            {'title': 'User Name', 'id': 'user_name'},
+            {'title': 'User Facts', 'id': 'user_facts'}
+        ]}
+    ]
+
 @router.get('/v1/plugin-triggers', tags=['v1'])
 def get_plugin_triggers():
     # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
