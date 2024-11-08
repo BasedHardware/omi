@@ -61,7 +61,7 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   Future<void> sendHeartbeat() async {
-    print("Sending heartbeat to frame");
+    debugPrint("Sending heartbeat to frame");
     final heartbeatBytes = Uint8List.fromList(utf8.encode("HEARTBEAT"));
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
@@ -110,14 +110,14 @@ class FrameDeviceConnection extends DeviceConnection {
       throw Exception("Frame is not initialised");
     }
     if (_frame!.isConnected == false) {
-      print("Frame is not connected in afterConnect!");
+      debugPrint("Frame is not connected in afterConnect!");
       return;
     }
     if (_debugSubscription != null) {
       _debugSubscription!.cancel();
     }
     _debugSubscription = _frame!.bluetooth.stringResponse.listen((data) {
-      print("Frame printed: $data");
+      debugPrint("Frame printed: $data");
     });
     await setTimeOnFrame();
     bool isLoaded = false;
@@ -131,7 +131,7 @@ class FrameDeviceConnection extends DeviceConnection {
       final deviceframeLibHash = await _frame!.evaluate("frameLibHash");
       isLoaded = deviceframeLibHash == frameLibHash.toString();
       isRunning = false;
-      print(
+      debugPrint(
           "A deviceframeLibHash: $deviceframeLibHash, frameLibHash: $frameLibHash, isLoaded: $isLoaded, isRunning: $isRunning");
     } else if (_isLooping == true) {
       final deviceframeLibHash = await getFromLoop("frameLibHash");
@@ -168,20 +168,20 @@ class FrameDeviceConnection extends DeviceConnection {
       await sendUntilEchoed("CAMERA START");
     } else if (!isLoaded) {
       await _frame!.bluetooth.sendBreakSignal();
-      print("About to send main.lua to frame, length = ${mainLuaContent.length}");
+      debugPrint("About to send main.lua to frame, length = ${mainLuaContent.length}");
       try {
         await _frame!.files.writeFile("main.lua", utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
             checked: true);
-        print("Sent main.lua to frame");
+        debugPrint("Sent main.lua to frame");
         await _frame!.bluetooth.sendResetSignal();
       } catch (e) {
-        print("Error sending main.lua to frame: $e");
+        debugPrint("Error sending main.lua to frame: $e");
       }
 
       await setTimeOnFrame();
     } else if (isLoaded && !isRunning) {
       await _frame!.bluetooth.sendBreakSignal();
-      print("Frame already loaded, running start()");
+      debugPrint("Frame already loaded, running start()");
       await setTimeOnFrame();
       await _frame!.runLua("start()");
     }
@@ -212,9 +212,9 @@ class FrameDeviceConnection extends DeviceConnection {
         return true;
       } catch (e) {
         if (e is TimeoutException) {
-          print("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
+          debugPrint("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
           if (attempt == maxAttempts) {
-            print("Failed to receive echo for $data after $maxAttempts attempts");
+            debugPrint("Failed to receive echo for $data after $maxAttempts attempts");
             //await disconnectDevice();
             return false;
           }
@@ -224,7 +224,7 @@ class FrameDeviceConnection extends DeviceConnection {
               await init();
             }
           } else {
-            print("Error sending $data to frame: $e");
+            debugPrint("Error sending $data to frame: $e");
             return false;
           }
         }
@@ -400,10 +400,10 @@ class FrameDeviceConnection extends DeviceConnection {
     StreamSubscription<Uint8List> subscription =
         _frame!.bluetooth.getDataOfType(FrameDataTypePrefixes.photoData).listen((value) {
       if (value.isNotEmpty) {
-        print("Received photo data from frame, length = ${value.length}");
+        debugPrint("Received photo data from frame, length = ${value.length}");
         final header = base64.decode(_photoHeader);
         final combinedData = Uint8List.fromList([...header, ...value]);
-        print("Processed photo data from frame, length = ${combinedData.length}");
+        debugPrint("Processed photo data from frame, length = ${combinedData.length}");
         onImageReceived(combinedData);
       }
     });

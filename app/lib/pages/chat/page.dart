@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -218,7 +217,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             message: message,
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,
-                                            appSender: apps.firstWhereOrNull((e) => e.id == message.appId),
+                                            appSender: provider.messageSenderApp(message.appId),
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
                                             },

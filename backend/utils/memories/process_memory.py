@@ -25,7 +25,7 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
-from utils.plugins import get_plugins_data
+from utils.plugins import get_plugins_data, get_plugins_data_from_db
 from utils.retrieval.rag import retrieve_rag_memory_context
 from utils.webhooks import memory_created_webhook
 
@@ -102,7 +102,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
 
 
 def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    plugins: List[Plugin] = get_plugins_data_from_db(uid)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     memory.plugins_results = []
     threads = []
