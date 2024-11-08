@@ -58,7 +58,7 @@ class AppListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      app.name,
+                      app.name + (app.private ? ' (private)' : ''),
                       maxLines: 1,
                       style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                     ),

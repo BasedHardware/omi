@@ -5,7 +5,7 @@ import requests
 
 import database.notifications as notification_db
 from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage
+from database.plugins import record_plugin_usage, get_private_plugins_db, get_public_plugins_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
 from models.memory import Memory, MemorySource
@@ -13,6 +13,7 @@ from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
+from utils.llm import get_metoring_message
 
 
 # ***********************************
@@ -33,6 +34,40 @@ def weighted_rating(plugin):
     R = plugin.rating_avg or 0
     v = plugin.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
+
+
+def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
+    private_data = []
+    public_data = []
+    all_plugins = []
+    # if cachedPlugins := get_generic_cache('get_public_plugins_data'):
+    #     print('get_public_plugins_data from cache')
+    #     public_data = cachedPlugins
+    #     private_data = get_private_plugins_db(uid)
+    #     pass
+    # else:
+    private_data = get_private_plugins_db(uid)
+    public_data = get_public_plugins_db(uid)
+    # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
+    user_enabled = set(get_enabled_plugins(uid))
+    all_plugins = private_data + public_data
+    plugins = []
+    for plugin in all_plugins:
+        plugin_dict = plugin
+        plugin_dict['enabled'] = plugin['id'] in user_enabled
+        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
+        if include_reviews:
+            reviews = get_plugin_reviews(plugin['id'])
+            sorted_reviews = reviews.values()
+            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+            plugin_dict['reviews'] = []
+            plugin_dict['user_review'] = reviews.get(uid)
+            plugin_dict['rating_avg'] = rating_avg
+            plugin_dict['rating_count'] = len(sorted_reviews)
+        plugins.append(Plugin(**plugin_dict))
+    if include_reviews:
+        plugins = sorted(plugins, key=weighted_rating, reverse=True)
+    return plugins
 
 
 def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
@@ -79,7 +114,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     if not memory or memory.discarded:
         return []
 
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    plugins: List[Plugin] = get_plugins_data_from_db(uid)
     filtered_plugins = [plugin for plugin in plugins if
                         plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
@@ -105,12 +140,13 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json=memory_dict, timeout=30,)  # TODO: failing?
+            response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
                 print('Plugin integration failed', plugin.id, 'result:', response.content)
                 return
 
-            record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration, memory_id=memory.id)
+            record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
+                                memory_id=memory.id)
 
             # print('response', response.json())
             if message := response.json().get('message', ''):
@@ -141,7 +177,7 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
-    plugins: List[Plugin] = get_plugins_data(uid, include_reviews=False)
+    plugins: List[Plugin] = get_plugins_data_from_db(uid, include_reviews=False)
     filtered_plugins = [
         plugin for plugin in plugins if
         plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
@@ -171,11 +207,29 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
             response_data = response.json()
             if not response_data:
                 return
+
+            # message
             message = response_data.get('message', '')
-            print('Plugin', plugin.id, 'response:', message)
+            mentor = response_data.get('mentor', None)
+            print('Plugin', plugin.id, 'response:', message, mentor)
             if message and len(message) > 5:
                 send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
+
+            # proactive_notification
+            if plugin.has_capability("proactive_notification"):
+                mentor = response_data.get('mentor', None)
+                if mentor:
+                    prompt = mentor.get('prompt', '')
+                    if len(prompt) > 0 and len(prompt) <= 5000:
+                        params = mentor.get('params', [])
+                        message = get_metoring_message(uid, prompt, plugin.fitler_proactive_notification_scopes(params))
+                        if message and len(message) > 5:
+                            send_plugin_notification(token, plugin.name, plugin.id, message)
+                            results[plugin.id] = message
+                    elif len(prompt) > 5000:
+                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/5000")
+
         except Exception as e:
             print(f"Plugin integration error: {e}")
             return
@@ -190,6 +244,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         if not message:
             continue
         messages.append(add_plugin_message(message, key, uid))
+
     return messages
 
 

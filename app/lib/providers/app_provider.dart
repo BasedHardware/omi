@@ -47,6 +47,7 @@ class AppProvider extends BaseProvider {
     apps = await retrieveApps();
     updatePrefApps();
     setApps();
+    appLoading = List.filled(apps.length, false);
     setLoadingState(false);
     notifyListeners();
   }

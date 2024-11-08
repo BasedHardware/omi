@@ -148,3 +148,29 @@ def get_ahda_url(uid: str) -> str:
 def get_ahda_os(uid: str) -> str:
     val = r.get(f'ahda_os:{uid}')
     return val.decode('utf-8') if val else None
+
+
+# *******************************************************
+# ************ MENTOR PLUGIN UTILS ***********
+# *******************************************************
+
+def get_upsert_segment_to_transcript_plugin(plugin_id: str, session_id: str, new_segments: list[TranscriptSegment]) -> List[dict]:
+    key = f'plugin:{plugin_id}:session:{session_id}:transcript_segments'
+    segments = r.get(key)
+    if not segments:
+        segments = []
+    else:
+        segments = eval(segments)
+
+    segments.extend([segment.dict() for segment in new_segments])
+
+    # keep 1000
+    if len(segments) > 1000:
+        segments = segments[-1000:]
+
+    r.set(key, str(segments))
+
+    # expire 5m
+    r.expire(key, 60 * 5)
+
+    return [TranscriptSegment(**segment) for segment in segments]

@@ -814,3 +814,22 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+
+# **************************************************
+# ************* MENTOR PLUGIN **************
+# **************************************************
+
+def get_metoring_message(uid: str, plugin_prompt: str, params: [str]) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+
+    prompt = plugin_prompt
+    for param in params:
+        if param == "user_name":
+            prompt = prompt.replace("{{user_name}}", user_name)
+            continue
+        if param == "user_facts":
+            prompt = prompt.replace("{{user_facts}}", facts_str)
+            continue
+    prompt = prompt.replace('    ', '').strip()
+
+    return llm_mini.invoke(prompt).content

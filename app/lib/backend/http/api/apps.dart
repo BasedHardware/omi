@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
@@ -8,9 +9,12 @@ import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
+
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/plugins',
+    url: '${Env.apiBaseUrl}v3/plugins',
     headers: {},
     body: '',
     method: 'GET',
@@ -67,7 +71,7 @@ Future<void> reviewApp(String appId, double score, {String review = ''}) async {
 
 Future<String> getAppMarkdown(String appMarkdownPath) async {
   var response = await makeApiCall(
-    url: 'https://raw.githubusercontent.com/BasedHardware/Omi/main$appMarkdownPath',
+    url: appMarkdownPath,
     method: 'GET',
     headers: {},
     body: '',
@@ -131,5 +135,69 @@ Future<double> getAppMoneyMade(String pluginId) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return 0;
+  }
+}
+
+Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v3/plugins'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'plugin_data': jsonEncode(appData)});
+  print(jsonEncode(appData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('An error occurred submitAppServer: $e');
+    return false;
+  }
+}
+
+Future<List<Category>> getAppCategories() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugin-categories',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getAppCategories: ${response.body}');
+    var res = jsonDecode(response.body);
+    return Category.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
+
+Future<List<TriggerEvent>> getTriggerEventsServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/plugin-triggers',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getTriggerEvents: ${response.body}');
+    var res = jsonDecode(response.body);
+    return TriggerEvent.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
   }
 }

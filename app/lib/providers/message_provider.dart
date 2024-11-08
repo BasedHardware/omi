@@ -129,4 +129,8 @@ class MessageProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  App? messageSenderApp(String? appId) {
+    return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  }
 }
