@@ -443,14 +443,14 @@
     "id": "insight-extractor",
     "name": "Insight Extractor",
     "author": "QNFO",
-    "description": "Extracts high-value insights and actionable next steps",
+    "description": "Extracts the highest-value content from any conversation, surfacing commitments, decisions, knowledge, requests, and key context that you'll want to remember later.",
     "image": "/plugins/logos/insight-extractor.png",
     "capabilities": [
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a transcribed conversation. Analyze input for high-value insights. If applicable, output brief bullet list with 1-3 most impactful points. Prioritize non-strategic elements. If not applicable: 'No significant insights identified.'",
-    "chat_prompt": "You are a personal development expert. Analyze input for actionable steps. Output brief bullet list with 1-3 high-impact actions. Optimize for personal growth. If not applicable: 'No actionable steps identified.'",
+    "memory_prompt": "Analyze input transcript. Extract ONLY high-value content worth remembering. Focus on: 1) Commitments 2) Requests 3) Timing 4) Decisions/Changes 5) Valuable Info. Output format: [CATEGORY]: [Exact Quote] ([Brief Context]). Prioritize actionable, forward-looking content. Include names, specific references, and critical context. Limit to 3-5 most important points. If no high-value content: 'No critical information extracted.'",
+    "chat_prompt": "You are a high-value content extractor. Analyze input for actionable, important information. Focus on commitments, requests, timing, decisions, and valuable data. Output brief bullet list with 3-5 most critical points in format: [CATEGORY]: [Exact Quote] ([Brief Context]). Optimize for future utility and action. If no high-value content: 'No actionable information identified.'",
     "deleted": false
   },
   {
