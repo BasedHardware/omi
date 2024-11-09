@@ -49,8 +49,6 @@ class AppProvider extends BaseProvider {
   Future getApps() async {
     setLoadingState(true);
     apps = await retrieveApps();
-    updatePrefApps();
-    setApps();
     appLoading = List.filled(apps.length, false);
     setLoadingState(false);
     notifyListeners();
@@ -117,6 +115,7 @@ class AppProvider extends BaseProvider {
 
   void updatePrefApps() {
     SharedPreferencesUtil().appsList = apps;
+    notifyListeners();
   }
 
   void setApps() {
