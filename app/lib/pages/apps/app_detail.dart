@@ -7,6 +7,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
+import 'package:friend_private/pages/apps/widgets/info_card_widget.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -196,8 +197,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool isMemoryPrompt = widget.app.worksWithMemories();
-    bool isChatPrompt = widget.app.worksWithChat();
     bool isIntegration = widget.app.worksExternally();
     bool hasSetupInstructions =
         isIntegration && widget.app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
@@ -526,128 +525,133 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     )
                   : const SizedBox.shrink(),
-              GestureDetector(
+              InfoCardWidget(
                 onTap: () {
                   if (widget.app.description.decodeString.characters.length > 200) {
                     routeToPage(
                         context, MarkdownViewer(title: 'About the App', markdown: widget.app.description.decodeString));
                   }
                 },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16.0),
-                  margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('About the App', style: TextStyle(color: Colors.white, fontSize: 14)),
-                          const Spacer(),
-                          widget.app.description.decodeString.characters.length > 200
-                              ? const Icon(
-                                  Icons.arrow_forward,
-                                  size: 20,
-                                )
-                              : const SizedBox.shrink(),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        widget.app.description.decodeString.characters.length > 200
-                            ? '${widget.app.description.decodeString.characters.take(200).toString().trim()}...'
-                            : widget.app.description.decodeString,
-                        style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
-                      ),
-                    ],
-                  ),
-                ),
+                title: 'About the App',
+                description: widget.app.description,
               ),
+
               widget.app.memoryPrompt != null
-                  ? GestureDetector(
+                  ? InfoCardWidget(
                       onTap: () {
                         if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
                           routeToPage(context,
                               MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
                         }
                       },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16.0),
-                        margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 10, bottom: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text('Memory Prompt', style: TextStyle(color: Colors.white, fontSize: 14)),
-                                const Spacer(),
-                                widget.app.memoryPrompt!.characters.length > 200
-                                    ? const Icon(
-                                        Icons.arrow_forward,
-                                        size: 20,
-                                      )
-                                    : const SizedBox.shrink(),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              widget.app.memoryPrompt!.decodeString.characters.length > 200
-                                  ? '${widget.app.memoryPrompt!.decodeString.characters.take(200).toString().trim()}...'
-                                  : widget.app.memoryPrompt!.decodeString,
-                              style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
-                            ),
-                          ],
-                        ),
-                      ),
+                      title: 'Memory Prompt',
+                      description: widget.app.memoryPrompt!,
                     )
                   : const SizedBox.shrink(),
+
               widget.app.chatPrompt != null
-                  ? GestureDetector(
+                  ? InfoCardWidget(
                       onTap: () {
                         if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
                           routeToPage(context,
-                              MarkdownViewer(title: 'Chat Prompt', markdown: widget.app.chatPrompt!.decodeString));
+                              MarkdownViewer(title: 'Chat Persoality', markdown: widget.app.chatPrompt!.decodeString));
                         }
                       },
+                      title: 'Chat Personality',
+                      description: widget.app.chatPrompt!,
+                    )
+                  : const SizedBox.shrink(),
+              !widget.app.isOwner(SharedPreferencesUtil().uid)
+                  ? GestureDetector(
+                      onTap: () {},
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16.0),
-                        margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 10, bottom: 6),
+                        margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 6),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade900,
                           borderRadius: BorderRadius.circular(16.0),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            Row(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Chat Personality', style: TextStyle(color: Colors.white, fontSize: 14)),
-                                const Spacer(),
-                                widget.app.chatPrompt!.characters.length > 200
-                                    ? const Icon(
-                                        Icons.arrow_forward,
-                                        size: 20,
-                                      )
-                                    : const SizedBox.shrink(),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6.0),
+                                  child: Text(widget.app.userReview?.score == null ? 'Rate this app' : 'Your rating',
+                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                ),
+                                const SizedBox(height: 10),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 0),
+                                  child: RatingBar.builder(
+                                    initialRating: widget.app.userReview?.score ?? 0,
+                                    minRating: 1,
+                                    direction: Axis.horizontal,
+                                    allowHalfRating: true,
+                                    itemCount: 5,
+                                    itemSize: 30,
+                                    itemPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                    itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                    maxRating: 5.0,
+                                    onRatingUpdate: (rating) {
+                                      final connectivityProvider =
+                                          Provider.of<ConnectivityProvider>(context, listen: false);
+                                      if (connectivityProvider.isConnected) {
+                                        reviewApp(widget.app.id, rating);
+                                        bool hadReview = widget.app.userReview != null;
+                                        if (!hadReview) widget.app.ratingCount += 1;
+                                        widget.app.userReview = AppReview(
+                                          uid: SharedPreferencesUtil().uid,
+                                          ratedAt: DateTime.now(),
+                                          review: '',
+                                          score: rating,
+                                        );
+                                        var appsList = SharedPreferencesUtil().appsList;
+                                        var index = appsList.indexWhere((element) => element.id == widget.app.id);
+                                        appsList[index] = widget.app;
+                                        SharedPreferencesUtil().appsList = appsList;
+                                        MixpanelManager().appRated(widget.app.id.toString(), rating);
+                                        debugPrint('Refreshed apps list.');
+                                        // TODO: refresh ratings on app
+                                        setState(() {});
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                          content: Text("Can't rate app without internet connection."),
+                                        ));
+                                      }
+                                    },
+                                  ),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              widget.app.chatPrompt!.decodeString.characters.length > 200
-                                  ? '${widget.app.chatPrompt!.decodeString.characters.take(200).toString().trim()}...'
-                                  : widget.app.chatPrompt!.decodeString,
-                              style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
+                            const Spacer(),
+                            const SizedBox(width: 28),
+                            const SizedBox(
+                              height: 56,
+                              child: VerticalDivider(
+                                color: Colors.white,
+                                endIndent: 2,
+                                indent: 2,
+                                width: 4,
+                              ),
                             ),
+                            const SizedBox(width: 28),
+                            Column(
+                              children: [
+                                Text(
+                                  '${widget.app.ratingCount} +',
+                                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Reviews',
+                                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 24),
                           ],
                         ),
                       ),
@@ -655,65 +659,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              const SizedBox(height: 80),
-              Divider(
-                color: Colors.grey.shade300,
-                height: 1,
-              ),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      widget.app.userReview?.score == null ? 'Rate App:' : 'Your rating:',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
-                    child: RatingBar.builder(
-                      initialRating: widget.app.userReview?.score ?? 0,
-                      minRating: 1,
-                      direction: Axis.horizontal,
-                      allowHalfRating: true,
-                      itemCount: 5,
-                      itemSize: 24,
-                      itemPadding: const EdgeInsets.symmetric(horizontal: 2),
-                      itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                      maxRating: 5.0,
-                      onRatingUpdate: (rating) {
-                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                        if (connectivityProvider.isConnected) {
-                          reviewApp(widget.app.id, rating);
-                          bool hadReview = widget.app.userReview != null;
-                          if (!hadReview) widget.app.ratingCount += 1;
-                          widget.app.userReview = AppReview(
-                            uid: SharedPreferencesUtil().uid,
-                            ratedAt: DateTime.now(),
-                            review: '',
-                            score: rating,
-                          );
-                          var appsList = SharedPreferencesUtil().appsList;
-                          var index = appsList.indexWhere((element) => element.id == widget.app.id);
-                          appsList[index] = widget.app;
-                          SharedPreferencesUtil().appsList = appsList;
-                          MixpanelManager().appRated(widget.app.id.toString(), rating);
-                          debugPrint('Refreshed apps list.');
-                          // TODO: refresh ratings on app
-                          setState(() {});
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text("Can't rate app without internet connection."),
-                          ));
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),

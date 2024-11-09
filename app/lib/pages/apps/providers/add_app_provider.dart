@@ -254,7 +254,7 @@ class AddAppProvider extends ChangeNotifier {
       'description': appDescriptionController.text,
       'author': creatorNameController.text,
       'email': creatorEmailController.text,
-      'capabilities': selectedCapabilities.map((e) => e.title).toList(),
+      'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
