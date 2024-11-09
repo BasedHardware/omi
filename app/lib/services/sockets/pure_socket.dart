@@ -155,10 +155,8 @@ class PureSocket implements IPureSocket {
 
   @override
   Future disconnect() async {
-    if (_status == PureSocketStatus.connected) {
-      // Warn: should not use await cause dead end by socket closed.
-      _channel?.sink.close(socket_channel_status.normalClosure);
-    }
+    // Warn: should not use await cause dead end by socket closed.
+    _channel?.sink.close(socket_channel_status.normalClosure);
     _status = PureSocketStatus.disconnected;
     onClosed();
   }

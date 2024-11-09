@@ -372,7 +372,7 @@ class CaptureProvider extends ChangeNotifier
   void _startKeepAliveServices() {
     if (_recordingDevice != null && _socket?.state != SocketServiceState.connected) {
       _keepAliveTimer?.cancel();
-      _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
         debugPrint("[Provider] keep alive...");
 
         if (_recordingDevice == null || _socket?.state == SocketServiceState.connected) {
