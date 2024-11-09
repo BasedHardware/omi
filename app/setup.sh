@@ -32,9 +32,9 @@ echo ""
 
 API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
 
-##########################################
-# Setup Firebase
-##########################################
+######################################
+# Setup Firebase with prebuilt configs
+######################################
 function setup_firebase() {
   mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/
   cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
@@ -110,9 +110,9 @@ function build_ios() {
     && dart run build_runner build
 }
 
-# #########
+# #######
 # Run dev
-# #########
+# #######
 function run_dev() {
   flutter run --flavor dev
 }
