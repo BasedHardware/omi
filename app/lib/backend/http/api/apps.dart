@@ -270,7 +270,7 @@ Future<List<NotificationScope>> getNotificationScopesServer() async {
 
 Future changeAppVisibilityServer(String appId, bool makePublic) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$appId/change-visibility?private=${!makePublic}',
+    url: '${Env.apiBaseUrl}v1/apps/$appId/change-visibility?private=${!makePublic}',
     headers: {},
     body: '',
     method: 'PATCH',
