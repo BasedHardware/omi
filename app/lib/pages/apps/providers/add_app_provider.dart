@@ -8,6 +8,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AddAppProvider extends ChangeNotifier {
@@ -90,9 +91,9 @@ class AddAppProvider extends ChangeNotifier {
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
-    appNameController.text = app.name;
-    appDescriptionController.text = app.description;
-    creatorNameController.text = app.author;
+    appNameController.text = app.name.decodeString;
+    appDescriptionController.text = app.description.decodeString;
+    creatorNameController.text = app.author.decodeString;
     creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
@@ -103,10 +104,10 @@ class AddAppProvider extends ChangeNotifier {
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
     }
     if (app.chatPrompt != null) {
-      chatPromptController.text = app.chatPrompt!;
+      chatPromptController.text = app.chatPrompt!.decodeString;
     }
     if (app.memoryPrompt != null) {
-      memoryPromptController.text = app.memoryPrompt!;
+      memoryPromptController.text = app.memoryPrompt!.decodeString;
     }
     setIsLoading(false);
     notifyListeners();
