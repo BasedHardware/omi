@@ -11,7 +11,7 @@ from fastapi.params import File, Form, Header
 from database.notifications import get_token_only
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
     change_plugin_approval_status, \
-    get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
+    get_plugin_by_id_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
     private_plugin_id_exists_db, delete_private_plugin, \
     delete_public_plugin, update_private_plugin, update_public_plugin
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
