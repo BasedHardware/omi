@@ -66,16 +66,21 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future checkIsAppOwner(String appId) async {
-    if (appId.contains('private')) {
-      isAppOwner = true;
-      appPublicToggled = false;
+  void checkIsAppOwner(String? appUid) {
+    if (appUid != null) {
+      if (appUid == SharedPreferencesUtil().uid) {
+        isAppOwner = true;
+      } else {
+        isAppOwner = false;
+      }
     } else {
-      var res = await checkIsAppOwnerServer(appId);
-      isAppOwner = res;
-      appPublicToggled = res;
+      isAppOwner = false;
     }
+    notifyListeners();
+  }
 
+  void setIsAppPublicToggled(bool value) {
+    appPublicToggled = value;
     notifyListeners();
   }
 
@@ -101,14 +106,6 @@ class AppProvider extends BaseProvider {
     setApps();
     AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
     notifyListeners();
-  }
-
-  bool isAppPublic(String appId) {
-    if (appId.contains('private')) {
-      return false;
-    } else {
-      return true;
-    }
   }
 
   void setAppsFromCache() {

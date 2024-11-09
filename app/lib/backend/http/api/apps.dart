@@ -14,7 +14,7 @@ import 'package:path/path.dart';
 
 Future<List<App>> retrieveApps() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/plugins',
+    url: '${Env.apiBaseUrl}v1/apps',
     headers: {},
     body: '',
     method: 'GET',
@@ -61,7 +61,7 @@ Future<bool> disableAppServer(String appId) async {
 
 Future<void> reviewApp(String appId, double score, {String review = ''}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/review?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v1/apps/review?app_id=$appId',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
     body: jsonEncode({'score': score, review: review}),
@@ -141,11 +141,11 @@ Future<double> getAppMoneyMade(String pluginId) async {
 Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v3/plugins'),
+    Uri.parse('${Env.apiBaseUrl}v1/apps'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'plugin_data': jsonEncode(appData)});
+  request.fields.addAll({'app_data': jsonEncode(appData)});
   print(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
@@ -167,13 +167,13 @@ Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
 Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'PATCH',
-    Uri.parse('${Env.apiBaseUrl}v1/plugins/${appData['id']}'),
+    Uri.parse('${Env.apiBaseUrl}v1/apps/${appData['id']}'),
   );
   if (file != null) {
     request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
-  request.fields.addAll({'plugin_data': jsonEncode(appData)});
+  request.fields.addAll({'app_data': jsonEncode(appData)});
   print(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
