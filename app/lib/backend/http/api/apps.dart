@@ -288,7 +288,7 @@ Future changeAppVisibilityServer(String appId, bool makePublic) async {
 
 Future deleteAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$appId',
+    url: '${Env.apiBaseUrl}v1/apps/$appId',
     headers: {},
     body: '',
     method: 'DELETE',
