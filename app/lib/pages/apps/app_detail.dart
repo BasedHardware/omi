@@ -5,7 +5,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
-import 'package:friend_private/pages/apps/instructions.dart';
+import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -177,7 +177,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppProvider>().checkIsAppOwner(widget.app.id);
+      context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
+      context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
     });
     if (widget.app.worksExternally()) {
       getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
@@ -362,13 +363,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   Column(
                     children: [
                       Text(
-                        widget.app.author,
+                        widget.app.private ? 'Private' : 'Public',
                         style: const TextStyle(
                           fontSize: 16,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text("creator"),
+                      const Text("app"),
                     ],
                   ),
                   const Spacer(),
@@ -398,7 +399,59 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ),
                       ),
                     ),
-
+              widget.app.isUnderReview() && !widget.app.private
+                  ? Column(
+                      children: [
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.78,
+                              child: const Text(
+                                  'Your app is under review and visible only to you. It will be public once approved.',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              widget.app.isRejected()
+                  ? Column(
+                      children: [
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.78,
+                              child: const Text(
+                                'Your app has been rejected. Please update the app details and resubmit for review.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
               const SizedBox(height: 16),
               (hasAuthSteps && stepsCount > 0)
                   ? Padding(
@@ -450,10 +503,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               .contains('raw.githubusercontent.com')) {
                             await routeToPage(
                               context,
-                              AppSetupInstructions(markdown: instructionsMarkdown ?? ''),
+                              MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
                             );
                           } else {
-                            await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
+                            if (widget.app.externalIntegration!.isInstructionsUrl) {
+                              await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
+                            } else {
+                              var m = widget.app.externalIntegration!.setupInstructionsFilePath;
+                              routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
+                            }
                           }
                         }
                         checkSetupCompleted();
@@ -471,7 +529,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
               GestureDetector(
                 onTap: () {
                   if (widget.app.description.decodeString.characters.length > 200) {
-                    // detail page
+                    routeToPage(
+                        context, MarkdownViewer(title: 'About the App', markdown: widget.app.description.decodeString));
                   }
                 },
                 child: Container(
@@ -512,7 +571,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ? GestureDetector(
                       onTap: () {
                         if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
-                          // detail page
+                          routeToPage(context,
+                              MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
                         }
                       },
                       child: Container(
@@ -550,11 +610,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     )
                   : const SizedBox.shrink(),
-              widget.app.memoryPrompt != null
+              widget.app.chatPrompt != null
                   ? GestureDetector(
                       onTap: () {
                         if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
-                          // detail page
+                          routeToPage(context,
+                              MarkdownViewer(title: 'Chat Prompt', markdown: widget.app.chatPrompt!.decodeString));
                         }
                       },
                       child: Container(
@@ -652,71 +713,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
                   ),
                 ],
-              ),
-
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18.0),
-                child: RichText(
-                    text: TextSpan(children: [
-                  const TextSpan(text: 'Developed by: ', style: TextStyle(fontSize: 16)),
-                  TextSpan(
-                    text: '   ${widget.app.author}.',
-                    style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.grey),
-                  ),
-                ])),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    const SizedBox(width: 2),
-                    isMemoryPrompt
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Memories',
-                              style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                    SizedBox(width: isMemoryPrompt && isChatPrompt ? 8 : 0),
-                    isChatPrompt
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Chat',
-                              style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                    SizedBox(width: isChatPrompt ? 8 : 0),
-                    ([isMemoryPrompt, isChatPrompt, isIntegration].where((value) => value).length > 1) && isIntegration
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Integration',
-                              style: TextStyle(color: Colors.deepPurple, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ],
-                ),
               ),
               const SizedBox(height: 16),
               Container(
