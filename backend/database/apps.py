@@ -107,3 +107,26 @@ def delete_public_app(plugin_id: str):
 def change_app_approval_status(plugin_id: str, approved: bool):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
+
+
+def change_app_visibility_db(app_id: str, private: bool, was_public: bool, uid: str):
+    if was_public and private:  # public -> private
+        plugin_ref = db.collection('plugins_data').document(app_id)
+        plugin = plugin_ref.get().to_dict()
+        plugin_ref.delete()
+        new_plugin_id = f'{app_id}-private'
+        plugin['id'] = new_plugin_id
+        plugin['private'] = private
+        plugin_ref = db.collection('users').document(uid).collection('plugins').document(new_plugin_id)
+        plugin_ref.set(plugin)
+    elif not was_public and not private:  # private -> public
+        plugin_ref = db.collection('users').document(uid).collection('plugins').document(app_id)
+        plugin = plugin_ref.get().to_dict()
+        plugin_ref.delete()
+        new_plugin_id = app_id.split('-private')[0]
+        plugin['id'] = new_plugin_id
+        plugin['private'] = private
+        if public_app_id_exists_db(new_plugin_id):
+            new_plugin_id = new_plugin_id + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        plugin_ref = db.collection('plugins_data').document(new_plugin_id)
+        plugin_ref.set(plugin)

@@ -192,14 +192,7 @@ def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: 
     return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
 
-@router.patch('/v1/plugins/{plugin_id}/change-visibility', tags=['v1'])
-def change_plugin_visibility(plugin_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    was_public = not plugin['deleted'] and not plugin['private']
-    change_plugin_visibility_db(plugin_id, private, was_public, uid)
-    return {'status': 'ok'}
+
 
 
 @router.get('/v1/plugins/public/unapproved', tags=['v1'])

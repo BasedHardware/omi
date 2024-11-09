@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
-    change_app_approval_status
+    change_app_approval_status, change_app_visibility_db
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache
 from utils.apps import get_apps_data_from_db
@@ -148,4 +148,14 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     score = data['score']
     review = data.get('review', '')
     set_plugin_review(app_id, uid, score, review)
+    return {'status': 'ok'}
+
+
+@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
+def change_plugin_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
+    plugin = get_app_by_id_db(app_id, uid)
+    if not plugin:
+        raise HTTPException(status_code=404, detail='Plugin not found')
+    was_public = not plugin['deleted'] and not plugin['private']
+    change_app_visibility_db(app_id, private, was_public, uid)
     return {'status': 'ok'}
