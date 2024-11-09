@@ -93,11 +93,11 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/{plugin_id}', tags=['v1'])
+@router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     plugin = get_app_by_id_db(app_id, uid)
     if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
+        raise HTTPException(status_code=404, detail='App not found')
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if plugin['private']:
@@ -122,7 +122,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/plugins/{plugin_id}/reject', tags=['v1'])
+@router.post('/v1/apps/{plugin_id}/reject', tags=['v1'])
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
