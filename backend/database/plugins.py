@@ -154,6 +154,7 @@ def add_plugin_from_community_json(plugin_data: dict):
     plugin_data['image'] = f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
     plugin_data['private'] = False
     plugin_data['approved'] = True
+    plugin_data['status'] = 'approved'
     if "external_integration" in plugin_data['capabilities']:
         plugin_data['external_integration'][
             'setup_instructions_file_path'] = "https://raw.githubusercontent.com/BasedHardware/Omi/main/" + \
