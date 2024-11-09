@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -24,6 +25,7 @@ class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin 
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().initialize(widget.filterChatOnly);
+      context.read<AddAppProvider>().getAppCapabilities();
     });
     super.initState();
   }

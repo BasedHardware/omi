@@ -6,6 +6,7 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
 import 'package:friend_private/pages/apps/widgets/info_card_widget.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -382,7 +383,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         child: AnimatedLoadingButton(
                           text: 'Uninstall App',
                           width: MediaQuery.of(context).size.width * 0.9,
-                          onPressed: () => _toggleApp(widget.app.id, true),
+                          onPressed: () => _toggleApp(widget.app.id, false, context),
                           color: Colors.red,
                         ),
                       ),
@@ -393,7 +394,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         child: AnimatedLoadingButton(
                           width: MediaQuery.of(context).size.width * 0.9,
                           text: 'Install App',
-                          onPressed: () => _toggleApp(widget.app.id, true),
+                          onPressed: () => _toggleApp(widget.app.id, true, context),
                           color: Colors.green,
                         ),
                       ),
@@ -534,6 +535,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 },
                 title: 'About the App',
                 description: widget.app.description,
+                showChips: true,
+                chips: widget.app
+                    .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
+                    .map((e) => e.title)
+                    .toList(),
               ),
 
               widget.app.memoryPrompt != null
@@ -546,6 +552,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       },
                       title: 'Memory Prompt',
                       description: widget.app.memoryPrompt!,
+                      showChips: false,
                     )
                   : const SizedBox.shrink(),
 
@@ -559,6 +566,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       },
                       title: 'Chat Personality',
                       description: widget.app.chatPrompt!,
+                      showChips: false,
                     )
                   : const SizedBox.shrink(),
               !widget.app.isOwner(SharedPreferencesUtil().uid)
@@ -672,43 +680,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 60),
             ],
           ),
         ));
   }
 
-  Future<void> _toggleApp(String appId, bool isEnabled) async {
-    var prefs = SharedPreferencesUtil();
+  Future<void> _toggleApp(String appId, bool isEnabled, BuildContext context) async {
     setState(() => appLoading = true);
-    if (isEnabled) {
-      var enabled = await enableAppServer(appId);
-      if (!enabled) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (c) => getDialog(
-              context,
-              () => Navigator.pop(context),
-              () => Navigator.pop(context),
-              'Error activating the app',
-              'If this is an integration app, make sure the setup is completed.',
-              singleButton: true,
-            ),
-          );
-        }
-
-        setState(() => appLoading = false);
-        return;
-      }
-
-      prefs.enableApp(appId);
-      MixpanelManager().appEnabled(appId);
-    } else {
-      prefs.disableApp(appId);
-      await enableAppServer(appId);
-      MixpanelManager().appDisabled(appId);
-    }
+    await context.read<AppProvider>().toggleApp(appId, isEnabled, null);
     setState(() => widget.app.enabled = isEnabled);
     setState(() => appLoading = false);
   }
