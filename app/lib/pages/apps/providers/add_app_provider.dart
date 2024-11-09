@@ -86,15 +86,14 @@ class AddAppProvider extends ChangeNotifier {
     if (categories.isEmpty) {
       await getCategories();
     }
-    var res = await getAppDetailsServer(app.id);
-    setAppCategory(res!['category']);
+    setAppCategory(app.category);
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
     appNameController.text = app.name;
     appDescriptionController.text = app.description;
     creatorNameController.text = app.author;
-    creatorEmailController.text = res['email'];
+    creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {

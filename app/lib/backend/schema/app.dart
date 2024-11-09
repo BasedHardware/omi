@@ -1,3 +1,5 @@
+import 'package:friend_private/widgets/extensions/string.dart';
+
 class AppReview {
   String uid;
   DateTime ratedAt;
@@ -60,6 +62,7 @@ class ExternalIntegration {
   String webhookUrl;
   String? setupCompletedUrl;
   String setupInstructionsFilePath;
+  bool isInstructionsUrl;
   List<AuthStep> authSteps;
 
   ExternalIntegration({
@@ -67,6 +70,7 @@ class ExternalIntegration {
     required this.webhookUrl,
     required this.setupCompletedUrl,
     required this.setupInstructionsFilePath,
+    required this.isInstructionsUrl,
     this.authSteps = const [],
   });
 
@@ -75,6 +79,7 @@ class ExternalIntegration {
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
+      isInstructionsUrl: json['is_instructions_url'] ?? false,
       setupInstructionsFilePath: json['setup_instructions_file_path'],
       authSteps: json['auth_steps'] == null
           ? []
@@ -98,6 +103,7 @@ class ExternalIntegration {
       'triggers_on': triggersOn,
       'webhook_url': webhookUrl,
       'setup_completed_url': setupCompletedUrl,
+      'is_instructions_url': isInstructionsUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
     };
@@ -134,13 +140,17 @@ class AppUsageHistory {
 
 class App {
   String id;
+  String? uid;
   String name;
   String author;
+  String? email;
+  String category;
+  String status;
   String description;
   String image;
   Set<String> capabilities;
   bool private;
-
+  bool approved;
   String? memoryPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
@@ -163,6 +173,11 @@ class App {
     required this.description,
     required this.image,
     required this.capabilities,
+    required this.status,
+    this.uid,
+    this.email,
+    required this.category,
+    required this.approved,
     this.memoryPrompt,
     this.chatPrompt,
     this.externalIntegration,
@@ -188,7 +203,12 @@ class App {
 
   factory App.fromJson(Map<String, dynamic> json) {
     return App(
+      category: json['category'],
+      approved: json['approved'],
+      status: json['status'],
       id: json['id'],
+      email: json['email'],
+      uid: json['uid'],
       name: json['name'],
       author: json['author'],
       description: json['description'],
@@ -217,6 +237,22 @@ class App {
     }
   }
 
+  bool isOwner(String uid) {
+    return this.uid == uid;
+  }
+
+  bool isUnderReview() {
+    return status == 'under-review';
+  }
+
+  bool isRejected() {
+    return status == 'rejected';
+  }
+
+  String getCategoryName() {
+    return category.decodeString.split('-').map((e) => e.capitalize()).join(' ');
+  }
+
   List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {
     return allCapabilities.where((e) => capabilities.contains(e.id)).toList();
   }
@@ -239,6 +275,12 @@ class App {
       'deleted': deleted,
       'enabled': enabled,
       'installs': installs,
+      'private': private,
+      'category': category,
+      'approved': approved,
+      'status': status,
+      'uid': uid,
+      'email': email,
     };
   }
 
