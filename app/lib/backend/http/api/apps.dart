@@ -268,24 +268,6 @@ Future<List<NotificationScope>> getNotificationScopesServer() async {
   }
 }
 
-Future<bool> checkIsAppOwnerServer(String pluginId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/is-owner',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return false;
-    log('checkIsAppOwner: ${response.body}');
-    return jsonDecode(response.body)['is_owner'];
-  } catch (e, stackTrace) {
-    debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    return false;
-  }
-}
-
 Future changeAppVisibilityServer(String appId, bool makePublic) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/plugins/$appId/change-visibility?private=${!makePublic}',

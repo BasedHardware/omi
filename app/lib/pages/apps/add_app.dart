@@ -141,6 +141,10 @@ class _AddAppPageState extends State<AddAppPage> {
                             icon: Icons.memory,
                           ),
                         const ExternalTriggerFieldsWidget(),
+                        if (provider.capabilitySelected())
+                          const SizedBox(
+                            height: 30,
+                          ),
                         const NotificationScopesChipsWidget(),
                         const Text(
                           'App Privacy',
