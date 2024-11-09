@@ -134,11 +134,6 @@ def get_plugin_money_made(plugin_id: str):
 #         add_plugin_from_community_json(plugin)
 
 
-@router.get('/v1/plugins/{plugin_id}/is-owner', tags=['v1'])
-def is_plugin_owner(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    return {'is_owner': is_public_plugin_owner_db(plugin_id, uid)}
-
-
 @router.post('/v3/plugins', tags=['v1'])
 def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(plugin_data)

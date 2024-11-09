@@ -19,12 +19,12 @@ from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 router = APIRouter()
 
 
-@router.get('/v1/apps', tags=['v3'], response_model=List[App])
+@router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     return get_apps_data_from_db(uid, include_reviews=include_reviews)
 
 
-@router.get('/v1/approved-apps', tags=['v3'], response_model=App)
+@router.get('/v1/approved-apps', tags=['v1'], response_model=App)
 def get_approved_apps(uid: str = Depends(auth.get_current_user_uid)):
     return get_apps_data_from_db(uid, include_reviews=False)
 
