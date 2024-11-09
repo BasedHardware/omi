@@ -22,6 +22,13 @@ class AppProvider extends BaseProvider {
   bool isAppOwner = false;
   bool appPublicToggled = false;
 
+  bool isLoading = false;
+
+  void setIsLoading(bool value) {
+    isLoading = value;
+    notifyListeners();
+  }
+
   void setSelectedChatAppId(String? appId) {
     if (appId == null) {
       selectedChatAppId = SharedPreferencesUtil().selectedChatAppId;
@@ -47,10 +54,11 @@ class AppProvider extends BaseProvider {
   }
 
   Future getApps() async {
-    setLoadingState(true);
+    if (isLoading) return;
+    setIsLoading(true);
     apps = await retrieveApps();
     appLoading = List.filled(apps.length, false);
-    setLoadingState(false);
+    setIsLoading(false);
     notifyListeners();
   }
 
