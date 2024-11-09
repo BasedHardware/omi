@@ -1,6 +1,14 @@
 #!/bin/bash
 #
 # Set up the Omi Mobile Project(iOS/Android).
+# Prerequisites:
+# - Flutter SDK
+# - Dart SDK
+# - Xcode (for iOS)
+# - CocoaPods (for iOS dependencies)
+# - Android Studio (for Android)
+# - NDK 26.3.11579264 or above (to build Opus for ARM Devices)
+# - Opus Codec: https://opus-codec.org
 # Usages: 
 # - $bash setup.sh ios
 # - $bash setup.sh android
@@ -8,6 +16,18 @@
 set -euo pipefail
 
 echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us on Discord: http://discord.omi.me"
+echo "Prerequisites:"
+echo "- Flutter SDK"
+echo "- Dart SDK"
+echo "- Xcode (for iOS)"
+echo "- CocoaPods (for iOS dependencies)"
+echo "- Android Studio (for Android)"
+echo "- NDK 26.3.11579264 or above (to build Opus for ARM Devices)"
+echo "- Opus Codec: https://opus-codec.org"
+echo "Usages:"
+echo "- bash setup.sh ios"
+echo "- bash setup.sh android"
+echo ""
 
 
 API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
