@@ -286,11 +286,10 @@ class AddAppProvider extends ChangeNotifier {
     var res = await updateAppServer(imageFile, data);
     if (res) {
       var app = await getAppDetailsServer(updateAppId!);
-
       appProvider!.updateLocalApp(App.fromJson(app!));
       AppSnackbar.showSnackbarSuccess('App updated successfully 🚀');
-      appProvider!.getApps();
       clear();
+      appProvider!.getApps();
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
     }

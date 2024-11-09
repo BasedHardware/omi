@@ -135,10 +135,13 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future<void> toggleApp(String appId, bool isEnabled, int idx) async {
-    if (appLoading[idx]) return;
-    appLoading[idx] = true;
-    notifyListeners();
+  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+    if (idx != null) {
+      if (appLoading[idx]) return;
+      appLoading[idx] = true;
+      notifyListeners();
+    }
+
     var prefs = SharedPreferencesUtil();
     if (isEnabled) {
       var enabled = await enableAppServer(appId);
@@ -148,9 +151,10 @@ class AppProvider extends BaseProvider {
           content: 'If this is an integration app, make sure the setup is completed.',
           singleButton: true,
         );
-
-        appLoading[idx] = false;
-        notifyListeners();
+        if (idx != null) {
+          appLoading[idx] = false;
+          notifyListeners();
+        }
 
         return;
       }
@@ -161,7 +165,9 @@ class AppProvider extends BaseProvider {
       prefs.disableApp(appId);
       MixpanelManager().appDisabled(appId);
     }
-    appLoading[idx] = false;
+    if (idx != null) {
+      appLoading[idx] = false;
+    }
     apps = SharedPreferencesUtil().appsList;
     notifyListeners();
   }
