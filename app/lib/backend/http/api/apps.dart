@@ -306,7 +306,7 @@ Future deleteAppServer(String appId) async {
 
 Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$appId',
+    url: '${Env.apiBaseUrl}v1/apps/$appId',
     headers: {},
     body: '',
     method: 'GET',
