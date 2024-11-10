@@ -442,15 +442,15 @@
   {
     "id": "insight-extractor",
     "name": "Insight Extractor",
-    "author": "Q8.org AiQ",
-    "description": "Extracts valuable insights and actionable recommendations from conversations across various domains",
+    "author": "QNFO",
+    "description": "Extracts the highest-value content from any conversation, surfacing commitments, decisions, knowledge, requests, and key context that you'll want to remember later.",
     "image": "/plugins/logos/insight-extractor.png",
     "capabilities": [
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a conversation related to any domain, such as personal growth, business strategy, education, relationships, problem-solving, emotional intelligence, decision-making, or conflict resolution. Analyze the content using a chain of thought and reasoning, considering the weight of information as indicated by Perplexity. Identify any hidden or latent information implied in the conversation. Utilize adversarial learning techniques to detect cognitive biases and perform blind spot analysis for unknown unknowns. Provide actionable insights and recommendations structured into clear sections, such as 'Key Insights,' 'Latent Information,' 'Potential Biases,' 'Blind Spots,' and 'Recommendations.' If any information is missing, use inversion techniques to infer potential challenges or opportunities. Maintain an objective and supportive tone throughout.",
-    "chat_prompt": "Extracts valuable insights and actionable recommendations from conversations across various domains",
+    "memory_prompt": "Analyze input transcript. Extract ONLY high-value content worth remembering. Focus on: 1) Commitments 2) Requests 3) Timing 4) Decisions/Changes 5) Valuable Info. Output format: [CATEGORY]: [Exact Quote] ([Brief Context]). Prioritize actionable, forward-looking content. Include names, specific references, and critical context. Limit to 3-5 most important points. If no high-value content: 'No critical information extracted.'",
+    "chat_prompt": "You are a high-value content extractor. Analyze input for actionable, important information. Focus on commitments, requests, timing, decisions, and valuable data. Output brief bullet list with 3-5 most critical points in format: [CATEGORY]: [Exact Quote] ([Brief Context]). Optimize for future utility and action. If no high-value content: 'No actionable information identified.'",
     "deleted": false
   },
   {
