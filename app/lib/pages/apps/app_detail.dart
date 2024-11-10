@@ -51,13 +51,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
     });
     if (widget.app.worksExternally()) {
-      getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
-        value = value.replaceAll(
-          '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.app.id}/assets/',
-        );
-        setState(() => instructionsMarkdown = value);
-      });
+      if (widget.app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
+        getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
+          value = value.replaceAll(
+            '](assets/',
+            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.app.id}/assets/',
+          );
+          setState(() => instructionsMarkdown = value);
+        });
+      }
       checkSetupCompleted();
     }
 
