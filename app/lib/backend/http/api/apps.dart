@@ -213,7 +213,7 @@ Future<List<Category>> getAppCategories() async {
 
 Future<List<AppCapability>> getAppCapabilitiesServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugin-capabilities',
+    url: '${Env.apiBaseUrl}v1/app-capabilities',
     headers: {},
     body: '',
     method: 'GET',
@@ -251,7 +251,7 @@ Future<List<TriggerEvent>> getTriggerEventsServer() async {
 
 Future<List<NotificationScope>> getNotificationScopesServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/notification-scopes',
+    url: '${Env.apiBaseUrl}v1/apps/proactive-notification-scopes',
     headers: {},
     body: '',
     method: 'GET',
