@@ -19,9 +19,9 @@ omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 
 def get_app_by_id_db(app_id: str, uid: str):
     if 'private' in app_id:
-        app_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+        app_ref = db.collection('users').document(uid).collection('plugins').document(app_id)
     else:
-        app_ref = db.collection('plugins_data').document(plugin_id)
+        app_ref = db.collection('plugins_data').document(app_id)
     doc = app_ref.get()
     if doc.exists:
         return doc.to_dict()

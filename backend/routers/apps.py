@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
-    change_app_approval_status, change_app_visibility_db
+    change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache
 from utils.apps import get_apps_data_from_db
@@ -18,6 +18,10 @@ from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 
 router = APIRouter()
 
+
+# ******************************************************
+# ********************* APPS CRUD **********************
+# ******************************************************
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
@@ -109,31 +113,12 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
-def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    change_app_approval_status(app_id, True)
-    plugin = get_app_by_id_db(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        send_notification(token, 'App Approved 🎉',
-                          f'Your app {plugin["name"]} has been approved and is now available for everyone to use 🥳')
-    return {'status': 'ok'}
-
-
-@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
-def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    change_app_approval_status(app_id, False)
-    plugin = get_app_by_id_db(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        # TODO: Add reason for rejection in payload and also redirect to the plugin page
-        send_notification(token, 'App Rejected 😔',
-                          f'Your app {plugin["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
-    return {'status': 'ok'}
+@router.get('/v1/apps/{app_id}', tags=['v1'])
+def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_app_by_id_db(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    return app
 
 
 @router.post('/v1/apps/review', tags=['v1'])
@@ -152,11 +137,11 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
-def change_plugin_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_app_by_id_db(app_id, uid)
-    if not plugin:
+def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_app_by_id_db(app_id, uid)
+    if not app:
         raise HTTPException(status_code=404, detail='Plugin not found')
-    was_public = not plugin['deleted'] and not plugin['private']
+    was_public = not app['deleted'] and not app['private']
     change_app_visibility_db(app_id, private, was_public, uid)
     return {'status': 'ok'}
 
@@ -183,3 +168,42 @@ def get_plugin_capabilities():
             {'title': 'User Facts', 'id': 'user_facts'}
         ]}
     ]
+
+
+# ******************************************************
+# ******************* TEAM ENDPOINTS *******************
+# ******************************************************
+
+@router.get('/v1/apps/public/unapproved', tags=['v1'])
+def get_unapproved_public_apps(secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    apps = get_unapproved_public_apps_db()
+    return apps
+
+
+@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
+def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    change_app_approval_status(app_id, True)
+    app = get_app_by_id_db(app_id, uid)
+    token = get_token_only(uid)
+    if token:
+        send_notification(token, 'App Approved 🎉',
+                          f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳')
+    return {'status': 'ok'}
+
+
+@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
+def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    change_app_approval_status(app_id, False)
+    app = get_app_by_id_db(app_id, uid)
+    token = get_token_only(uid)
+    if token:
+        # TODO: Add reason for rejection in payload and also redirect to the plugin page
+        send_notification(token, 'App Rejected 😔',
+                          f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
+    return {'status': 'ok'}
