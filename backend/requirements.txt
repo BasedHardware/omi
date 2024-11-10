@@ -30,6 +30,7 @@ croniter==1.4.1
 cryptography==43.0.0
 cycler==0.12.1
 dataclasses-json==0.6.7
+ddtrace==2.16.0
 decorator==5.1.1
 deepgram-sdk==3.4.0
 deprecation==2.1.0
