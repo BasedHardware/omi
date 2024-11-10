@@ -44,7 +44,10 @@ def get_plugin_by_id_db(plugin_id: str, uid: str):
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     else:
         plugin_ref = db.collection('plugins_data').document(plugin_id)
-    return plugin_ref.get().to_dict()
+    doc = plugin_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
 
 
 def add_public_plugin(plugin_data: dict):

@@ -109,7 +109,7 @@ def get_plugin_money_made(plugin_id: str):
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
 
     # tbd based on current prod stats
-    t1multiplier = 0.5
+    t1multiplier = 0.02
     t2multiplier = 0.01
     t3multiplier = 0.005
 
