@@ -38,12 +38,14 @@ def send_message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
     chat_db.add_message(uid, message.dict())
+
     plugin = get_app_by_id_db(plugin_id, uid)
-    plugin = App(**plugin)
+    plugin = App(**plugin) if plugin else None
+    
     plugin_id = plugin.id if plugin else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, memories = execute_graph_chat(uid, messages)
+    response, memories = execute_graph_chat(uid, messages)  # plugin
     memories_id = []
     # check if the items in the memories list are dict
     if memories:
