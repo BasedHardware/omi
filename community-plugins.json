@@ -414,15 +414,15 @@
   {
     "id": "game-theory-strategist",
     "name": "Game Theory Strategist",
-    "author": "AiQ8.org",
+    "author": "QNFO",
     "description": "Analyzes conversations and provides game-theoretic insights and strategic recommendations.",
     "image": "/plugins/logos/game-theory-strategist.png",
     "capabilities": [
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a conversation related to any domain involving strategic decision-making. Analyze the content using a chain of thought and reasoning, applying game theory principles to identify the key players, their objectives, and potential strategies. Output response must always be concise in <4 lines. Maintain a strategic and analytical tone.",
-    "chat_prompt": "Analyzes conversations and provides game-theoretic insights and strategic recommendations.",
+    "memory_prompt": "You will be given a conversation transcript.  Extract key information and analyze intended objectives from input using game theory. If applicable, output plain text list with Objectives, Players, Strategies, Key Insights. Prioritize most impactful points. <4 lines total. If not applicable: 'Insufficient strategic relevance.'",
+    "chat_prompt": "You are a game theory expert. Analyze input to identify strategic objectives and provide high-utility recommendations. Apply relevant game theory and behavioral psychology principles. If applicable, output plain text list with Proposed Action, Strategic Rationale, Expected Outcomes. Optimize for maximum expected utility. <4 lines total. If not applicable: 'Insufficient strategic relevance.'",
     "deleted": false
   },
   {
