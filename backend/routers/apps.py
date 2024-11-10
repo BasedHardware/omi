@@ -109,7 +109,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{plugin_id}/approve', tags=['v1'])
+@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -122,7 +122,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{plugin_id}/reject', tags=['v1'])
+@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
