@@ -37,7 +37,7 @@ Future<List<App>> retrieveApps() async {
 
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/enable?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
@@ -49,7 +49,7 @@ Future<bool> enableAppServer(String appId) async {
 
 Future<bool> disableAppServer(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/disable?plugin_id=$appId',
+    url: '${Env.apiBaseUrl}v1/apps/disable?app_id=$appId',
     headers: {},
     method: 'POST',
     body: '',
