@@ -8,11 +8,12 @@ import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form, Header
 
+from database.apps import get_app_by_id_db
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
-    get_plugin_by_id_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
-    private_plugin_id_exists_db
+    public_plugin_id_exists_db, private_plugin_id_exists_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
+from models.app import App
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
@@ -23,8 +24,8 @@ router = APIRouter()
 
 @router.post('/v1/plugins/enable')
 def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
@@ -39,8 +40,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
 
 @router.post('/v1/plugins/disable')
 def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     disable_plugin(uid, plugin_id)

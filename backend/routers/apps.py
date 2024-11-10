@@ -4,12 +4,14 @@ import random
 from typing import List
 
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from langchain import requests
 
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
     change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db
 from database.notifications import get_token_only
-from database.redis_db import set_plugin_review, delete_generic_cache
+from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
+    disable_plugin, decrease_plugin_installs_count
 from utils.apps import get_apps_data_from_db
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -25,6 +27,7 @@ router = APIRouter()
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+    delete_generic_cache('get_public_approved_apps_data')
     return get_apps_data_from_db(uid, include_reviews=include_reviews)
 
 
@@ -168,6 +171,37 @@ def get_plugin_capabilities():
             {'title': 'User Facts', 'id': 'user_facts'}
         ]}
     ]
+
+
+# ******************************************************
+# **************** ENABLE/DISABLE APPS *****************
+# ******************************************************
+
+@router.post('/v1/apps/enable')
+def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_app_by_id_db(app_id, uid)
+    app = App(**app)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app.works_externally() and app.external_integration.setup_completed_url:
+        res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        print('enable_app_endpoint', res.status_code, res.content)
+        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
+            raise HTTPException(status_code=400, detail='App setup is not completed')
+    increase_plugin_installs_count(app_id)
+    enable_plugin(uid, app_id)
+    return {'status': 'ok'}
+
+
+@router.post('/v1/apps/disable')
+def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_app_by_id_db(app_id, uid)
+    app = App(**app)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    disable_plugin(uid, app_id)
+    decrease_plugin_installs_count(app_id)
+    return {'status': 'ok'}
 
 
 # ******************************************************
