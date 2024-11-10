@@ -79,7 +79,7 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
     plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
+    plugin = Plugin(**plugin) if plugin else None
     text = initial_chat_message(uid, plugin)
 
     ai_message = Message(
