@@ -114,14 +114,6 @@ def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
     return plugin_ref.get().exists
 
 
-def is_public_plugin_owner_db(plugin_id: str, uid: str) -> bool:
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
-    plugin = plugin_ref.get().to_dict()
-    if plugin is None or 'uid' not in plugin:
-        return False
-    return plugin['uid'] == uid
-
-
 def add_plugin_from_community_json(plugin_data: dict):
     img = requests.get("https://raw.githubusercontent.com/BasedHardware/Omi/main/" + plugin_data['image'], stream=True)
     bucket = storage_client.bucket(omi_plugins_bucket)
