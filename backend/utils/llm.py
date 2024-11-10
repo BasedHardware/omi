@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
 from database.redis_db import add_filter_category_item
+from models.app import App
 from models.chat import Message
 from models.facts import Fact
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
@@ -197,7 +198,7 @@ def generate_embedding(content: str) -> List[float]:
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
-def initial_chat_message(uid: str, plugin: Optional[Plugin] = None) -> str:
+def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
         prompt = f'''
