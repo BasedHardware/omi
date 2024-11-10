@@ -17,12 +17,16 @@ from ._client import db
 omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 
 
-def get_app_by_id_db(plugin_id: str, uid: str):
-    if 'private' in plugin_id:
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
+def get_app_by_id_db(app_id: str, uid: str):
+    if 'private' in app_id:
+        app_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
     else:
-        plugin_ref = db.collection('plugins_data').document(plugin_id)
-    return plugin_ref.get().to_dict()
+        app_ref = db.collection('plugins_data').document(plugin_id)
+    doc = app_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
 
 def get_private_apps_db(uid: str) -> List:
     private_plugins = db.collection('users').document(uid).collection('plugins').stream()
