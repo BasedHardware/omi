@@ -159,3 +159,27 @@ def change_plugin_visibility(app_id: str, private: bool, uid: str = Depends(auth
     was_public = not plugin['deleted'] and not plugin['private']
     change_app_visibility_db(app_id, private, was_public, uid)
     return {'status': 'ok'}
+
+
+@router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
+def get_notification_scopes():
+    return [
+        {'title': 'User Name', 'id': 'user_name'},
+        {'title': 'User Facts', 'id': 'user_facts'}
+    ]
+
+
+@router.get('/v1/app-capabilities', tags=['v1'])
+def get_plugin_capabilities():
+    return [
+        {'title': 'Chat', 'id': 'chat'},
+        {'title': 'Memories', 'id': 'memories'},
+        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
+            {'title': 'Memory Creation', 'id': 'memory_creation'},
+            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ]},
+        {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
+            {'title': 'User Name', 'id': 'user_name'},
+            {'title': 'User Facts', 'id': 'user_facts'}
+        ]}
+    ]

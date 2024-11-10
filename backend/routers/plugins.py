@@ -8,16 +8,13 @@ import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form, Header
 
-from database.notifications import get_token_only
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
-    change_plugin_approval_status, \
     get_plugin_by_id_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
-    private_plugin_id_exists_db, delete_private_plugin, \
-    delete_public_plugin, update_private_plugin, update_public_plugin
+    private_plugin_id_exists_db, \
+    update_private_plugin, update_public_plugin
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
-from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
@@ -192,9 +189,6 @@ def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: 
     return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
 
-
-
-
 @router.get('/v1/plugins/public/unapproved', tags=['v1'])
 def get_unapproved_public_plugins(secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
@@ -211,21 +205,6 @@ def get_plugin_details(plugin_id: str, uid: str = Depends(auth.get_current_user_
     return plugin
 
 
-@router.get('/v1/plugin-capabilities', tags=['v1'])
-def get_plugin_capabilities():
-    return [
-        {'title': 'Chat', 'id': 'chat'},
-        {'title': 'Memories', 'id': 'memories'},
-        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
-            {'title': 'Memory Creation', 'id': 'memory_creation'},
-            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
-        ]},
-        {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
-            {'title': 'User Name', 'id': 'user_name'},
-            {'title': 'User Facts', 'id': 'user_facts'}
-        ]}
-    ]
-
 @router.get('/v1/plugin-triggers', tags=['v1'])
 def get_plugin_triggers():
     # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
@@ -233,14 +212,6 @@ def get_plugin_triggers():
         {'title': 'Memory Creation', 'id': 'memory_creation'},
         {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         {'title': 'Proactive Notification', 'id': 'proactive_notification'}
-    ]
-
-
-@router.get('/v1/notification-scopes', tags=['v1'])
-def get_notification_scopes():
-    return [
-        {'title': 'User Name', 'id': 'user_name'},
-        {'title': 'User Facts', 'id': 'user_facts'}
     ]
 
 
