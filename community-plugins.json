@@ -428,15 +428,15 @@
   {
     "id": "latent-information-analyzer",
     "name": "Latent Information Analyzer",
-    "author": "AiQ8.org",
-    "description": "Identifies hidden or latent information in conversations and provides insights for further exploration.",
+    "author": "QNFO",
+    "description": "Identifies what you're missing in conversations - unaddressed questions, skipped topics, missed signals, and implicit assumptions. Helps you catch important details that often slip through the cracks.",
     "image": "/plugins/logos/latent-information-analyzer.png",
     "capabilities": [
       "memories",
       "chat"
     ],
-    "memory_prompt": "You will be given a conversation related to any domain. Analyze the content using a chain of thought and reasoning, focusing on identifying any hidden or latent information implied in the conversation. Consider the weight of information as indicated by Perplexity and utilize inversion techniques to infer potential gaps in the available information. Provide insights into the latent information and suggest areas for further exploration or clarification. Output response must always be concise in <4 lines. Maintain a curious and analytical tone throughout.",
-    "chat_prompt": "Identifies hidden or latent information in conversations and provides insights for further exploration.",
+    "memory_prompt": "Analyze the conversation transcript for specifically overlooked or unaddressed elements:\n\n1. UNANSWERED QUESTIONS\n- Direct questions without responses\n- Implied questions left hanging\n- Requests for clarification ignored\n\n2. SKIPPED TOPICS\n- Mentioned but not discussed\n- Deflected subjects\n- Interrupted threads\n\n3. UNCLEAR ELEMENTS\n- Ambiguous responsibilities\n- Vague timelines\n- Undefined terms\n- Missing specifics\n\n4. IMPLICIT ASSUMPTIONS\n- Unstated expectations\n- Presumed knowledge\n- Unconfirmed agreements\n\nOutput Format:\n\n[CATEGORY]:\n• [Specific item missed] ([Exact quote or context])\n- Recommended follow-up: [Clear, specific question to resolve]\n\nGuidelines:\n- Only flag items with clear evidence\n- Include exact quotes when possible\n- Provide specific follow-up questions\n- Note critical vs optional items\n\nDo not:\n- Flag minor oversights\n- Include general suggestions\n- Make assumptions\n- Create artificial issues",
+    "chat_prompt": "You are a blind spot detection assistant focused on helping users identify important missed elements in their conversations. Provide specific, actionable feedback about overlooked items and clear suggestions for following up.",
     "deleted": false
   },
   {
