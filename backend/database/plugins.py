@@ -57,31 +57,6 @@ def add_private_plugin(plugin_data: dict, uid: str):
     plugin_ref.add(plugin_data, plugin_data['id'])
 
 
-def update_public_plugin(plugin_data: dict):
-    plugin_ref = db.collection('plugins_data').document(plugin_data['id'])
-    plugin_ref.update(plugin_data)
-
-
-def update_private_plugin(plugin_data: dict, uid: str):
-    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_data['id'])
-    plugin_ref.update(plugin_data)
-
-
-def delete_private_plugin(plugin_id: str, uid: str):
-    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-    plugin_ref.update({'deleted': True})
-
-
-def delete_public_plugin(plugin_id: str):
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
-    plugin_ref.update({'deleted': True})
-
-
-def change_plugin_approval_status(plugin_id: str, approved: bool):
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
-    plugin_ref.update({'approved': approved})
-
-
 def get_private_plugins_db(uid: str) -> List:
     private_plugins = db.collection('users').document(uid).collection('plugins').stream()
     data = [doc.to_dict() for doc in private_plugins]
