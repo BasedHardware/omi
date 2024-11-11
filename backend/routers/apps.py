@@ -27,7 +27,6 @@ router = APIRouter()
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    delete_generic_cache('get_public_approved_apps_data')
     return get_apps_data_from_db(uid, include_reviews=include_reviews)
 
 
