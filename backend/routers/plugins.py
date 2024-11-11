@@ -69,7 +69,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = next(filter(lambda x: x.id == plugin_id, get_plugins_data(uid)), None)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
 
