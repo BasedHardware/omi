@@ -203,12 +203,12 @@ class App {
 
   factory App.fromJson(Map<String, dynamic> json) {
     return App(
-      category: json['category'],
-      approved: json['approved'],
-      status: json['status'],
+      category: json['category'] ?? 'other',
+      approved: json['approved'] ?? true,
+      status: json['status'] ?? 'approved',
       id: json['id'],
-      email: json['email'],
-      uid: json['uid'],
+      email: json['email'] ?? '',
+      uid: json['uid'] ?? '',
       name: json['name'],
       author: json['author'],
       description: json['description'],
