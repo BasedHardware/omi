@@ -6,17 +6,17 @@ from typing import List
 
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
-from fastapi.params import File, Form, Header
+from fastapi.params import File, Form
 
 from database.apps import get_app_by_id_db
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
-    public_plugin_id_exists_db, private_plugin_id_exists_db
+    public_plugin_id_exists_db, private_plugin_id_exists_db, get_plugin_by_id_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.app import App
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
 from utils.other import endpoints as auth
-from utils.other.storage import upload_plugin_logo, delete_plugin_logo
+from utils.other.storage import upload_plugin_logo
 from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
 
 router = APIRouter()

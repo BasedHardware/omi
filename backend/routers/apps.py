@@ -2,9 +2,8 @@ import json
 import os
 import random
 from typing import List
-
+import requests
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
-from langchain import requests
 
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
