@@ -5,7 +5,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.chat as chat_db
-from database.plugins import record_plugin_usage, get_plugin_by_id_db
+from database.apps import get_app_by_id_db
+from database.plugins import record_plugin_usage
+from models.app import App
 from models.chat import Message, SendMessageRequest, MessageSender
 from models.plugin import UsageHistoryType, Plugin
 from models.memory import Memory
@@ -36,8 +38,10 @@ def send_message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
     chat_db.add_message(uid, message.dict())
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin) if plugin else None
+
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin) if plugin else None
+    
     plugin_id = plugin.id if plugin else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
@@ -78,9 +82,12 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
-    text = initial_chat_message(uid, plugin)
+    plugin = get_app_by_id_db(plugin_id, uid)
+    if not plugin:
+        text = initial_chat_message(uid)
+    else:
+        plugin = App(**plugin)
+        text = initial_chat_message(uid, plugin)
 
     ai_message = Message(
         id=str(uuid.uuid4()),

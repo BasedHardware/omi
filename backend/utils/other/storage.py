@@ -243,3 +243,11 @@ def upload_plugin_logo(file_path: str, plugin_id: str):
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
+
+
+def delete_plugin_logo(img_url: str):
+    bucket = storage_client.bucket(omi_plugins_bucket)
+    path = img_url.split(f'https://storage.googleapis.com/{omi_plugins_bucket}/')[1]
+    print('delete_plugin_logo', path)
+    blob = bucket.blob(path)
+    blob.delete()
