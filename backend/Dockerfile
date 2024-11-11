@@ -18,5 +18,6 @@ COPY --from=gcr.io/datadoghq/serverless-init:1 /datadog-init /app/datadog-init
 COPY backend/ .
 
 EXPOSE 8080
-CMD ["/app/datadog-init", "ddtrace-run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["/app/datadog-init"]
+CMD ["ddtrace-run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 
