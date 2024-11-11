@@ -9,7 +9,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<AddAppProvider>(builder: (context, provider, child) {
-      if (!provider.isCapabilitySelected('external_integration')) {
+      if (!provider.isCapabilitySelectedById('external_integration')) {
         return const SizedBox.shrink();
       }
       return Column(
@@ -51,7 +51,8 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
-            items: provider.triggerEvents
+            items: provider
+                .getTriggerEvents()
                 .map(
                   (event) => DropdownMenuItem(
                     value: event.id,
@@ -111,9 +112,12 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
           TextFormField(
             controller: provider.setupCompletedController,
             validator: (value) {
-              if (value == null || !isValidUrl(value)) {
-                return 'Please enter a valid URL';
+              if (value != null) {
+                if (value.isNotEmpty && !isValidUrl(value)) {
+                  return 'Please enter a valid URL';
+                }
               }
+
               return null;
             },
             decoration: InputDecoration(
@@ -153,13 +157,8 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             height: 20,
           ),
           TextFormField(
+            maxLines: null,
             controller: provider.instructionsController,
-            validator: (value) {
-              if (value == null || !isValidUrl(value)) {
-                return 'Please enter a valid webhook URL';
-              }
-              return null;
-            },
             decoration: InputDecoration(
               border: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
@@ -180,11 +179,11 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                     width: 8,
                   ),
                   const Text(
-                    'Setup Instructions URL',
+                    'Setup Instructions',
                   ),
                 ],
               ),
-              hintText: 'https://your-setup-instructions-url.com/',
+              hintText: 'Link or text instructions for app setup',
               labelStyle: const TextStyle(
                 color: Colors.grey,
               ),
