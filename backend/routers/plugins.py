@@ -1,19 +1,20 @@
 import json
 import os
 import random
+from datetime import datetime, timezone
 from collections import defaultdict
 from typing import List
 
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
-from fastapi.params import File, Form, Header
+from fastapi.params import File, Form
 
+from database.apps import get_app_by_id_db
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
-    change_plugin_approval_status, \
-    get_plugin_by_id_db, change_plugin_visibility_db, get_unapproved_public_plugins_db, public_plugin_id_exists_db, \
-    private_plugin_id_exists_db
+    public_plugin_id_exists_db, private_plugin_id_exists_db, get_plugin_by_id_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
-    decrease_plugin_installs_count, delete_generic_cache
+    decrease_plugin_installs_count
+from models.app import App
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
@@ -24,8 +25,8 @@ router = APIRouter()
 
 @router.post('/v1/plugins/enable')
 def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
@@ -40,8 +41,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
 
 @router.post('/v1/plugins/disable')
 def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    plugin = Plugin(**plugin)
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     disable_plugin(uid, plugin_id)
@@ -55,12 +56,12 @@ def get_plugins(uid: str):
 
 
 @router.get('/v1/plugins', tags=['v1'])
-def get_plugins(uid: str):
+def get_plugins_v1(uid: str):
     return get_plugins_data(uid, include_reviews=True)
 
 
 @router.get('/v2/plugins', tags=['v1'], response_model=List[Plugin])
-def get_plugins(uid: str = Depends(auth.get_current_user_uid)):
+def get_plugins_v2(uid: str = Depends(auth.get_current_user_uid)):
     return get_plugins_data(uid, include_reviews=True)
 
 
@@ -69,7 +70,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = next(filter(lambda x: x.id == plugin_id, get_plugins_data(uid)), None)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
 
@@ -128,13 +129,14 @@ def get_plugin_money_made(plugin_id: str):
 #         return []
 #     data = response.json()
 #     for plugin in data:
-#         add_plugin_script(plugin)
+#         add_plugin_from_community_json(plugin)
 
 
 @router.post('/v3/plugins', tags=['v1'])
 def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(plugin_data)
     data['approved'] = False
+    data['name'] = data['name'].strip()
     data['id'] = data['name'].replace(' ', '-').lower()
     data['uid'] = uid
     if 'private' in data and data['private']:
@@ -150,6 +152,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
         f.write(file.file.read())
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
+    data['created_at'] = datetime.now(timezone.utc)
     if data.get('private', True):
         print("Adding private plugin")
         add_private_plugin(data, data['uid'])
@@ -163,46 +166,13 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
 def get_plugins(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     return get_plugins_data_from_db(uid, include_reviews=include_reviews)
 
-@router.post('/v1/plugins/{plugin_id}/approve', tags=['v1'])
-def approve_plugin(plugin_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    change_plugin_approval_status(plugin_id, True)
-    return {'status': 'ok'}
-
-
-@router.post('/v1/plugins/{plugin_id}/reject', tags=['v1'])
-def reject_plugin(plugin_id: str,secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    change_plugin_approval_status(plugin_id, False)
-    return {'status': 'ok'}
-
-
-@router.patch('/v1/plugins/{plugin_id}/change-visibility', tags=['v1'])
-def change_plugin_visibility(plugin_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_plugin_by_id_db(plugin_id, uid)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    was_public = not plugin.deleted and not plugin.private
-    change_plugin_visibility_db(plugin_id, private, was_public, uid)
-    return {'status': 'ok'}
-
-
-@router.get('/v1/plugins/public/unapproved', tags=['v1'])
-def get_unapproved_public_plugins(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    plugins = get_unapproved_public_plugins_db()
-    return plugins
-
 
 @router.get('/v1/plugin-triggers', tags=['v1'])
 def get_plugin_triggers():
     # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
     return [
         {'title': 'Memory Creation', 'id': 'memory_creation'},
-        {'title': 'Transcript Processed','id': 'transcript_processed'}
+        {'title': 'Transcript Processed', 'id': 'transcript_processed'}
     ]
 
 

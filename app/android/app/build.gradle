@@ -101,6 +101,14 @@ android {
                 storePassword keystoreProperties['storePassword']
             }
         }
+        debug {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storePassword keystoreProperties['storePassword']
+            }
+        }
     }
 
     buildTypes {
@@ -119,7 +127,7 @@ android {
         }
     }
 
-	ndkVersion System.getenv()["NDK_VERSION"] ?: "27.0.12077973"
+    ndkVersion System.getenv()["NDK_VERSION"] ?: "27.0.12077973"
 }
 
 flutter {

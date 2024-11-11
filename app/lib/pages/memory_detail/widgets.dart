@@ -498,7 +498,7 @@ class GetAppsWidgets extends StatelessWidget {
                                           ),
                                         ),
                                         title: Text(
-                                          app.name,
+                                          app.name.decodeString,
                                           maxLines: 1,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w600,
@@ -509,7 +509,7 @@ class GetAppsWidgets extends StatelessWidget {
                                         subtitle: Padding(
                                           padding: const EdgeInsets.only(top: 4.0),
                                           child: Text(
-                                            app.description,
+                                            app.description.decodeString,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(color: Colors.grey, fontSize: 14),
