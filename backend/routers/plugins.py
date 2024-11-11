@@ -138,6 +138,10 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data['approved'] = False
     data['name'] = data['name'].strip()
     data['id'] = data['name'].replace(' ', '-').lower()
+    data['id'] = data['id'].replace('/', '-')
+    data['id'] = data['id'].replace('\\', '-')
+    data['id'] = data['id'].replace(',', '-')
+    data['id'] = data['id'].replace("'", '')
     data['uid'] = uid
     if 'private' in data and data['private']:
         data['id'] = data['id'] + '-private'
