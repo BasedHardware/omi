@@ -1,4 +1,5 @@
 import os
+import random
 from datetime import datetime, timezone
 from typing import List
 
@@ -8,12 +9,12 @@ from models.plugin import UsageHistoryType
 from utils.other.storage import storage_client
 from ._client import db
 
-
 # *****************************
 # ********** CRUD *************
 # *****************************
 
 omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
+
 
 def record_plugin_usage(
         uid: str, plugin_id: str, usage_type: UsageHistoryType, memory_id: str = None, message_id: str = None,
@@ -59,27 +60,6 @@ def add_private_plugin(plugin_data: dict, uid: str):
     plugin_ref.add(plugin_data, plugin_data['id'])
 
 
-def change_plugin_approval_status(plugin_id: str, approved: bool):
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
-    plugin_ref.update({'approved': approved})
-
-
-def change_plugin_visibility_db(plugin_id: str, private: bool, was_public: bool, uid: str):
-    if was_public and private:  # public -> private
-        plugin_ref = db.collection('plugins_data').document(plugin_id)
-        plugin = plugin_ref.get().to_dict()
-        plugin_ref.delete()
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-        plugin['private'] = private
-        plugin_ref.set(plugin)
-    elif not was_public and not private:  # private -> public
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-        plugin = plugin_ref.get().to_dict()
-        plugin_ref.delete()
-        plugin_ref = db.collection('plugins_data').document(plugin_id)
-        plugin_ref.set(plugin)
-
-
 def get_private_plugins_db(uid: str) -> List:
     private_plugins = db.collection('users').document(uid).collection('plugins').stream()
     data = [doc.to_dict() for doc in private_plugins]
@@ -112,7 +92,6 @@ def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
     return plugin_ref.get().exists
 
 
-
 def add_plugin_from_community_json(plugin_data: dict):
     img = requests.get("https://raw.githubusercontent.com/BasedHardware/Omi/main/" + plugin_data['image'], stream=True)
     bucket = storage_client.bucket(omi_plugins_bucket)
@@ -122,6 +101,7 @@ def add_plugin_from_community_json(plugin_data: dict):
     plugin_data['image'] = f'https://storage.googleapis.com/{omi_plugins_bucket}/{path}'
     plugin_data['private'] = False
     plugin_data['approved'] = True
+    plugin_data['status'] = 'approved'
     if "external_integration" in plugin_data['capabilities']:
         plugin_data['external_integration'][
             'setup_instructions_file_path'] = "https://raw.githubusercontent.com/BasedHardware/Omi/main/" + \

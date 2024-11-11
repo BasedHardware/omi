@@ -8,6 +8,7 @@ from ._client import db
 def save_token(uid: str, data: dict):
     db.collection('users').document(uid).set(data, merge=True)
 
+
 def get_user_time_zone(uid: str):
     user_ref = db.collection('users').document(uid)
     user_ref = user_ref.get()
@@ -15,6 +16,7 @@ def get_user_time_zone(uid: str):
         user_ref = user_ref.to_dict()
         return user_ref.get('time_zone')
     return None
+
 
 def get_token_only(uid: str):
     user_ref = db.collection('users').document(uid)
@@ -24,8 +26,9 @@ def get_token_only(uid: str):
         return user_ref.get('fcm_token')
     return None
 
+
 def remove_token(token: str):
-    token = db.collection('users'). where(filter=FieldFilter('fcm_token', '==', token)).get()
+    token = db.collection('users').where(filter=FieldFilter('fcm_token', '==', token)).get()
     for doc in token:
         doc.reference.update({'fcm_token': DELETE_FIELD, 'time_zone': DELETE_FIELD})
 
@@ -38,8 +41,10 @@ def get_token(uid: str):
         return user_ref.get('fcm_token'), user_ref.get('time_zone')
     return None
 
+
 async def get_users_token_in_timezones(timezones: list[str]):
     return await get_users_in_timezones(timezones, 'fcm_token')
+
 
 async def get_users_id_in_timezones(timezones: list[str]):
     return await get_users_in_timezones(timezones, 'id')
@@ -58,7 +63,7 @@ async def get_users_in_timezones(timezones: list[str], filter: str):
             try:
                 query = users_ref.where(filter=FieldFilter('time_zone', 'in', chunk))
                 for doc in query.stream():
-                    if(filter == 'fcm_token'):
+                    if (filter == 'fcm_token'):
                         token = doc.get('fcm_token')
                     else:
                         token = doc.id, doc.get('fcm_token')

@@ -3,22 +3,22 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AppSetupInstructions extends StatefulWidget {
+class MarkdownViewer extends StatefulWidget {
   final String markdown;
-
-  const AppSetupInstructions({super.key, required this.markdown});
+  final String title;
+  const MarkdownViewer({super.key, required this.markdown, required this.title});
 
   @override
-  State<AppSetupInstructions> createState() => _AppSetupInstructionsState();
+  State<MarkdownViewer> createState() => _MarkdownViewerState();
 }
 
-class _AppSetupInstructionsState extends State<AppSetupInstructions> {
+class _MarkdownViewerState extends State<MarkdownViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: const Text('Setup Instructions'),
+        title: Text(widget.title),
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: ListView(
