@@ -13,48 +13,27 @@ class CapabilitiesChipsWidget extends StatelessWidget {
         shrinkWrap: true,
         scrollDirection: Axis.horizontal,
         children: [
-          ChoiceChip(
-            label: const Text('Chat'),
-            selected: provider.isCapabilitySelected('chat'),
-            backgroundColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            showCheckmark: true,
-            onSelected: (bool selected) {
-              provider.addOrRemoveCapability('chat');
-            },
-          ),
-          const SizedBox(
-            width: 12,
-          ),
-          ChoiceChip(
-            label: const Text('Memories'),
-            selected: provider.isCapabilitySelected('memories'),
-            showCheckmark: true,
-            backgroundColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            onSelected: (bool selected) {
-              provider.addOrRemoveCapability('memories');
-            },
-          ),
-          const SizedBox(
-            width: 12,
-          ),
-          ChoiceChip(
-            label: const Text('External Integration'),
-            selected: provider.isCapabilitySelected('external_integration'),
-            showCheckmark: true,
-            backgroundColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            onSelected: (bool selected) {
-              provider.addOrRemoveCapability('external_integration');
-            },
-          ),
+          provider.capabilities.isEmpty
+              ? const SizedBox.shrink()
+              : Wrap(
+                  spacing: 12,
+                  children: provider.capabilities
+                      .map(
+                        (capability) => ChoiceChip(
+                          label: Text(capability.title),
+                          selected: provider.isCapabilitySelected(capability),
+                          showCheckmark: true,
+                          backgroundColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onSelected: (bool selected) {
+                            provider.addOrRemoveCapability(capability);
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
         ],
       );
     });

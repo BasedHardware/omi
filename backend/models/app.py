@@ -5,7 +5,7 @@ from typing import List, Optional, Set
 from pydantic import BaseModel
 
 
-class PluginReview(BaseModel):
+class AppReview(BaseModel):
     uid: str
     rated_at: datetime
     score: float
@@ -31,24 +31,33 @@ class ExternalIntegration(BaseModel):
     webhook_url: str
     setup_completed_url: Optional[str] = None
     setup_instructions_file_path: str
+    is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
     # setup_instructions_markdown: str = ''
+
 
 class ProactiveNotification(BaseModel):
     scopes: Set[str]
 
-class Plugin(BaseModel):
+
+class App(BaseModel):
     id: str
     name: str
+    uid: Optional[str] = None
+    private: bool = False
+    approved: bool = False
+    status: str = 'approved'
+    category: str
+    email: Optional[str] = None
     author: str
     description: str
-    image: str  # TODO: return image_url: str with the whole repo + path
+    image: str
     capabilities: Set[str]
     memory_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
     external_integration: Optional[ExternalIntegration] = None
-    reviews: List[PluginReview] = []
-    user_review: Optional[PluginReview] = None
+    reviews: List[AppReview] = []
+    user_review: Optional[AppReview] = None
     rating_avg: Optional[float] = 0
     rating_count: int = 0
     enabled: bool = False
@@ -79,7 +88,7 @@ class Plugin(BaseModel):
     def triggers_realtime(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
 
-    def fitler_proactive_notification_scopes(self, params: [str]) -> []:
+    def filter_proactive_notification_scopes(self, params: [str]) -> []:
         if not self.proactive_notification:
             return []
         return [param for param in params if param in self.proactive_notification.scopes]

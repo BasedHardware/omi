@@ -233,11 +233,14 @@ def _create_user_speech_profile(uid: str):
 
 
 def _remove_user_speech_profile(uid: str):
-    result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
-    completed = result.returncode == 0
-    print('_remove_user_speech_profile successful:', completed)
-    return completed
-
+    try:
+        result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
+        completed = result.returncode == 0
+        print('_remove_user_speech_profile successful:', completed)
+        return completed
+    except Exception as e:
+        print(f'_remove_user_speech_profile failed: {e}')
+        return False
 
 @timeit
 def create_user_speech_profile(uid: str):
