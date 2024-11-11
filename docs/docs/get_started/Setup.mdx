@@ -6,18 +6,48 @@ description: 'How to set up your own Omi app.'
 Follow these steps to get started with your Omi. Don't want to bother with code? Use our official version
 on [Apple](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)/[Google](https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US) store
 
-### Prerequisites
+#### Prerequisites
 
 Before starting, make sure you have the following installed:
 
-* Flutter SDK
-* Dart SDK
-* Xcode (for iOS)
-* Android Studio (for Android)
-* CocoaPods (for iOS dependencies)
-* NDK 26.3.11579264 or above (to build Opus for ARM Devices)
+* [Flutter SDK](https://docs.flutter.dev/get-started/install?_gl=1*15npmc9*_gcl_aw*R0NMLjE3MzEyNzExNTAuQ2owS0NRaUEwTUc1QmhEMUFSSXNBRWNadHdTR2U5Ujc5bUNNVEk0eDBlVFlMRy1nY2NpT3hSV3JkUUlaaDVjVEc5NU4zTm9BT3JGendja2FBdk9oRUFMd193Y0I.*_gcl_dc*R0NMLjE3MzEyNzExNTAuQ2owS0NRaUEwTUc1QmhEMUFSSXNBRWNadHdTR2U5Ujc5bUNNVEk0eDBlVFlMRy1nY2NpT3hSV3JkUUlaaDVjVEc5NU4zTm9BT3JGendja2FBdk9oRUFMd193Y0I.*_up*MQ..*_ga*NzUzOTkzMzIyLjE3MjgzMzc5MDY.*_ga_04YGWK0175*MTczMTI3MDU5MC40LjEuMTczMTI3MTE1My4wLjAuMA..)
+* [Dart SDK](https://dart.dev/get-dart)
+* [Xcode](https://developer.apple.com/xcode/) (for iOS)
+* [Android Studio](https://developer.android.com/studio) (for Android)
+* [CocoaPods](https://cocoapods.org/) (for iOS dependencies)
+* [NDK 26.3.11579264](https://developer.android.com/ndk/downloads) or above (to build Opus for ARM Devices)
 
-## Setup Instructions
+### Build the app automatically
+
+Building the app automatically means setting up your environment to use Omi's Development backend. That makes it much easier for you to get started - with just one command!
+
+This is the best way to get started, make changes to the app, and build apps on Omi.
+
+Alternatively, you can [build the app manually (see below)](#build-the-app-manually) - which allows you to use your own backend, etc.
+
+**1. Navigate to the `app` directory:**
+```
+cd app
+```
+
+**2. Build the app for iOS:**
+```
+bash setup.sh ios
+```
+
+**3. Build the app for Android:**
+```
+bash setup.sh android
+```
+
+**4. Run app in simulator:**
+
+Now that we've built the app, we can run it in the simulator.
+Open the app in Xcode (open folder `app/ios`) or Android Studio (open folder `app/android`) - then just hit the run button!
+
+### Build the app manually:
+
+Setup manually is useful if you want to build the app to use your own backend. 
 
 ### 1. Upgrade Flutter
    Before proceeding, make sure your Flutter SDK is up to date:
@@ -28,6 +58,7 @@ Before starting, make sure you have the following installed:
 ### 2. Get Flutter Dependencies
    From within `app` directory, install flutter packages:
    ```
+   cd app
    flutter pub get
    ```
 
