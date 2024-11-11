@@ -41,8 +41,10 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    data['id'] = data['name'].replace(' ', '-').lower()
     data['uid'] = uid
+    data['id'] = data['name'].replace(' ', '-').lower()
+    data['id'] = data['id'].replace('/', '-')
+    data['id'] = data['id'].replace('\\', '-')
     data['id'] = data['id'].replace(',', '-')
     data['id'] = data['id'].replace("'", '')
     if 'private' in data and data['private']:
