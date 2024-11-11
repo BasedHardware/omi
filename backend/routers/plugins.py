@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from datetime import datetime, timezone
 from collections import defaultdict
 from typing import List
 
@@ -55,12 +56,12 @@ def get_plugins(uid: str):
 
 
 @router.get('/v1/plugins', tags=['v1'])
-def get_plugins(uid: str):
+def get_plugins_v1(uid: str):
     return get_plugins_data(uid, include_reviews=True)
 
 
 @router.get('/v2/plugins', tags=['v1'], response_model=List[Plugin])
-def get_plugins(uid: str = Depends(auth.get_current_user_uid)):
+def get_plugins_v2(uid: str = Depends(auth.get_current_user_uid)):
     return get_plugins_data(uid, include_reviews=True)
 
 
@@ -151,6 +152,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
         f.write(file.file.read())
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
+    data['created_at'] = datetime.now(timezone.utc)
     if data.get('private', True):
         print("Adding private plugin")
         add_private_plugin(data, data['uid'])
