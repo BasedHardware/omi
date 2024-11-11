@@ -127,7 +127,7 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
     return InitialMessageWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString);
+    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, createdAt: message.createdAt);
   }
 }
 
@@ -272,13 +272,30 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
-  const NormalMessageWidget({super.key, required this.showTypingIndicator, required this.messageText});
+  final DateTime createdAt;
+
+  const NormalMessageWidget({
+    super.key, 
+    required this.showTypingIndicator,
+    required this.messageText,
+    required this.createdAt,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
+          child: Text(
+            formatChatTimestamp(createdAt),
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ),
         SelectionArea(
           child: showTypingIndicator
               ? const Row(
@@ -293,11 +310,14 @@ class NormalMessageWidget extends StatelessWidget {
                 )
               : AutoSizeText(
                   messageText,
-                  // : utf8.decode(widget.message.text.codeUnits),
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+                  style: TextStyle(
+                    fontSize: 15.0,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade300
+                  ),
                 ),
         ),
-        CopyButton(messageText: messageText),
+        if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
     );
   }
