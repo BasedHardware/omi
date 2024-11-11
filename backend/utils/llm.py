@@ -379,6 +379,27 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
+def answer_omi_question(messages: List[Message], context: str) -> str:
+    conversation_history = Message.get_messages_as_string(
+        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+    )
+
+    prompt = f"""
+    You are an assistant for answering questions about the app Omi, also known as Friend.
+    Continue the conversation, answering the question based on the context provided.
+    
+    Context:
+    ```
+    {context}
+    ```
+
+    Conversation History:
+    {conversation_history}
+
+    Answer:
+    """.replace('    ', '').strip()
+    return llm_mini.invoke(prompt).content
+
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
