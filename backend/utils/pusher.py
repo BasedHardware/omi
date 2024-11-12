@@ -1,25 +1,5 @@
-import uuid
 import os
-from datetime import datetime, timezone, timedelta
-from enum import Enum
-
-import opuslib
-import webrtcvad
-from fastapi import APIRouter
-from fastapi.websockets import WebSocketDisconnect, WebSocket
-from pydub import AudioSegment
-from starlette.websockets import WebSocketState
-
-import database.memories as memories_db
-from database import redis_db
-from database.redis_db import get_cached_user_geolocation
-from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
-from models.message_event import MemoryEvent, MessageEvent
-from utils.memories.location import get_google_maps_location
-from utils.memories.process_memory import process_memory
-from utils.stt.streaming import *
-from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
-    get_audio_bytes_webhook_seconds
+import websockets
 
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
