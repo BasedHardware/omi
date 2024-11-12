@@ -38,59 +38,6 @@ def get_plugin_usage_history(plugin_id: str):
     return [doc.to_dict() for doc in usage]
 
 
-# def get_plugin_by_id_db(plugin_id: str, uid: str):
-#     if 'private' in plugin_id:
-#         plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-#     else:
-#         plugin_ref = db.collection('plugins_data').document(plugin_id)
-#     doc = plugin_ref.get()
-#     if doc.exists:
-#         return doc.to_dict()
-#     return None
-
-
-# def add_public_plugin(plugin_data: dict):
-#     plugin_ref = db.collection('plugins_data')
-#     plugin_ref.add(plugin_data, plugin_data['id'])
-#
-#
-# def add_private_plugin(plugin_data: dict, uid: str):
-#     plugin_ref = db.collection('users').document(uid).collection('plugins')
-#     plugin_ref.add(plugin_data, plugin_data['id'])
-
-
-# def get_private_plugins_db(uid: str) -> List:
-#     private_plugins = db.collection('users').document(uid).collection('plugins').stream()
-#     data = [doc.to_dict() for doc in private_plugins]
-#     return data
-
-
-# def get_unapproved_public_plugins_db() -> List:
-#     public_plugins = db.collection('plugins_data').where('approved', '==', False).stream()
-#     return [doc.to_dict() for doc in public_plugins]
-
-
-# def get_public_plugins_db(uid: str) -> List:
-#     public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
-#     data = [doc.to_dict() for doc in public_plugins]
-#
-#     # Include the doc if it is not approved but uid matches
-#     unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
-#     data.extend([doc.to_dict() for doc in unapproved])
-#
-#     return data
-
-
-# def public_plugin_id_exists_db(plugin_id: str) -> bool:
-#     plugin_ref = db.collection('plugins_data').document(plugin_id)
-#     return plugin_ref.get().exists
-#
-#
-# def private_plugin_id_exists_db(plugin_id: str, uid: str) -> bool:
-#     plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-#     return plugin_ref.get().exists
-
-
 def add_plugin_from_community_json(plugin_data: dict):
     img = requests.get("https://raw.githubusercontent.com/BasedHardware/Omi/main/" + plugin_data['image'], stream=True)
     bucket = storage_client.bucket(omi_plugins_bucket)
