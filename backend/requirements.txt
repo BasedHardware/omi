@@ -179,6 +179,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-multipart==0.0.9
 python-slugify==8.0.4
+python-ulid==3.0.0
 pytorch-lightning==2.4.0
 pytorch-metric-learning==2.6.0
 pytz==2024.1
