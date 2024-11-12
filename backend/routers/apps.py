@@ -5,10 +5,12 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from slugify import slugify
 
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
-    change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db
+    change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db, get_incremented_public_app_id, \
+    get_incremented_private_app_id, update_all_public_apps
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count
@@ -41,19 +43,23 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    data['uid'] = uid
-    data['id'] = data['name'].replace(' ', '-').lower()
-    data['id'] = data['id'].replace('/', '-')
-    data['id'] = data['id'].replace('\\', '-')
-    data['id'] = data['id'].replace(',', '-')
-    data['id'] = data['id'].replace("'", '')
+
+    new_app_id = slugify(data['name'])
+
+    if len(new_app_id) < 5:
+        new_app_id = new_app_id + ''.join(random.choices('0123456789', k=5 - len(new_app_id)))
+
+    if len(new_app_id) > 128:
+        new_app_id = new_app_id[:128]
+
     if 'private' in data and data['private']:
-        data['id'] = data['id'] + '-private'
-        if private_app_id_exists_db(data['id'], uid):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        new_app_id = new_app_id + '-private'
+        if private_app_id_exists_db(new_app_id, uid):
+            new_app_id = get_incremented_private_app_id(new_app_id, uid)
     else:
         if public_app_id_exists_db(data['id']):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+            new_app_id = get_incremented_public_app_id(new_app_id)
+    data['id'] = new_app_id
     if external_integration := data.get('external_integration'):
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):

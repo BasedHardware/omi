@@ -8,8 +8,10 @@ from typing import List
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
+from slugify import slugify
 
-from database.apps import get_app_by_id_db
+from database.apps import get_app_by_id_db, private_app_id_exists_db, get_incremented_private_app_id, \
+    public_app_id_exists_db, get_incremented_public_app_id
 from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
     public_plugin_id_exists_db, private_plugin_id_exists_db, get_plugin_by_id_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
@@ -137,19 +139,22 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data = json.loads(plugin_data)
     data['approved'] = False
     data['name'] = data['name'].strip()
-    data['id'] = data['name'].replace(' ', '-').lower()
-    data['id'] = data['id'].replace('/', '-')
-    data['id'] = data['id'].replace('\\', '-')
-    data['id'] = data['id'].replace(',', '-')
-    data['id'] = data['id'].replace("'", '')
-    data['uid'] = uid
+    new_app_id = slugify(data['name'])
+
+    if len(new_app_id) < 5:
+        new_app_id = new_app_id + ''.join(random.choices('0123456789', k=5 - len(new_app_id)))
+
+    if len(new_app_id) > 128:
+        new_app_id = new_app_id[:128]
+
     if 'private' in data and data['private']:
-        data['id'] = data['id'] + '-private'
-        if private_plugin_id_exists_db(data['id'], uid):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        new_app_id = new_app_id + '-private'
+        if private_app_id_exists_db(new_app_id, uid):
+            new_app_id = get_incremented_private_app_id(new_app_id, uid)
     else:
-        if public_plugin_id_exists_db(data['id']):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+        if public_app_id_exists_db(data['id']):
+            new_app_id = get_incremented_public_app_id(new_app_id)
+    data['id'] = new_app_id
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
