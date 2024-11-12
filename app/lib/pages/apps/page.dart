@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
@@ -13,14 +14,173 @@ import 'package:provider/provider.dart';
 
 class AppsPage extends StatefulWidget {
   final bool filterChatOnly;
-
   const AppsPage({super.key, this.filterChatOnly = false});
 
   @override
   State<AppsPage> createState() => _AppsPageState();
 }
 
-class _AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
+class _AppsPageState extends State<AppsPage> {
+  @override
+  void initState() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AddAppProvider>().getCategories();
+    });
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      appBar: null,
+      body: DefaultTabController(
+        length: 2,
+        initialIndex: 0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                TabBar(
+                  indicatorSize: TabBarIndicatorSize.label,
+                  isScrollable: true,
+                  padding: EdgeInsets.zero,
+                  indicatorPadding: EdgeInsets.zero,
+                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                  indicatorColor: Colors.white,
+                  tabs: const [
+                    Tab(text: 'Explore & Install'),
+                    Tab(text: 'Manage & Create'),
+                  ],
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.search,
+                  color: Colors.white,
+                ),
+                const SizedBox(
+                  width: 12,
+                ),
+              ],
+            ),
+            Expanded(
+                child: TabBarView(
+              children: [
+                // For You
+                CustomScrollView(
+                  slivers: [
+                    const SliverToBoxAdapter(child: SizedBox(height: 18)),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 40,
+                        child: Selector<AddAppProvider, List<Category>>(
+                          selector: (ctx, provider) => provider.categories,
+                          builder: (ctx, categories, child) {
+                            return ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemBuilder: (ctx, idx) {
+                                  if (idx == 0) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(left: 8.0),
+                                      child: ChoiceChip(
+                                        label: const Row(
+                                          children: [
+                                            Icon(
+                                              Icons.filter_list_alt,
+                                              size: 15,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text('Filter'),
+                                          ],
+                                        ),
+                                        selected: false,
+                                        showCheckmark: true,
+                                        backgroundColor: Colors.transparent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        onSelected: (bool selected) {},
+                                      ),
+                                    );
+                                  }
+                                  return ChoiceChip(
+                                    label: Text(categories[idx].title),
+                                    selected: false,
+                                    showCheckmark: true,
+                                    backgroundColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    onSelected: (bool selected) {},
+                                  );
+                                },
+                                separatorBuilder: (ctx, idx) {
+                                  return const SizedBox(
+                                    width: 10,
+                                  );
+                                },
+                                itemCount: categories.length + 1);
+                          },
+                        ),
+                      ),
+                    ),
+                    Selector<AppProvider, List<App>>(
+                      selector: (context, provider) => provider.apps.where((p) => p.worksExternally()).toList(),
+                      builder: (context, memoryIntegrationApps, child) {
+                        return SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              return AppListItem(
+                                app: memoryIntegrationApps[index],
+                                index: index,
+                              );
+                            },
+                            childCount: memoryIntegrationApps.length,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                // Memories
+                Selector<AppProvider, List<App>>(
+                  selector: (context, provider) => provider.apps.where((p) => p.worksWithMemories()).toList(),
+                  builder: (context, memoryPromptApps, child) {
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      itemBuilder: (ctx, index) {
+                        return AppListItem(
+                          app: memoryPromptApps[index],
+                          index: index,
+                        );
+                      },
+                      separatorBuilder: (ctx, index) {
+                        return const SizedBox();
+                      },
+                      itemCount: memoryPromptApps.length,
+                    );
+                  },
+                ),
+              ],
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AppsPage2 extends StatefulWidget {
+  final bool filterChatOnly;
+
+  const AppsPage2({super.key, this.filterChatOnly = false});
+
+  @override
+  State<AppsPage2> createState() => _AppsPage2State();
+}
+
+class _AppsPage2State extends State<AppsPage2> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
