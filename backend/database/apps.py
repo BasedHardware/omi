@@ -27,12 +27,12 @@ def get_private_apps_db(uid: str) -> List:
 
 
 def get_unapproved_public_apps_db() -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', False).stream()
+    public_plugins = db.collection('plugins_data').where('approved', '==', False).where('private','==', False).stream()
     return [doc.to_dict() for doc in public_plugins]
 
 
 def get_public_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
+    public_plugins = db.collection('plugins_data').where('approved', '==', True).where('private','==',False).stream()
     data = [doc.to_dict() for doc in public_plugins]
 
     # Include the doc if it is not approved but uid matches
