@@ -9,7 +9,7 @@ from database.apps import get_app_by_id_db
 from database.plugins import record_plugin_usage
 from models.app import App
 from models.chat import Message, SendMessageRequest, MessageSender
-from models.plugin import UsageHistoryType, Plugin
+from models.plugin import UsageHistoryType
 from models.memory import Memory
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
@@ -39,7 +39,7 @@ def send_message(
     )
     chat_db.add_message(uid, message.dict())
 
-    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = get_app_by_id_db(plugin_id)
     plugin = App(**plugin) if plugin else None
     
     plugin_id = plugin.id if plugin else None
@@ -82,7 +82,7 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = get_app_by_id_db(plugin_id)
     plugin = App(**plugin) if plugin else None
     text = initial_chat_message(uid, plugin)
 

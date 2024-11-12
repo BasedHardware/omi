@@ -1,8 +1,7 @@
 from typing import List
 
-from database.apps import get_private_apps_db, get_public_apps_db, get_public_unapproved_apps_db, \
+from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db
-from database.plugins import get_private_plugins_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache
 from models.app import App
