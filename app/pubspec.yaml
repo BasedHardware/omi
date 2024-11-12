@@ -100,6 +100,11 @@ dependency_overrides:
   http: ^1.2.1
   uuid: ^4.4.0
   js: ^0.7.1
+  opus_flutter_ios:
+    git:
+      url: https://github.com/mdmohsin7/opus_flutter.git
+      path: opus_flutter_ios
+      ref: dev
   opus_flutter_android:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
