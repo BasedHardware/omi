@@ -70,6 +70,17 @@ def private_app_id_exists_db(app_id: str, uid: str) -> bool:
     return app_ref.get().exists
 
 
+def get_incremented_public_app_id(app_id: str):
+    apps_count = db.collection('plugins_data').count()
+    return f'{app_id}-{apps_count}'
+
+
+def get_incremented_private_app_id(app_id: str, uid: str):
+    apps_count = db.collection('users').document(uid).collection('plugins').count()
+    app_id = app_id.split('-private')[0]
+    return f'{app_id}-{apps_count}-private'
+
+
 def add_public_app(plugin_data: dict):
     plugin_ref = db.collection('plugins_data')
     plugin_ref.add(plugin_data, plugin_data['id'])
