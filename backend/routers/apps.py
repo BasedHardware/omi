@@ -10,7 +10,7 @@ from slugify import slugify
 from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
     get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
     change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db, get_incremented_public_app_id, \
-    get_incremented_private_app_id, update_all_public_apps
+    get_incremented_private_app_id
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count
@@ -57,7 +57,7 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         if private_app_id_exists_db(new_app_id, uid):
             new_app_id = get_incremented_private_app_id(new_app_id, uid)
     else:
-        if public_app_id_exists_db(data['id']):
+        if public_app_id_exists_db(new_app_id):
             new_app_id = get_incremented_public_app_id(new_app_id)
     data['id'] = new_app_id
     if external_integration := data.get('external_integration'):
