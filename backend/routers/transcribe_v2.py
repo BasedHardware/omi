@@ -297,6 +297,8 @@ async def _websocket_util(
         nonlocal websocket_active
 
         pusher_ws = None
+        pusher_connect_lock = asyncio.Lock()
+        pusher_connected = False
 
         # Transcript
         transcript_ws = None
@@ -309,6 +311,7 @@ async def _websocket_util(
         async def transcript_consume():
             nonlocal websocket_active
             nonlocal segment_buffers
+            nonlocal transcript_ws
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
                 if transcript_ws and len(segment_buffers) > 0:
@@ -321,6 +324,9 @@ async def _websocket_util(
                         await transcript_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
+                        transcript_ws = None
+                        pusher_connected = False
+                        await connect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
 
@@ -336,6 +342,7 @@ async def _websocket_util(
         async def audio_bytes_consume():
             nonlocal websocket_active
             nonlocal audio_buffers
+            nonlocal audio_bytes_ws
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
                 if audio_bytes_ws and len(audio_buffers) > 0:
@@ -348,6 +355,9 @@ async def _websocket_util(
                         await audio_bytes_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
+                        audio_bytes_ws = None
+                        pusher_connected = False
+                        await connect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
 
@@ -356,10 +366,20 @@ async def _websocket_util(
             nonlocal transcript_ws
             nonlocal audio_bytes_ws
             nonlocal audio_bytes_enabled
-            pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
-            transcript_ws = pusher_ws
-            if audio_bytes_enabled:
-                audio_bytes_ws = pusher_ws
+            nonlocal pusher_connected
+
+            with pusher_connect_lock:
+                if pusher_connected:
+                    return
+                try:
+                    pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
+                    pusher_connected = True
+
+                    transcript_ws = pusher_ws
+                    if audio_bytes_enabled:
+                        audio_bytes_ws = pusher_ws
+                except Exception as e:
+                    print(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
             await pusher_ws.close(code)
