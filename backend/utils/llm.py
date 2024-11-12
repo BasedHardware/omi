@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
@@ -264,8 +264,31 @@ def requires_context(messages: List[Message]) -> bool:
     except ValidationError:
         return False
 
+class IsAnOmiQuestion(BaseModel):
+    value: bool = Field(description="If the message is an Omi/Friend related question")
 
-# TODO: try query expansion
+def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
+    prompt = f'''
+    The user is using the chat functionality of an app known as Omi or Friend.
+    Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
+    
+    Questions like, 
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it"
+    - "Where do I get it"
+    - "How the chat works?"
+    - ...
+    
+    Conversation History:    
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
 
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
@@ -356,6 +379,27 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     print(prompt)
     return llm_mini.invoke(prompt).content
 
+
+def answer_omi_question(messages: List[Message], context: str) -> str:
+    conversation_history = Message.get_messages_as_string(
+        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+    )
+
+    prompt = f"""
+    You are an assistant for answering questions about the app Omi, also known as Friend.
+    Continue the conversation, answering the question based on the context provided.
+    
+    Context:
+    ```
+    {context}
+    ```
+
+    Conversation History:
+    {conversation_history}
+
+    Answer:
+    """.replace('    ', '').strip()
+    return llm_mini.invoke(prompt).content
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)

@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from datetime import datetime, timezone
 from typing import List
 import requests
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
@@ -66,6 +67,7 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         f.write(file.file.read())
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
+    data['created_at'] = datetime.now(timezone.utc)
     if data.get('private', True):
         print("Adding private app")
         add_private_app(data, data['uid'])
@@ -163,11 +165,11 @@ def get_plugin_capabilities():
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
-        ]},
-        {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
-            {'title': 'User Name', 'id': 'user_name'},
-            {'title': 'User Facts', 'id': 'user_facts'}
         ]}
+        # {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
+        #     {'title': 'User Name', 'id': 'user_name'},
+        #     {'title': 'User Facts', 'id': 'user_facts'}
+        # ]}
     ]
 
 
