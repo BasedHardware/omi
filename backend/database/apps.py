@@ -71,12 +71,14 @@ def private_app_id_exists_db(app_id: str, uid: str) -> bool:
 
 
 def get_incremented_public_app_id(app_id: str):
-    apps_count = db.collection('plugins_data').count()
+    res = db.collection('plugins_data').count().get()
+    apps_count = res[0][0].value
     return f'{app_id}-{apps_count}'
 
 
 def get_incremented_private_app_id(app_id: str, uid: str):
-    apps_count = db.collection('users').document(uid).collection('plugins').count()
+    res = db.collection('users').document(uid).collection('plugins').count().get()
+    apps_count = res[0][0].value
     app_id = app_id.split('-private')[0]
     return f'{app_id}-{apps_count}-private'
 
@@ -122,6 +124,8 @@ def change_app_visibility_db(app_id: str, private: bool, was_public: bool, uid: 
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
         new_plugin_id = f'{app_id}-private'
+        if private_app_id_exists_db(new_plugin_id, uid):
+            new_plugin_id = get_incremented_private_app_id(app_id, uid)
         plugin['id'] = new_plugin_id
         plugin['private'] = private
         plugin_ref = db.collection('users').document(uid).collection('plugins').document(new_plugin_id)
@@ -131,6 +135,8 @@ def change_app_visibility_db(app_id: str, private: bool, was_public: bool, uid: 
         plugin = plugin_ref.get().to_dict()
         plugin_ref.delete()
         new_plugin_id = app_id.split('-private')[0]
+        if public_app_id_exists_db(new_plugin_id):
+            new_plugin_id = get_incremented_public_app_id(app_id)
         plugin['id'] = new_plugin_id
         plugin['private'] = private
         if public_app_id_exists_db(new_plugin_id):
