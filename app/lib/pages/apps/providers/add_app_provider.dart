@@ -136,6 +136,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getCategories() async {
     categories = await getAppCategories();
+    appProvider!.categories = categories;
     notifyListeners();
   }
 
