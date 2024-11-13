@@ -11,12 +11,13 @@ from fastapi.params import File, Form
 from slugify import slugify
 from ulid import ULID
 
-from database.apps import get_app_by_id_db, add_app_to_db
+from database.apps import add_app_to_db
 from database.plugins import get_plugin_usage_history
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.app import App
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
+from utils.apps import get_available_app_by_id
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
 from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
@@ -26,8 +27,8 @@ router = APIRouter()
 
 @router.post('/v1/plugins/enable')
 def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_app_by_id_db(plugin_id)
-    plugin = App(**plugin)
+    plugin = get_available_app_by_id(plugin_id, uid)
+    plugin = App(**plugin) if plugin else None
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
@@ -42,8 +43,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
 
 @router.post('/v1/plugins/disable')
 def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_app_by_id_db(plugin_id)
-    plugin = App(**plugin)
+    plugin = get_available_app_by_id(plugin_id, uid)
+    plugin = App(**plugin) if plugin else None
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
     disable_plugin(uid, plugin_id)
@@ -71,7 +72,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = get_app_by_id_db(plugin_id)
+    plugin = get_available_app_by_id(plugin_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
 

@@ -5,12 +5,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import database.chat as chat_db
-from database.apps import get_app_by_id_db
 from database.plugins import record_plugin_usage
 from models.app import App
 from models.chat import Message, SendMessageRequest, MessageSender
 from models.plugin import UsageHistoryType
 from models.memory import Memory
+from utils.apps import get_available_app_by_id
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat
@@ -39,7 +39,7 @@ def send_message(
     )
     chat_db.add_message(uid, message.dict())
 
-    plugin = get_app_by_id_db(plugin_id)
+    plugin = get_available_app_by_id(plugin_id, uid)
     plugin = App(**plugin) if plugin else None
     
     plugin_id = plugin.id if plugin else None
@@ -82,7 +82,7 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_app_by_id_db(plugin_id)
+    plugin = get_available_app_by_id(plugin_id, uid)
     plugin = App(**plugin) if plugin else None
     text = initial_chat_message(uid, plugin)
 
