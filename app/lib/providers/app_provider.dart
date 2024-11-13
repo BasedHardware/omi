@@ -24,6 +24,73 @@ class AppProvider extends BaseProvider {
 
   bool isLoading = false;
 
+  List<Category> categories = [];
+  Map<String, String> filters = {};
+  List<App> filteredApps = [];
+
+  void addOrRemoveFilter(String filter, String filterGroup) {
+    if (filters.containsKey(filterGroup)) {
+      filters[filterGroup] = filter;
+    } else {
+      filters.addAll({filterGroup: filter});
+    }
+    notifyListeners();
+  }
+
+  bool isFilterSelected(String filter, String filterGroup) {
+    return filters.containsKey(filterGroup) && filters[filterGroup] == filter;
+  }
+
+  void clearFilters() {
+    filters.clear();
+    notifyListeners();
+  }
+
+  void removeFilter(String filterGroup) {
+    filters.remove(filterGroup);
+    notifyListeners();
+  }
+
+  bool isFilterActive() {
+    return filters.isNotEmpty;
+  }
+
+  void filterApps() {
+    if (!isFilterActive()) {
+      filteredApps = apps;
+      return;
+    }
+    filteredApps = apps;
+    filters.forEach((key, value) {
+      switch (key) {
+        case 'Sort':
+          if (value == 'A-Z') {
+            filteredApps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          } else if (value == 'Z-A') {
+            filteredApps.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          } else if (value == 'Highest Rating') {
+            filteredApps.sort((a, b) => (b.ratingAvg ?? 0.0).compareTo(a.ratingAvg ?? 0.0));
+          } else if (value == 'Lowest Rating') {
+            filteredApps.sort((a, b) => (a.ratingAvg ?? 0.0).compareTo(b.ratingAvg ?? 0.0));
+          }
+          break;
+        case 'Category':
+          filteredApps = filteredApps.where((app) => app.category == value).toList();
+          break;
+        case 'Rating':
+          value = value.replaceAll('+', '');
+          filteredApps = filteredApps.where((app) => (app.ratingAvg ?? 0.0) >= double.parse(value)).toList();
+          break;
+        case 'Capabilities':
+          filteredApps = filteredApps.where((app) => app.capabilities.contains(value)).toList();
+          break;
+        default:
+          break;
+      }
+    });
+    notifyListeners();
+  }
+
   void setIsLoading(bool value) {
     isLoading = value;
     notifyListeners();
