@@ -15,6 +15,7 @@ import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
@@ -27,7 +28,7 @@ class AIMessage extends StatefulWidget {
   final bool displayOptions;
   final App? appSender;
   final Function(ServerMemory) updateMemory;
-  final bool isMostRecent;
+  final Function(int) setMessageNps;
 
   const AIMessage({
     super.key,
@@ -35,9 +36,9 @@ class AIMessage extends StatefulWidget {
     required this.sendMessage,
     required this.displayOptions,
     required this.updateMemory,
+    required this.setMessageNps,
     this.appSender,
     this.showTypingIndicator = false,
-    this.isMostRecent = false,
   });
 
   @override
@@ -105,6 +106,7 @@ class _AIMessageState extends State<AIMessage> {
                 widget.displayOptions,
                 widget.appSender,
                 widget.updateMemory,
+                widget.setMessageNps,
               ),
             ],
           ),
@@ -114,23 +116,40 @@ class _AIMessageState extends State<AIMessage> {
   }
 }
 
-Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, bool showTypingIndicator,
-    bool displayOptions, App? appSender, Function(ServerMemory) updateMemory) {
+Widget buildMessageWidget(
+  ServerMessage message,
+  Function(String) sendMessage,
+  bool showTypingIndicator,
+  bool displayOptions,
+  App? appSender,
+  Function(ServerMemory) updateMemory,
+  Function(int) sendMessageNps,
+) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
       messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateMemory: updateMemory,
+      message: message,
+      setMessageNps: sendMessageNps,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
+      showTypingIndicator: showTypingIndicator,
+      messageText: message.text.decodeString,
+      sendMessage: sendMessage,
+    );
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString);
+    return NormalMessageWidget(
+      showTypingIndicator: showTypingIndicator,
+      messageText: message.text.decodeString,
+      message: message,
+      setMessageNps: sendMessageNps,
+    );
   }
 }
 
@@ -157,6 +176,35 @@ Widget _getMarkdownWidget(BuildContext context, String content) {
       ),
     ),
     data: content,
+  );
+}
+
+Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+  if (!message.askForNps) return const SizedBox();
+
+  return Padding(
+    padding: const EdgeInsetsDirectional.only(top: 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade300)),
+        IconButton(
+          onPressed: () {
+            setMessageNps(0);
+            AppSnackbar.showSnackbar('Thank you for your feedback!');
+          },
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+        ),
+        IconButton(
+          onPressed: () {
+            setMessageNps(1);
+            AppSnackbar.showSnackbar('Thank you for your feedback!');
+          },
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+        ),
+      ],
+    ),
   );
 }
 
@@ -303,8 +351,16 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
+  final ServerMessage message;
+  final Function(int) setMessageNps;
 
-  const NormalMessageWidget({super.key, required this.showTypingIndicator, required this.messageText});
+  const NormalMessageWidget({
+    super.key,
+    required this.showTypingIndicator,
+    required this.messageText,
+    required this.message,
+    required this.setMessageNps,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +386,7 @@ class NormalMessageWidget extends StatelessWidget {
           //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
           //       ),
         ),
+        _getNpsWidget(context, message, setMessageNps),
         CopyButton(messageText: messageText),
       ],
     );
@@ -341,13 +398,18 @@ class MemoriesMessageWidget extends StatefulWidget {
   final List<MessageMemory> messageMemories;
   final String messageText;
   final Function(ServerMemory) updateMemory;
+  final ServerMessage message;
+  final Function(int) setMessageNps;
 
-  const MemoriesMessageWidget(
-      {super.key,
-      required this.showTypingIndicator,
-      required this.messageMemories,
-      required this.messageText,
-      required this.updateMemory});
+  const MemoriesMessageWidget({
+    super.key,
+    required this.showTypingIndicator,
+    required this.messageMemories,
+    required this.messageText,
+    required this.updateMemory,
+    required this.message,
+    required this.setMessageNps,
+  });
 
   @override
   State<MemoriesMessageWidget> createState() => _MemoriesMessageWidgetState();
@@ -483,6 +545,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             ),
           ),
         ],
+        _getNpsWidget(context, widget.message, widget.setMessageNps),
       ],
     );
   }

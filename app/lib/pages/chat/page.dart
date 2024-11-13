@@ -202,6 +202,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 itemBuilder: (context, chatIndex) {
                                   final message = provider.messages[chatIndex];
                                   double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
+                                  if (chatIndex != 0) message.askForNps = false;
+
                                   double bottomPadding = chatIndex == 0
                                       ? Platform.isAndroid
                                           ? 200
@@ -221,7 +223,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
                                             },
-                                            isMostRecent: chatIndex == 0,
+                                            setMessageNps: (int value) {
+                                              provider.setMessageNps(message, value);
+                                            },
                                           )
                                         : HumanMessage(message: message),
                                   );
