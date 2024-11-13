@@ -433,7 +433,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     ```
     Answer:
     """.replace('    ', '').strip()
-    print('QA Using context:', context)
+    # print('qa_rag prompt', prompt)
     return llm_mini.invoke(prompt).content
 
 
