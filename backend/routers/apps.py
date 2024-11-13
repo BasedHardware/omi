@@ -165,11 +165,11 @@ def get_plugin_capabilities():
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ]},
+        {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
+            {'title': 'User Name', 'id': 'user_name'},
+            {'title': 'User Facts', 'id': 'user_facts'}
         ]}
-        # {'title': 'Proactive Notification', 'id': 'proactive_notification', 'scopes': [
-        #     {'title': 'User Name', 'id': 'user_name'},
-        #     {'title': 'User Facts', 'id': 'user_facts'}
-        # ]}
     ]
 
 
