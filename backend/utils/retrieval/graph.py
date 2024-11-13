@@ -192,9 +192,9 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 
 @timeit
-def execute_graph_chat(uid: str, messages: List[Message]) -> Tuple[str, bool, List[Memory]]:
+def execute_graph_chat(uid: str, messages: List[Message], plugin: Optional[Plugin]) -> Tuple[str, bool, List[Memory]]:
     result = graph.invoke(
-        {"uid": uid, "messages": messages},
+        {"uid": uid, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])

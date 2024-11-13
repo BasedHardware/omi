@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
@@ -264,8 +264,10 @@ def requires_context(messages: List[Message]) -> bool:
     except ValidationError:
         return False
 
+
 class IsAnOmiQuestion(BaseModel):
     value: bool = Field(description="If the message is an Omi/Friend related question")
+
 
 def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
     prompt = f'''
@@ -289,6 +291,7 @@ def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
@@ -400,6 +403,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     Answer:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
@@ -859,6 +863,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+
 
 # **************************************************
 # ************* MENTOR PLUGIN **************
