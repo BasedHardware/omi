@@ -6,7 +6,7 @@ from enum import Enum
 
 import opuslib
 import webrtcvad
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
@@ -64,6 +64,9 @@ async def _websocket_util(
 ):
 
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
+
+    if not uid or len(uid) <= 0:
+        raise HTTPException(status_code=400, detail="Invalid UID")
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     if stt_service == STTService.soniox and language not in soniox_valid_languages:
@@ -313,6 +316,7 @@ async def _websocket_util(
             nonlocal websocket_active
             nonlocal segment_buffers
             nonlocal transcript_ws
+            nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
                 if transcript_ws and len(segment_buffers) > 0:
@@ -344,6 +348,7 @@ async def _websocket_util(
             nonlocal websocket_active
             nonlocal audio_buffers
             nonlocal audio_bytes_ws
+            nonlocal pusher_connected
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
                 if audio_bytes_ws and len(audio_buffers) > 0:
@@ -365,7 +370,7 @@ async def _websocket_util(
         async def reconnect():
             nonlocal pusher_connected
             nonlocal pusher_connect_lock
-            with pusher_connect_lock:
+            async with pusher_connect_lock:
                 if pusher_connected:
                     return
                 await connect()
