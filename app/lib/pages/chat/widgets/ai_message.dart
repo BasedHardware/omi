@@ -4,6 +4,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
@@ -133,6 +134,32 @@ Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, b
   }
 }
 
+Widget _getMarkdownWidget(BuildContext context, String content) {
+  var style = TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3);
+  return MarkdownBody(
+    shrinkWrap: true,
+    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      a: style,
+      p: style,
+      blockquote: style.copyWith(
+        backgroundColor: Colors.transparent,
+        color: Colors.black,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      code: style.copyWith(
+        backgroundColor: Colors.transparent,
+        decoration: TextDecoration.none,
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    data: content,
+  );
+}
+
 class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
@@ -146,23 +173,23 @@ class InitialMessageWidget extends StatelessWidget {
     return Column(
       children: [
         SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : AutoSizeText(
-                  messageText,
-                  // : utf8.decode(widget.message.text.codeUnits),
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
-        ),
+            child: showTypingIndicator
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 4),
+                      TypingIndicator(),
+                      Spacer(),
+                    ],
+                  )
+                : _getMarkdownWidget(context, messageText)
+            // AutoSizeText(
+            //         messageText,
+            // style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+            // ),
+            ),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -296,11 +323,12 @@ class NormalMessageWidget extends StatelessWidget {
                     Spacer(),
                   ],
                 )
-              : AutoSizeText(
-                  messageText,
-                  // : utf8.decode(widget.message.text.codeUnits),
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
+              : _getMarkdownWidget(context, messageText),
+          // AutoSizeText(
+          //         messageText,
+          //         // : utf8.decode(widget.message.text.codeUnits),
+          //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+          //       ),
         ),
         CopyButton(messageText: messageText),
       ],
@@ -339,22 +367,23 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     return Column(
       children: [
         SelectionArea(
-          child: widget.showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : AutoSizeText(
-                  widget.messageText,
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
-        ),
+            child: widget.showTypingIndicator
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 4),
+                      TypingIndicator(),
+                      Spacer(),
+                    ],
+                  )
+                : _getMarkdownWidget(context, widget.messageText)
+            // AutoSizeText(
+            //         widget.messageText,
+            //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+            //       ),
+            ),
         CopyButton(messageText: widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
