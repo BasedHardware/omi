@@ -1,6 +1,7 @@
 import os
 from typing import List
 
+from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from ulid import ULID
 
 from ._client import db
@@ -23,14 +24,17 @@ def get_app_by_id_db(app_id: str):
 
 
 def get_private_apps_db(uid: str) -> List:
-    private_plugins = db.collection('plugins_data').where('uid', '==', uid).where('private', '==', True).stream()
-    data = [doc.to_dict() for doc in private_plugins]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
+    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream(),
+    data = [doc.to_dict() for doc in private_apps]
     return data
 
 
+# This returns public unapproved apps of all users
 def get_unapproved_public_apps_db() -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', False).where('private', '==', False).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False), FieldFilter('deleted', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
 def get_public_apps_db(uid: str) -> List:
@@ -41,14 +45,16 @@ def get_public_apps_db(uid: str) -> List:
 
 
 def get_public_approved_apps_db() -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).where('deleted', '==', False).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
+# This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).where(
-        'deleted', '==', False).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False), FieldFilter('private', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
 def add_app_to_db(app_data: dict):
