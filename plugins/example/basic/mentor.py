@@ -20,11 +20,14 @@ def mentoring(data: RealtimePluginRequest):
 
     session_id = data.session_id
     segments = get_upsert_segment_to_transcript_plugin('mentor-01', session_id, data.segments)
-    scan_segment = scan_segment_session[session_id] if session_id in scan_segment_session and len(segments) > len(data.segments) else 0
+    if len(segments) <= len(data.segments) or session_id not in scan_segment_session:
+        scan_segment_session[session_id] = 0
+    scan_segment = scan_segment_session[session_id]
 
     # 1. Detect codewords. You could either use a simple regexp or call LLMs to trigger the step 2.
     codewords = ['hey Omi what do you think']
     scan_segments = segments[scan_segment:]
+    print(session_id, "scan_segment", len(scan_segments), scan_segment)
     if len(scan_segments) == 0:
         return {}
     text_lower = normalize(" ".join([segment.text for segment in scan_segments]))
@@ -50,7 +53,7 @@ def mentoring(data: RealtimePluginRequest):
     The following is a {user_name}'s conversation, with the transcripts, that {user_name} had during the meeting.
     {user_name} wants to get the call-to-action advice to move faster during the meetting based on the conversation.
 
-    First, identify the topics or problems that {user_name} is discussing or trying to resolve during the meeting, and then provide advice specific to those topics or problems. If you cannot find the topic or problem of the meeting, respond with an empty message.
+    First, identify the topics or problems that {user_name} is discussing or trying to resolve during the meeting, and then provide advice specific to those topics or problems.
 
     The advice must focus on the specific object mentioned in the conversation. The object could be a product, a person, or an event.
 
@@ -62,6 +65,8 @@ def mentoring(data: RealtimePluginRequest):
     Respond in at most 100 words.
 
     Output your response in plain text, without markdown.
+
+    If you cannot find the topic or problem of the meeting, respond 'Nah 🤷 ~'.
     ```
     ${transcript}
     ```
