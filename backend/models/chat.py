@@ -36,7 +36,6 @@ class Message(BaseModel):
     type: MessageType
     memories_id: List[str] = []  # used in db
     memories: List[MessageMemory] = []  # used front facing
-    ask_for_nps: Optional[bool] = False
 
     @staticmethod
     def get_messages_as_string(
@@ -61,6 +60,10 @@ class Message(BaseModel):
         ]
 
         return '\n'.join(formatted_messages)
+
+
+class ResponseMessage(Message):
+    ask_for_nps: Optional[bool] = False
 
 
 class SendMessageRequest(BaseModel):
