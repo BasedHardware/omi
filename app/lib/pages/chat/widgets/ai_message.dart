@@ -6,15 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -26,15 +26,17 @@ class AIMessage extends StatefulWidget {
   final bool displayOptions;
   final App? appSender;
   final Function(ServerMemory) updateMemory;
+  final bool isMostRecent;
 
   const AIMessage({
     super.key,
-    this.showTypingIndicator = false,
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    this.appSender,
     required this.updateMemory,
+    this.appSender,
+    this.showTypingIndicator = false,
+    this.isMostRecent = false,
   });
 
   @override
@@ -135,6 +137,7 @@ class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
   final Function(String) sendMessage;
+
   const InitialMessageWidget(
       {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
 
@@ -176,6 +179,7 @@ class DaySummaryWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final DateTime date;
   final String messageText;
+
   const DaySummaryWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.date});
 
   @override
@@ -272,6 +276,7 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
+
   const NormalMessageWidget({super.key, required this.showTypingIndicator, required this.messageText});
 
   @override
@@ -308,6 +313,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final List<MessageMemory> messageMemories;
   final String messageText;
   final Function(ServerMemory) updateMemory;
+
   const MemoriesMessageWidget(
       {super.key,
       required this.showTypingIndicator,
@@ -463,6 +469,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+
   const CopyButton({super.key, required this.messageText});
 
   @override
@@ -514,6 +521,7 @@ class CopyButton extends StatelessWidget {
 class InitialOptionWidget extends StatelessWidget {
   final String optionText;
   final Function(String) sendMessage;
+
   const InitialOptionWidget({super.key, required this.optionText, required this.sendMessage});
 
   @override
