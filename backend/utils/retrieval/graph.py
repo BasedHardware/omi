@@ -64,6 +64,7 @@ def determine_conversation_type(
         s: GraphState,
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "no_context_omi_question"]:
     is_omi_question = retrieve_is_an_omi_question(s.get("messages", []))
+    # TODO: after asked many questions this is causing issues.
     if is_omi_question:
         return "no_context_omi_question"
 
@@ -193,6 +194,7 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 @timeit
 def execute_graph_chat(uid: str, messages: List[Message], plugin: Optional[Plugin]) -> Tuple[str, bool, List[Memory]]:
+    print('execute_graph_chat plugin    :', plugin)
     result = graph.invoke(
         {"uid": uid, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
