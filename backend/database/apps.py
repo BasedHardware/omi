@@ -1,6 +1,8 @@
 import os
 from typing import List
 
+from ulid import ULID
+
 from ._client import db
 
 # *****************************
@@ -32,16 +34,10 @@ def get_unapproved_public_apps_db() -> List:
 
 
 def get_public_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).where('private', '==', False).stream()
+    public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
 
-    # Include the doc if it is not approved but uid matches
-    unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).where('private',
-                                                                                                            '==',
-                                                                                                            False).stream()
-    data.extend([doc.to_dict() for doc in unapproved])
-
-    return data
+    return [plugin for plugin in data if plugin['approved'] == True or plugin['uid'] == uid]
 
 
 def get_public_approved_apps_db() -> List:
@@ -72,10 +68,18 @@ def delete_app_from_db(app_id: str):
 
 def update_app_visibility_in_db(app_id: str, private: bool):
     app_ref = db.collection('plugins_data').document(app_id)
-    app_ref.update({'private': private})
+    if 'private' in app_id and not private:
+        app = app_ref.get().to_dict()
+        app_ref.delete()
+        new_app_id = app_id.split('-private')[0] + str(ULID())
+        app['id'] = new_app_id
+        app['private'] = private
+        app_ref = db.collection('plugins_data').document(new_app_id)
+        app_ref.set(app)
+    else:
+        app_ref.update({'private': private})
 
 
 def change_app_approval_status(plugin_id: str, approved: bool):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
-
