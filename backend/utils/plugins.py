@@ -1,6 +1,6 @@
 import threading
 from typing import List, Optional
-
+import os
 import requests
 
 import database.notifications as notification_db
@@ -15,6 +15,48 @@ from models.plugin import Plugin, UsageHistoryType
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
 from utils.llm import get_metoring_message
+
+
+def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
+    """
+    Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
+    Returns a dict mapping file paths to their raw content.
+    
+    If cached, returns cached content. (24 hours)
+    So any changes to the docs will take 24 hours to be reflected.
+    """
+    if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
+        return cached
+    docs_content = {}
+    headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
+    
+    def get_contents(path):
+        url = f"https://api.github.com/repos/{repo}/contents/{path}"
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"Failed to fetch contents for {path}: {response.status_code}")
+            return
+            
+        contents = response.json()
+        
+        if not isinstance(contents, list):
+            return
+            
+        for item in contents:
+            if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
+                # Get raw content for documentation files
+                raw_response = requests.get(item["download_url"], headers=headers)
+                if raw_response.status_code == 200:
+                    docs_content[item["path"]] = raw_response.text
+            
+            elif item["type"] == "dir":
+                # Recursively process subfolders
+                get_contents(item["path"])
+    
+    get_contents(path)
+    set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24*7)
+    return docs_content
 
 
 # ***********************************
@@ -83,7 +125,7 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
         data = response.json()
         set_generic_cache('get_plugins_data', data, 60 * 10)  # 10 minutes cached
 
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_plugins(uid)) if uid else []
     # print('get_plugins_data, user_enabled', user_enabled)
     plugins = []
     for plugin in data:

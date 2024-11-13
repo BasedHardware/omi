@@ -161,7 +161,8 @@ def get_plugin_triggers():
     # TODO: Include audio_bytes trigger when the code for it triggering through plugin is ready
     return [
         {'title': 'Memory Creation', 'id': 'memory_creation'},
-        {'title': 'Transcript Processed', 'id': 'transcript_processed'}
+        {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        {'title': 'Proactive Notification', 'id': 'proactive_notification'}
     ]
 
 
