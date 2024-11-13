@@ -315,7 +315,7 @@ async def _websocket_util(
             nonlocal transcript_ws
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
-                if transcript_ws:
+                if transcript_ws and len(segment_buffers) > 0:
                     try:
                         # 100|data
                         data = bytearray()
@@ -346,7 +346,7 @@ async def _websocket_util(
             nonlocal audio_bytes_ws
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
-                if audio_bytes_ws:
+                if audio_bytes_ws and len(audio_buffers) > 0:
                     try:
                         # 101|data
                         data = bytearray()
