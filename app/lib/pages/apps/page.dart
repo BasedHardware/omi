@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
+import 'package:friend_private/pages/apps/explore_install_page.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
@@ -40,110 +40,23 @@ class _AppsPageState extends State<AppsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  isScrollable: true,
-                  padding: EdgeInsets.zero,
-                  indicatorPadding: EdgeInsets.zero,
-                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                  indicatorColor: Colors.white,
-                  tabs: const [
-                    Tab(text: 'Explore & Install'),
-                    Tab(text: 'Manage & Create'),
-                  ],
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.search,
-                  color: Colors.white,
-                ),
-                const SizedBox(
-                  width: 12,
-                ),
+            TabBar(
+              indicatorSize: TabBarIndicatorSize.label,
+              isScrollable: true,
+              padding: EdgeInsets.zero,
+              indicatorPadding: EdgeInsets.zero,
+              labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+              indicatorColor: Colors.white,
+              tabs: const [
+                Tab(text: 'Explore & Install'),
+                Tab(text: 'Manage & Create'),
               ],
             ),
             Expanded(
                 child: TabBarView(
               children: [
-                // For You
-                CustomScrollView(
-                  slivers: [
-                    const SliverToBoxAdapter(child: SizedBox(height: 18)),
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: 40,
-                        child: Selector<AddAppProvider, List<Category>>(
-                          selector: (ctx, provider) => provider.categories,
-                          builder: (ctx, categories, child) {
-                            return ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemBuilder: (ctx, idx) {
-                                  if (idx == 0) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: ChoiceChip(
-                                        label: const Row(
-                                          children: [
-                                            Icon(
-                                              Icons.filter_list_alt,
-                                              size: 15,
-                                            ),
-                                            SizedBox(width: 4),
-                                            Text('Filter'),
-                                          ],
-                                        ),
-                                        selected: false,
-                                        showCheckmark: true,
-                                        backgroundColor: Colors.transparent,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        onSelected: (bool selected) {},
-                                      ),
-                                    );
-                                  }
-                                  return ChoiceChip(
-                                    label: Text(categories[idx].title),
-                                    selected: false,
-                                    showCheckmark: true,
-                                    backgroundColor: Colors.transparent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    onSelected: (bool selected) {},
-                                  );
-                                },
-                                separatorBuilder: (ctx, idx) {
-                                  return const SizedBox(
-                                    width: 10,
-                                  );
-                                },
-                                itemCount: categories.length + 1);
-                          },
-                        ),
-                      ),
-                    ),
-                    Selector<AppProvider, List<App>>(
-                      selector: (context, provider) => provider.apps.where((p) => p.worksExternally()).toList(),
-                      builder: (context, memoryIntegrationApps, child) {
-                        return SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              return AppListItem(
-                                app: memoryIntegrationApps[index],
-                                index: index,
-                              );
-                            },
-                            childCount: memoryIntegrationApps.length,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                // Memories
+                const ExploreInstallPage(),
+                // Manage & Create
                 Selector<AppProvider, List<App>>(
                   selector: (context, provider) => provider.apps.where((p) => p.worksWithMemories()).toList(),
                   builder: (context, memoryPromptApps, child) {
