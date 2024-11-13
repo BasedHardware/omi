@@ -251,6 +251,20 @@ Future<bool> setMemorySummaryRating(String memoryId, int value, {String? reason}
   return response.statusCode == 200;
 }
 
+
+Future<bool> setMessageResponseRating(String messageId, int value) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setMessageResponseRating response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+
 Future<bool> getHasMemorySummaryRating(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$memoryId',
