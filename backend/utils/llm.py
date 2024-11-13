@@ -120,7 +120,6 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 
     Conversation: ```{transcript.strip()}```,
 
-    Output your response in plain text, without markdown.
     Make sure to be concise and clear.
     '''
 
@@ -211,8 +210,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     else:
         prompt = f'''
@@ -225,8 +222,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
