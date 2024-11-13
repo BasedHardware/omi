@@ -57,6 +57,7 @@ class GraphState(TypedDict):
 
     parsed_question: Optional[str]
     answer: Optional[str]
+    ask_for_nps: Optional[bool]
 
 
 def determine_conversation_type(
@@ -75,7 +76,7 @@ def determine_conversation_type(
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
-    return {"answer": answer_simple_message(state.get("uid"), state.get("messages"))}
+    return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
 
 
 def no_context_omi_question(state: GraphState):
@@ -83,7 +84,7 @@ def no_context_omi_question(state: GraphState):
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
     answer = answer_omi_question(state.get("messages", []), context_str)
-    return {'answer': answer}
+    return {'answer': answer, 'ask_for_nps': True}
 
 
 def context_dependent_conversation(state: GraphState):
@@ -153,7 +154,7 @@ def qa_handler(state: GraphState):
         Memory.memories_to_string(memories, True),
         state.get("plugin_selected"),
     )
-    return {"answer": response}
+    return {"answer": response, "ask_for_nps": True}
 
 
 workflow = StateGraph(GraphState)
@@ -191,12 +192,12 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 
 @timeit
-def execute_graph_chat(uid: str, messages: List[Message]) -> Tuple[str, List[Memory]]:
+def execute_graph_chat(uid: str, messages: List[Message]) -> Tuple[str, bool, List[Memory]]:
     result = graph.invoke(
         {"uid": uid, "messages": messages},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
-    return result.get("answer"), result.get("memories_found", [])
+    return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
 
 def _pretty_print_conversation(messages: List[Message]):
