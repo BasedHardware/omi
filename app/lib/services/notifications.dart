@@ -190,16 +190,19 @@ class NotificationService {
         if (noti != null) {
           _showForegroundNotification(noti: noti);
         }
+
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
+        return;
       }
 
       // Announcement likes
       if (noti != null) {
         _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
+        return;
       }
     });
   }
