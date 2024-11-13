@@ -1,9 +1,8 @@
 import re
-import time
 
 from fastapi import APIRouter
 
-from models import *
+from models import TranscriptSegment, MentorEndpointResponse, RealtimePluginRequest
 from db import get_upsert_segment_to_transcript_plugin
 
 router = APIRouter()
@@ -19,23 +18,23 @@ def mentoring(data: RealtimePluginRequest):
     def normalize(text):
         return re.sub(r' +', ' ',re.sub(r'[,?.!]', ' ', text)).lower().strip()
 
-    # Add segments by session_id
     session_id = data.session_id
     segments = get_upsert_segment_to_transcript_plugin('mentor-01', session_id, data.segments)
     scan_segment = scan_segment_session[session_id] if session_id in scan_segment_session and len(segments) > len(data.segments) else 0
 
-    # Detect codewords
-    ai_names = ['Omi', 'Omie', 'Homi', 'Homie']
-    codewords = [f'hey {ai_name} what do you think' for ai_name in ai_names]
-    scan_segments = TranscriptSegment.combine_segments([], segments[scan_segment:])
+    # 1. Detect codewords. You could either use a simple regexp or call LLMs to trigger the step 2.
+    codewords = ['hey Omi what do you think']
+    scan_segments = segments[scan_segment:]
     if len(scan_segments) == 0:
         return {}
-    text_lower = normalize(scan_segments[-1].text)
+    text_lower = normalize(" ".join([segment.text for segment in scan_segments]))
     pattern = r'\b(?:' + '|'.join(map(re.escape, [normalize(cw) for cw in codewords])) + r')\b'
     if not bool(re.search(pattern, text_lower)):
         return {}
 
-    # Generate mentoring prompt
+    # 2. Generate mentoring prompt
+    # Omi will replace {{user_name}} in your prompt with the user's name
+    # Omi will replace {{user_facts}} in your prompt  with the user's known facts.
     scan_segment_session[session_id] = len(segments)
     transcript = TranscriptSegment.segments_as_string(segments)
 
@@ -68,6 +67,7 @@ def mentoring(data: RealtimePluginRequest):
     ```
     """.replace('    ', '').strip()
 
+    # 3. Respond with the format {mentor: {prompt, params}}
     return {'session_id': data.session_id,
             'mentor': {'prompt': prompt,
                        'params': ['user_name', 'user_facts']}}
