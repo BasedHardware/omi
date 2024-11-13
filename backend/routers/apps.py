@@ -79,8 +79,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
-        imgUrl = upload_plugin_logo(file_path, app_id)
-        data['image'] = imgUrl
+        img_url = upload_plugin_logo(file_path, app_id)
+        data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
     update_app_in_db(data)
     return {'status': 'ok'}
