@@ -1,13 +1,9 @@
 import os
-import random
-from datetime import datetime, timezone
 from typing import List
 
-import requests
+from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
+from ulid import ULID
 
-from models.app import App
-from models.plugin import UsageHistoryType
-from utils.other.storage import storage_client
 from ._client import db
 
 # *****************************
@@ -17,112 +13,80 @@ from ._client import db
 omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 
 
-def get_app_by_id_db(app_id: str, uid: str):
-    if 'private' in app_id:
-        app_ref = db.collection('users').document(uid).collection('plugins').document(app_id)
-    else:
-        app_ref = db.collection('plugins_data').document(app_id)
+def get_app_by_id_db(app_id: str):
+    app_ref = db.collection('plugins_data').document(app_id)
     doc = app_ref.get()
     if doc.exists:
-        return doc.to_dict()
+        if doc.to_dict().get('deleted', True):
+            return None
+        else:
+            return doc.to_dict()
     return None
 
 
 def get_private_apps_db(uid: str) -> List:
-    private_plugins = db.collection('users').document(uid).collection('plugins').stream()
-    data = [doc.to_dict() for doc in private_plugins]
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
+    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    data = [doc.to_dict() for doc in private_apps]
     return data
 
 
+# This returns public unapproved apps of all users
 def get_unapproved_public_apps_db() -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', False).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('private', '==', False), FieldFilter('deleted', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
 def get_public_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
+    public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
 
-    # Include the doc if it is not approved but uid matches
-    unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
-    data.extend([doc.to_dict() for doc in unapproved])
-
-    return data
+    return [plugin for plugin in data if plugin['approved'] == True or plugin['uid'] == uid]
 
 
 def get_public_approved_apps_db() -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
+# This returns public unapproved apps for a user
 def get_public_unapproved_apps_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
-    return [doc.to_dict() for doc in public_plugins]
+    filters = [FieldFilter('approved', '==', False), FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False), FieldFilter('private', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
 
 
-def public_app_id_exists_db(app_id: str) -> bool:
+def add_app_to_db(app_data: dict):
+    app_ref = db.collection('plugins_data')
+    app_ref.add(app_data, app_data['id'])
+
+
+def update_app_in_db(app_data: dict):
+    app_ref = db.collection('plugins_data').document(app_data['id'])
+    app_ref.update(app_data)
+
+
+def delete_app_from_db(app_id: str):
     app_ref = db.collection('plugins_data').document(app_id)
-    return app_ref.get().exists
+    app_ref.update({'deleted': True})
 
 
-def private_app_id_exists_db(app_id: str, uid: str) -> bool:
-    app_ref = db.collection('users').document(uid).collection('plugins').document(app_id)
-    return app_ref.get().exists
-
-
-def add_public_app(plugin_data: dict):
-    plugin_ref = db.collection('plugins_data')
-    plugin_ref.add(plugin_data, plugin_data['id'])
-
-
-def add_private_app(plugin_data: dict, uid: str):
-    plugin_ref = db.collection('users').document(uid).collection('plugins')
-    plugin_ref.add(plugin_data, plugin_data['id'])
-
-
-def update_public_app(plugin_data: dict):
-    plugin_ref = db.collection('plugins_data').document(plugin_data['id'])
-    plugin_ref.update(plugin_data)
-
-
-def update_private_app(plugin_data: dict, uid: str):
-    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_data['id'])
-    plugin_ref.update(plugin_data)
-
-
-def delete_private_app(plugin_id: str, uid: str):
-    plugin_ref = db.collection('users').document(uid).collection('plugins').document(plugin_id)
-    plugin_ref.update({'deleted': True})
-
-
-def delete_public_app(plugin_id: str):
-    plugin_ref = db.collection('plugins_data').document(plugin_id)
-    plugin_ref.update({'deleted': True})
+def update_app_visibility_in_db(app_id: str, private: bool):
+    app_ref = db.collection('plugins_data').document(app_id)
+    if 'private' in app_id and not private:
+        app = app_ref.get().to_dict()
+        app_ref.delete()
+        new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
+        app['id'] = new_app_id
+        app['private'] = private
+        app_ref = db.collection('plugins_data').document(new_app_id)
+        app_ref.set(app)
+    else:
+        app_ref.update({'private': private})
 
 
 def change_app_approval_status(plugin_id: str, approved: bool):
     plugin_ref = db.collection('plugins_data').document(plugin_id)
     plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
-
-
-def change_app_visibility_db(app_id: str, private: bool, was_public: bool, uid: str):
-    if was_public and private:  # public -> private
-        plugin_ref = db.collection('plugins_data').document(app_id)
-        plugin = plugin_ref.get().to_dict()
-        plugin_ref.delete()
-        new_plugin_id = f'{app_id}-private'
-        plugin['id'] = new_plugin_id
-        plugin['private'] = private
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(new_plugin_id)
-        plugin_ref.set(plugin)
-    elif not was_public and not private:  # private -> public
-        plugin_ref = db.collection('users').document(uid).collection('plugins').document(app_id)
-        plugin = plugin_ref.get().to_dict()
-        plugin_ref.delete()
-        new_plugin_id = app_id.split('-private')[0]
-        plugin['id'] = new_plugin_id
-        plugin['private'] = private
-        if public_app_id_exists_db(new_plugin_id):
-            new_plugin_id = new_plugin_id + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
-        plugin_ref = db.collection('plugins_data').document(new_plugin_id)
-        plugin_ref.set(plugin)
