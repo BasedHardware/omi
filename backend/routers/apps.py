@@ -1,18 +1,18 @@
 import json
 import os
-import random
 from datetime import datetime, timezone
 from typing import List
 import requests
+from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from slugify import slugify
 
-from database.apps import private_app_id_exists_db, public_app_id_exists_db, add_public_app, add_private_app, \
-    get_app_by_id_db, update_private_app, update_public_app, delete_private_app, delete_public_app, \
-    change_app_approval_status, change_app_visibility_db, get_unapproved_public_apps_db
+from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
+    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count
-from utils.apps import get_apps_data_from_db
+from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
@@ -27,12 +27,12 @@ router = APIRouter()
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    return get_apps_data_from_db(uid, include_reviews=include_reviews)
+    return get_available_apps(uid, include_reviews=include_reviews)
 
 
-@router.get('/v1/approved-apps', tags=['v1'], response_model=App)
-def get_approved_apps(uid: str = Depends(auth.get_current_user_uid)):
-    return get_apps_data_from_db(uid, include_reviews=False)
+@router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
+def get_approved_apps():
+    return get_approved_available_apps(include_reviews=False)
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -41,17 +41,8 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    data['id'] = data['name'].replace(' ', '-').lower()
-    data['uid'] = uid
-    data['id'] = data['id'].replace(',', '-')
-    data['id'] = data['id'].replace("'", '')
-    if 'private' in data and data['private']:
-        data['id'] = data['id'] + '-private'
-        if private_app_id_exists_db(data['id'], uid):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
-    else:
-        if public_app_id_exists_db(data['id']):
-            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+    new_app_id = slugify(data['name']) + '-' + str(ULID())
+    data['id'] = new_app_id
     if external_integration := data.get('external_integration'):
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):
@@ -68,11 +59,7 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
     data['created_at'] = datetime.now(timezone.utc)
-    if data.get('private', True):
-        print("Adding private app")
-        add_private_app(data, data['uid'])
-    else:
-        add_public_app(data)
+    add_app_to_db(data)
     return {'status': 'ok'}
 
 
@@ -80,9 +67,9 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
-    plugin = get_app_by_id_db(app_id, uid)
+    plugin = get_available_app_by_id(app_id, uid)
     if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
+        raise HTTPException(status_code=404, detail='App not found')
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
@@ -91,36 +78,37 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
-        imgUrl = upload_plugin_logo(file_path, app_id)
-        data['image'] = imgUrl
-    if data.get('private', True):
-        update_private_app(data, uid)
-    else:
-        update_public_app(data)
+        img_url = upload_plugin_logo(file_path, app_id)
+        data['image'] = img_url
+    data['updated_at'] = datetime.now(timezone.utc)
+    update_app_in_db(data)
     return {'status': 'ok'}
 
 
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_app_by_id_db(app_id, uid)
+    plugin = get_available_app_by_id(app_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
     if plugin['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if plugin['private']:
-        delete_private_app(app_id, uid)
-    else:
-        delete_public_app(app_id)
-        if plugin['approved']:
-            delete_generic_cache('get_public_approved_apps_data')
+    delete_app_from_db(app_id)
+    if plugin['approved']:
+        delete_generic_cache('get_public_approved_apps_data')
     return {'status': 'ok'}
 
 
 @router.get('/v1/apps/{app_id}', tags=['v1'])
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_app_by_id_db(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if not app.approved:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app.private is None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to view this app')
     return app
 
 
@@ -129,9 +117,16 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = get_app_by_id_db(app_id, uid)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.uid == uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to review your own app')
+
+    if app.private and app.uid != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
     score = data['score']
     review = data.get('review', '')
@@ -141,11 +136,13 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_app_by_id_db(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    was_public = not app['deleted'] and not app['private']
-    change_app_visibility_db(app_id, private, was_public, uid)
+        raise HTTPException(status_code=404, detail='App not found')
+    if app.uid != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    update_app_visibility_in_db(app_id, private)
     return {'status': 'ok'}
 
 
@@ -179,10 +176,13 @@ def get_plugin_capabilities():
 
 @router.post('/v1/apps/enable')
 def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_app_by_id_db(app_id, uid)
-    app = App(**app)
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if app.private is not None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         print('enable_app_endpoint', res.status_code, res.content)
@@ -195,10 +195,13 @@ def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps/disable')
 def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_app_by_id_db(app_id, uid)
-    app = App(**app)
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if app.private is None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     disable_plugin(uid, app_id)
     decrease_plugin_installs_count(app_id)
     return {'status': 'ok'}
@@ -221,7 +224,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
-    app = get_app_by_id_db(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
         send_notification(token, 'App Approved 🎉',
@@ -234,7 +237,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
-    app = get_app_by_id_db(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
         # TODO: Add reason for rejection in payload and also redirect to the plugin page
