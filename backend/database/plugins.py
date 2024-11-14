@@ -72,14 +72,10 @@ def get_unapproved_public_plugins_db() -> List:
 
 
 def get_public_plugins_db(uid: str) -> List:
-    public_plugins = db.collection('plugins_data').where('approved', '==', True).stream()
+    public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
 
-    # Include the doc if it is not approved but uid matches
-    unapproved = db.collection('plugins_data').where('approved', '==', False).where('uid', '==', uid).stream()
-    data.extend([doc.to_dict() for doc in unapproved])
-
-    return data
+    return [plugin for plugin in data if plugin['approved'] == True or plugin['uid'] == uid]
 
 
 def public_plugin_id_exists_db(plugin_id: str) -> bool:
