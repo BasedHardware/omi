@@ -253,26 +253,26 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
 
             # message
             message = response_data.get('message', '')
-            mentor = response_data.get('mentor', None)
-            print('Plugin', plugin.id, 'response:', message, mentor)
+            print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
                 send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
 
             # proactive_notification
             if plugin.has_capability("proactive_notification"):
-                mentor = response_data.get('mentor', None)
-                if mentor:
-                    prompt = mentor.get('prompt', '')
-                    if len(prompt) > 0 and len(prompt) <= 5000:
-                        params = mentor.get('params', [])
+                noti = response_data.get('notification', None)
+                print('Plugin', plugin.id, 'response notification:', noti)
+                if noti:
+                    prompt = noti.get('prompt', '')
+                    if len(prompt) > 0 and len(prompt) <= 8000:
+                        params = noti.get('params', [])
                         message = get_metoring_message(uid, prompt, plugin.fitler_proactive_notification_scopes(params))
                         if message and len(message) > 5:
                             send_plugin_notification(token, plugin.name, plugin.id, message)
                             results[plugin.id] = message
-                    elif len(prompt) > 5000:
-                        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/5000 characters. Please shorten.")
-                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/5000")
+                    elif len(prompt) > 8000:
+                        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/8000 characters. Please shorten.")
+                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/8000")
 
         except Exception as e:
             print(f"Plugin integration error: {e}")
