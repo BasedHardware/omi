@@ -514,18 +514,18 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     You are an experienced detective, whose job is to create detailed profile personas based on conversations.
 
     You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
-    Your task is to determine **new** facts, preferences, and interests about {user_name}, based on the transcript.
-
+    Your task is to determine **new** facts like age, city of living, marriage status, health, friends names, preferences,work facts, allergies, preferences, interests or anything else that is important to know about {user_name}, based on the transcript.
     Make sure these facts are:
     - Relevant, and are not repetitive or similar to the existing facts we know about {user_name}, in this case, is preferred to have breadth than too much depth on specifics.
-    - Use a format of "{user_name} likes to play tennis on weekends.".
+    - Use a format of "{user_name} is 25 years old".
     - Contain one of the categories available.
     - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
+    - Examples: "{user_name} lives in San Francisco", "{user_name} is single but currently dating Anna", "{user_name} has a friend called "John" who is a 26yo entrepreneur working on a health startup", "{user_name} recently learned that it's important to hire people only when you have Product Market Fit", "{user_name} recently learned that Pavel Durov recommends not to drink alcohol".
 
     This way we can create a more accurate profile. 
-    Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+    Include from 0 up to 5 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
 
-    Existing Facts that were: {facts_str}
+    Existing Facts that were before (ignore previous structure): {facts_str}
 
     Conversation:
     ```
