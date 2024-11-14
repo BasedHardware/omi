@@ -83,6 +83,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
     update_app_in_db(data)
+    if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
+        delete_generic_cache('get_public_approved_apps_data')
     return {'status': 'ok'}
 
 
