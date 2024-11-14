@@ -14,6 +14,7 @@ class AppProvider extends BaseProvider {
   bool filterMemories = true;
   bool filterExternal = true;
   String searchQuery = '';
+  bool installedAppsOptionSelected = true;
 
   List<bool> appLoading = [];
 
@@ -27,6 +28,13 @@ class AppProvider extends BaseProvider {
   List<Category> categories = [];
   Map<String, String> filters = {};
   List<App> filteredApps = [];
+
+  get userPrivateApps => apps.where((app) => app.private).toList();
+
+  void updateInstalledAppsOptionSelected(bool value) {
+    installedAppsOptionSelected = value;
+    notifyListeners();
+  }
 
   void addOrRemoveFilter(String filter, String filterGroup) {
     if (filters.containsKey(filterGroup)) {
@@ -53,6 +61,21 @@ class AppProvider extends BaseProvider {
 
   bool isFilterActive() {
     return filters.isNotEmpty;
+  }
+
+  bool isSearchActive() {
+    return searchQuery.isNotEmpty;
+  }
+
+  void searchApps(String query) {
+    if (query.isEmpty) {
+      filteredApps = apps;
+      searchQuery = '';
+    } else {
+      searchQuery = query;
+      filteredApps = apps.where((app) => app.name.toLowerCase().contains(query.toLowerCase())).toList();
+    }
+    notifyListeners();
   }
 
   void filterApps() {
