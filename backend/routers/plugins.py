@@ -36,7 +36,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
         print('enable_plugin_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='Plugin setup is not completed')
-    increase_plugin_installs_count(plugin_id)
+    if plugin.private is not None and plugin.private is False:
+        increase_plugin_installs_count(plugin_id)
     enable_plugin(uid, plugin_id)
     return {'status': 'ok'}
 
@@ -48,7 +49,8 @@ def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
     disable_plugin(uid, plugin_id)
-    decrease_plugin_installs_count(plugin_id)
+    if plugin.private is not None and plugin.private is False:
+        decrease_plugin_installs_count(plugin_id)
     return {'status': 'ok'}
 
 

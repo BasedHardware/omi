@@ -191,7 +191,8 @@ def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         print('enable_app_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
-    increase_plugin_installs_count(app_id)
+    if app.private is None or app.private is False:
+        increase_plugin_installs_count(app_id)
     enable_plugin(uid, app_id)
     return {'status': 'ok'}
 
@@ -206,7 +207,8 @@ def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     disable_plugin(uid, app_id)
-    decrease_plugin_installs_count(app_id)
+    if app.private is None or app.private is False:
+        decrease_plugin_installs_count(app_id)
     return {'status': 'ok'}
 
 
