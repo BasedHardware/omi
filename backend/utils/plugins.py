@@ -4,9 +4,8 @@ import os
 import requests
 
 import database.notifications as notification_db
-from database.apps import get_private_apps_db, get_public_apps_db
 from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage
+from database.plugins import record_plugin_usage, get_private_plugins_db, get_public_plugins_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
 from models.memory import Memory, MemorySource
@@ -89,8 +88,8 @@ def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Pl
     #     private_data = get_private_plugins_db(uid)
     #     pass
     # else:
-    private_data = get_private_apps_db(uid)
-    public_data = get_public_apps_db(uid)
+    private_data = get_private_plugins_db(uid)
+    public_data = get_public_plugins_db(uid)
     # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_plugins = private_data + public_data

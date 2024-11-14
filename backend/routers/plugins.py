@@ -8,16 +8,14 @@ from typing import List
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
-from slugify import slugify
-from ulid import ULID
 
-from database.apps import add_app_to_db
-from database.plugins import get_plugin_usage_history
+from database.apps import get_app_by_id_db
+from database.plugins import get_plugin_usage_history, add_public_plugin, add_private_plugin, \
+    public_plugin_id_exists_db, private_plugin_id_exists_db, get_plugin_by_id_db
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.app import App
 from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
-from utils.apps import get_available_app_by_id
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
 from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
@@ -27,8 +25,8 @@ router = APIRouter()
 
 @router.post('/v1/plugins/enable')
 def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_available_app_by_id(plugin_id, uid)
-    plugin = App(**plugin) if plugin else None
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     if plugin.works_externally() and plugin.external_integration.setup_completed_url:
@@ -43,10 +41,10 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
 
 @router.post('/v1/plugins/disable')
 def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    plugin = get_available_app_by_id(plugin_id, uid)
-    plugin = App(**plugin) if plugin else None
+    plugin = get_app_by_id_db(plugin_id, uid)
+    plugin = App(**plugin)
     if not plugin:
-        raise HTTPException(status_code=404, detail='App not found')
+        raise HTTPException(status_code=404, detail='Plugin not found')
     disable_plugin(uid, plugin_id)
     decrease_plugin_installs_count(plugin_id)
     return {'status': 'ok'}
@@ -72,7 +70,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    plugin = get_available_app_by_id(plugin_id, uid)
+    plugin = get_plugin_by_id_db(plugin_id, uid)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
 
@@ -139,8 +137,15 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data = json.loads(plugin_data)
     data['approved'] = False
     data['name'] = data['name'].strip()
-    new_app_id = slugify(data['name']) + '-' + str(ULID())
-    data['id'] = new_app_id
+    data['id'] = data['name'].replace(' ', '-').lower()
+    data['uid'] = uid
+    if 'private' in data and data['private']:
+        data['id'] = data['id'] + '-private'
+        if private_plugin_id_exists_db(data['id'], uid):
+            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+    else:
+        if public_plugin_id_exists_db(data['id']):
+            data['id'] = data['id'] + '-' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -148,7 +153,12 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
     data['created_at'] = datetime.now(timezone.utc)
-    add_app_to_db(data)
+    if data.get('private', True):
+        print("Adding private plugin")
+        add_private_plugin(data, data['uid'])
+    else:
+        add_public_plugin(data)
+    # delete_generic_cache('get_public_plugins_data')
     return {'status': 'ok'}
 
 
