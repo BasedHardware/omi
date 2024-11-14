@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/explore_install_page.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
+import 'package:friend_private/pages/apps/manage_create_page.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
@@ -52,29 +53,11 @@ class _AppsPageState extends State<AppsPage> {
                 Tab(text: 'Manage & Create'),
               ],
             ),
-            Expanded(
+            const Expanded(
                 child: TabBarView(
               children: [
-                const ExploreInstallPage(),
-                // Manage & Create
-                Selector<AppProvider, List<App>>(
-                  selector: (context, provider) => provider.apps.where((p) => p.worksWithMemories()).toList(),
-                  builder: (context, memoryPromptApps, child) {
-                    return ListView.separated(
-                      shrinkWrap: true,
-                      itemBuilder: (ctx, index) {
-                        return AppListItem(
-                          app: memoryPromptApps[index],
-                          index: index,
-                        );
-                      },
-                      separatorBuilder: (ctx, index) {
-                        return const SizedBox();
-                      },
-                      itemCount: memoryPromptApps.length,
-                    );
-                  },
-                ),
+                ExploreInstallPage(),
+                ManageCreatePage(),
               ],
             )),
           ],
