@@ -74,7 +74,7 @@ def mentoring(data: RealtimePluginRequest):
 
     # 3. Respond with the format {mentor: {prompt, params}}
     return {'session_id': data.session_id,
-            'mentor': {'prompt': prompt,
+            'notification': {'prompt': prompt,
                        'params': ['user_name', 'user_facts']}}
 
 @ router.get('/setup/mentor', tags=['mentor'])
