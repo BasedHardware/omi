@@ -9,6 +9,7 @@ enum MessageType {
   ;
 
   final String value;
+
   const MessageType(this.value);
 
   static MessageType valuesFromString(String value) {
@@ -69,6 +70,7 @@ class ServerMessage {
   bool fromIntegration;
 
   List<MessageMemory> memories;
+  bool askForNps = false;
 
   ServerMessage(
     this.id,
@@ -78,8 +80,9 @@ class ServerMessage {
     this.type,
     this.appId,
     this.fromIntegration,
-    this.memories,
-  );
+    this.memories, {
+    this.askForNps = false,
+  });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
     return ServerMessage(
@@ -91,6 +94,7 @@ class ServerMessage {
       json['plugin_id'],
       json['from_integration'] ?? false,
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),
+      askForNps: json['ask_for_nps'] ?? false,
     );
   }
 
@@ -104,6 +108,7 @@ class ServerMessage {
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
+      'ask_for_nps': askForNps,
     };
   }
 

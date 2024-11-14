@@ -21,7 +21,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     """
     Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
     Returns a dict mapping file paths to their raw content.
-    
+
     If cached, returns cached content. (24 hours)
     So any changes to the docs will take 24 hours to be reflected.
     """
@@ -29,31 +29,31 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
         return cached
     docs_content = {}
     headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
-    
+
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
         response = requests.get(url, headers=headers)
-        
+
         if response.status_code != 200:
             print(f"Failed to fetch contents for {path}: {response.status_code}")
             return
-            
+
         contents = response.json()
-        
+
         if not isinstance(contents, list):
             return
-            
+
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
                 raw_response = requests.get(item["download_url"], headers=headers)
                 if raw_response.status_code == 200:
                     docs_content[item["path"]] = raw_response.text
-            
+
             elif item["type"] == "dir":
                 # Recursively process subfolders
                 get_contents(item["path"])
-    
+
     get_contents(path)
     set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24*7)
     return docs_content
@@ -271,6 +271,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
                             send_plugin_notification(token, plugin.name, plugin.id, message)
                             results[plugin.id] = message
                     elif len(prompt) > 5000:
+                        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/5000 characters. Please shorten.")
                         print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/5000")
 
         except Exception as e:
