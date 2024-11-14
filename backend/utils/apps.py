@@ -56,6 +56,21 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     return app
 
 
+def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict | None:
+    app = get_app_by_id_db(app_id)
+    if not app:
+        return None
+    if app['private'] and app['uid'] != uid:
+        return None
+    reviews = get_plugin_reviews(app['id'])
+    sorted_reviews = reviews.values()
+    rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+    app['reviews'] = []
+    app['rating_avg'] = rating_avg
+    app['rating_count'] = len(sorted_reviews)
+    return app
+
+
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     all_apps = []
     if cached_apps := get_generic_cache('get_public_approved_apps_data'):

@@ -19,7 +19,8 @@ def get_app_by_id_db(app_id: str):
     if doc.exists:
         if doc.to_dict().get('deleted', True):
             return None
-        return doc.to_dict()
+        else:
+            return doc.to_dict()
     return None
 
 
