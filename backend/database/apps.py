@@ -25,7 +25,7 @@ def get_app_by_id_db(app_id: str):
 
 def get_private_apps_db(uid: str) -> List:
     filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
-    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream(),
+    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     data = [doc.to_dict() for doc in private_apps]
     return data
 
