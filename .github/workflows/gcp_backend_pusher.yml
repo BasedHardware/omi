@@ -62,7 +62,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./backend/pusher/Dockerfile
+          file: ./backend/pusher/Dockerfile.datadog
           push: true
           tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
