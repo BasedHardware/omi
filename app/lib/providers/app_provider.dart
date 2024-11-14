@@ -26,10 +26,14 @@ class AppProvider extends BaseProvider {
   bool isLoading = false;
 
   List<Category> categories = [];
-  Map<String, String> filters = {};
+  List<AppCapability> capabilities = [];
+  Map<String, dynamic> filters = {};
   List<App> filteredApps = [];
 
-  get userPrivateApps => apps.where((app) => app.private).toList();
+  List<App> get userPrivateApps => apps.where((app) => app.private).toList();
+
+  List<App> get userPublicApps =>
+      apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
   void updateInstalledAppsOptionSelected(bool value) {
     installedAppsOptionSelected = value;
@@ -45,8 +49,34 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void addOrRemoveCategoryFilter(Category category) {
+    if (filters.containsKey('Category')) {
+      filters['Category'] = category;
+    } else {
+      filters.addAll({'Category': category});
+    }
+    notifyListeners();
+  }
+
+  void addOrRemoveCapabilityFilter(AppCapability capability) {
+    if (filters.containsKey('Capabilities')) {
+      filters['Capabilities'] = capability;
+    } else {
+      filters.addAll({'Capabilities': capability});
+    }
+    notifyListeners();
+  }
+
   bool isFilterSelected(String filter, String filterGroup) {
     return filters.containsKey(filterGroup) && filters[filterGroup] == filter;
+  }
+
+  bool isCategoryFilterSelected(Category category) {
+    return filters.containsKey('Category') && filters['Category'] == category;
+  }
+
+  bool isCapabilityFilterSelected(AppCapability capability) {
+    return filters.containsKey('Capabilities') && filters['Capabilities'] == capability;
   }
 
   void clearFilters() {
@@ -98,14 +128,14 @@ class AppProvider extends BaseProvider {
           }
           break;
         case 'Category':
-          filteredApps = filteredApps.where((app) => app.category == value).toList();
+          filteredApps = filteredApps.where((app) => app.category == (value as Category).id).toList();
           break;
         case 'Rating':
           value = value.replaceAll('+', '');
           filteredApps = filteredApps.where((app) => (app.ratingAvg ?? 0.0) >= double.parse(value)).toList();
           break;
         case 'Capabilities':
-          filteredApps = filteredApps.where((app) => app.capabilities.contains(value)).toList();
+          filteredApps = filteredApps.where((app) => app.capabilities.contains((value as AppCapability).id)).toList();
           break;
         default:
           break;
