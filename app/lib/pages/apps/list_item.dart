@@ -13,8 +13,9 @@ import 'app_detail.dart';
 class AppListItem extends StatelessWidget {
   final App app;
   final int index;
+  final bool showPrivateIcon;
 
-  const AppListItem({super.key, required this.app, required this.index});
+  const AppListItem({super.key, required this.app, required this.index, this.showPrivateIcon = true});
 
   @override
   Widget build(BuildContext context) {
@@ -93,31 +94,27 @@ class AppListItem extends StatelessWidget {
                                             ],
                                           )
                                         : const SizedBox(),
-                                    app.installs > 0
-                                        ? Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.download_rounded, size: 16, color: Colors.grey.shade300),
-                                              const SizedBox(width: 4),
-                                              Text('${app.installs}'),
-                                            ],
-                                          )
-                                        : Container(),
                                   ],
                                 ),
                               )
                             : Container(),
-                        (app.ratingAvg != null || app.installs > 0) ? const SizedBox(width: 16) : const SizedBox(),
-                        app.private
-                            ? const Padding(
-                                padding: EdgeInsets.only(top: 8),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.lock, color: Colors.grey, size: 16),
-                                    SizedBox(width: 4),
-                                    Text('Private', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                                  ],
-                                ),
+                        app.private && showPrivateIcon
+                            ? Row(
+                                children: [
+                                  (app.ratingAvg != null || app.installs > 0)
+                                      ? const SizedBox(width: 16)
+                                      : const SizedBox(),
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.lock, color: Colors.grey, size: 16),
+                                        SizedBox(width: 4),
+                                        Text('Private', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               )
                             : const SizedBox(),
                       ],
