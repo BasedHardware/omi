@@ -4,10 +4,30 @@ import 'package:friend_private/pages/apps/widgets/category_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:provider/provider.dart';
 
-class ExploreInstallPage extends StatelessWidget {
+class ExploreInstallPage extends StatefulWidget {
   const ExploreInstallPage({super.key});
+
+  @override
+  State<ExploreInstallPage> createState() => _ExploreInstallPageState();
+}
+
+class _ExploreInstallPageState extends State<ExploreInstallPage> {
+  late TextEditingController searchController;
+
+  @override
+  void initState() {
+    searchController = TextEditingController();
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +93,7 @@ class ExploreInstallPage extends StatelessWidget {
                               label: Row(
                                 children: [
                                   Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 6.5),
+                                    padding: const EdgeInsets.symmetric(vertical: 6.5),
                                     child: Text(
                                       provider.filters.values.elementAt(idx),
                                       style: const TextStyle(fontSize: 16),
@@ -108,9 +128,10 @@ class ExploreInstallPage extends StatelessWidget {
                           width: MediaQuery.sizeOf(context).width * 0.72,
                           height: 40,
                           child: TextFormField(
+                            controller: searchController,
+                            focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
                             onChanged: (value) {
-                              provider.searchQuery = value;
-                              provider.filterApps();
+                              provider.searchApps(value);
                             },
                             decoration: InputDecoration(
                               hintText: 'Search apps',
@@ -121,6 +142,19 @@ class ExploreInstallPage extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(8),
                                 borderSide: BorderSide.none,
                               ),
+                              suffixIcon: provider.isSearchActive()
+                                  ? GestureDetector(
+                                      onTap: () {
+                                        context.read<HomeProvider>().appsSearchFieldFocusNode.unfocus();
+                                        provider.searchApps('');
+                                        searchController.clear();
+                                      },
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                             ),
                             style: const TextStyle(color: Colors.white),
@@ -130,16 +164,28 @@ class ExploreInstallPage extends StatelessWidget {
               ),
             ),
           ),
-          provider.isFilterActive()
+          provider.isFilterActive() || provider.isSearchActive()
               ? const SliverToBoxAdapter(child: SizedBox.shrink())
               : const SliverToBoxAdapter(
                   child: SizedBox(
                   height: 10,
                 )),
-          !provider.isFilterActive()
+          !provider.isFilterActive() && !provider.isSearchActive()
               ? const SliverToBoxAdapter(child: SizedBox.shrink())
               : Consumer<AppProvider>(
                   builder: (context, provider, child) {
+                    if (provider.filteredApps.isEmpty) {
+                      return SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.28),
+                          child: const Text(
+                            'No apps found',
+                            style: TextStyle(fontSize: 18),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
@@ -153,7 +199,7 @@ class ExploreInstallPage extends StatelessWidget {
                     );
                   },
                 ),
-          !provider.isFilterActive()
+          !provider.isFilterActive() && !provider.isSearchActive()
               ? SliverToBoxAdapter(
                   child: CategoryCard(
                     title: 'Popular Apps',
@@ -165,28 +211,32 @@ class ExploreInstallPage extends StatelessWidget {
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.only(left: 12.0, top: 18, bottom: 0),
-              child: Text('All Apps', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-          Selector<AppProvider, List<App>>(
-            selector: (context, provider) => provider.apps,
-            builder: (context, memoryIntegrationApps, child) {
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    return AppListItem(
-                      app: memoryIntegrationApps[index],
-                      index: index,
+          !provider.isFilterActive() && !provider.isSearchActive()
+              ? const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 12.0, top: 18, bottom: 0),
+                    child: Text('All Apps', style: TextStyle(fontSize: 18)),
+                  ),
+                )
+              : const SliverToBoxAdapter(child: SizedBox.shrink()),
+          !provider.isFilterActive() && !provider.isSearchActive()
+              ? Selector<AppProvider, List<App>>(
+                  selector: (context, provider) => provider.apps,
+                  builder: (context, memoryIntegrationApps, child) {
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          return AppListItem(
+                            app: memoryIntegrationApps[index],
+                            index: index,
+                          );
+                        },
+                        childCount: memoryIntegrationApps.length,
+                      ),
                     );
                   },
-                  childCount: memoryIntegrationApps.length,
-                ),
-              );
-            },
-          ),
+                )
+              : const SliverToBoxAdapter(child: SizedBox.shrink()),
         ],
       );
     });
