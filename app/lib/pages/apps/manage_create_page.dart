@@ -80,7 +80,7 @@ class ManageCreatePage extends StatelessWidget {
                             );
                           },
                         ),
-                        SizedBox(
+                        const SizedBox(
                           height: 50,
                         ),
                       ],
@@ -121,7 +121,7 @@ class ManageCreatePage extends StatelessWidget {
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0),
                                 child: Text('Private Apps (${provider.userPrivateApps.length})',
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
+                                    style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPrivateApps.isEmpty
                             ? const SizedBox()
@@ -130,6 +130,7 @@ class ManageCreatePage extends StatelessWidget {
                                 shrinkWrap: true,
                                 itemBuilder: (context, index) {
                                   return AppListItem(
+                                    showPrivateIcon: false,
                                     app: provider.userPrivateApps[index],
                                     index: index,
                                   );
@@ -140,7 +141,7 @@ class ManageCreatePage extends StatelessWidget {
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0),
                                 child: Text('Public Apps (${provider.userPublicApps.length})',
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
+                                    style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPublicApps.isEmpty
                             ? const SizedBox()
