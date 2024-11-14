@@ -277,7 +277,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                   Consumer<HomeProvider>(
                     builder: (context, home, child) {
-                      if (home.chatFieldFocusNode.hasFocus || home.memoryFieldFocusNode.hasFocus) {
+                      if (home.chatFieldFocusNode.hasFocus ||
+                          home.memoryFieldFocusNode.hasFocus ||
+                          home.appsSearchFieldFocusNode.hasFocus) {
                         return const SizedBox.shrink();
                       } else {
                         return Align(
