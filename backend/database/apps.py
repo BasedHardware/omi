@@ -78,7 +78,7 @@ def update_app_visibility_in_db(app_id: str, private: bool):
     if 'private' in app_id and not private:
         app = app_ref.get().to_dict()
         app_ref.delete()
-        new_app_id = app_id.split('-private')[0] + str(ULID())
+        new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
         app['id'] = new_app_id
         app['private'] = private
         app_ref = db.collection('plugins_data').document(new_app_id)
