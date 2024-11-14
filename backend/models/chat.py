@@ -62,5 +62,9 @@ class Message(BaseModel):
         return '\n'.join(formatted_messages)
 
 
+class ResponseMessage(Message):
+    ask_for_nps: Optional[bool] = False
+
+
 class SendMessageRequest(BaseModel):
     text: str

@@ -5,9 +5,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -202,6 +202,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 itemBuilder: (context, chatIndex) {
                                   final message = provider.messages[chatIndex];
                                   double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
+                                  if (chatIndex != 0) message.askForNps = false;
+
                                   double bottomPadding = chatIndex == 0
                                       ? Platform.isAndroid
                                           ? 200
@@ -220,6 +222,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             appSender: provider.messageSenderApp(message.appId),
                                             updateMemory: (ServerMemory memory) {
                                               context.read<MemoryProvider>().updateMemory(memory);
+                                            },
+                                            setMessageNps: (int value) {
+                                              provider.setMessageNps(message, value);
                                             },
                                           )
                                         : HumanMessage(message: message),

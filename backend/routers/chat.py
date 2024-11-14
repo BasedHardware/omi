@@ -8,9 +8,9 @@ import database.chat as chat_db
 from database.apps import get_app_by_id_db
 from database.plugins import record_plugin_usage
 from models.app import App
-from models.chat import Message, SendMessageRequest, MessageSender
-from models.plugin import UsageHistoryType, Plugin
+from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
 from models.memory import Memory
+from models.plugin import UsageHistoryType
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat
@@ -29,7 +29,7 @@ def filter_messages(messages, plugin_id):
     return collected
 
 
-@router.post('/v1/messages', tags=['chat'], response_model=Message)
+@router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -41,11 +41,11 @@ def send_message(
 
     plugin = get_app_by_id_db(plugin_id, uid)
     plugin = App(**plugin) if plugin else None
-    
+
     plugin_id = plugin.id if plugin else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, memories = execute_graph_chat(uid, messages)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, plugin)  # plugin
     memories_id = []
     # check if the items in the memories list are dict
     if memories:
@@ -70,7 +70,9 @@ def send_message(
     if plugin_id:
         record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-    return ai_message
+    resp = ai_message.dict()
+    resp['ask_for_nps'] = ask_for_nps
+    return resp
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
