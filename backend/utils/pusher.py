@@ -16,7 +16,7 @@ async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: 
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
         print(f"Waiting {backoff_delay:.0f}ms before next retry...")
-        asyncio.sleep(backoff_delay / 1000)
+        await asyncio.sleep(backoff_delay / 1000)
 
     raise Exception(f'Could not open socket: All retry attempts failed.')
 

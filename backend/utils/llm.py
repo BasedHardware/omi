@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
@@ -120,7 +120,6 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 
     Conversation: ```{transcript.strip()}```,
 
-    Output your response in plain text, without markdown.
     Make sure to be concise and clear.
     '''
 
@@ -211,8 +210,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     else:
         prompt = f'''
@@ -225,8 +222,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
@@ -264,8 +259,10 @@ def requires_context(messages: List[Message]) -> bool:
     except ValidationError:
         return False
 
+
 class IsAnOmiQuestion(BaseModel):
     value: bool = Field(description="If the message is an Omi/Friend related question")
+
 
 def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
     prompt = f'''
@@ -289,6 +286,7 @@ def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
@@ -401,6 +399,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
+
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
@@ -429,7 +428,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     ```
     Answer:
     """.replace('    ', '').strip()
-    print('QA Using context:', context)
+    # print('qa_rag prompt', prompt)
     return llm_mini.invoke(prompt).content
 
 
@@ -859,6 +858,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+
 
 # **************************************************
 # ************* MENTOR PLUGIN **************
