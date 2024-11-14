@@ -1,11 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/widgets/category_card.dart';
+import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:provider/provider.dart';
+
+String filterValueToString(dynamic value) {
+  if (value.runtimeType == String) {
+    return value;
+  } else if (value.runtimeType == Category) {
+    return (value as Category).title;
+  } else if (value.runtimeType == AppCapability) {
+    return (value as AppCapability).title;
+  }
+  return '';
+}
 
 class ExploreInstallPage extends StatefulWidget {
   const ExploreInstallPage({super.key});
@@ -95,7 +106,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> {
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6.5),
                                     child: Text(
-                                      provider.filters.values.elementAt(idx),
+                                      filterValueToString(provider.filters.values.elementAt(idx)),
                                       style: const TextStyle(fontSize: 16),
                                     ),
                                   ),
@@ -201,7 +212,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> {
                 ),
           !provider.isFilterActive() && !provider.isSearchActive()
               ? SliverToBoxAdapter(
-                  child: CategoryCard(
+                  child: AppSectionCard(
                     title: 'Popular Apps',
                     apps: context
                         .read<AppProvider>()

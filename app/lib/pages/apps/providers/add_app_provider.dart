@@ -142,6 +142,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getAppCapabilities() async {
     capabilities = await getAppCapabilitiesServer();
+    appProvider!.capabilities = capabilities;
     notifyListeners();
   }
 

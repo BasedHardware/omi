@@ -72,6 +72,7 @@ class FilterBottomSheet extends StatelessWidget {
                               onTap: () {
                                 provider.addOrRemoveFilter('Lowest Rating', 'Sort');
                               },
+                              isSelected: provider.isFilterSelected('Lowest Rating', 'Sort'),
                             ),
                           ],
                         )),
@@ -82,9 +83,9 @@ class FilterBottomSheet extends StatelessWidget {
                             .map((category) => FilterOption(
                                   label: category.title,
                                   onTap: () {
-                                    provider.addOrRemoveFilter(category.id, 'Category');
+                                    provider.addOrRemoveCategoryFilter(category);
                                   },
-                                  isSelected: provider.isFilterSelected(category.id, 'Category'),
+                                  isSelected: provider.isCategoryFilterSelected(category),
                                 ))
                             .toList(),
                       ),
@@ -123,26 +124,15 @@ class FilterBottomSheet extends StatelessWidget {
                     FilterSection(
                       title: 'Capabilities',
                       child: Column(
-                        children: [
-                          FilterOption(
-                              label: 'Memories',
-                              onTap: () {
-                                provider.addOrRemoveFilter('memories', 'Capabilities');
-                              },
-                              isSelected: provider.isFilterSelected('memories', 'Capabilities')),
-                          FilterOption(
-                              label: 'Chat',
-                              onTap: () {
-                                provider.addOrRemoveFilter('chat', 'Capabilities');
-                              },
-                              isSelected: provider.isFilterSelected('chat', 'Capabilities')),
-                          FilterOption(
-                              label: 'Integrations',
-                              onTap: () {
-                                provider.addOrRemoveFilter('external_integration', 'Capabilities');
-                              },
-                              isSelected: provider.isFilterSelected('external_integration', 'Capabilities')),
-                        ],
+                        children: provider.capabilities
+                            .map((capability) => FilterOption(
+                                  label: capability.title,
+                                  onTap: () {
+                                    provider.addOrRemoveCapabilityFilter(capability);
+                                  },
+                                  isSelected: provider.isCapabilityFilterSelected(capability),
+                                ))
+                            .toList(),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -163,7 +153,7 @@ class FilterBottomSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-                child: const Text('Clear filters'),
+                child: const Text('Clear Filters'),
               ),
             ),
           );
