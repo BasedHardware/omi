@@ -72,7 +72,7 @@ def mentoring(data: RealtimePluginRequest):
     ```
     """.replace('    ', '').strip()
 
-    # 3. Respond with the format {mentor: {prompt, params}}
+    # 3. Respond with the format {notification: {prompt, params}}
     return {'session_id': data.session_id,
             'notification': {'prompt': prompt,
                        'params': ['user_name', 'user_facts']}}
