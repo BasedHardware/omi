@@ -174,4 +174,4 @@ class MentorResponse(BaseModel):
 
 class MentorEndpointResponse(BaseModel):
     message: str = Field(description="A short message to be sent as notification to the user, if needed.", default='')
-    mentor: MentorResponse = Field(description="An object to guide the system in generating the proactive notification", default=None)
+    notification: MentorResponse = Field(description="An object to guide the system in generating the proactive notification", default=None)
