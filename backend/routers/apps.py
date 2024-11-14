@@ -12,7 +12,8 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count
-from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps
+from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
+    get_available_app_by_id_with_reviews
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
@@ -31,8 +32,8 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
 
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
-def get_approved_apps():
-    return get_approved_available_apps(include_reviews=False)
+def get_approved_apps(include_reviews: bool = False):
+    return get_approved_available_apps(include_reviews=include_reviews)
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -100,13 +101,13 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/{app_id}', tags=['v1'])
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_available_app_by_id(app_id, uid)
+    app = get_available_app_by_id_with_reviews(app_id, uid)
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
-    if not app.approved:
+    if not app.approved and app.uid != uid:
         raise HTTPException(status_code=404, detail='App not found')
-    if app.private is None:
+    if app.private is not None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to view this app')
     return app
