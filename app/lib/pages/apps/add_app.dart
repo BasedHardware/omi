@@ -215,13 +215,13 @@ class _AddAppPageState extends State<AddAppPage> {
                                         MixpanelManager().publicAppSubmitted({
                                           'app_name': provider.appNameController.text,
                                           'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities,
+                                          'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
                                         });
                                       } else {
                                         MixpanelManager().privateAppSubmitted({
                                           'app_name': provider.appNameController.text,
                                           'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities,
+                                          'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
                                         });
                                       }
                                       SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
