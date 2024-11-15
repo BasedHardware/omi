@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -29,6 +30,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController webhookUrlController = TextEditingController();
   TextEditingController setupCompletedController = TextEditingController();
   TextEditingController instructionsController = TextEditingController();
+  TextEditingController authUrlController = TextEditingController();
 
   bool termsAgreed = false;
 
@@ -124,6 +126,7 @@ class AddAppProvider extends ChangeNotifier {
     webhookUrlController.clear();
     setupCompletedController.clear();
     instructionsController.clear();
+    authUrlController.clear();
     termsAgreed = false;
     makeAppPublic = false;
     appCategory = null;
@@ -136,11 +139,13 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getCategories() async {
     categories = await getAppCategories();
+    appProvider!.categories = categories;
     notifyListeners();
   }
 
   Future<void> getAppCapabilities() async {
     capabilities = await getAppCapabilitiesServer();
+    appProvider!.capabilities = capabilities;
     notifyListeners();
   }
 
@@ -269,7 +274,15 @@ class AddAppProvider extends ChangeNotifier {
           'webhook_url': webhookUrlController.text,
           'setup_completed_url': setupCompletedController.text,
           'setup_instructions_file_path': instructionsController.text,
+          'auth_steps': [],
         };
+        if (authUrlController.text.isNotEmpty) {
+          data['external_integration']['auth_steps'] = [];
+          data['external_integration']['auth_steps'].add({
+            'url': authUrlController.text,
+            'name': 'Setup ${appNameController.text}',
+          });
+        }
       }
       if (capability.id == 'chat') {
         data['chat_prompt'] = chatPromptController.text;
@@ -317,7 +330,15 @@ class AddAppProvider extends ChangeNotifier {
           'webhook_url': webhookUrlController.text,
           'setup_completed_url': setupCompletedController.text,
           'setup_instructions_file_path': instructionsController.text,
+          'auth_steps': [],
         };
+        if (authUrlController.text.isNotEmpty) {
+          data['external_integration']['auth_steps'] = [];
+          data['external_integration']['auth_steps'].add({
+            'url': authUrlController.text,
+            'name': 'Setup ${appNameController.text}',
+          });
+        }
       }
       if (capability.id == 'chat') {
         data['chat_prompt'] = chatPromptController.text;

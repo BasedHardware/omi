@@ -495,7 +495,7 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        max_items=3,
+        # max_items=3,
         description="List of new user facts, preferences, interests, or topics.",
     )
 
