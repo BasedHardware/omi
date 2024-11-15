@@ -13,8 +13,9 @@ import 'app_detail.dart';
 class AppListItem extends StatelessWidget {
   final App app;
   final int index;
+  final bool showPrivateIcon;
 
-  const AppListItem({super.key, required this.app, required this.index});
+  const AppListItem({super.key, required this.app, required this.index, this.showPrivateIcon = true});
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +59,7 @@ class AppListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      app.name + (app.private ? ' (private)' : ''),
+                      app.name.decodeString,
                       maxLines: 1,
                       style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                     ),
@@ -71,40 +72,53 @@ class AppListItem extends StatelessWidget {
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                     ),
-                    app.ratingAvg != null || app.installs > 0
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                app.ratingAvg != null
-                                    ? Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        children: [
-                                          Text(app.getRatingAvg()!),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                                          const SizedBox(width: 4),
-                                          Text('(${app.ratingCount})'),
-                                          const SizedBox(width: 16),
-                                        ],
-                                      )
-                                    : const SizedBox(),
-                                app.installs > 0
-                                    ? Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.download_rounded, size: 16, color: Colors.grey.shade300),
-                                          const SizedBox(width: 4),
-                                          Text('${app.installs}'),
-                                        ],
-                                      )
-                                    : Container(),
-                              ],
-                            ),
-                          )
-                        : Container(),
+                    Row(
+                      children: [
+                        app.ratingAvg != null || app.installs > 0
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    app.ratingAvg != null
+                                        ? Row(
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              Text(app.getRatingAvg()!),
+                                              const SizedBox(width: 4),
+                                              const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                              const SizedBox(width: 4),
+                                              Text('(${app.ratingCount})'),
+                                              const SizedBox(width: 16),
+                                            ],
+                                          )
+                                        : const SizedBox(),
+                                  ],
+                                ),
+                              )
+                            : Container(),
+                        app.private && showPrivateIcon
+                            ? Row(
+                                children: [
+                                  (app.ratingAvg != null || app.installs > 0)
+                                      ? const SizedBox(width: 16)
+                                      : const SizedBox(),
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.lock, color: Colors.grey, size: 16),
+                                        SizedBox(width: 4),
+                                        Text('Private', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : const SizedBox(),
+                      ],
+                    ),
                   ],
                 ),
               ),
