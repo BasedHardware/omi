@@ -95,29 +95,29 @@ class FilterBottomSheet extends StatelessWidget {
                       child: Column(
                         children: [
                           FilterOption(
-                              label: '1+ Star',
+                              label: '1+ Stars',
                               onTap: () {
-                                provider.addOrRemoveFilter('1+', 'Rating');
+                                provider.addOrRemoveFilter('1+ Stars', 'Rating');
                               },
-                              isSelected: provider.isFilterSelected('1+', 'Rating')),
+                              isSelected: provider.isFilterSelected('1+ Stars', 'Rating')),
                           FilterOption(
                               label: '2+ Stars',
                               onTap: () {
-                                provider.addOrRemoveFilter('2+', 'Rating');
+                                provider.addOrRemoveFilter('2+ Stars', 'Rating');
                               },
-                              isSelected: provider.isFilterSelected('2+', 'Rating')),
+                              isSelected: provider.isFilterSelected('2+ Stars', 'Rating')),
                           FilterOption(
                               label: '3+ Stars',
                               onTap: () {
-                                provider.addOrRemoveFilter('3+', 'Rating');
+                                provider.addOrRemoveFilter('3+ Stars', 'Rating');
                               },
-                              isSelected: provider.isFilterSelected('3+', 'Rating')),
+                              isSelected: provider.isFilterSelected('3+ Stars', 'Rating')),
                           FilterOption(
                               label: '4+ Stars',
                               onTap: () {
-                                provider.addOrRemoveFilter('4+', 'Rating');
+                                provider.addOrRemoveFilter('4+ Stars', 'Rating');
                               },
-                              isSelected: provider.isFilterSelected('4+', 'Rating')),
+                              isSelected: provider.isFilterSelected('4+ Stars', 'Rating')),
                         ],
                       ),
                     ),
