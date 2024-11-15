@@ -268,7 +268,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ),
                       ),
                     ),
-              widget.app.isUnderReview() && !widget.app.private
+              widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
                   ? Column(
                       children: [
                         const SizedBox(
