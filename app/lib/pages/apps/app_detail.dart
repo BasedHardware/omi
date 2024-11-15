@@ -268,7 +268,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ),
                       ),
                     ),
-              widget.app.isUnderReview() && !widget.app.private
+              widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
                   ? Column(
                       children: [
                         const SizedBox(
@@ -444,7 +444,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16.0),
-                        margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 6),
+                        margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade900,
                           borderRadius: BorderRadius.circular(16.0),
