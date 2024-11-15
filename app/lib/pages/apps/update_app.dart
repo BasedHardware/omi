@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/gradient_button.dart';
 import 'package:provider/provider.dart';
@@ -145,6 +146,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                     const SizedBox(
                       height: 30,
                     ),
+                  const NotificationScopesChipsWidget(),
                   const SizedBox(
                     height: 30,
                   ),
