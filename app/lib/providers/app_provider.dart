@@ -131,7 +131,8 @@ class AppProvider extends BaseProvider {
           filteredApps = filteredApps.where((app) => app.category == (value as Category).id).toList();
           break;
         case 'Rating':
-          value = value.replaceAll('+', '');
+          value = value as String;
+          value = value.replaceAll('+ Stars', '');
           filteredApps = filteredApps.where((app) => (app.ratingAvg ?? 0.0) >= double.parse(value)).toList();
           break;
         case 'Capabilities':
