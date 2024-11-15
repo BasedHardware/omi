@@ -16,6 +16,9 @@ class AppSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (apps.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Container(
       padding: const EdgeInsets.only(top: 16.0, left: 10, right: 10),
       height: height ?? MediaQuery.sizeOf(context).height * 0.4,

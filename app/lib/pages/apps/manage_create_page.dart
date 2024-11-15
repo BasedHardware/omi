@@ -119,7 +119,7 @@ class ManageCreatePage extends StatelessWidget {
                         provider.userPrivateApps.isEmpty
                             ? const SizedBox()
                             : Padding(
-                                padding: const EdgeInsets.only(left: 16.0),
+                                padding: const EdgeInsets.only(left: 16.0, bottom: 10),
                                 child: Text('Private Apps (${provider.userPrivateApps.length})',
                                     style: const TextStyle(fontSize: 18)),
                               ),
@@ -132,14 +132,14 @@ class ManageCreatePage extends StatelessWidget {
                                   return AppListItem(
                                     showPrivateIcon: false,
                                     app: provider.userPrivateApps[index],
-                                    index: index,
+                                    index: provider.apps.indexOf(provider.userPrivateApps[index]),
                                   );
                                 },
                               ),
                         provider.userPublicApps.isEmpty
                             ? const SizedBox()
                             : Padding(
-                                padding: const EdgeInsets.only(left: 16.0),
+                                padding: const EdgeInsets.only(left: 16.0, bottom: 10),
                                 child: Text('Public Apps (${provider.userPublicApps.length})',
                                     style: const TextStyle(fontSize: 18)),
                               ),
@@ -151,7 +151,7 @@ class ManageCreatePage extends StatelessWidget {
                                 itemBuilder: (context, index) {
                                   return AppListItem(
                                     app: provider.userPublicApps[index],
-                                    index: index,
+                                    index: provider.apps.indexOf(provider.userPublicApps[index]),
                                   );
                                 },
                               ),
