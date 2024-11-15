@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
@@ -91,6 +92,7 @@ class ManageCreatePage extends StatelessWidget {
                         const SizedBox(height: 16),
                         GestureDetector(
                           onTap: () {
+                            MixpanelManager().pageOpened('Submit App');
                             routeToPage(context, const AddAppPage());
                           },
                           child: Container(

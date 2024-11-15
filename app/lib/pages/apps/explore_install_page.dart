@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
@@ -25,12 +26,15 @@ class ExploreInstallPage extends StatefulWidget {
   State<ExploreInstallPage> createState() => _ExploreInstallPageState();
 }
 
-class _ExploreInstallPageState extends State<ExploreInstallPage> {
+class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKeepAliveClientMixin {
   late TextEditingController searchController;
 
   @override
   void initState() {
     searchController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AddAppProvider>().init();
+    });
     super.initState();
   }
 
@@ -42,6 +46,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<AppProvider>(builder: (context, provider, child) {
       return CustomScrollView(
         slivers: [
@@ -197,15 +202,27 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> {
                         ),
                       );
                     }
-                    return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return AppListItem(
-                            app: provider.filteredApps[index],
-                            index: index,
-                          );
-                        },
-                        childCount: provider.filteredApps.length,
+                    return SliverToBoxAdapter(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListView.separated(
+                            physics: const NeverScrollableScrollPhysics(),
+                            shrinkWrap: true,
+                            itemBuilder: (ctx, idx) {
+                              return AppListItem(
+                                app: provider.filteredApps[idx],
+                                index:
+                                    provider.apps.indexWhere((element) => element.id == provider.filteredApps[idx].id),
+                              );
+                            },
+                            separatorBuilder: (ctx, idx) {
+                              return const SizedBox(height: 8);
+                            },
+                            itemCount: provider.filteredApps.length,
+                          ),
+                          const SizedBox(height: 64),
+                        ],
                       ),
                     );
                   },
@@ -252,4 +269,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> {
       );
     });
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
