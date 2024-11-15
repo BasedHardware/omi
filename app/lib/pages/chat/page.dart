@@ -15,6 +15,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/memory_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
@@ -317,6 +318,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   }
 
   _sendMessageUtil(String message) async {
+    MixpanelManager().chatMessageSent(message);
     context.read<MessageProvider>().setSendingMessage(true);
     String? appId =
         SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
