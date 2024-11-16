@@ -264,7 +264,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         if len(memories) > 0:
             context = Memory.memories_to_string(memories, True)
 
-    print(f'_process_proactive_notification context {context[100] if context else "empty"}')
+    print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
     message = get_proactive_message(uid, prompt, filter_scopes, context)
