@@ -66,11 +66,14 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             height: 20,
           ),
           TextFormField(
-            controller: provider.webhookUrlController,
+            controller: provider.authUrlController,
             validator: (value) {
-              if (value == null || !isValidUrl(value)) {
-                return 'Please enter a valid Auth URL';
+              if (value != null) {
+                if (value.isNotEmpty && !isValidUrl(value)) {
+                  return 'Please enter a valid Auth URL';
+                }
               }
+
               return null;
             },
             decoration: InputDecoration(
@@ -110,7 +113,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             height: 20,
           ),
           TextFormField(
-            controller: provider.authUrlController,
+            controller: provider.webhookUrlController,
             validator: (value) {
               if (value == null || !isValidUrl(value)) {
                 return 'Please enter a valid webhook URL';
