@@ -1,9 +1,9 @@
 from typing import List
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
-    get_public_approved_apps_db, get_app_by_id_db
+    get_public_approved_apps_db, get_app_by_id_db, set_app_review_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
-    set_generic_cache
+    set_generic_cache, set_plugin_review
 from models.app import App
 from utils.plugins import weighted_rating
 
@@ -95,3 +95,13 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     if include_reviews:
         apps = sorted(apps, key=weighted_rating, reverse=True)
     return apps
+
+
+def set_app_review(app_id: str, uid: str, review: dict):
+    set_app_review_in_db(app_id, uid, review)
+    set_plugin_review(app_id, uid, review['score'], review['review'], review['username'], review['response'])
+    return {'status': 'ok'}
+
+
+def get_app_reviews(app_id: str) -> dict:
+    return get_plugin_reviews(app_id)
