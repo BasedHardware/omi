@@ -10,6 +10,8 @@ class AppReview(BaseModel):
     rated_at: datetime
     score: float
     review: str
+    username: Optional[str] = None
+    response: Optional[str] = None
 
     @classmethod
     def from_json(cls, json_data: dict):
