@@ -81,7 +81,7 @@ def mentoring(data: RealtimePluginRequest):
     """.replace('    ', '').strip()
 
     # 3. Respond with the format {notification: {prompt, params, context}}
-    #   - context: {question, filters: {people, topics, entities, dates}} | None
+    #   - context: {question, filters: {people, topics, entities}} | None
     return {
         'session_id': data.session_id,
         'notification': {
