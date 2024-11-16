@@ -260,7 +260,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     # context
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('user_context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
             context = Memory.memories_to_string(memories, True)
 
