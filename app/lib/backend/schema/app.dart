@@ -2,32 +2,46 @@ import 'package:friend_private/widgets/extensions/string.dart';
 
 class AppReview {
   String uid;
-  DateTime ratedAt;
+  DateTime? ratedAt;
   double score;
   String review;
+  String username;
+  String response;
+  DateTime? updatedAt;
 
   AppReview({
     required this.uid,
-    required this.ratedAt,
+    this.ratedAt,
     required this.score,
     required this.review,
+    this.username = '',
+    this.response = '',
+    this.updatedAt,
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
     return AppReview(
       uid: json['uid'],
-      ratedAt: DateTime.parse(json['rated_at']).toLocal(),
+      ratedAt: json['rated_at'] == null ? null : DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
       review: json['review'],
+      username: json['user_name'] ?? '',
+      response: json['response'] ?? '',
+      updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
+          ? null
+          : DateTime.parse(json['updated_at']).toLocal(),
     );
   }
 
   toJson() {
     return {
       'uid': uid,
-      'rated_at': ratedAt.toUtc().toIso8601String(),
+      'rated_at': ratedAt?.toUtc().toIso8601String() ?? '',
       'score': score,
       'review': review,
+      'username': username,
+      'response': response,
+      'updated_at': updatedAt?.toUtc().toIso8601String() ?? '',
     };
   }
 
