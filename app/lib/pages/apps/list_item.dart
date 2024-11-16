@@ -58,10 +58,22 @@ class AppListItem extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      app.name.decodeString,
-                      maxLines: 1,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                    Row(
+                      children: [
+                        Text(
+                          app.name.decodeString,
+                          maxLines: 1,
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                        ),
+                        app.private && showPrivateIcon
+                            ? const SizedBox(
+                                width: 6,
+                              )
+                            : const SizedBox(),
+                        app.private && showPrivateIcon
+                            ? const Icon(Icons.lock, color: Colors.grey, size: 16)
+                            : const SizedBox(),
+                      ],
                     ),
                     SizedBox(height: app.ratingAvg != null ? 4 : 0),
                     Padding(
@@ -98,25 +110,6 @@ class AppListItem extends StatelessWidget {
                                 ),
                               )
                             : Container(),
-                        app.private && showPrivateIcon
-                            ? Row(
-                                children: [
-                                  (app.ratingAvg != null || app.installs > 0)
-                                      ? const SizedBox(width: 16)
-                                      : const SizedBox(),
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 8),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.lock, color: Colors.grey, size: 16),
-                                        SizedBox(width: 4),
-                                        Text('Private', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : const SizedBox(),
                       ],
                     ),
                   ],
