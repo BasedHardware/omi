@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter
 
-from models import TranscriptSegment, MentorEndpointResponse, RealtimePluginRequest
+from models import TranscriptSegment, ProactiveNotificationEndpointResponse, RealtimePluginRequest
 from db import get_upsert_segment_to_transcript_plugin
 
 router = APIRouter()
@@ -10,10 +10,10 @@ router = APIRouter()
 scan_segment_session = {}
 
 # *******************************************************
-# ************ Basic Mentor Plugin ************
+# ************ Basic Proactive Notification Plugin ************
 # *******************************************************
 
-@router.post('/mentor', tags=['mentor', 'basic', 'realtime'], response_model=MentorEndpointResponse)
+@router.post('/mentor', tags=['mentor', 'basic', 'realtime', 'proactive_notification'], response_model=ProactiveNotificationEndpointResponse)
 def mentoring(data: RealtimePluginRequest):
     def normalize(text):
         return re.sub(r' +', ' ',re.sub(r'[,?.!]', ' ', text)).lower().strip()
