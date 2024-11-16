@@ -13,7 +13,7 @@ scan_segment_session = {}
 # ************ Basic Proactive Notification Plugin ************
 # *******************************************************
 
-@router.post('/mentor', tags=['mentor', 'basic', 'realtime', 'proactive_notification'], response_model=ProactiveNotificationEndpointResponse)
+@router.post('/mentor', tags=['mentor', 'basic', 'realtime', 'proactive_notification'], response_model=ProactiveNotificationEndpointResponse, response_model_exclude_none=True)
 def mentoring(data: RealtimePluginRequest):
     def normalize(text):
         return re.sub(r' +', ' ',re.sub(r'[,?.!]', ' ', text)).lower().strip()

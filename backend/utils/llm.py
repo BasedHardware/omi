@@ -879,5 +879,6 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             prompt = prompt.replace("{{user_context}}", context if context else "")
             continue
     prompt = prompt.replace('    ', '').strip()
+    #print(prompt)
 
     return llm_mini.invoke(prompt).content
