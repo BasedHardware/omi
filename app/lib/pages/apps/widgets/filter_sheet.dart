@@ -43,6 +43,27 @@ class FilterBottomSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     FilterSection(
+                      title: 'Apps',
+                      child: Column(
+                        children: [
+                          FilterOption(
+                            label: 'Installed Apps',
+                            onTap: () {
+                              provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                            },
+                            isSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
+                          ),
+                          FilterOption(
+                            label: 'My Apps',
+                            onTap: () {
+                              provider.addOrRemoveFilter('My Apps', 'Apps');
+                            },
+                            isSelected: provider.isFilterSelected('My Apps', 'Apps'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilterSection(
                         title: 'Sort',
                         child: Column(
                           children: [

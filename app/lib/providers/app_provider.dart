@@ -116,6 +116,13 @@ class AppProvider extends BaseProvider {
     filteredApps = apps;
     filters.forEach((key, value) {
       switch (key) {
+        case 'Apps':
+          if (value == 'Installed Apps') {
+            filteredApps = filteredApps.where((app) => app.enabled).toList();
+          } else if (value == 'My Apps') {
+            filteredApps = filteredApps.where((app) => app.isOwner(SharedPreferencesUtil().uid)).toList();
+          }
+          break;
         case 'Sort':
           if (value == 'A-Z') {
             filteredApps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
