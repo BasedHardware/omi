@@ -16,7 +16,12 @@ from models.plugin import Plugin, UsageHistoryType
 from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
-from utils.llm import get_metoring_message
+from utils.llm import (
+    generate_embedding,
+    get_proactive_message
+)
+from database.vector_db import query_vectors_by_metadata
+import database.memories as memories_db
 
 
 def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
@@ -213,6 +218,65 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
     _trigger_realtime_integrations(uid, token, segments)
 
 
+# proactive notification
+def _retrieve_contextual_memories(uid: str, user_context):
+    vector = (
+        generate_embedding(user_context.get('question', ''))
+        if user_context.get('question')
+        else [0] * 3072
+    )
+    print("query_vectors vector:", vector[:5])
+
+    date_filters = {}  # not support yet
+    filters = user_context.get('filters', {})
+    memories_id = query_vectors_by_metadata(
+        uid,
+        vector,
+        dates_filter=[date_filters.get("start"), date_filters.get("end")],
+        people=filters.get("people", []),
+        topics=filters.get("topics", []),
+        entities=filters.get("entities", []),
+        dates=filters.get("dates", []),
+    )
+    return memories_db.get_memories_by_id(uid, memories_id)
+
+
+def _process_proactive_notification(uid: str, token: str, plugin: App, data):
+    if not plugin.has_capability("proactive_notification") or not data:
+        print(f"Plugins {plugin.id} is not proactive_notification or data invalid", uid)
+        return None
+
+    max_prompt_char_limit = 8000
+    min_message_char_limit = 5
+
+    prompt = data.get('prompt', '')
+    if len(prompt) > max_prompt_char_limit:
+        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
+        return None
+
+    filter_scopes = plugin.filter_proactive_notification_scopes(data.get('params', []))
+
+    # context
+    context = None
+    if 'user_context' in filter_scopes:
+        memories = _retrieve_contextual_memories(uid, data.get('user_context', {}))
+        if len(memories) > 0:
+            context = Memory.memories_to_string(memories, True)
+
+    print(f'_process_proactive_notification context {context[100] if context else "empty"}')
+
+    # retrive message
+    message = get_proactive_message(uid, prompt, filter_scopes, context)
+    if not message or len(message) < min_message_char_limit:
+        print(f"Plugins {plugin.id}, message too short", uid)
+        return None
+
+    # send notification
+    send_plugin_notification(token, plugin.name, plugin.id, message)
+    return message
+
+
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [
@@ -253,21 +317,12 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
                 results[plugin.id] = message
 
             # proactive_notification
+            noti = response_data.get('notification', None)
+            print('Plugin', plugin.id, 'response notification:', noti)
             if plugin.has_capability("proactive_notification"):
-                noti = response_data.get('notification', None)
-                print('Plugin', plugin.id, 'response notification:', noti)
-                if noti:
-                    prompt = noti.get('prompt', '')
-                    if len(prompt) > 0 and len(prompt) <= 8000:
-                        params = noti.get('params', [])
-                        message = get_metoring_message(uid, prompt, plugin.filter_proactive_notification_scopes(params))
-                        if message and len(message) > 5:
-                            send_plugin_notification(token, plugin.name, plugin.id, message)
-                            results[plugin.id] = message
-                    elif len(prompt) > 8000:
-                        send_plugin_notification(token, plugin.name, plugin.id,
-                                                 f"Prompt too long: {len(prompt)}/8000 characters. Please shorten.")
-                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/8000")
+                message = _process_proactive_notification(uid, token, plugin, noti)
+                if message:
+                    results[plugin.id] = message
 
         except Exception as e:
             print(f"Plugin integration error: {e}")
