@@ -59,14 +59,53 @@ Future<bool> disableAppServer(String appId) async {
   return response.statusCode == 200;
 }
 
-Future<void> reviewApp(String appId, double score, {String review = ''}) async {
+Future<bool> reviewApp(String appId, AppReview review) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/review?app_id=$appId',
+      headers: {'Content-Type': 'application/json'},
+      method: 'POST',
+      body: jsonEncode(review.toJson()),
+    );
+    debugPrint('reviewApp: ${response?.body}');
+    return response?.statusCode == 200;
+  } catch (e) {
+    debugPrint('Error reviewing app: $e');
+    return false;
+  }
+}
+
+Future<bool> updateAppReview(String appId, AppReview review) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/$appId/review',
+      headers: {'Content-Type': 'application/json'},
+      method: 'PATCH',
+      body: jsonEncode(review.toJson()),
+    );
+    debugPrint('updateAppReview: ${response?.body}');
+    return response?.statusCode == 200;
+  } catch (e) {
+    debugPrint('Error updating app review: $e');
+    return false;
+  }
+}
+
+Future<List<AppReview>> getAppReviews(String appId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/review?app_id=$appId',
-    headers: {'Content-Type': 'application/json'},
-    method: 'POST',
-    body: jsonEncode({'score': score, review: review}),
+    url: '${Env.apiBaseUrl}v1/apps/$appId/reviews',
+    headers: {},
+    body: '',
+    method: 'GET',
   );
-  debugPrint('reviewApp: ${response?.body}');
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getAppReviews: ${response.body}');
+    return AppReview.fromJsonList(jsonDecode(response.body));
+  } catch (e) {
+    debugPrint(e.toString());
+    return [];
+  }
 }
 
 Future<String> getAppMarkdown(String appMarkdownPath) async {
