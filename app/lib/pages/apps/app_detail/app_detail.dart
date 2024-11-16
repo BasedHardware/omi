@@ -5,11 +5,10 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
+import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/info_card_widget.dart';
 import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
@@ -18,8 +17,9 @@ import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../backend/schema/app.dart';
-import 'widgets/show_app_options_sheet.dart';
+import '../../../backend/schema/app.dart';
+import '../widgets/show_app_options_sheet.dart';
+import 'widgets/info_card_widget.dart';
 
 class AppDetailPage extends StatefulWidget {
   final App app;
@@ -34,6 +34,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
+  List<AppReview> reviews = [];
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -46,6 +47,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void initState() {
+    getAppReviews(widget.app.id).then((value) {
+      if (mounted) {
+        setState(() => reviews = value);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
@@ -438,101 +444,88 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       showChips: false,
                     )
                   : const SizedBox.shrink(),
-              !widget.app.isOwner(SharedPreferencesUtil().uid)
-                  ? GestureDetector(
-                      onTap: () {},
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16.0),
-                        margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Row(
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16.0),
+                margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900,
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(widget.app.getRatingAvg() ?? '0.0',
+                            style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        Column(
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6.0),
-                                  child: Text(widget.app.userReview?.score == null ? 'Rate this app' : 'Your rating',
-                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                ),
-                                const SizedBox(height: 10),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 0),
-                                  child: RatingBar.builder(
-                                    initialRating: widget.app.userReview?.score ?? 0,
-                                    minRating: 1,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 5,
-                                    itemSize: 30,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 4),
-                                    itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {
-                                      final connectivityProvider =
-                                          Provider.of<ConnectivityProvider>(context, listen: false);
-                                      if (connectivityProvider.isConnected) {
-                                        reviewApp(widget.app.id, rating);
-                                        bool hadReview = widget.app.userReview != null;
-                                        if (!hadReview) widget.app.ratingCount += 1;
-                                        widget.app.userReview = AppReview(
-                                          uid: SharedPreferencesUtil().uid,
-                                          ratedAt: DateTime.now(),
-                                          review: '',
-                                          score: rating,
-                                        );
-                                        var appsList = SharedPreferencesUtil().appsList;
-                                        var index = appsList.indexWhere((element) => element.id == widget.app.id);
-                                        appsList[index] = widget.app;
-                                        SharedPreferencesUtil().appsList = appsList;
-                                        MixpanelManager().appRated(widget.app.id.toString(), rating);
-                                        debugPrint('Refreshed apps list.');
-                                        // TODO: refresh ratings on app
-                                        setState(() {});
-                                      } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                          content: Text("Can't rate app without internet connection."),
-                                        ));
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
+                            RatingBar.builder(
+                              initialRating: 4.2,
+                              minRating: 1,
+                              ignoreGestures: true,
+                              direction: Axis.horizontal,
+                              allowHalfRating: true,
+                              itemCount: 5,
+                              itemSize: 20,
+                              tapOnlyMode: false,
+                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                              maxRating: 5.0,
+                              onRatingUpdate: (rating) {},
                             ),
-                            const Spacer(),
-                            const SizedBox(width: 28),
-                            const SizedBox(
-                              height: 56,
-                              child: VerticalDivider(
-                                color: Colors.white,
-                                endIndent: 2,
-                                indent: 2,
-                                width: 4,
-                              ),
-                            ),
-                            const SizedBox(width: 28),
-                            Column(
-                              children: [
-                                Text(
-                                  '${widget.app.ratingCount} +',
-                                  style: const TextStyle(color: Colors.white, fontSize: 18),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'Reviews',
-                                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 24),
+                            const SizedBox(height: 4),
+                            Text("${widget.app.ratingCount}+ ratings"),
                           ],
                         ),
-                      ),
-                    )
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Most Recent Reviews',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                    ...reviews.mapIndexed<Widget>((i, review) {
+                      return ListTile(
+                        title: Text(
+                          review.review,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            RatingBar.builder(
+                              initialRating: review.score.toDouble(),
+                              minRating: 1,
+                              ignoreGestures: true,
+                              direction: Axis.horizontal,
+                              allowHalfRating: true,
+                              itemCount: 5,
+                              itemSize: 20,
+                              tapOnlyMode: false,
+                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                              maxRating: 5.0,
+                              onRatingUpdate: (rating) {},
+                            ),
+                            const SizedBox(height: 4),
+                            Text(review.review),
+                          ],
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                        onTap: () {},
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+              !widget.app.isOwner(SharedPreferencesUtil().uid)
+                  ? AddReviewWidget(app: widget.app)
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
