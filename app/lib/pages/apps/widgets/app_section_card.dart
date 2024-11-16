@@ -41,9 +41,9 @@ class AppSectionCard extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                childAspectRatio: 0.3,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
+                childAspectRatio: 0.25,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
               ),
               itemCount: apps.length,
               itemBuilder: (context, index) => SectionAppItemCard(
@@ -52,6 +52,7 @@ class AppSectionCard extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -74,7 +75,11 @@ class SectionAppItemCard extends StatelessWidget {
           provider.setApps();
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 25, 24, 24),
+            borderRadius: BorderRadius.circular(12.0),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -109,7 +114,6 @@ class SectionAppItemCard extends StatelessWidget {
                       maxLines: 1,
                       style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                     ),
-                    SizedBox(height: app.ratingAvg != null ? 4 : 0),
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
@@ -132,6 +136,7 @@ class SectionAppItemCard extends StatelessWidget {
                                           Text(app.getRatingAvg()!),
                                           const SizedBox(width: 4),
                                           const Icon(Icons.star, color: Colors.deepPurple, size: 16),
+                                          Text('(${app.ratingCount})'),
                                           const SizedBox(width: 16),
                                         ],
                                       )
@@ -143,7 +148,6 @@ class SectionAppItemCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
             ],
           ),
         ),

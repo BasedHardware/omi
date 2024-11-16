@@ -36,31 +36,35 @@ class _AppsPageState extends State<AppsPage> {
               elevation: 0,
             )
           : null,
-      body: DefaultTabController(
-        length: 2,
+      body: const DefaultTabController(
+        length: 1,
         initialIndex: 0,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            TabBar(
-              indicatorSize: TabBarIndicatorSize.label,
-              isScrollable: true,
-              padding: EdgeInsets.zero,
-              indicatorPadding: EdgeInsets.zero,
-              labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-              indicatorColor: Colors.white,
-              tabs: const [
-                Tab(text: 'Explore & Install'),
-                Tab(text: 'Manage & Create'),
-              ],
+            // TabBar(
+            //   indicatorSize: TabBarIndicatorSize.label,
+            //   isScrollable: true,
+            //   padding: EdgeInsets.zero,
+            //   indicatorPadding: EdgeInsets.zero,
+            //   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+            //   indicatorColor: Colors.white,
+            //   tabs: const [
+            //     Tab(text: 'Explore & Install'),
+            //     Tab(text: 'Manage & Create'),
+            //   ],
+            // ),
+            Expanded(
+              child: ExploreInstallPage(),
             ),
-            const Expanded(
-                child: TabBarView(
-              children: [
-                ExploreInstallPage(),
-                ManageCreatePage(),
-              ],
-            )),
+            // const Expanded(
+            //     child: TabBarView(
+            //   children: [
+            //     ExploreInstallPage(),
+            //     ManageCreatePage(),
+            //   ],
+            // )),
           ],
         ),
       ),
