@@ -13,12 +13,18 @@ Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  if (!hasAuthToken ||
-      expiry.isBefore(DateTime.now()) ||
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now()))) {
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+
+  if (SharedPreferencesUtil().customBackendUrl.isNotEmpty && (!hasAuthToken || !isExpirationDateValid)) {
+    throw Exception('No auth token found');
+  }
+
+  if (!hasAuthToken || !isExpirationDateValid) {
     SharedPreferencesUtil().authToken = await getIdToken() ?? '';
   }
+
   if (!hasAuthToken) {
     if (isSignedIn()) {
       // should only throw if the user is signed in but the token is not found
