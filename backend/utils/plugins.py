@@ -9,9 +9,11 @@ from database.chat import add_plugin_message
 from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
+from models.app import App
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
+from utils.apps import get_available_apps
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
 from utils.llm import get_metoring_message
@@ -55,7 +57,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
                 get_contents(item["path"])
 
     get_contents(path)
-    set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24*7)
+    set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24 * 7)
     return docs_content
 
 
@@ -157,7 +159,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     if not memory or memory.discarded:
         return []
 
-    plugins: List[Plugin] = get_plugins_data_from_db(uid)
+    plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [plugin for plugin in plugins if
                         plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
@@ -166,7 +168,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     threads = []
     results = {}
 
-    def _single(plugin: Plugin):
+    def _single(plugin: App):
         if not plugin.external_integration.webhook_url:
             return
 
@@ -220,7 +222,7 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
-    plugins: List[Plugin] = get_plugins_data_from_db(uid, include_reviews=False)
+    plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [
         plugin for plugin in plugins if
         plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
@@ -231,7 +233,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
     threads = []
     results = {}
 
-    def _single(plugin: Plugin):
+    def _single(plugin: App):
         if not plugin.external_integration.webhook_url:
             return
 
@@ -271,7 +273,8 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
                             send_plugin_notification(token, plugin.name, plugin.id, message)
                             results[plugin.id] = message
                     elif len(prompt) > 8000:
-                        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/8000 characters. Please shorten.")
+                        send_plugin_notification(token, plugin.name, plugin.id,
+                                                 f"Prompt too long: {len(prompt)}/8000 characters. Please shorten.")
                         print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/8000")
 
         except Exception as e:
