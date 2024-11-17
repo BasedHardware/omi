@@ -5,8 +5,14 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache
 from models.app import App
-from utils.plugins import weighted_rating
 
+
+def weighted_rating(plugin):
+    C = 3.0  # Assume 3.0 is the mean rating across all plugins
+    m = 5  # Minimum number of ratings required to be considered
+    R = plugin.rating_avg or 0
+    v = plugin.rating_count or 0
+    return (v / (v + m) * R) + (m / (v + m) * C)
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     private_data = []
