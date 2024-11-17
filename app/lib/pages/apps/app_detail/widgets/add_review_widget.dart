@@ -172,7 +172,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                         if (rating == widget.app.userReview?.score &&
                                             reviewController.text == widget.app.userReview?.review) {
                                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                            content: Text("No changes in review."),
+                                            content: Text("No changes in review to update."),
                                           ));
                                           return;
                                         }
@@ -197,6 +197,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                             widget.app.userReview = rev;
                                           }
                                           if (isSuccessful) {
+                                            updateShowButton(false);
+                                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                              content: Text("Review added successfully 🚀"),
+                                            ));
                                             bool hadReview = widget.app.userReview != null;
                                             if (!hadReview) widget.app.ratingCount += 1;
                                             widget.app.userReview = AppReview(
