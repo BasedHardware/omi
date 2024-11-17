@@ -3,7 +3,7 @@ from typing import List
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
-    set_generic_cache
+    set_generic_cache, get_app_cache_by_id, set_app_cache_by_id
 from models.app import App
 from utils.plugins import weighted_rating
 
@@ -48,11 +48,18 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
 
 
 def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
+    cached_app = get_app_cache_by_id(app_id)
+    if cached_app:
+        print('get_app_cache_by_id from cache')
+        if cached_app['private'] and cached_app['uid'] != uid:
+            return None
+        return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
     if app['private'] and app['uid'] != uid:
         return None
+    set_app_cache_by_id(app_id, app)
     return app
 
 
