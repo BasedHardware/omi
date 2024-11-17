@@ -266,7 +266,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
                     prompt = noti.get('prompt', '')
                     if len(prompt) > 0 and len(prompt) <= 8000:
                         params = noti.get('params', [])
-                        message = get_metoring_message(uid, prompt, plugin.fitler_proactive_notification_scopes(params))
+                        message = get_metoring_message(uid, prompt, plugin.filter_proactive_notification_scopes(params))
                         if message and len(message) > 5:
                             send_plugin_notification(token, plugin.name, plugin.id, message)
                             results[plugin.id] = message
