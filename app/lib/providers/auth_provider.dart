@@ -20,12 +20,15 @@ class AuthenticationProvider extends BaseProvider {
 
   AuthenticationProvider() {
     _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) return;
+
       this.user = user;
       SharedPreferencesUtil().uid = user?.uid ?? '';
       SharedPreferencesUtil().email = user?.email ?? '';
       SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
     });
     _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) return;
       if (user == null) {
         debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
         SharedPreferencesUtil().authToken = '';

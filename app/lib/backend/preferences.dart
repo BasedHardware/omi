@@ -361,7 +361,7 @@ class SharedPreferencesUtil {
 
   set familyName(String value) => saveString('familyName', value);
 
-  String get fullName => '$givenName $familyName';
+  String get fullName => '$givenName $familyName'.trim();
 
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
@@ -432,4 +432,8 @@ class SharedPreferencesUtil {
   String get customBackendUrl => getString('customBackendUrl') ?? '';
 
   set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
+  String get customAuthPassword => getString('customAuthPassword') ?? '';
+
+  set customAuthPassword(String value) => saveString('customAuthPassword', value);
 }
