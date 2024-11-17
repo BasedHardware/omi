@@ -13,7 +13,7 @@ from models.app import App
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
-from utils.apps import get_available_apps
+from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
 from utils.llm import get_metoring_message
@@ -71,14 +71,6 @@ def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
         return None
     plugins = get_plugins_data('', include_reviews=False)
     return next((p for p in plugins if p.id == plugin_id), None)
-
-
-def weighted_rating(plugin):
-    C = 3.0  # Assume 3.0 is the mean rating across all plugins
-    m = 5  # Minimum number of ratings required to be considered
-    R = plugin.rating_avg or 0
-    v = plugin.rating_count or 0
-    return (v / (v + m) * R) + (m / (v + m) * C)
 
 
 def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
