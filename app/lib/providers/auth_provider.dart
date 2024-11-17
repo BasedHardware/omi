@@ -14,10 +14,6 @@ class AuthenticationProvider extends BaseProvider {
   User? user;
   String? authToken;
 
-  bool isSignedIn() {
-    return _auth.currentUser != null;
-  }
-
   AuthenticationProvider() {
     _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
       if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) return;
@@ -48,6 +44,8 @@ class AuthenticationProvider extends BaseProvider {
       notifyListeners();
     });
   }
+
+  bool isSignedIn() => _auth.currentUser != null;
 
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {

@@ -285,7 +285,8 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         NotificationService.instance.saveNotificationToken();
       }
 
-      if (context.read<AuthenticationProvider>().user != null) {
+      if (context.read<AuthenticationProvider>().user != null ||
+          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         IntercomManager.instance.intercom.loginIdentifiedUser(
           userId: SharedPreferencesUtil().uid,
@@ -305,7 +306,10 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted && authProvider.user != null) {
+        if (SharedPreferencesUtil().onboardingCompleted &&
+            (authProvider.user != null ||
+                (SharedPreferencesUtil().customBackendUrl.isNotEmpty &&
+                    SharedPreferencesUtil().authToken.isNotEmpty))) {
           return const HomePageWrapper();
         } else {
           return const OnboardingWrapper();

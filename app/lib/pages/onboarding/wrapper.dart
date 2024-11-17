@@ -38,7 +38,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _controller = TabController(length: hasSpeechProfile ? 5 : 6, vsync: this);
     _controller!.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (isSignedIn()) {
+      if (isSignedIn() ||
+          (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
           context.read<HomeProvider>().setupHasSpeakerProfile();
@@ -82,7 +83,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           MixpanelManager().onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.intercom.loginIdentifiedUser(
-            userId: FirebaseAuth.instance.currentUser!.uid,
+            userId: SharedPreferencesUtil().uid,
           );
           if (SharedPreferencesUtil().onboardingCompleted) {
             // previous users
