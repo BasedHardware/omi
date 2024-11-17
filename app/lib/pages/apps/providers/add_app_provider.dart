@@ -104,6 +104,9 @@ class AddAppProvider extends ChangeNotifier {
       webhookUrlController.text = app.externalIntegration!.webhookUrl;
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      if (app.externalIntegration!.authSteps.isNotEmpty) {
+        authUrlController.text = app.externalIntegration!.authSteps.first.url;
+      }
     }
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
