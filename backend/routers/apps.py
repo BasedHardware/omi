@@ -11,7 +11,7 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
 from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
-    disable_plugin, decrease_plugin_installs_count
+    disable_plugin, decrease_plugin_installs_count, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews
 from utils.notifications import send_notification
@@ -85,6 +85,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -98,6 +99,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_app_from_db(app_id)
     if plugin['approved']:
         delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -146,6 +148,7 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     if app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     update_app_visibility_in_db(app_id, private)
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -229,6 +232,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
+    delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
@@ -242,6 +246,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
+    delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
