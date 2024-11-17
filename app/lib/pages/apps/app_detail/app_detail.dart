@@ -5,6 +5,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/analytics.dart';
+import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -81,372 +82,378 @@ class _AppDetailPageState extends State<AppDetailPage> {
     int stepsCount = widget.app.externalIntegration?.authSteps.length ?? 0;
 
     return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          elevation: 0,
-          actions: [
-            context.watch<AppProvider>().isAppOwner
-                ? IconButton(
-                    icon: const Icon(Icons.settings),
-                    onPressed: () async {
-                      await showModalBottomSheet(
-                        context: context,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
-                          ),
-                        ),
-                        builder: (context) {
-                          return ShowAppOptionsSheet(
-                            app: widget.app,
-                          );
-                        },
-                      );
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ],
-        ),
+      appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        body: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  const SizedBox(width: 20),
-                  CachedNetworkImage(
-                    imageUrl: widget.app.getImageUrl(),
-                    imageBuilder: (context, imageProvider) => Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.rectangle,
-                        borderRadius: BorderRadius.circular(8),
-                        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                      ),
-                    ),
-                    placeholder: (context, url) => const CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
-                  ),
-                  const SizedBox(width: 20),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.6,
-                        child: Text(
-                          widget.app.name.decodeString,
-                          style: const TextStyle(color: Colors.white, fontSize: 20),
+        elevation: 0,
+        actions: [
+          context.watch<AppProvider>().isAppOwner
+              ? IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () async {
+                    await showModalBottomSheet(
+                      context: context,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.app.author,
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  widget.app.ratingCount == 0
-                      ? const Column(
-                          children: [
-                            Text(
-                              '0.0',
-                              style: TextStyle(
-                                fontSize: 16,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text("no reviews"),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  widget.app.getRatingAvg() ?? '0.0',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                RatingBar.builder(
-                                  initialRating: widget.app.ratingAvg ?? 0,
-                                  minRating: 1,
-                                  ignoreGestures: true,
-                                  direction: Axis.horizontal,
-                                  allowHalfRating: true,
-                                  itemCount: 1,
-                                  itemSize: 20,
-                                  tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                                  maxRating: 5.0,
-                                  onRatingUpdate: (rating) {},
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text('${widget.app.ratingCount}+ reviews'),
-                          ],
-                        ),
-                  const Spacer(),
-                  const SizedBox(
-                    height: 36,
-                    child: VerticalDivider(
-                      color: Colors.white,
-                      endIndent: 2,
-                      indent: 2,
-                      width: 4,
+                      builder: (context) {
+                        return ShowAppOptionsSheet(
+                          app: widget.app,
+                        );
+                      },
+                    );
+                  },
+                )
+              : const SizedBox.shrink(),
+        ],
+      ),
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      body: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const SizedBox(width: 20),
+                CachedNetworkImage(
+                  imageUrl: widget.app.getImageUrl(),
+                  imageBuilder: (context, imageProvider) => Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.rectangle,
+                      borderRadius: BorderRadius.circular(8),
+                      image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                     ),
                   ),
-                  const Spacer(),
-                  Column(
-                    children: [
-                      Text(
-                        '${(widget.app.installs / 10).round() * 10}+',
-                        style: const TextStyle(
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text("installs"),
-                    ],
-                  ),
-                  const Spacer(),
-                  const SizedBox(
-                    height: 36,
-                    child: VerticalDivider(
-                      color: Colors.white,
-                      endIndent: 2,
-                      indent: 2,
-                      width: 4,
-                    ),
-                  ),
-                  const Spacer(),
-                  Column(
-                    children: [
-                      Text(
-                        widget.app.private ? 'Private' : 'Public',
-                        style: const TextStyle(
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text("app"),
-                    ],
-                  ),
-                  const Spacer(),
-                ],
-              ),
-              const SizedBox(height: 24),
-              widget.app.enabled
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: AnimatedLoadingButton(
-                          text: 'Uninstall App',
-                          width: MediaQuery.of(context).size.width * 0.9,
-                          onPressed: () => _toggleApp(widget.app.id, false),
-                          color: Colors.red,
-                        ),
-                      ),
-                    )
-                  : Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: AnimatedLoadingButton(
-                          width: MediaQuery.of(context).size.width * 0.9,
-                          text: 'Install App',
-                          onPressed: () => _toggleApp(widget.app.id, true),
-                          color: Colors.green,
-                        ),
+                  placeholder: (context, url) => const CircularProgressIndicator(),
+                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                ),
+                const SizedBox(width: 20),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.6,
+                      child: Text(
+                        widget.app.name.decodeString,
+                        style: const TextStyle(color: Colors.white, fontSize: 20),
                       ),
                     ),
-              widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
-                  ? Column(
-                      children: [
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Colors.grey,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.78,
-                              child: const Text(
-                                  'Your app is under review and visible only to you. It will be public once approved.',
-                                  style: TextStyle(color: Colors.grey)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-              widget.app.isRejected()
-                  ? Column(
-                      children: [
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.grey,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.78,
-                              child: const Text(
-                                'Your app has been rejected. Please update the app details and resubmit for review.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-              const SizedBox(height: 16),
-              (hasAuthSteps && stepsCount > 0)
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.app.author,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
+                widget.app.ratingCount == 0
+                    ? const Column(
                         children: [
-                          const Text(
-                            'Setup Steps',
-                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          Text(
+                            '0.0',
+                            style: TextStyle(
+                              fontSize: 16,
+                            ),
                           ),
-                          setupCompleted
-                              ? const Padding(
-                                  padding: EdgeInsets.only(right: 12.0),
-                                  child: Text(
-                                    '✅',
-                                    style: TextStyle(color: Colors.grey, fontSize: 18),
-                                  ),
-                                )
-                              : const SizedBox(),
+                          SizedBox(height: 4),
+                          Text("no reviews"),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                widget.app.getRatingAvg() ?? '0.0',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                ),
+                              ),
+                              RatingBar.builder(
+                                initialRating: widget.app.ratingAvg ?? 0,
+                                minRating: 1,
+                                ignoreGestures: true,
+                                direction: Axis.horizontal,
+                                allowHalfRating: true,
+                                itemCount: 1,
+                                itemSize: 20,
+                                tapOnlyMode: false,
+                                itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                maxRating: 5.0,
+                                onRatingUpdate: (rating) {},
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text('${widget.app.ratingCount}+ reviews'),
                         ],
                       ),
-                    )
-                  : const SizedBox.shrink(),
-              ...(hasAuthSteps
-                  ? widget.app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                      String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
-                      // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
-                      return ListTile(
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontSize: 17),
+                const Spacer(),
+                const SizedBox(
+                  height: 36,
+                  child: VerticalDivider(
+                    color: Colors.white,
+                    endIndent: 2,
+                    indent: 2,
+                    width: 4,
+                  ),
+                ),
+                const Spacer(),
+                Column(
+                  children: [
+                    Text(
+                      '${(widget.app.installs / 10).round() * 10}+',
+                      style: const TextStyle(
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text("installs"),
+                  ],
+                ),
+                const Spacer(),
+                const SizedBox(
+                  height: 36,
+                  child: VerticalDivider(
+                    color: Colors.white,
+                    endIndent: 2,
+                    indent: 2,
+                    width: 4,
+                  ),
+                ),
+                const Spacer(),
+                Column(
+                  children: [
+                    Text(
+                      widget.app.private ? 'Private' : 'Public',
+                      style: const TextStyle(
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text("app"),
+                  ],
+                ),
+                const Spacer(),
+              ],
+            ),
+            const SizedBox(height: 24),
+            widget.app.enabled
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: AnimatedLoadingButton(
+                        text: 'Uninstall App',
+                        width: MediaQuery.of(context).size.width * 0.9,
+                        onPressed: () => _toggleApp(widget.app.id, false),
+                        color: Colors.red,
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: AnimatedLoadingButton(
+                        width: MediaQuery.of(context).size.width * 0.9,
+                        text: 'Install App',
+                        onPressed: () => _toggleApp(widget.app.id, true),
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+            widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
+                ? Column(
+                    children: [
+                      const SizedBox(
+                        height: 10,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Colors.grey,
+                            size: 18,
                           ),
-                          onTap: () async {
-                            await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
-                            checkSetupCompleted();
-                          },
-                          trailing: const Padding(
-                            padding: EdgeInsets.only(right: 12.0),
-                            child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
-                          ));
-                    }).toList()
-                  : <Widget>[const SizedBox.shrink()]),
-              !hasAuthSteps && hasSetupInstructions
-                  ? ListTile(
-                      onTap: () async {
-                        if (widget.app.externalIntegration != null) {
-                          if (widget.app.externalIntegration!.setupInstructionsFilePath
-                              .contains('raw.githubusercontent.com')) {
-                            await routeToPage(
-                              context,
-                              MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
-                            );
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width * 0.78,
+                            child: const Text(
+                                'Your app is under review and visible only to you. It will be public once approved.',
+                                style: TextStyle(color: Colors.grey)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+            widget.app.isRejected()
+                ? Column(
+                    children: [
+                      const SizedBox(
+                        height: 10,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.grey,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width * 0.78,
+                            child: const Text(
+                              'Your app has been rejected. Please update the app details and resubmit for review.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+            const SizedBox(height: 16),
+            (hasAuthSteps && stepsCount > 0)
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Setup Steps',
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
+                        setupCompleted
+                            ? const Padding(
+                                padding: EdgeInsets.only(right: 12.0),
+                                child: Text(
+                                  '✅',
+                                  style: TextStyle(color: Colors.grey, fontSize: 18),
+                                ),
+                              )
+                            : const SizedBox(),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            ...(hasAuthSteps
+                ? widget.app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
+                    String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
+                    // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
+                    return ListTile(
+                        title: Text(
+                          title,
+                          style: const TextStyle(fontSize: 17),
+                        ),
+                        onTap: () async {
+                          await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                          checkSetupCompleted();
+                        },
+                        trailing: const Padding(
+                          padding: EdgeInsets.only(right: 12.0),
+                          child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                        ));
+                  }).toList()
+                : <Widget>[const SizedBox.shrink()]),
+            !hasAuthSteps && hasSetupInstructions
+                ? ListTile(
+                    onTap: () async {
+                      if (widget.app.externalIntegration != null) {
+                        if (widget.app.externalIntegration!.setupInstructionsFilePath
+                            .contains('raw.githubusercontent.com')) {
+                          await routeToPage(
+                            context,
+                            MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+                          );
+                        } else {
+                          if (widget.app.externalIntegration!.isInstructionsUrl) {
+                            await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
                           } else {
-                            if (widget.app.externalIntegration!.isInstructionsUrl) {
-                              await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
-                            } else {
-                              var m = widget.app.externalIntegration!.setupInstructionsFilePath;
-                              routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
-                            }
+                            var m = widget.app.externalIntegration!.setupInstructionsFilePath;
+                            routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
                           }
                         }
-                        checkSetupCompleted();
-                      },
-                      trailing: const Padding(
-                        padding: EdgeInsets.only(right: 12.0),
-                        child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
-                      ),
-                      title: const Text(
-                        'Integration Instructions',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-              InfoCardWidget(
-                onTap: () {
-                  if (widget.app.description.decodeString.characters.length > 200) {
-                    routeToPage(
-                        context, MarkdownViewer(title: 'About the App', markdown: widget.app.description.decodeString));
-                  }
-                },
-                title: 'About the App',
-                description: widget.app.description,
-                showChips: true,
-                chips: widget.app
-                    .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
-                    .map((e) => e.title)
-                    .toList(),
-              ),
+                      }
+                      checkSetupCompleted();
+                    },
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 12.0),
+                      child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                    ),
+                    title: const Text(
+                      'Integration Instructions',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            InfoCardWidget(
+              onTap: () {
+                if (widget.app.description.decodeString.characters.length > 200) {
+                  routeToPage(
+                      context, MarkdownViewer(title: 'About the App', markdown: widget.app.description.decodeString));
+                }
+              },
+              title: 'About the App',
+              description: widget.app.description,
+              showChips: true,
+              chips: widget.app
+                  .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
+                  .map((e) => e.title)
+                  .toList(),
+            ),
 
-              widget.app.memoryPrompt != null
-                  ? InfoCardWidget(
-                      onTap: () {
-                        if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
-                          routeToPage(context,
-                              MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
-                        }
-                      },
-                      title: 'Memory Prompt',
-                      description: widget.app.memoryPrompt!,
-                      showChips: false,
-                    )
-                  : const SizedBox.shrink(),
+            widget.app.memoryPrompt != null
+                ? InfoCardWidget(
+                    onTap: () {
+                      if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
+                        routeToPage(context,
+                            MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
+                      }
+                    },
+                    title: 'Memory Prompt',
+                    description: widget.app.memoryPrompt!,
+                    showChips: false,
+                  )
+                : const SizedBox.shrink(),
 
-              widget.app.chatPrompt != null
-                  ? InfoCardWidget(
-                      onTap: () {
-                        if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
-                          routeToPage(context,
-                              MarkdownViewer(title: 'Chat Persoality', markdown: widget.app.chatPrompt!.decodeString));
-                        }
-                      },
-                      title: 'Chat Personality',
-                      description: widget.app.chatPrompt!,
-                      showChips: false,
-                    )
-                  : const SizedBox.shrink(),
-              Container(
+            widget.app.chatPrompt != null
+                ? InfoCardWidget(
+                    onTap: () {
+                      if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
+                        routeToPage(context,
+                            MarkdownViewer(title: 'Chat Persoality', markdown: widget.app.chatPrompt!.decodeString));
+                      }
+                    },
+                    title: 'Chat Personality',
+                    description: widget.app.chatPrompt!,
+                    showChips: false,
+                  )
+                : const SizedBox.shrink(),
+            GestureDetector(
+              onTap: () {
+                if (reviews.isNotEmpty) {
+                  routeToPage(context, ReviewsListPage(reviews: reviews));
+                }
+              },
+              child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(18.0),
                 margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade900,
@@ -454,9 +461,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
-                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
+                        const Spacer(),
+                        reviews.isNotEmpty
+                            ? const Icon(
+                                Icons.arrow_forward,
+                                size: 20,
+                              )
+                            : const SizedBox.shrink(),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
                         Text(widget.app.getRatingAvg() ?? '0.0',
@@ -485,67 +504,34 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Most Recent Reviews',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    const SizedBox(height: 16),
-                    ...reviews.mapIndexed<Widget>((i, review) {
-                      return ListTile(
-                        title: Text(
-                          review.review,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            RatingBar.builder(
-                              initialRating: review.score.toDouble(),
-                              minRating: 1,
-                              ignoreGestures: true,
-                              direction: Axis.horizontal,
-                              allowHalfRating: true,
-                              itemCount: 5,
-                              itemSize: 20,
-                              tapOnlyMode: false,
-                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                              maxRating: 5.0,
-                              onRatingUpdate: (rating) {},
-                            ),
-                            const SizedBox(height: 4),
-                            Text(review.review),
-                          ],
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
-                        onTap: () {},
-                      );
-                    }).toList(),
+                    RecentReviewsSection(reviews: reviews)
                   ],
                 ),
               ),
-              !widget.app.isOwner(SharedPreferencesUtil().uid)
-                  ? AddReviewWidget(app: widget.app)
-                  : const SizedBox.shrink(),
-              // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                child: GestureDetector(
-                  onTap: () {
-                    routeToPage(context, AppAnalytics(app: widget.app));
-                  },
-                  child: const Text(
-                    'App Analytics',
-                    style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
-                  ),
+            ),
+            !widget.app.isOwner(SharedPreferencesUtil().uid)
+                ? AddReviewWidget(app: widget.app)
+                : const SizedBox.shrink(),
+            // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              child: GestureDetector(
+                onTap: () {
+                  routeToPage(context, AppAnalytics(app: widget.app));
+                },
+                child: const Text(
+                  'App Analytics',
+                  style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
                 ),
               ),
-              const SizedBox(height: 60),
-            ],
-          ),
-        ));
+            ),
+            const SizedBox(height: 60),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleApp(String appId, bool isEnabled) async {
@@ -582,5 +568,81 @@ class _AppDetailPageState extends State<AppDetailPage> {
     context.read<AppProvider>().setApps();
     setState(() => widget.app.enabled = isEnabled);
     setState(() => appLoading = false);
+  }
+}
+
+class RecentReviewsSection extends StatelessWidget {
+  final List<AppReview> reviews;
+  const RecentReviewsSection({super.key, required this.reviews});
+
+  @override
+  Widget build(BuildContext context) {
+    if (reviews.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const Text(
+          'Most Recent Reviews',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.138,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            shrinkWrap: true,
+            itemCount: reviews.length,
+            itemBuilder: (context, index) {
+              return Container(
+                width: reviews.length == 1
+                    ? MediaQuery.of(context).size.width * 0.84
+                    : MediaQuery.of(context).size.width * 0.78,
+                padding: const EdgeInsets.all(16.0),
+                margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 0, bottom: 6),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 25, 24, 24),
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RatingBar.builder(
+                      initialRating: reviews[index].score.toDouble(),
+                      minRating: 1,
+                      ignoreGestures: true,
+                      direction: Axis.horizontal,
+                      allowHalfRating: true,
+                      itemCount: 5,
+                      itemSize: 20,
+                      tapOnlyMode: false,
+                      itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                      itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                      maxRating: 5.0,
+                      onRatingUpdate: (rating) {},
+                    ),
+                    const SizedBox(
+                      height: 8,
+                    ),
+                    Text(
+                      reviews[index].review.length > 120
+                          ? '${reviews[index].review.characters.take(120).toString().decodeString.trim()}...'
+                          : reviews[index].review.decodeString,
+                      style: const TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+            separatorBuilder: (context, index) => const SizedBox(width: 2),
+          ),
+        ),
+      ],
+    );
   }
 }
