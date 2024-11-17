@@ -52,6 +52,20 @@ def delete_generic_cache(path: str):
     r.delete(f'cache:{key}')
 
 
+def set_app_cache_by_id(app_id: str, app: dict):
+    r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
+
+
+def get_app_cache_by_id(app_id: str) -> dict | None:
+    app = r.get(f'apps:{app_id}')
+    app = json.loads(app) if app else None
+    return app
+
+
+def delete_app_cache_by_id(app_id: str):
+    r.delete(f'apps:{app_id}')
+
+
 def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
     reviews = r.get(f'plugins:{plugin_id}:reviews')
     if not reviews:
