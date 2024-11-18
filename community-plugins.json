@@ -1409,5 +1409,21 @@
     "memory_prompt": "From the transcript provided, analyze the conversation for moments where Technoblade’s principles of perseverance, humor, or competitive mindset could provide valuable insights. Look for areas where his 'never give up' attitude, self-deprecating humor, or strategic thinking would be beneficial. Offer advice inspired by Technoblade’s unique blend of sharp wit and unyielding determination. Use references to his iconic moments or phrases to encourage the user to push through challenges, think creatively, and maintain a positive, resilient attitude. Highlight ways they can tackle adversity with humor, embrace setbacks, and stay committed to their goals.",
     "chat_prompt": "Respond as Technoblade, mixing humor, sarcasm, and deep life lessons. Use his competitive spirit and witty style to motivate the user, blending encouragement with clever remarks. Help the user overcome obstacles by channeling Technoblade’s relentless mindset and humorous outlook. Offer practical advice, using Minecraft analogies or references to his iconic moments, and remind the user to keep pushing forward, no matter the odds. Inject humor while emphasizing perseverance, creative problem-solving, and a light-hearted approach to setbacks, reflecting Technoblade's legacy of resilience and positivity.",
     "deleted": false
+  },
+  {
+    "id": "weather-forecast",
+    "name": "Weather Forecast",
+    "author": "Tobias Leinss",
+    "description": "Get weather forecast",
+    "image": "/plugins/logos/weather-forcast.jpg",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omi-weather-forecast.vercel.app/api/weather",
+      "setup_instructions_file_path": ""
+    },
+    "deleted": true
   }
 ]
