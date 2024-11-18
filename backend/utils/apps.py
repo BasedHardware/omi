@@ -99,7 +99,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
 
 def set_app_review(app_id: str, uid: str, review: dict):
     set_app_review_in_db(app_id, uid, review)
-    set_plugin_review(app_id, uid, review['score'], review['review'], review['username'], review['response'])
+    set_plugin_review(app_id, uid, review)
     return {'status': 'ok'}
 
 
