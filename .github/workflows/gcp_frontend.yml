@@ -5,6 +5,12 @@ on:
     branches: [ "main", "development" ]
     paths:
       - 'frontend/**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
 
 env:
   SERVICE: frontend
