@@ -116,7 +116,7 @@ class AppListItem extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              provider.appLoading.isNotEmpty && provider.appLoading[index]
+              provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),
                       child: SizedBox(
