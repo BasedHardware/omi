@@ -22,6 +22,8 @@ import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
 import 'widgets/info_card_widget.dart';
 
+import 'package:timeago/timeago.dart' as timeago;
+
 class AppDetailPage extends StatefulWidget {
   final App app;
 
@@ -442,7 +444,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             GestureDetector(
               onTap: () {
                 if (widget.app.reviews.isNotEmpty) {
-                  routeToPage(context, ReviewsListPage(reviews: widget.app.reviews));
+                  routeToPage(context, ReviewsListPage(appName: widget.app.name, reviews: widget.app.reviews));
                 }
               },
               child: Container(
@@ -604,19 +606,30 @@ class RecentReviewsSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    RatingBar.builder(
-                      initialRating: reviews[index].score.toDouble(),
-                      minRating: 1,
-                      ignoreGestures: true,
-                      direction: Axis.horizontal,
-                      allowHalfRating: true,
-                      itemCount: 5,
-                      itemSize: 20,
-                      tapOnlyMode: false,
-                      itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                      itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                      maxRating: 5.0,
-                      onRatingUpdate: (rating) {},
+                    Row(
+                      children: [
+                        RatingBar.builder(
+                          initialRating: reviews[index].score.toDouble(),
+                          minRating: 1,
+                          ignoreGestures: true,
+                          direction: Axis.horizontal,
+                          allowHalfRating: true,
+                          itemCount: 5,
+                          itemSize: 20,
+                          tapOnlyMode: false,
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          maxRating: 5.0,
+                          onRatingUpdate: (rating) {},
+                        ),
+                        const SizedBox(
+                          width: 8,
+                        ),
+                        Text(
+                          timeago.format(reviews[index].ratedAt),
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ],
                     ),
                     const SizedBox(
                       height: 8,

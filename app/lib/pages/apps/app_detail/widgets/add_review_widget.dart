@@ -189,7 +189,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                             uid: SharedPreferencesUtil().uid,
                                             review: reviewController.text,
                                             score: rating,
-                                            ratedAt: widget.app.userReview?.ratedAt,
+                                            ratedAt: widget.app.userReview?.ratedAt ?? DateTime.now(),
                                             response: widget.app.userReview?.response ?? '',
                                             username: widget.app.userReview?.username ?? '',
                                           );
