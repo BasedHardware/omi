@@ -144,7 +144,6 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'])
 def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     print(data)
@@ -177,7 +176,6 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    print(reviews)
     reviews = [
         details for details in reviews.values() if details['review']
     ]
@@ -191,18 +189,18 @@ def get_user_review(app_id: str, uid: str):
 
 
 @router.get('/v1/update-review', tags=['v1'])
-def update_user_review(data: dict, app_id: str, uid: str ):
+def update_user_review(data: dict, app_id: str, uid: str):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
-    update_specific_user_review(app_id, uid, data['score'], data.get('review', ''), data.get('username', ''), data.get('response', ''))
+    update_specific_user_review(app_id, uid, data['score'], data.get('review', ''), data.get('username', ''),
+                                data.get('response', ''))
     return {'status': 'ok'}
 
 
-@router.get('/migrate-reviews', tags=['v1'])
-def migrate_reviews():
-    migrate_reviews_from_redis_to_firestore()
-
+# @router.get('/migrate-reviews', tags=['v1'])
+# def migrate_reviews():
+#     migrate_reviews_from_redis_to_firestore()
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
