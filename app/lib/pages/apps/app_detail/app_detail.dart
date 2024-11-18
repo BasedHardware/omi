@@ -35,7 +35,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
-  List<AppReview> reviews = [];
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -48,11 +47,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void initState() {
-    getAppReviews(widget.app.id).then((value) {
-      if (mounted) {
-        setState(() => reviews = value);
-      }
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
@@ -447,8 +441,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 : const SizedBox.shrink(),
             GestureDetector(
               onTap: () {
-                if (reviews.isNotEmpty) {
-                  routeToPage(context, ReviewsListPage(reviews: reviews));
+                if (widget.app.reviews.isNotEmpty) {
+                  routeToPage(context, ReviewsListPage(reviews: widget.app.reviews));
                 }
               },
               child: Container(
@@ -467,7 +461,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       children: [
                         const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
                         const Spacer(),
-                        reviews.isNotEmpty
+                        widget.app.reviews.isNotEmpty
                             ? const Icon(
                                 Icons.arrow_forward,
                                 size: 20,
@@ -504,7 +498,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    RecentReviewsSection(reviews: reviews)
+                    RecentReviewsSection(reviews: widget.app.reviews)
                   ],
                 ),
               ),
