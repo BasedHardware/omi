@@ -861,10 +861,10 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
 
 
 # **************************************************
-# ************* MENTOR PLUGIN **************
+# ************* PROACTIVE NOTIFICATION PLUGIN **************
 # **************************************************
 
-def get_metoring_message(uid: str, plugin_prompt: str, params: [str]) -> str:
+def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     prompt = plugin_prompt
@@ -875,6 +875,10 @@ def get_metoring_message(uid: str, plugin_prompt: str, params: [str]) -> str:
         if param == "user_facts":
             prompt = prompt.replace("{{user_facts}}", facts_str)
             continue
+        if param == "user_context":
+            prompt = prompt.replace("{{user_context}}", context if context else "")
+            continue
     prompt = prompt.replace('    ', '').strip()
+    #print(prompt)
 
     return llm_mini.invoke(prompt).content
