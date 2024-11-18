@@ -8,10 +8,9 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from slugify import slugify
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
-    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
-    migrate_reviews_from_redis_to_firestore
+    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
-from database.redis_db import set_plugin_review, delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
+from database.redis_db import delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count, get_specific_user_review, update_specific_user_review
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews
@@ -146,7 +145,6 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
 
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'])
 def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    print(data)
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
@@ -170,6 +168,29 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
         'uid': uid
     }
     set_app_review(app_id, uid, review_data)
+    return {'status': 'ok'}
+
+
+@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
+def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    if app.uid != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
+
+    if app.private and app.uid != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
+
+    review = get_specific_user_review(app_id, uid)
+    if not review:
+        raise HTTPException(status_code=404, detail='Review not found')
+
+    review['response'] = data['response']
+    review['responded_at'] = datetime.now(timezone.utc).isoformat()
+    set_app_review(app_id, uid, review)
     return {'status': 'ok'}
 
 

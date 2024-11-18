@@ -52,13 +52,13 @@ def delete_generic_cache(path: str):
     r.delete(f'cache:{key}')
 
 
-def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = '', username: str = '', response: str = ''):
+def set_plugin_review(plugin_id: str, uid: str, data: dict):
     reviews = r.get(f'plugins:{plugin_id}:reviews')
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid, 'username': username, 'response': response}
+    reviews[uid] = data
     r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 

@@ -80,7 +80,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
 
     score = data['score']
     review = data.get('review', '')
-    set_plugin_review(plugin_id, uid, score, review)
+    set_plugin_review(plugin_id, uid, {'score': score, 'review': review})
     return {'status': 'ok'}
 
 
