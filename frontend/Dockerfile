@@ -24,7 +24,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
-ENV API_URL=https://based-hardware--backend-api.modal.run
 RUN npm run build
 
 RUN echo "base files"
