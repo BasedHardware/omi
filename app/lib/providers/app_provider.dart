@@ -200,6 +200,16 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void updateLocalAppReviewResponse(String appId, String response, String reviewId) {
+    var idx = apps.indexWhere((element) => element.id == appId);
+    if (idx != -1) {
+      apps[idx].updateReviewResponse(response, reviewId, DateTime.now());
+      updatePrefApps();
+      setApps();
+    }
+    notifyListeners();
+  }
+
   void checkIsAppOwner(String? appUid) {
     if (appUid != null) {
       if (appUid == SharedPreferencesUtil().uid) {

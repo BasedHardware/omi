@@ -444,7 +444,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             GestureDetector(
               onTap: () {
                 if (widget.app.reviews.isNotEmpty) {
-                  routeToPage(context, ReviewsListPage(appName: widget.app.name, reviews: widget.app.reviews));
+                  routeToPage(context, ReviewsListPage(app: widget.app));
                 }
               },
               child: Container(
@@ -500,7 +500,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    RecentReviewsSection(reviews: widget.app.reviews)
+                    RecentReviewsSection(
+                      reviews: widget.app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                      appAuthor: widget.app.author,
+                    )
                   ],
                 ),
               ),
@@ -569,7 +572,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
 class RecentReviewsSection extends StatelessWidget {
   final List<AppReview> reviews;
-  const RecentReviewsSection({super.key, required this.reviews});
+  final String appAuthor;
+  const RecentReviewsSection({super.key, required this.reviews, required this.appAuthor});
 
   @override
   Widget build(BuildContext context) {
@@ -578,6 +582,7 @@ class RecentReviewsSection extends StatelessWidget {
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 12),
         const Text(
@@ -585,8 +590,12 @@ class RecentReviewsSection extends StatelessWidget {
           style: TextStyle(color: Colors.white, fontSize: 16),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          height: MediaQuery.of(context).size.height * 0.138,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: reviews.any((e) => e.response.isNotEmpty)
+                ? MediaQuery.of(context).size.height * 0.24
+                : MediaQuery.of(context).size.height * 0.138,
+          ),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             shrinkWrap: true,
@@ -627,7 +636,7 @@ class RecentReviewsSection extends StatelessWidget {
                         ),
                         Text(
                           timeago.format(reviews[index].ratedAt),
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          style: const TextStyle(color: Color.fromARGB(255, 176, 174, 174), fontSize: 12),
                         ),
                       ],
                     ),
@@ -635,13 +644,54 @@ class RecentReviewsSection extends StatelessWidget {
                       height: 8,
                     ),
                     Text(
-                      reviews[index].review.length > 120
-                          ? '${reviews[index].review.characters.take(120).toString().decodeString.trim()}...'
+                      reviews[index].review.length > 100
+                          ? '${reviews[index].review.characters.take(100).toString().decodeString.trim()}...'
                           : reviews[index].review.decodeString,
                       style: const TextStyle(
                         color: Colors.white,
                       ),
                     ),
+                    const SizedBox(
+                      height: 6,
+                    ),
+                    reviews[index].response.isNotEmpty
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Divider(
+                                color: Color.fromARGB(255, 92, 92, 92),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Response from $appAuthor',
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                  const SizedBox(
+                                    width: 8,
+                                  ),
+                                  Text(
+                                    timeago.format(reviews[index].ratedAt),
+                                    style: const TextStyle(color: Color.fromARGB(255, 176, 174, 174), fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(
+                                height: 8,
+                              ),
+                              Text(
+                                reviews[index].response.length > 100
+                                    ? '${reviews[index].response.characters.take(100).toString().decodeString.trim()}...'
+                                    : reviews[index].response.decodeString,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
                   ],
                 ),
               );

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
-import 'package:timeago/timeago.dart' as timeago;
+import 'package:friend_private/pages/apps/app_detail/widgets/app_owner_review_card.dart';
+import 'package:friend_private/pages/apps/app_detail/widgets/user_review_card.dart';
 
 class ReviewsListPage extends StatefulWidget {
-  final String appName;
-  final List<AppReview> reviews;
-  const ReviewsListPage({super.key, required this.reviews, required this.appName});
+  final App app;
+  const ReviewsListPage({super.key, required this.app});
 
   @override
   State<ReviewsListPage> createState() => _ReviewsListPageState();
@@ -16,10 +15,12 @@ class ReviewsListPage extends StatefulWidget {
 class _ReviewsListPageState extends State<ReviewsListPage> {
   List<AppReview> filteredReviews = [];
   int selectedRating = 0;
+  late TextEditingController replyController;
 
   @override
   void initState() {
-    filteredReviews = widget.reviews;
+    filteredReviews = widget.app.reviews;
+    replyController = TextEditingController();
     super.initState();
   }
 
@@ -28,12 +29,12 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     if (rating == 0) {
       setState(() {
         selectedRating = 0;
-        filteredReviews = widget.reviews;
+        filteredReviews = widget.app.reviews;
       });
     } else {
       setState(() {
         selectedRating = rating;
-        filteredReviews = widget.reviews
+        filteredReviews = widget.app.reviews
             .where((element) => (element.score >= rating.toDouble() && element.score < (rating + 1).toDouble()))
             .toList();
       });
@@ -45,7 +46,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text('${widget.appName} Reviews'),
+        title: Text('${widget.app.name} Reviews'),
         elevation: 0,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -109,60 +110,21 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   )
                 : ListView.separated(
                     shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: filteredReviews.length,
                     itemBuilder: (context, index) {
-                      return Container(
-                        width: MediaQuery.of(context).size.width * 0.78,
-                        padding: const EdgeInsets.all(16.0),
-                        margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 6),
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(255, 25, 24, 24),
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                RatingBar.builder(
-                                  initialRating: filteredReviews[index].score.toDouble(),
-                                  minRating: 1,
-                                  ignoreGestures: true,
-                                  direction: Axis.horizontal,
-                                  allowHalfRating: true,
-                                  itemCount: 5,
-                                  itemSize: 20,
-                                  tapOnlyMode: false,
-                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                                  maxRating: 5.0,
-                                  onRatingUpdate: (rating) {},
-                                ),
-                                const SizedBox(
-                                  width: 8,
-                                ),
-                                Text(
-                                  timeago.format(filteredReviews[index].ratedAt),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(
-                              height: 8,
-                            ),
-                            Text(
-                              filteredReviews[index].review.decodeString,
-                              style: const TextStyle(
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
+                      if (!widget.app.isOwner(SharedPreferencesUtil().uid)) {
+                        return AppOwnerReviewCard(
+                          review: filteredReviews[index],
+                          appId: widget.app.id,
+                          ownerName: widget.app.author,
+                        );
+                      } else {
+                        return UserReviewCard(
+                          review: filteredReviews[index],
+                          ownerName: widget.app.author,
+                        );
+                      }
                     },
                     separatorBuilder: (context, index) => const SizedBox(width: 6),
                   ),
