@@ -135,7 +135,11 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                   maxLength: 250,
                                   onChanged: (value) {
                                     if (value.isEmpty) {
-                                      updateShowButton(false);
+                                      if (value == widget.app.userReview?.review) {
+                                        updateShowButton(false);
+                                      } else {
+                                        updateShowButton(true);
+                                      }
                                     } else {
                                       updateShowButton(true);
                                     }
@@ -169,6 +173,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                       text: widget.app.userReview != null ? 'Update Review' : 'Submit Review',
                                       textStyle: const TextStyle(color: Colors.black, fontSize: 16),
                                       onPressed: () async {
+                                        FocusScope.of(context).unfocus();
                                         if (rating == widget.app.userReview?.score &&
                                             reviewController.text == widget.app.userReview?.review) {
                                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
