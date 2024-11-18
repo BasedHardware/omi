@@ -13,7 +13,7 @@ interface PluginReview {
   // Define PluginReview properties here if needed
 }
 
-interface Plugin {
+export interface Plugin {
   id: string;
   name: string;
   author: string;
@@ -33,7 +33,7 @@ interface Plugin {
   trigger_workflow_memories: boolean;
 }
 
-interface PluginStat {
+export interface PluginStat {
   id: string;
   money: number,
 }
