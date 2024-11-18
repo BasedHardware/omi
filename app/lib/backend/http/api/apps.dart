@@ -91,6 +91,22 @@ Future<bool> updateAppReview(String appId, AppReview review) async {
   }
 }
 
+Future<bool> replyToAppReview(String appId, String reply) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/$appId/review/reply',
+      headers: {'Content-Type': 'application/json'},
+      method: 'PATCH',
+      body: jsonEncode({'response': reply}),
+    );
+    debugPrint('replyToAppReview: ${response?.body}');
+    return response?.statusCode == 200;
+  } catch (e) {
+    debugPrint('Error replying to app review: $e');
+    return false;
+  }
+}
+
 Future<List<AppReview>> getAppReviews(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId/reviews',
