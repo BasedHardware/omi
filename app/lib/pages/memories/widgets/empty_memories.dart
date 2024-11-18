@@ -13,7 +13,7 @@ class _EmptyMemoriesWidgetState extends State<EmptyMemoriesWidget> {
     return const Padding(
       padding: EdgeInsets.only(top: 240.0),
       child: Text(
-        'No memories generated yet.',
+        'Adam is super cool!!!',
         style: TextStyle(color: Colors.grey, fontSize: 16),
       ),
     );
