@@ -25,6 +25,7 @@ import {
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import PaidAmountDialog from '@/src/components/dashboard/paidamount';
+import { PluginStat, Plugin } from '../page';
 
 const COST_CONSTANT = 0.05;
 
