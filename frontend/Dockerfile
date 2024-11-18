@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 #COPY frontend/. .
 COPY frontend .
+ENV API_URL=https://backend-hhibjajaja-uc.a.run.app
 RUN npm run build
 
 RUN echo "base files"
