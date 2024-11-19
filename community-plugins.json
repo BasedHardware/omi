@@ -1180,8 +1180,6 @@
     "external_integration": {
       "triggers_on": "transcript_processed",
       "webhook_url": "https://reasoner-friend-server.onrender.com/webhook",
-      "setup_completed_url": "https://reasoner-friend-server.onrender.com/setup/reasoner-friend",
-      "setup_instructions_file_path": "/plugins/instructions/reasoner-friend/README.md"
     },
     "proactive_notification": {
       "scopes": [
