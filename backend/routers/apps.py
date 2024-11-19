@@ -223,7 +223,8 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
-        {'title': 'User Facts', 'id': 'user_facts'}
+        {'title': 'User Facts', 'id': 'user_facts'},
+        {'title': 'User Memories', 'id': 'user_context'}
     ]
 
 
@@ -238,7 +239,8 @@ def get_plugin_capabilities():
         ]},
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
-            {'title': 'User Facts', 'id': 'user_facts'}
+            {'title': 'User Facts', 'id': 'user_facts'},
+            {'title': 'User Memories', 'id': 'user_context'}
         ]}
     ]
 

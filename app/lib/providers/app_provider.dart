@@ -185,7 +185,7 @@ class AppProvider extends BaseProvider {
     if (isLoading) return;
     setIsLoading(true);
     apps = await retrieveApps();
-    appLoading = List.filled(apps.length, false);
+    appLoading = List.filled(apps.length, false, growable: true);
     setIsLoading(false);
     notifyListeners();
   }
@@ -231,7 +231,10 @@ class AppProvider extends BaseProvider {
   Future deleteApp(String appId) async {
     var res = await deleteAppServer(appId);
     if (res) {
-      apps.removeWhere((app) => app.id == appId);
+      var appIndex = apps.indexWhere((app) => app.id == appId);
+      apps.removeAt(appIndex);
+      filteredApps.removeWhere((app) => app.id == appId);
+      appLoading.removeAt(appIndex);
       updatePrefApps();
       setApps();
       AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
@@ -245,7 +248,8 @@ class AppProvider extends BaseProvider {
     appPublicToggled = value;
     changeAppVisibilityServer(appId, value);
     getApps();
-    apps.removeWhere((app) => app.id == appId);
+    var appIndex = apps.indexWhere((app) => app.id == appId);
+    apps[appIndex].private = !value;
     updatePrefApps();
     setApps();
     AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
