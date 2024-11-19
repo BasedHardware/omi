@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter
 
-from models import TranscriptSegment, MentorEndpointResponse, RealtimePluginRequest
+from models import TranscriptSegment, ProactiveNotificationEndpointResponse, RealtimePluginRequest
 from db import get_upsert_segment_to_transcript_plugin
 
 router = APIRouter()
@@ -10,10 +10,10 @@ router = APIRouter()
 scan_segment_session = {}
 
 # *******************************************************
-# ************ Basic Mentor Plugin ************
+# ************ Basic Proactive Notification Plugin ************
 # *******************************************************
 
-@router.post('/mentor', tags=['mentor', 'basic', 'realtime'], response_model=MentorEndpointResponse)
+@router.post('/mentor', tags=['mentor', 'basic', 'realtime', 'proactive_notification'], response_model=ProactiveNotificationEndpointResponse, response_model_exclude_none=True)
 def mentoring(data: RealtimePluginRequest):
     def normalize(text):
         return re.sub(r' +', ' ',re.sub(r'[,?.!]', ' ', text)).lower().strip()
@@ -43,6 +43,7 @@ def mentoring(data: RealtimePluginRequest):
 
     user_name = "{{user_name}}"
     user_facts = "{{user_facts}}"
+    user_context = "{{user_context}}"
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals during the meeting.
@@ -67,15 +68,27 @@ def mentoring(data: RealtimePluginRequest):
     Output your response in plain text, without markdown.
 
     If you cannot find the topic or problem of the meeting, respond 'Nah 🤷 ~'.
+
+    Conversation:
     ```
     ${transcript}
     ```
+
+    Context:
+    ```
+    {user_context}
+    ```
     """.replace('    ', '').strip()
 
-    # 3. Respond with the format {notification: {prompt, params}}
-    return {'session_id': data.session_id,
-            'notification': {'prompt': prompt,
-                       'params': ['user_name', 'user_facts']}}
+    # 3. Respond with the format {notification: {prompt, params, context}}
+    #   - context: {question, filters: {people, topics, entities}} | None
+    return {
+        'session_id': data.session_id,
+        'notification': {
+            'prompt': prompt,
+            'params': ['user_name', 'user_facts', 'user_context'],
+        }
+    }
 
 @ router.get('/setup/mentor', tags=['mentor'])
 def is_setup_completed(uid: str):

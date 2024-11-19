@@ -79,7 +79,7 @@ class Plugin(BaseModel):
     def triggers_realtime(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
 
-    def fitler_proactive_notification_scopes(self, params: [str]) -> []:
+    def filter_proactive_notification_scopes(self, params: [str]) -> []:
         if not self.proactive_notification:
             return []
         return [param for param in params if param in self.proactive_notification.scopes]

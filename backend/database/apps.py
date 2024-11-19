@@ -107,6 +107,11 @@ def change_app_approval_status(plugin_id: str, approved: bool):
     plugin_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
 
 
+def get_app_usage_history_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
+    return [doc.to_dict() for doc in usage]
+  
+    
 # ********************************
 # *********** REVIEWS ************
 # ********************************

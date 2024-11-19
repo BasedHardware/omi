@@ -52,6 +52,39 @@ def delete_generic_cache(path: str):
     r.delete(f'cache:{key}')
 
 
+# ******************************************************
+# *********************** APPS *************************
+# ******************************************************
+
+
+def set_app_usage_history_cache(app_id: str, usage: List[dict]):
+    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 5)  # 5 minutes
+
+
+def get_app_usage_history_cache(app_id: str) -> List[dict]:
+    usage = r.get(f'apps:{app_id}:usage')
+    if usage is None:
+        return []
+    usage = json.loads(usage)
+    if not usage:
+        return []
+    return usage
+
+
+def get_app_money_made_cache(app_id: str) -> dict:
+    money = r.get(f'apps:{app_id}:money')
+    if money is None:
+        return {}
+    money = json.loads(money)
+    if not money:
+        return {}
+    return money
+
+
+def set_app_money_made_cache(app_id: str, money: dict):
+    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 5)  # 5 minutes
+
+
 def set_plugin_review(plugin_id: str, uid: str, data: dict):
     reviews = r.get(f'plugins:{plugin_id}:reviews')
     if not reviews:

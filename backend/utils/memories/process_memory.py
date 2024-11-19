@@ -14,11 +14,13 @@ import database.tasks as tasks_db
 import database.trends as trends_db
 from database.plugins import record_plugin_usage
 from database.vector_db import upsert_vector2, update_vector_metadata
+from models.app import App
 from models.facts import FactDB
 from models.memory import *
 from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
+from utils.apps import get_available_apps
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
@@ -102,7 +104,7 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
 
 
 def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
-    plugins: List[Plugin] = get_plugins_data_from_db(uid)
+    plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
     memory.plugins_results = []
     threads = []
