@@ -91,7 +91,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool scriptsInProgress = false;
 
   PageController? _controller;
-  late int indexSelected = 0;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -139,9 +138,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
     if (widget.openAppFromNotification) {
-      indexSelected = SharedPreferencesUtil().pageToShowFromNotification;
+      context.read<HomeProvider>().selectedIndex = SharedPreferencesUtil().pageToShowFromNotification;
       _controller = PageController(initialPage: SharedPreferencesUtil().pageToShowFromNotification);
-      if (indexSelected == 1) {
+      if (SharedPreferencesUtil().pageToShowFromNotification == 1) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           await context.read<MessageProvider>().refreshMessages();
         });
@@ -321,7 +320,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 home.setIndex(index);
-                                indexSelected = index;
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                               },
@@ -331,7 +329,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   child: Text(
                                     'Memories',
                                     style: TextStyle(
-                                      color: indexSelected == 0 ? Colors.white : Colors.grey,
+                                      color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
@@ -340,7 +338,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   child: Text(
                                     'Chat',
                                     style: TextStyle(
-                                      color: indexSelected == 1 ? Colors.white : Colors.grey,
+                                      color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
@@ -349,7 +347,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   child: Text(
                                     'Apps',
                                     style: TextStyle(
-                                      color: indexSelected == 2 ? Colors.white : Colors.grey,
+                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
                                     ),
                                   ),
