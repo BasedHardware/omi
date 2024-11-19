@@ -170,10 +170,10 @@ class NotificationService {
   void _handleOnTap(RemoteMessage message) {
     final data = message.data;
     if (data.isNotEmpty) {
-      if (message.data['notification_type'] == 'daily_summary') {
+      if (message.data['notification_type'] == 'daily_summary' || message.data['notification_type'] == 'plugin') {
         SharedPreferencesUtil().pageToShowFromNotification = 1;
         MyApp.navigatorKey.currentState
-            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
       }
     }
   }
@@ -187,14 +187,15 @@ class NotificationService {
 
       // Plugin
       if (data.isNotEmpty) {
-        if (noti != null) {
-          _showForegroundNotification(noti: noti);
-        }
-
+        late Map<String, String> payload = <String, String>{};
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
+          payload.addAll({'path':'/chat'});
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
+        }
+        if (noti != null) {
+          _showForegroundNotification(noti: noti, payload: payload);
         }
         return;
       }
@@ -212,9 +213,9 @@ class NotificationService {
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
   Future<void> _showForegroundNotification(
-      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default}) async {
+      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default, Map<String, String?>? payload}) async {
     final id = Random().nextInt(10000);
-    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout);
+    showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
 }
 
@@ -257,8 +258,8 @@ class NotificationUtil {
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
     final Map<String, int> screensWithRespectToPath = {
-      '/chat': 2,
-      '/capture': 1,
+      '/apps': 2,
+      '/chat': 1,
       '/memories': 0,
     };
     var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
@@ -271,7 +272,7 @@ class NotificationUtil {
     if (payload?.containsKey('navigateTo') ?? false) {
       SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
     }
-    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 1;
-    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper()));
+    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 0;
+    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
   }
 }
