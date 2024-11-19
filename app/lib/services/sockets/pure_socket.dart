@@ -8,6 +8,7 @@ import 'package:internet_connection_checker_plus/internet_connection_checker_plu
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:friend_private/backend/http/shared.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
 
@@ -110,6 +111,9 @@ class PureSocket implements IPureSocket {
 
     _channel = IOWebSocketChannel.connect(
       url,
+      headers: {
+        'Authorization': await getAuthHeader(),
+      },
       pingInterval: const Duration(seconds: 10),
       connectTimeout: const Duration(seconds: 30),
     );

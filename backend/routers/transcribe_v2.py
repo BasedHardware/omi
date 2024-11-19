@@ -6,7 +6,7 @@ from enum import Enum
 
 import opuslib
 import webrtcvad
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
@@ -23,6 +23,8 @@ from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
 from utils.pusher import connect_to_trigger_pusher
+
+from utils.other import endpoints as auth
 
 router = APIRouter()
 
@@ -582,6 +584,13 @@ async def _websocket_util(
 @router.websocket("/v2/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+):
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+
+@router.websocket("/v3/listen")
+async def websocket_endpoint_v3(
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
