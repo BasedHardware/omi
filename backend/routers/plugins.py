@@ -86,16 +86,20 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
 
 @router.get('/v1/plugins/{plugin_id}/usage', tags=['v1'])
 def get_plugin_usage(plugin_id: str):
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_available_app_by_id(plugin_id, None)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     usage = get_plugin_usage_history(plugin_id)
     usage = [UsageHistoryItem(**x) for x in usage]
     # return usage by date grouped count
     by_date = defaultdict(int)
+    # for item in usage:
+    #     date = item.timestamp.date()
+    #     by_date[date] += 1
     for item in usage:
         date = item.timestamp.date()
-        by_date[date] += 1
+        if date > datetime(2024, 11, 1).date():
+            by_date[date] += 1
 
     data = [{'date': k, 'count': v} for k, v in by_date.items()]
     data = sorted(data, key=lambda x: x['date'])
@@ -104,11 +108,14 @@ def get_plugin_usage(plugin_id: str):
 
 @router.get('/v1/plugins/{plugin_id}/money', tags=['v1'])
 def get_plugin_money_made(plugin_id: str):
-    plugin = get_plugin_by_id(plugin_id)
+    plugin = get_available_app_by_id(plugin_id, None)
     if not plugin:
         raise HTTPException(status_code=404, detail='Plugin not found')
     usage = get_plugin_usage_history(plugin_id)
     usage = [UsageHistoryItem(**x) for x in usage]
+    for item in usage:
+        if item.timestamp.date() < datetime(2024, 11, 1).date():
+            usage.remove(item)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
