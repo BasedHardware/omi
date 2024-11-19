@@ -8,7 +8,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
-import 'app_detail.dart';
+import 'app_detail/app_detail.dart';
 
 class AppListItem extends StatelessWidget {
   final App app;

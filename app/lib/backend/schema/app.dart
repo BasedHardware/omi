@@ -5,12 +5,20 @@ class AppReview {
   DateTime ratedAt;
   double score;
   String review;
+  String username;
+  String response;
+  DateTime? updatedAt;
+  DateTime? respondedAt;
 
   AppReview({
     required this.uid,
     required this.ratedAt,
     required this.score,
     required this.review,
+    this.username = '',
+    this.response = '',
+    this.updatedAt,
+    this.respondedAt,
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
@@ -19,6 +27,14 @@ class AppReview {
       ratedAt: DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
       review: json['review'],
+      username: json['user_name'] ?? '',
+      response: json['response'] ?? '',
+      updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
+          ? null
+          : DateTime.parse(json['updated_at']).toLocal(),
+      respondedAt: (json['responded_at'] == "" || json['responded_at'] == null)
+          ? null
+          : DateTime.parse(json['responded_at']).toLocal(),
     );
   }
 
@@ -28,6 +44,10 @@ class AppReview {
       'rated_at': ratedAt.toUtc().toIso8601String(),
       'score': score,
       'review': review,
+      'username': username,
+      'response': response,
+      'updated_at': updatedAt?.toUtc().toIso8601String() ?? '',
+      'responded_at': respondedAt?.toUtc().toIso8601String() ?? '',
     };
   }
 
@@ -234,6 +254,14 @@ class App {
       return image;
     } else {
       return 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+    }
+  }
+
+  updateReviewResponse(String response, reviewId, DateTime respondedAt) {
+    var idx = reviews.indexWhere((element) => element.uid == reviewId);
+    if (idx != -1) {
+      reviews[idx].response = response;
+      reviews[idx].updatedAt = respondedAt;
     }
   }
 

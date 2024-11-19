@@ -85,14 +85,22 @@ def set_app_money_made_cache(app_id: str, money: dict):
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 5)  # 5 minutes
 
 
-def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
+def set_plugin_review(plugin_id: str, uid: str, data: dict):
     reviews = r.get(f'plugins:{plugin_id}:reviews')
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid}
+    reviews[uid] = data
     r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+
+
+def get_specific_user_review(app_id: str, uid: str) -> dict:
+    reviews = r.get(f'plugins:{app_id}:reviews')
+    if not reviews:
+        return {}
+    reviews = eval(reviews)
+    return reviews.get(uid, {})
 
 
 def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):

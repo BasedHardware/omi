@@ -10,6 +10,9 @@ class AppReview(BaseModel):
     rated_at: datetime
     score: float
     review: str
+    username: Optional[str] = None
+    response: Optional[str] = None
+    responded_at: Optional[datetime] = None
 
     @classmethod
     def from_json(cls, json_data: dict):
@@ -18,6 +21,9 @@ class AppReview(BaseModel):
             ratedAt=datetime.fromisoformat(json_data['rated_at']),
             score=json_data['score'],
             review=json_data['review'],
+            username=json_data.get('username'),
+            response=json_data.get('response'),
+            responded_at=datetime.fromisoformat(json_data['responded_at']) if json_data.get('responded_at') else None
         )
 
 

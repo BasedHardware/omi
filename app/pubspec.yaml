@@ -94,6 +94,7 @@ dependencies:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
   image_picker: ^1.1.2
+  timeago: ^3.7.0
 
 
 dependency_overrides:
