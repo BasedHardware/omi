@@ -36,13 +36,15 @@ import 'package:upgrader/upgrader.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
-  const HomePageWrapper({super.key});
+  final bool openAppFromNotification;
+  const HomePageWrapper({super.key, this.openAppFromNotification = false});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
+  late bool _openAppFromNotification;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -63,17 +65,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
+    _openAppFromNotification = widget.openAppFromNotification;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return const HomePage();
+    return HomePage(openAppFromNotification: _openAppFromNotification);
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final bool openAppFromNotification;
+  const HomePage({super.key, this.openAppFromNotification = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -132,9 +136,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    SharedPreferencesUtil().pageToShowFromNotification = 0; // TODO: whatisit
     SharedPreferencesUtil().onboardingCompleted = true;
-    _controller = PageController();
+    if (widget.openAppFromNotification) {
+      context.read<HomeProvider>().selectedIndex = SharedPreferencesUtil().pageToShowFromNotification;
+      _controller = PageController(initialPage: SharedPreferencesUtil().pageToShowFromNotification);
+      if (SharedPreferencesUtil().pageToShowFromNotification == 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await context.read<MessageProvider>().refreshMessages();
+        });
+      }
+      SharedPreferencesUtil().pageToShowFromNotification = 0;
+    } else {
+      _controller = PageController();
+    }
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
