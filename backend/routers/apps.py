@@ -11,7 +11,7 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
-    disable_plugin, decrease_plugin_installs_count, get_specific_user_review, update_specific_user_review
+    disable_plugin, decrease_plugin_installs_count, get_specific_user_review
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews
 from utils.notifications import send_notification
@@ -201,10 +201,6 @@ def app_reviews(app_id: str):
         details for details in reviews.values() if details['review']
     ]
     return reviews
-
-# @router.get('/migrate-reviews', tags=['v1'])
-# def migrate_reviews():
-#     migrate_reviews_from_redis_to_firestore()
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])

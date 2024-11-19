@@ -103,20 +103,6 @@ def get_specific_user_review(app_id: str, uid: str) -> dict:
     return reviews.get(uid, {})
 
 
-def update_specific_user_review(app_id: str, uid: str, score: float, review: str, username: str, response: str):
-    reviews = r.get(f'plugins:{app_id}:reviews')
-    if not reviews:
-        return
-    reviews = eval(reviews)
-    if uid in reviews:
-        reviews[uid]['score'] = score
-        reviews[uid]['review'] = review
-        reviews[uid]['updated_at'] = datetime.now(timezone.utc).isoformat()
-        reviews[uid]['username'] = username
-        reviews[uid]['response'] = response
-        r.set(f'plugins:{app_id}:reviews', str(reviews))
-
-
 def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
     for key in r.scan_iter(f'plugins:*:reviews'):
         plugin_id = key.decode().split(':')[1]
