@@ -202,23 +202,6 @@ def app_reviews(app_id: str):
     ]
     return reviews
 
-
-@router.get('/get-review', tags=['v1'])
-def get_user_review(app_id: str, uid: str):
-    review = get_specific_user_review(app_id, uid)
-    return review
-
-
-@router.get('/v1/update-review', tags=['v1'])
-def update_user_review(data: dict, app_id: str, uid: str):
-    if 'score' not in data:
-        raise HTTPException(status_code=422, detail='Score is required')
-
-    update_specific_user_review(app_id, uid, data['score'], data.get('review', ''), data.get('username', ''),
-                                data.get('response', ''))
-    return {'status': 'ok'}
-
-
 # @router.get('/migrate-reviews', tags=['v1'])
 # def migrate_reviews():
 #     migrate_reviews_from_redis_to_firestore()
