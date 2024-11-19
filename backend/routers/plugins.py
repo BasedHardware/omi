@@ -12,15 +12,14 @@ from slugify import slugify
 from ulid import ULID
 
 from database.apps import add_app_to_db
-from database.plugins import get_plugin_usage_history
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.app import App
-from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
+from models.plugin import Plugin
 from utils.apps import get_available_app_by_id, get_app_usage_history, get_app_money_made
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
-from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
+from utils.plugins import get_plugins_data, get_plugins_data_from_db
 
 router = APIRouter()
 
@@ -80,7 +79,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
 
     score = data['score']
     review = data.get('review', '')
-    set_plugin_review(plugin_id, uid, score, review)
+    set_plugin_review(plugin_id, uid, {'score': score, 'review': review})
     return {'status': 'ok'}
 
 

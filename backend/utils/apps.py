@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from typing import List, Dict
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
-    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db
+    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache
+    set_app_money_made_cache, set_plugin_review
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
@@ -47,7 +47,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
             reviews = get_plugin_reviews(app['id'])
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            app_dict['reviews'] = []
+            app_dict['reviews'] = [details for details in reviews.values() if details['review']]
             app_dict['user_review'] = reviews.get(uid)
             app_dict['rating_avg'] = rating_avg
             app_dict['rating_count'] = len(sorted_reviews)
@@ -107,6 +107,17 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     return apps
 
 
+
+def set_app_review(app_id: str, uid: str, review: dict):
+    set_app_review_in_db(app_id, uid, review)
+    set_plugin_review(app_id, uid, review)
+    return {'status': 'ok'}
+
+
+def get_app_reviews(app_id: str) -> dict:
+    return get_plugin_reviews(app_id)
+
+  
 def get_app_usage_history(app_id: str) -> list:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
