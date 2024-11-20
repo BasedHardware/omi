@@ -480,7 +480,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         Column(
                           children: [
                             RatingBar.builder(
-                              initialRating: 4.2,
+                              initialRating: widget.app.ratingAvg ?? 0,
                               minRating: 1,
                               ignoreGestures: true,
                               direction: Axis.horizontal,
@@ -494,7 +494,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               onRatingUpdate: (rating) {},
                             ),
                             const SizedBox(height: 4),
-                            Text("${widget.app.ratingCount}+ ratings"),
+                            Text(widget.app.ratingCount <= 0 ? "no ratings" : "${widget.app.ratingCount}+ ratings"),
                           ],
                         ),
                       ],
@@ -508,7 +508,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ),
               ),
             ),
-            !widget.app.isOwner(SharedPreferencesUtil().uid)
+            !widget.app.isOwner(SharedPreferencesUtil().uid) && (widget.app.enabled || widget.app.userReview != null)
                 ? AddReviewWidget(app: widget.app)
                 : const SizedBox.shrink(),
             // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
