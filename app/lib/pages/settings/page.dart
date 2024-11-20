@@ -48,19 +48,6 @@ class _SettingsPageState extends State<SettingsPage> {
         canPop: true,
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            automaticallyImplyLeading: true,
-            title: const Text('Settings'),
-            centerTitle: false,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-            elevation: 0,
-          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
