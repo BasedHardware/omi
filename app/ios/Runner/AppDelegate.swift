@@ -1,6 +1,7 @@
 import UIKit
 import Flutter
 import UserNotifications
+import Firebase
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -13,6 +14,7 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+	FirebaseApp.configure()
     GeneratedPluginRegistrant.register(with: self)
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
