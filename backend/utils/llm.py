@@ -374,7 +374,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
 
     Answer:
     """.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
     return llm_mini.invoke(prompt).content
 
 
@@ -778,7 +778,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
-        print('select_structured_filters:', response.dict())
+        # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
@@ -879,6 +879,6 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             prompt = prompt.replace("{{user_context}}", context if context else "")
             continue
     prompt = prompt.replace('    ', '').strip()
-    #print(prompt)
+    # print(prompt)
 
     return llm_mini.invoke(prompt).content
