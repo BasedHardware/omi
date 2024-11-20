@@ -113,7 +113,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: filteredReviews.length,
                     itemBuilder: (context, index) {
-                      if (!widget.app.isOwner(SharedPreferencesUtil().uid)) {
+                      if (widget.app.isOwner(SharedPreferencesUtil().uid)) {
                         return AppOwnerReviewCard(
                           review: filteredReviews[index],
                           appId: widget.app.id,

@@ -45,7 +45,7 @@ class UserReviewCard extends StatelessWidget {
               Text(
                 timeago.format(review.ratedAt),
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: Colors.grey,
                   fontSize: 12,
                 ),
               ),
