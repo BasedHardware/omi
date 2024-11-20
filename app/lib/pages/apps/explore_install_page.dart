@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 String filterValueToString(dynamic value) {
@@ -153,7 +150,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                               provider.searchApps(value);
                             },
                             decoration: InputDecoration(
-                              hintText: 'Search apps',
+                              hintText: 'Search Apps',
                               hintStyle: const TextStyle(color: Colors.white),
                               filled: true,
                               fillColor: Colors.grey[800],
@@ -187,36 +184,6 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
               child: SizedBox(
             height: 20,
           )),
-          SliverToBoxAdapter(
-            child: GestureDetector(
-              onTap: () {
-                MixpanelManager().pageOpened('Submit App');
-                routeToPage(context, const AddAppPage());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(12.0),
-                margin: const EdgeInsets.only(left: 12.0, right: 12.0, top: 2, bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
-                child: const ListTile(
-                  title: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text(
-                        'Create and submit a new app',
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
           !provider.isFilterActive() && !provider.isSearchActive()
               ? const SliverToBoxAdapter(child: SizedBox.shrink())
               : Consumer<AppProvider>(
@@ -266,7 +233,8 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                         .read<AppProvider>()
                         .apps
                         .where((p) => (p.installs > 50 && (p.ratingAvg ?? 0.0) > 4.0))
-                        .toList(),
+                        .toList()
+                        .sublist(0, 6),
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
