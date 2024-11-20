@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/explore_install_page.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class AppsPage extends StatefulWidget {
@@ -35,6 +38,33 @@ class _AppsPageState extends State<AppsPage> {
               elevation: 0,
             )
           : null,
+      floatingActionButton: Container(
+        width: MediaQuery.sizeOf(context).width * 0.36,
+        height: MediaQuery.sizeOf(context).height * 0.06,
+        decoration: BoxDecoration(
+          color: const Color.fromARGB(255, 29, 29, 29),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: TextButton(
+          onPressed: () {
+            MixpanelManager().pageOpened('Submit App');
+            routeToPage(context, const AddAppPage());
+          },
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, color: Colors.white),
+              SizedBox(
+                width: 4,
+              ),
+              Text(
+                'Create App',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: const DefaultTabController(
         length: 1,
         initialIndex: 0,
