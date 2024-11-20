@@ -2,8 +2,11 @@ import threading
 from typing import List, Optional
 import os
 import requests
+import time
 
 import database.notifications as notification_db
+from database import mem_db
+from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db
 from database.chat import add_plugin_message
 from database.plugins import record_plugin_usage
@@ -23,6 +26,7 @@ from utils.llm import (
 from database.vector_db import query_vectors_by_metadata
 import database.memories as memories_db
 
+PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
 def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     """
@@ -240,10 +244,35 @@ def _retrieve_contextual_memories(uid: str, user_context):
     )
     return memories_db.get_memories_by_id(uid, memories_id)
 
+def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
+    sent_at = mem_db.get_proactive_noti_sent_at(uid, plugin.id)
+    if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
+        return True
+
+    # remote
+    sent_at = redis_db.get_proactive_noti_sent_at(uid, plugin.id)
+    if not sent_at:
+        return False
+    ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, plugin.id)
+    if ttl > 0:
+        mem_db.set_proactive_noti_sent_at(uid, plugin.id, int(time.time() + ttl), ttl=ttl)
+
+    return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
+
+def _set_proactive_noti_sent_at(uid: str, plugin: App):
+    ts = time.time()
+    mem_db.set_proactive_noti_sent_at(uid, plugin, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, plugin.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+
 
 def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     if not plugin.has_capability("proactive_notification") or not data:
         print(f"Plugins {plugin.id} is not proactive_notification or data invalid", uid)
+        return None
+
+    # rate limits
+    if _hit_proactive_notification_rate_limits(uid, plugin):
+        print(f"Plugins {plugin.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
     max_prompt_char_limit = 8000
@@ -274,8 +303,10 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
     # send notification
     send_plugin_notification(token, plugin.name, plugin.id, message)
-    return message
 
+    # set rate
+    _set_proactive_noti_sent_at(uid, plugin)
+    return message
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[App] = get_available_apps(uid)
