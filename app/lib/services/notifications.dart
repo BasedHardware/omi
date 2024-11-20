@@ -172,10 +172,15 @@ class NotificationService {
     if (data.isNotEmpty) {
       if (message.data['notification_type'] == 'daily_summary' || message.data['notification_type'] == 'plugin') {
         SharedPreferencesUtil().pageToShowFromNotification = 1;
-        MyApp.navigatorKey.currentState
-            ?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
+        MyApp.navigatorKey.currentState?.pushReplacement(
+            MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
       }
     }
+  }
+
+  // FIXME: Causes the different behavior on android and iOS
+  bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
+    return Platform.isAndroid;
   }
 
   Future<void> listenForMessages() async {
@@ -191,17 +196,17 @@ class NotificationService {
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
-          payload.addAll({'path':'/chat'});
+          payload.addAll({'path': '/chat'});
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
-        if (noti != null) {
+        if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
           _showForegroundNotification(noti: noti, payload: payload);
         }
         return;
       }
 
       // Announcement likes
-      if (noti != null) {
+      if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
         _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
         return;
       }
@@ -213,7 +218,9 @@ class NotificationService {
   Stream<ServerMessage> get listenForServerMessages => _serverMessageStreamController.stream;
 
   Future<void> _showForegroundNotification(
-      {required RemoteNotification noti, NotificationLayout layout = NotificationLayout.Default, Map<String, String?>? payload}) async {
+      {required RemoteNotification noti,
+      NotificationLayout layout = NotificationLayout.Default,
+      Map<String, String?>? payload}) async {
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
@@ -273,6 +280,7 @@ class NotificationUtil {
       SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
     }
     SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 0;
-    MyApp.navigatorKey.currentState?.pushReplacement(MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
+    MyApp.navigatorKey.currentState?.pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
   }
 }
