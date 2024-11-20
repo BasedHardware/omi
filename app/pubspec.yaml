@@ -134,6 +134,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   flutter_flavorizr: ^2.2.3
+  flutter_gen_runner: ^5.8.0
 
 
 flutter_launcher_icons:
@@ -160,6 +161,7 @@ flutter:
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
+    - assets/icons/
   fonts:
     - family: 'SF Pro Display'
       fonts:
@@ -182,6 +184,20 @@ flutter:
         - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
           weight: 900
           style: italic
+
+flutter_gen:
+  output: lib/gen/
+  class_name: Assets
+  integrations:
+  flutter_svg: true
+  flare_flutter: true
+  rive: true
+  lottie: true
+  gen_package_path: true
+  ignore_resolution: true
+  omit_path_levels: 3
+  format_dart_code: false
+  
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"
