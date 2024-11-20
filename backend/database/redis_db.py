@@ -317,3 +317,15 @@ def save_migrated_retrieval_memory_id(memory_id: str):
 
 def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
     return r.sismember('migrated_retrieval_memory_ids', memory_id)
+
+def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
+    r.set(f'{uid}:{plugin_id}:proactive_noti_sent_at', ts, ex=ttl)
+
+def get_proactive_noti_sent_at(uid: str, plugin_id: str):
+    val = r.get(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+    if not val:
+        return None
+    return int(val)
+
+def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
+    return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
