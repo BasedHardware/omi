@@ -158,13 +158,16 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
 
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
-
+    old_review = get_specific_user_review(app_id, uid)
+    if not old_review:
+        raise HTTPException(status_code=404, detail='Review not found')
     review_data = {
         'score': data['score'],
         'review': data.get('review', ''),
-        'username': data.get('username', ''),
-        'response': data.get('response', ''),
         'updated_at': datetime.now(timezone.utc).isoformat(),
+        'rated_at': old_review['rated_at'],
+        'username': old_review['username'],
+        'response': old_review['response'],
         'uid': uid
     }
     set_app_review(app_id, uid, review_data)
@@ -178,8 +181,8 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
-    if app.uid != uid:
-        raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
+    # if app.uid != uid:
+    #     raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
 
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
