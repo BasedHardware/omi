@@ -84,7 +84,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                 Text(
                   timeago.format(widget.review.ratedAt),
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Colors.grey,
                     fontSize: 12,
                   ),
                 ),
