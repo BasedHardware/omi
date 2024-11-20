@@ -1167,7 +1167,7 @@
     "id": "reasoner-friend",
     "name": "Reasoner Friend",
     "author": "guilhermeke",
-    "description": "Friendly AI companion that helps users think through decisions, ideas, or challenges with a warm and thoughtful tone.",
+    "description": "Friendly AI companion that helps users think through decisions, ideas, or challenges with a warm and thoughtful tone. and everytime you say 'Hey reasoner' its gonna answer your query with CoT(chain of thought) and send you a notification.",
     "image": "/plugins/logos/reasoner-friend.png",
     "capabilities": [
       "memories",
