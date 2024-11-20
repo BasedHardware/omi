@@ -188,7 +188,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         try:
             response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
 
             record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
@@ -293,7 +293,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         if len(memories) > 0:
             context = Memory.memories_to_string(memories, True)
 
-    print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
+    # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
     message = get_proactive_message(uid, prompt, filter_scopes, context)
@@ -333,7 +333,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
+                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:', response.text[:100])
                 return
 
             response_data = response.json()
@@ -342,14 +342,14 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
 
             # message
             message = response_data.get('message', '')
-            print('Plugin', plugin.id, 'response message:', message)
+            # print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
                 send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
 
             # proactive_notification
             noti = response_data.get('notification', None)
-            print('Plugin', plugin.id, 'response notification:', noti)
+            # print('Plugin', plugin.id, 'response notification:', noti)
             if plugin.has_capability("proactive_notification"):
                 message = _process_proactive_notification(uid, token, plugin, noti)
                 if message:

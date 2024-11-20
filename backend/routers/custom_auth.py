@@ -39,7 +39,7 @@ def sign_in(credentials: UserCredentials):
         }
         response = requests.post(url, json=payload)
         if response.status_code != 200:
-            print(response.json())
+            # print(response.json())
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         firebase_token = response.json().get("idToken")
