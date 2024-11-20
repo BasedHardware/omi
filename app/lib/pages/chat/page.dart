@@ -207,8 +207,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? Platform.isAndroid
-                                          ? 200
-                                          : 170
+                                          ? 160
+                                          : MediaQuery.sizeOf(context).height * 0.14
                                       : 0;
                                   return Padding(
                                     key: ValueKey(message.id),
@@ -239,7 +239,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   child: Container(
                     width: double.maxFinite,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    margin: EdgeInsets.only(left: 32, right: 32, bottom: home.isChatFieldFocused ? 40 : 120),
+                    margin: const EdgeInsets.only(left: 32, right: 32, bottom: 36),
                     decoration: const BoxDecoration(
                       color: Colors.black,
                       borderRadius: BorderRadius.all(Radius.circular(16)),
