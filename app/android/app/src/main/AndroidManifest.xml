@@ -118,7 +118,7 @@
             <!-- Deep linking -->
             <meta-data
                 android:name="flutter_deeplinking_enabled"
-                android:value="true" />
+                android:value="false" />
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -126,7 +126,7 @@
                 <data
                     android:host="h.omi.me"
                     android:scheme="https"
-                    android:pathPattern="/apps/" />
+                    android:pathPattern="/apps/.*" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -135,7 +135,7 @@
                 <data
                     android:host="try.omi.me"
                     android:scheme="https"
-                    android:pathPattern="/apps/" />
+                    android:pathPattern="/apps/.*" />
             </intent-filter>
         </activity>
 
