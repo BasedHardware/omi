@@ -35,6 +35,21 @@ class AppProvider extends BaseProvider {
   List<App> get userPublicApps =>
       apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
+  Future<App?> getAppFromId(String id) async {
+    if (apps.isEmpty) {
+      apps = SharedPreferencesUtil().appsList;
+    }
+    var app = apps.firstWhereOrNull((app) => app.id == id);
+    if (app == null) {
+      var appRes = await getAppDetailsServer(id);
+      if (appRes != null) {
+        app = App.fromJson(appRes);
+      }
+      return app;
+    }
+    return app;
+  }
+
   void updateInstalledAppsOptionSelected(bool value) {
     installedAppsOptionSelected = value;
     notifyListeners();
