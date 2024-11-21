@@ -1425,5 +1425,54 @@
       "setup_instructions_file_path": ""
     },
     "deleted": true
+  },
+  {
+    "id": "taskflow",
+    "name": "TaskFlow: Seamless Task Management",
+    "author": "Lee Sangoroh",
+    "description": "An intelligent assistant that listens to conversations through Omi, identifies tasks and structures the response for a task management system to consume e.g. Notion",
+    "image": "/plugins/logos/taskflow.png",
+    "capabilities": [
+      "memories"
+    ],
+    "memory_prompt": {
+      "system": "You are a task recipient system. You are supposed to extract tasks assigned from the given transcript. Some tasks are not directly assigned so you will have to make implications.",
+      "user": "From the transcript provided, look for tasks assigned and organize them in the following format:",
+      "assistant": {
+        "task": "7-word task description",
+        "Task Details": {
+          "Task Name": "Brief, descriptive title",
+          "Description": "Detailed explanation of the task",
+          "Deadline": "Specific date and time",
+          "Priority": "High/Medium/Low",
+          "Expected Outcome": "What should be achieved"
+        },
+        "Resources": {
+          "Relevant Documents": "Links or file names",
+          "Contact Persons": "Names and contact information",
+          "Budget": "Amount and any restrictions"
+        },
+        "Communication": {
+          "Progress Updates": "Frequency of updates required",
+          "Preferred Communication Method": "Email/Slack",
+          "Questions or Clarifications": "How to handle queries"
+        },
+        "transcript": "{{transcript}}"
+      },
+      "user_additional": "If the communication channel or questions or clarification channel is not clearly stated in the transcript, make inference from {{communication_preference}} and choose one best form of communication for this given task for the two categories.",
+      "communication_preference": {
+        "description": "My communication channels",
+        "urgent_issues": "For urgent issues that need an immediate response, a phone call is best.",
+        "quick_back_and_forth": "I like calls for quick back-and-forth when no information is needed.",
+        "notifications": "For notifications and non-urgent communication with my team, Slack works well.",
+        "slack_channels": "We have channels set up for different topics.",
+        "personal_reminders": "For personal reminders, like picking something up on my way home, a text is ideal so I don't miss it.",
+        "text_limitation": "But limit texts to just one-off items, not multiple in a row.",
+        "email": "Email is generally for external communication with investors, customers, prospects, etc.",
+        "internal_email": "I don't email much internally with my team.",
+        "documentation": "Any long-form documentation, note-taking, presentations etc. are done in Google Docs, Sheets and Slides since we're a Google shop."
+    }
+  },
+    "deleted": false
   }
 ]
