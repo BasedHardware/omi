@@ -36,6 +36,7 @@ import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -135,33 +136,12 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  late AppLinks _appLinks;
-  StreamSubscription<Uri>? _linkSubscription;
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
-    initDeepLinks();
     super.initState();
-  }
-
-  Future<void> initDeepLinks() async {
-    _appLinks = AppLinks();
-
-    // Handle links
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
-      debugPrint('onAppLink: $uri');
-      openAppLink(uri);
-    });
-  }
-
-  void openAppLink(Uri uri) async {
-    print('openAppLink: $uri');
-    var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[0]);
-    if (app != null) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-    }
   }
 
   void _deinit() {
@@ -300,8 +280,36 @@ class DeciderWidget extends StatefulWidget {
 }
 
 class _DeciderWidgetState extends State<DeciderWidget> {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
+
+  Future<void> initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle links
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      debugPrint('onAppLink: $uri');
+      openAppLink(uri);
+    });
+  }
+
+  void openAppLink(Uri uri) async {
+    if (uri.pathSegments.first == 'apps') {
+      var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
+      if (app != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app!)));
+      } else {
+        debugPrint('App not found: ${uri.pathSegments[1]}');
+        AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+      }
+    } else {
+      debugPrint('Unknown link: $uri');
+    }
+  }
+
   @override
   void initState() {
+    initDeepLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();
