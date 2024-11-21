@@ -86,6 +86,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           GestureDetector(
             child: const Icon(Icons.share),
             onTap: () {
+              MixpanelManager().track('App Shared', properties: {'appId': widget.app.id});
               Share.share(
                 'Check out this app on Omi AI: ${widget.app.name} by ${widget.app.author} \n\n${widget.app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${widget.app.id}',
                 subject: widget.app.name,
