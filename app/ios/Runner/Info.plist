@@ -36,10 +36,10 @@
 				<key>CFBundleTypeRole</key>
 				<string>Editor</string>
 				<key>CFBundleURLName</key>
-				<string>friendprivate.com</string>
+				<string>h.omi.me</string>
 				<key>CFBundleURLSchemes</key>
 				<array>
-					<string>friendprivate</string>
+					<string>https</string>
 				</array>
 			</dict>
 		</array>
