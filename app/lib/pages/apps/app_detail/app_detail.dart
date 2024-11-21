@@ -580,7 +580,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       MixpanelManager().appEnabled(appId);
     } else {
       prefs.disableApp(appId);
-      await enableAppServer(appId);
+      await disableAppServer(appId);
       MixpanelManager().appDisabled(appId);
     }
     context.read<AppProvider>().setApps();
