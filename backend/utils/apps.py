@@ -6,7 +6,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, set_plugin_review
+    set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
@@ -38,13 +38,18 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     user_enabled = set(get_enabled_plugins(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data
     apps = []
+
+    app_ids = [app['id'] for app in all_apps]
+    plugins_install = get_plugins_installs_count(app_ids)
+    plugins_review = get_plugins_reviews(app_ids) if include_reviews else {}
+
     for app in all_apps:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = get_plugin_installs_count(app['id'])
+        app_dict['installs'] = plugins_install.get(app['id'],0)
         if include_reviews:
-            reviews = get_plugin_reviews(app['id'])
+            reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             app_dict['reviews'] = [details for details in reviews.values() if details['review']]
@@ -117,7 +122,7 @@ def set_app_review(app_id: str, uid: str, review: dict):
 def get_app_reviews(app_id: str) -> dict:
     return get_plugin_reviews(app_id)
 
-  
+
 def get_app_usage_history(app_id: str) -> list:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
