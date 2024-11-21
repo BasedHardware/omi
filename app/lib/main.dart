@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
+import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
@@ -34,6 +36,7 @@ import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/growthbook.dart';
 import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -138,7 +141,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
-
     super.initState();
   }
 
@@ -278,8 +280,37 @@ class DeciderWidget extends StatefulWidget {
 }
 
 class _DeciderWidgetState extends State<DeciderWidget> {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
+
+  Future<void> initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle links
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      debugPrint('onAppLink: $uri');
+      openAppLink(uri);
+    });
+  }
+
+  void openAppLink(Uri uri) async {
+    if (uri.pathSegments.first == 'apps') {
+      var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
+      if (app != null) {
+        MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+      } else {
+        debugPrint('App not found: ${uri.pathSegments[1]}');
+        AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+      }
+    } else {
+      debugPrint('Unknown link: $uri');
+    }
+  }
+
   @override
   void initState() {
+    initDeepLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (context.read<ConnectivityProvider>().isConnected) {
         NotificationService.instance.saveNotificationToken();

@@ -16,6 +16,7 @@ import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../backend/schema/app.dart';
@@ -82,9 +83,27 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
+          GestureDetector(
+            child: const Icon(Icons.share),
+            onTap: () {
+              MixpanelManager().track('App Shared', properties: {'appId': widget.app.id});
+              Share.share(
+                'Check out this app on Omi AI: ${widget.app.name} by ${widget.app.author} \n\n${widget.app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${widget.app.id}',
+                subject: widget.app.name,
+              );
+            },
+          ),
+          !context.watch<AppProvider>().isAppOwner
+              ? const SizedBox(
+                  width: 24,
+                )
+              : const SizedBox(
+                  width: 12,
+                ),
           context.watch<AppProvider>().isAppOwner
               ? IconButton(
                   icon: const Icon(Icons.settings),
+                  padding: const EdgeInsets.only(right: 12),
                   onPressed: () async {
                     await showModalBottomSheet(
                       context: context,
