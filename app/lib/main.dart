@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:friend_private/env/prod_env.dart';
 import 'package:friend_private/firebase_options_dev.dart' as dev;
 import 'package:friend_private/firebase_options_prod.dart' as prod;
 import 'package:friend_private/flavors.dart';
+import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
@@ -133,13 +135,33 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
-
+    initDeepLinks();
     super.initState();
+  }
+
+  Future<void> initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle links
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      debugPrint('onAppLink: $uri');
+      openAppLink(uri);
+    });
+  }
+
+  void openAppLink(Uri uri) async {
+    print('openAppLink: $uri');
+    var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[0]);
+    if (app != null) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+    }
   }
 
   void _deinit() {
