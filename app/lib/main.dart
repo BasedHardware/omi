@@ -287,7 +287,7 @@ class _DeciderWidgetState extends State<DeciderWidget> {
     _appLinks = AppLinks();
 
     // Handle links
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
       debugPrint('onAppLink: $uri');
       openAppLink(uri);
     });
