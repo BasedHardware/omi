@@ -160,12 +160,37 @@ class NotificationService {
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
 
+  Future<void> onNotificationTap() async {
+    // Get notified when the application is in a terminated state
+    final message = await FirebaseMessaging.instance.getInitialMessage();
+    if (message != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleOnTap(message);
+      });
+    }
+
+    // Get notified when the application is in background
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
+  }
+
+  void _handleOnTap(RemoteMessage message) {
+    final data = message.data;
+    if (data.isNotEmpty) {
+      if (message.data['notification_type'] == 'daily_summary' || message.data['notification_type'] == 'plugin') {
+        SharedPreferencesUtil().pageToShowFromNotification = 1;
+        MyApp.navigatorKey.currentState?.pushReplacement(
+            MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
+      }
+    }
+  }
+
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
     return Platform.isAndroid;
   }
 
   Future<void> listenForMessages() async {
+    onNotificationTap();
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
