@@ -246,7 +246,7 @@ class DatesContext(BaseModel):
 
 def requires_context(messages: List[Message]) -> bool:
     prompt = f'''
-    Based on the current conversation your task is to determine if the user is asking a question that requires context outside the conversation to be answered.
+    Based on the current conversation your task is to determine whether the user is asking a question or a follow up question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
     
     Conversation History:    
@@ -668,7 +668,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     prompt = f'''
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the last few messages, and identify the single question that the user is asking.
+    your task is to understand the last few messages, and identify the single question or follow-up question the user is asking. \
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
 
     Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
 
