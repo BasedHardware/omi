@@ -29,11 +29,14 @@ jobs:
         uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
       - run: gcloud auth configure-docker
+
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/example/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/example/Dockerfile.datadog .
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
