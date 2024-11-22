@@ -3,11 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
@@ -27,7 +25,9 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
+import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -286,101 +286,112 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         MemoriesPage(),
                         ChatPage(),
                         AppsPage(),
-                        SettingsPage(),
                       ],
                     ),
                   ),
+                  Consumer<HomeProvider>(
+                    builder: (context, home, child) {
+                      if (home.chatFieldFocusNode.hasFocus ||
+                          home.memoryFieldFocusNode.hasFocus ||
+                          home.appsSearchFieldFocusNode.hasFocus) {
+                        return const SizedBox.shrink();
+                      } else {
+                        return Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.all(Radius.circular(16)),
+                              border: GradientBoxBorder(
+                                gradient: LinearGradient(colors: [
+                                  Color.fromARGB(127, 208, 208, 208),
+                                  Color.fromARGB(127, 188, 99, 121),
+                                  Color.fromARGB(127, 86, 101, 182),
+                                  Color.fromARGB(127, 126, 190, 236)
+                                ]),
+                                width: 2,
+                              ),
+                              shape: BoxShape.rectangle,
+                            ),
+                            child: TabBar(
+                              padding: const EdgeInsets.only(top: 4, bottom: 4),
+                              onTap: (index) {
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
+                                primaryFocus?.unfocus();
+                                home.setIndex(index);
+                                _controller?.animateToPage(index,
+                                    duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                              },
+                              indicatorColor: Colors.transparent,
+                              tabs: [
+                                Tab(
+                                  child: Text(
+                                    'Memories',
+                                    style: TextStyle(
+                                      color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                    ),
+                                  ),
+                                ),
+                                Tab(
+                                  child: Text(
+                                    'Chat',
+                                    style: TextStyle(
+                                      color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                    ),
+                                  ),
+                                ),
+                                Tab(
+                                  child: Text(
+                                    'Apps',
+                                    style: TextStyle(
+                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  if (scriptsInProgress)
+                    Center(
+                      child: Container(
+                        height: 150,
+                        width: 250,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                            SizedBox(height: 16),
+                            Center(
+                                child: Text(
+                              'Running migration, please wait! 🚨',
+                              style: TextStyle(color: Colors.white, fontSize: 16),
+                              textAlign: TextAlign.center,
+                            )),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox.shrink(),
                 ],
               ),
             ),
-          ),
-          bottomNavigationBar: Consumer<HomeProvider>(
-            builder: (context, home, child) {
-              return Container(
-                height: MediaQuery.sizeOf(context).height * 0.12,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF262626),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                  ),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black38, spreadRadius: 0, blurRadius: 1),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                  child: BottomNavigationBar(
-                    currentIndex: home.selectedIndex,
-                    selectedItemColor: Colors.white,
-                    elevation: 5,
-                    showSelectedLabels: true,
-                    showUnselectedLabels: false,
-                    backgroundColor: const Color.fromARGB(255, 29, 29, 29),
-                    onTap: (value) {
-                      MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps', 'Settings'][value]);
-                      primaryFocus?.unfocus();
-                      home.setIndex(value);
-                      _controller?.animateToPage(value,
-                          duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                    },
-                    items: [
-                      BottomNavigationBarItem(
-                        icon: Padding(
-                          padding: const EdgeInsets.only(bottom: 2.0),
-                          child: home.selectedIndex == 0
-                              ? SvgPicture.asset(
-                                  Assets.icons.icHomeSelected,
-                                )
-                              : SvgPicture.asset(Assets.icons.icHomeUnselected),
-                        ),
-                        label: 'Home',
-                        backgroundColor: const Color.fromARGB(255, 29, 29, 29),
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Padding(
-                          padding: const EdgeInsets.only(bottom: 2.0),
-                          child: home.selectedIndex == 1
-                              ? SvgPicture.asset(
-                                  Assets.icons.icChatSelected,
-                                )
-                              : SvgPicture.asset(Assets.icons.icChatUnselected),
-                        ),
-                        label: 'Chat',
-                        backgroundColor: const Color.fromARGB(255, 29, 29, 29),
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Padding(
-                          padding: const EdgeInsets.only(bottom: 2.0),
-                          child: home.selectedIndex == 2
-                              ? SvgPicture.asset(
-                                  Assets.icons.icAppsSelected,
-                                )
-                              : SvgPicture.asset(Assets.icons.icAppsUnselected),
-                        ),
-                        label: 'Apps',
-                        backgroundColor: const Color.fromARGB(255, 29, 29, 29),
-                      ),
-                      BottomNavigationBarItem(
-                        icon: Padding(
-                          padding: const EdgeInsets.only(bottom: 2.0),
-                          child: home.selectedIndex == 3
-                              ? SvgPicture.asset(
-                                  Assets.icons.icSettingsSelected,
-                                )
-                              : SvgPicture.asset(Assets.icons.icSettingsUnselected),
-                        ),
-                        label: 'Settings',
-                        backgroundColor: const Color.fromARGB(255, 29, 29, 29),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
           ),
           appBar: AppBar(
             automaticallyImplyLeading: false,
@@ -393,20 +404,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
-                      return const Padding(
-                        padding: EdgeInsets.only(right: 35.0),
-                        child: ChatAppsDropdownWidget(),
-                      );
+                      return const ChatAppsDropdownWidget();
                     } else if (provider.selectedIndex == 2) {
-                      return const Padding(
-                        padding: EdgeInsets.only(right: 50.0),
-                        child: Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
-                      );
-                    } else if (provider.selectedIndex == 3) {
-                      return const Padding(
-                        padding: EdgeInsets.only(right: 50.0),
-                        child: Text('Settings', style: TextStyle(color: Colors.white, fontSize: 18)),
-                      );
+                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
                     } else {
                       return Flexible(
                         child: Row(
@@ -448,6 +448,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             size: 24,
                           ));
                     }),
+                    IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                      onPressed: () async {
+                        MixpanelManager().pageOpened('Settings');
+                        String language = SharedPreferencesUtil().recordingsLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                        await routeToPage(context, const SettingsPage());
+
+                        if (language != SharedPreferencesUtil().recordingsLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        }
+                      },
+                    ),
                   ],
                 )
               ],
