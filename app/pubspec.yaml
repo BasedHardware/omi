@@ -152,7 +152,6 @@ flutter:
     - assets/images/blob.png
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/images/backbutton.svg
     - assets/fonts/
     - assets/images/
     - assets/lottie_animations/
@@ -161,7 +160,6 @@ flutter:
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
-    - assets/icons/
   fonts:
     - family: 'SF Pro Display'
       fonts:

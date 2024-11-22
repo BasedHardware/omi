@@ -64,55 +64,12 @@ class $AssetsFontsGen {
       ];
 }
 
-class $AssetsIconsGen {
-  const $AssetsIconsGen();
-
-  /// File path: assets/icons/ic_apps_selected.svg
-  String get icAppsSelected => 'assets/icons/ic_apps_selected.svg';
-
-  /// File path: assets/icons/ic_apps_unselected.svg
-  String get icAppsUnselected => 'assets/icons/ic_apps_unselected.svg';
-
-  /// File path: assets/icons/ic_chat_selected.svg
-  String get icChatSelected => 'assets/icons/ic_chat_selected.svg';
-
-  /// File path: assets/icons/ic_chat_unselected.svg
-  String get icChatUnselected => 'assets/icons/ic_chat_unselected.svg';
-
-  /// File path: assets/icons/ic_home_selected.svg
-  String get icHomeSelected => 'assets/icons/ic_home_selected.svg';
-
-  /// File path: assets/icons/ic_home_unselected.svg
-  String get icHomeUnselected => 'assets/icons/ic_home_unselected.svg';
-
-  /// File path: assets/icons/ic_settings_selected.svg
-  String get icSettingsSelected => 'assets/icons/ic_settings_selected.svg';
-
-  /// File path: assets/icons/ic_settings_unselected.svg
-  String get icSettingsUnselected => 'assets/icons/ic_settings_unselected.svg';
-
-  /// List of all assets
-  List<String> get values => [
-        icAppsSelected,
-        icAppsUnselected,
-        icChatSelected,
-        icChatUnselected,
-        icHomeSelected,
-        icHomeUnselected,
-        icSettingsSelected,
-        icSettingsUnselected
-      ];
-}
-
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
   /// File path: assets/images/app_launcher_icon.png
   AssetGenImage get appLauncherIcon =>
       const AssetGenImage('assets/images/app_launcher_icon.png');
-
-  /// File path: assets/images/backbutton.svg
-  String get backbutton => 'assets/images/backbutton.svg';
 
   /// File path: assets/images/background.png
   AssetGenImage get background =>
@@ -124,9 +81,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/emotional_feedback_1.png
   AssetGenImage get emotionalFeedback1 =>
       const AssetGenImage('assets/images/emotional_feedback_1.png');
-
-  /// File path: assets/images/favicon.png
-  AssetGenImage get favicon => const AssetGenImage('assets/images/favicon.png');
 
   /// File path: assets/images/herologo.png
   AssetGenImage get herologo =>
@@ -163,13 +117,11 @@ class $AssetsImagesGen {
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
   /// List of all assets
-  List<dynamic> get values => [
+  List<AssetGenImage> get values => [
         appLauncherIcon,
-        backbutton,
         background,
         blob,
         emotionalFeedback1,
-        favicon,
         herologo,
         instruction1,
         instruction2,
@@ -213,7 +165,6 @@ class Assets {
 
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
-  static const $AssetsIconsGen icons = $AssetsIconsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsLottieAnimationsGen lottieAnimations =
       $AssetsLottieAnimationsGen();
