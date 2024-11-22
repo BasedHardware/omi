@@ -162,7 +162,9 @@ class NotificationService {
   Future<void> onNotificationTap() async {
     final message = await FirebaseMessaging.instance.getInitialMessage();
     if (message != null) {
-      _handleOnTap(message);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleOnTap(message);
+      });
     }
     FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
   }
