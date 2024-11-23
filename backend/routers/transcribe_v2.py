@@ -388,8 +388,8 @@ async def _websocket_util(
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
                 pusher_connected = True
                 transcript_ws = pusher_ws
-                if audio_bytes_enabled:
-                    audio_bytes_ws = pusher_ws
+                # if audio_bytes_enabled:
+                audio_bytes_ws = pusher_ws
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
@@ -398,7 +398,7 @@ async def _websocket_util(
 
         return (connect, close,
                 transcript_send, transcript_consume,
-                audio_bytes_send if audio_bytes_enabled else None, audio_bytes_consume if audio_bytes_enabled else None)
+                audio_bytes_send, audio_bytes_consume)
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
