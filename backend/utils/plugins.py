@@ -28,6 +28,7 @@ import database.memories as memories_db
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
+
 def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     """
     Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
@@ -188,7 +189,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         try:
             response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:', response.text[:100])
+                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:',
+                      response.text[:100])
                 return
 
             record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
@@ -222,6 +224,11 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
     _trigger_realtime_integrations(uid, token, segments)
 
 
+async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+    """REALTIME AUDIO STREAMING"""
+    _trigger_realtime_audio_bytes(uid, sample_rate, data)
+
+
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
     vector = (
@@ -244,6 +251,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
     )
     return memories_db.get_memories_by_id(uid, memories_id)
 
+
 def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
     sent_at = mem_db.get_proactive_noti_sent_at(uid, plugin.id)
     if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
@@ -258,6 +266,7 @@ def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
         mem_db.set_proactive_noti_sent_at(uid, plugin.id, int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
+
 
 def _set_proactive_noti_sent_at(uid: str, plugin: App):
     ts = time.time()
@@ -280,7 +289,8 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
-        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        send_plugin_notification(token, plugin.name, plugin.id,
+                                 f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
         print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
@@ -308,6 +318,51 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     _set_proactive_noti_sent_at(uid, plugin)
     return message
 
+
+def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
+    plugins: List[App] = get_available_apps(uid)
+    filtered_plugins = [
+        plugin for plugin in plugins if
+        plugin.triggers_realtime_audio_bytes() and plugin.enabled and not plugin.deleted
+    ]
+    if not filtered_plugins:
+        return {}
+
+    threads = []
+    results = {}
+
+    def _single(plugin: App):
+        if not plugin.external_integration.webhook_url:
+            return
+
+        url = plugin.external_integration.webhook_url
+        url += f'?sample_rate={sample_rate}&uid={uid}'
+        try:
+            response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
+            if response.status_code != 200:
+                print('trigger_realtime_audio_bytes', plugin.id, 'status:', response.status_code, 'results:',
+                      response.text[:100])
+                return
+
+            response_data = response.json()
+            if not response_data:
+                return
+
+        except Exception as e:
+            print(f"Plugin integration error: {e}")
+            return
+
+    for plugin in filtered_plugins:
+        threads.append(threading.Thread(target=_single, args=(plugin,)))
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+
+    return results
+
+
+
+
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [
@@ -333,7 +388,8 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:', response.text[:100])
+                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:',
+                      response.text[:100])
                 return
 
             response_data = response.json()

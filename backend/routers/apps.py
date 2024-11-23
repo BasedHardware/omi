@@ -233,6 +233,7 @@ def get_plugin_capabilities():
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Memories', 'id': 'memories'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
+            {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ]},
