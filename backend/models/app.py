@@ -94,6 +94,9 @@ class App(BaseModel):
     def triggers_realtime(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
 
+    def triggers_realtime_audio_bytes(self) -> bool:
+        return self.works_externally() and self.external_integration.triggers_on == 'audio_bytes'
+
     def filter_proactive_notification_scopes(self, params: [str]) -> []:
         if not self.proactive_notification:
             return []
