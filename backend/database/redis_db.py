@@ -137,6 +137,19 @@ def get_plugin_reviews(plugin_id: str) -> dict:
         return {}
     return eval(reviews)
 
+def get_plugins_reviews(plugin_ids: list) -> dict:
+    if not plugin_ids:
+        return {}
+
+    keys = [f'plugins:{plugin_id}:reviews' for plugin_id in plugin_ids]
+    reviews = r.mget(keys)
+    if reviews is None:
+        return {}
+    return {
+        plugin_id: eval(review) if review else {}
+        for plugin_id, review in zip(plugin_ids, reviews)
+    }
+
 
 def set_plugin_installs_count(plugin_id: str, count: int):
     r.set(f'plugins:{plugin_id}:installs', count)
@@ -155,6 +168,19 @@ def get_plugin_installs_count(plugin_id: str) -> int:
     if not count:
         return 0
     return int(count)
+
+def get_plugins_installs_count(plugin_ids: list) -> dict:
+    if not plugin_ids:
+        return {}
+
+    keys = [f'plugins:{plugin_id}:installs' for plugin_id in plugin_ids]
+    counts = r.mget(keys)
+    if counts is None:
+        return {}
+    return {
+        plugin_id: int(count) if count else 0
+        for plugin_id, count in zip(plugin_ids, counts)
+    }
 
 
 def set_user_has_soniox_speech_profile(uid: str):
