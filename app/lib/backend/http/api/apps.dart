@@ -376,3 +376,45 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
     return null;
   }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// Apps Tester Specific Endpoints //////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Future<bool> isAppTester() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/tester/check',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('isAppTester: ${response.body}');
+    var res = jsonDecode(response.body)['is_tester'];
+    if (res == null) return false;
+    return res;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}
+
+Future<List<App>> getUnapprovedApps() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/unapproved/read-only',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getUnapprovedApps: ${response.body}');
+    var res = jsonDecode(response.body);
+    return App.fromJsonList(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
+  }
+}
