@@ -3,11 +3,18 @@ from datetime import datetime, timezone
 from typing import List, Dict
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
-    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
+    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
+    get_public_unapproved_apps_tester_db, get_private_apps_tester_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews
 from models.app import App, UsageHistoryItem, UsageHistoryType
+
+admins = ['bZENWi3veHS6o0ko2hdsdrIG8CF3']
+
+
+def check_tester(uid: str) -> bool:
+    return uid in admins
 
 
 def weighted_rating(plugin):
@@ -26,14 +33,14 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
         print('get_public_approved_plugins_data from cache----------------------------')
         public_approved_data = cachedApps
-        public_unapproved_data = get_public_unapproved_apps_db(uid)
-        private_data = get_private_apps_db(uid)
+        public_unapproved_data = get_public_unapproved_apps(uid)
+        private_data = get_private_apps(uid)
         pass
     else:
         print('get_public_approved_plugins_data from db----------------------------')
-        private_data = get_private_apps_db(uid)
+        private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
-        public_unapproved_data = get_public_unapproved_apps_db(uid)
+        public_unapproved_data = get_public_unapproved_apps(uid)
         set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data
@@ -47,7 +54,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = plugins_install.get(app['id'],0)
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
@@ -66,8 +73,6 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
-        return None
     return app
 
 
@@ -84,6 +89,22 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
     return app
+
+
+def get_public_unapproved_apps(uid: str) -> List:
+    if check_tester(uid):
+        data = get_public_unapproved_apps_tester_db()
+    else:
+        data = get_public_unapproved_apps_db(uid)
+    return data
+
+
+def get_private_apps(uid: str) -> List:
+    if check_tester(uid):
+        data = get_private_apps_tester_db()
+    else:
+        data = get_private_apps_db(uid)
+    return data
 
 
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
@@ -110,7 +131,6 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     if include_reviews:
         apps = sorted(apps, key=weighted_rating, reverse=True)
     return apps
-
 
 
 def set_app_review(app_id: str, uid: str, review: dict):
