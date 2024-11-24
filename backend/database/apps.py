@@ -52,6 +52,13 @@ def get_unapproved_public_apps_db() -> List:
     return [doc.to_dict() for doc in public_apps]
 
 
+# This returns all unapproved apps of all users including private apps
+def get_all_unapproved_apps_db() -> List:
+    filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False)]
+    all_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in all_apps]
+
+
 def get_public_apps_db(uid: str) -> List:
     public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
@@ -71,6 +78,20 @@ def get_public_unapproved_apps_db(uid: str) -> List:
                FieldFilter('private', '==', False)]
     public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
+
+
+def get_public_unapproved_apps_tester_db() -> List:
+    filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False),
+               FieldFilter('private', '==', False)]
+    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in public_apps]
+
+
+def get_private_apps_tester_db() -> List:
+    filters = [FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
+    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    data = [doc.to_dict() for doc in private_apps]
+    return data
 
 
 def add_app_to_db(app_data: dict):
@@ -110,8 +131,8 @@ def change_app_approval_status(plugin_id: str, approved: bool):
 def get_app_usage_history_db(app_id: str):
     usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
     return [doc.to_dict() for doc in usage]
-  
-    
+
+
 # ********************************
 # *********** REVIEWS ************
 # ********************************
