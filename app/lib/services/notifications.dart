@@ -159,24 +159,6 @@ class NotificationService {
   }
 
   clearNotification(int id) => _awesomeNotifications.cancel(id);
-  Future<void> onNotificationTap() async {
-    final message = await FirebaseMessaging.instance.getInitialMessage();
-    if (message != null) {
-      _handleOnTap(message);
-    }
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleOnTap);
-  }
-
-  void _handleOnTap(RemoteMessage message) {
-    final data = message.data;
-    if (data.isNotEmpty) {
-      if (message.data['notification_type'] == 'daily_summary' || message.data['notification_type'] == 'plugin') {
-        SharedPreferencesUtil().pageToShowFromNotification = 1;
-        MyApp.navigatorKey.currentState?.pushReplacement(
-            MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
-      }
-    }
-  }
 
   // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
@@ -184,8 +166,6 @@ class NotificationService {
   }
 
   Future<void> listenForMessages() async {
-    onNotificationTap();
-
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
@@ -264,22 +244,44 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
+    debugPrint("onActionReceivedMethodImpl");
+    if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
+      return;
+    }
+    _handleAppLinkOrDeepLink(receivedAction.payload!);
+  }
+
+  static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     final Map<String, int> screensWithRespectToPath = {
       '/apps': 2,
       '/chat': 1,
       '/memories': 0,
     };
-    var message = 'Action ${receivedAction.actionType?.name} received on ${receivedAction.actionLifeCycle?.name}';
-    debugPrint(message);
-    debugPrint(receivedAction.toMap().toString());
+
+    final Map<String, int> screensWithRespectToNotiType = {
+      'daily_summary': 1,
+      'plugin': 1,
+    };
 
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
-    final payload = receivedAction.payload;
-    if (payload?.containsKey('navigateTo') ?? false) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload?['navigateTo'] ?? '';
+    if (payload.containsKey('navigateTo')) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? '';
     }
-    SharedPreferencesUtil().pageToShowFromNotification = screensWithRespectToPath[payload?['path']] ?? 0;
+
+    // Notification page
+    var pageIdx = 0;
+    var path = payload['path'] ?? "";
+    var notificationType = payload['notification_type'] ?? "";
+    if (path.isNotEmpty) {
+      pageIdx = screensWithRespectToPath[path] ?? 0;
+    } else if (notificationType.isNotEmpty) {
+      pageIdx = screensWithRespectToNotiType[notificationType] ?? 0;
+    }
+
+    SharedPreferencesUtil().pageToShowFromNotification = pageIdx;
+
+    debugPrint("onActionReceivedMethodImpl ${SharedPreferencesUtil().pageToShowFromNotification}");
     MyApp.navigatorKey.currentState?.pushReplacement(
         MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
   }

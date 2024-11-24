@@ -71,8 +71,8 @@ async def _websocket_util(
         raise HTTPException(status_code=400, detail="Invalid UID")
 
     # Not when comes from the phone, and only Friend's with 1.0.4
-    if stt_service == STTService.soniox and language not in soniox_valid_languages:
-        stt_service = STTService.deepgram
+    # if stt_service == STTService.soniox and language not in soniox_valid_languages:
+    stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
