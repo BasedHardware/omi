@@ -114,6 +114,10 @@ class AddAppProvider extends ChangeNotifier {
     if (app.memoryPrompt != null) {
       memoryPromptController.text = app.memoryPrompt!.decodeString;
     }
+    if (app.proactiveNotification != null) {
+      selectedScopes = app.getNotificationScopesFromIds(
+          capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
+    }
     setIsLoading(false);
     notifyListeners();
   }
