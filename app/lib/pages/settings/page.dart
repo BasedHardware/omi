@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/settings/about.dart';
+import 'package:friend_private/pages/settings/admin_area/admin_page.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/profile.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
@@ -26,12 +28,17 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   String? version;
   String? buildVersion;
+  bool isTester = false;
 
   @override
   void initState() {
     optInAnalytics = SharedPreferencesUtil().optInAnalytics;
     optInEmotionalFeedback = SharedPreferencesUtil().optInEmotionalFeedback;
     devModeEnabled = SharedPreferencesUtil().devModeEnabled;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      isTester = await isAppTester();
+      setState(() {});
+    });
     PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
       version = packageInfo.version;
       buildVersion = packageInfo.buildNumber.toString();
@@ -137,6 +144,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   );
                 }, icon: Icons.logout),
+                isTester
+                    ? const SizedBox(
+                        height: 32,
+                      )
+                    : const SizedBox.shrink(),
+                isTester
+                    ? getItemAddOn2(
+                        'Admin Area',
+                        () => routeToPage(context, const AdminPage()),
+                        icon: Icons.person,
+                      )
+                    : const SizedBox.shrink(),
                 const SizedBox(height: 24),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
