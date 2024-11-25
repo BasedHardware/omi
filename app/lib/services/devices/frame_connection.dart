@@ -257,6 +257,8 @@ class FrameDeviceConnection extends DeviceConnection {
     return Future.value(BleAudioCodec.pcm8);
   }
 
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {}
+
   @override
   Future<StreamSubscription?> performGetBleAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
@@ -423,6 +425,11 @@ class FrameDeviceConnection extends DeviceConnection {
   }) async {
     // not yet implemented
     return null;
+  }
+
+  @override
+  Future<bool> performPlayToSpeakerHaptic(int mode) async {
+    return false;
   }
 
   @override

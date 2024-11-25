@@ -183,8 +183,21 @@ abstract class DeviceConnection {
     return null;
   }
 
+  Future<StreamSubscription?> getBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    if (await isConnected()) {
+      return await performGetBleButtonListener(onButtonReceived: onButtonReceived);
+    }
+    return null;
+  }
+
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
+  });
+
+  Future<StreamSubscription?> performGetBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
   });
 
   Future<BleAudioCodec> getAudioCodec() async {
@@ -196,7 +209,10 @@ abstract class DeviceConnection {
   }
 
   Future<BleAudioCodec> performGetAudioCodec();
-//storage here
+
+  Future<bool> performPlayToSpeakerHaptic(int mode);
+
+  // storage here
 
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
