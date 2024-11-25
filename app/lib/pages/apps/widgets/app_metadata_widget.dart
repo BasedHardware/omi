@@ -1,9 +1,10 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:provider/provider.dart';
 
 class AppMetadataWidget extends StatelessWidget {
   final File? imageFile;
@@ -33,349 +34,354 @@ class AppMetadataWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'App Metadata',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        const SizedBox(
-          height: 16,
-        ),
-        GestureDetector(
-          onTap: pickImage,
-          child: imageFile != null || imageUrl != null
-              ? (imageUrl == null
-                  ? Container(
-                      height: 100,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[500] ?? Colors.grey),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          const SizedBox(
-                            width: 30,
-                          ),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8.0),
-                            child: Image.file(
-                              imageFile!,
-                              height: 60,
-                              width: 60,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          const SizedBox(
-                            width: 30,
-                          ),
-                          const Text(
-                            'Replace App Icon?',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: imageUrl!,
-                      imageBuilder: (context, imageProvider) => Container(
-                        height: 100,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[500] ?? Colors.grey),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            const SizedBox(
-                              width: 30,
-                            ),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8.0),
-                              child: Image(image: imageProvider, height: 60, width: 60, fit: BoxFit.cover),
-                            ),
-                            const SizedBox(
-                              width: 30,
-                            ),
-                            const Text(
-                              'Replace App Icon?',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ))
-              : DottedBorder(
-                  borderType: BorderType.RRect,
-                  dashPattern: [6, 3],
-                  radius: const Radius.circular(10),
-                  color: Colors.grey[600] ?? Colors.grey,
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Form(
+        key: context.watch<AddAppProvider>().metadataKey,
+        onChanged: () {
+          Provider.of<AddAppProvider>(context, listen: false).checkValidity();
+        },
+        child: Column(
+          children: [
+            Stack(
+              children: [
+                GestureDetector(
+                  onTap: pickImage,
                   child: Container(
-                    height: 100,
-                    width: double.infinity,
+                    margin: const EdgeInsets.all(8.0),
+                    width: MediaQuery.of(context).size.width * 0.28,
+                    height: MediaQuery.of(context).size.width * 0.28,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(30.0),
+                      border: Border.all(color: Colors.grey.shade800, width: 2.0),
                     ),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.cloud_upload,
-                            color: Colors.grey,
-                            size: 32,
+                    child: imageFile != null || imageUrl != null
+                        ? (imageUrl == null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(30.0),
+                                child: Image.file(imageFile!, fit: BoxFit.cover))
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(30.0),
+                                child: CachedNetworkImage(imageUrl: imageUrl!),
+                              ))
+                        : const Icon(Icons.add_a_photo, color: Colors.grey, size: 32),
+                  ),
+                ),
+                (imageFile != null || imageUrl != null)
+                    ? Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: pickImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(8.0),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade800,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit,
+                              color: Colors.white,
+                            ),
                           ),
-                          SizedBox(
-                            height: 8,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ],
+            ),
+            const SizedBox(
+              height: 18,
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade900,
+                borderRadius: BorderRadius.circular(12.0),
+              ),
+              padding: const EdgeInsets.all(14.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'App Name',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    width: double.infinity,
+                    child: TextFormField(
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter app name';
+                        }
+                        return null;
+                      },
+                      controller: appNameController,
+                      decoration: const InputDecoration(
+                        errorText: null,
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'My Awesome App',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'Category',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                        builder: (context) {
+                          return Consumer<AddAppProvider>(builder: (context, provider, child) {
+                            return Container(
+                              padding: const EdgeInsets.all(16.0),
+                              height: MediaQuery.of(context).size.height * 0.6,
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(
+                                      height: 12,
+                                    ),
+                                    const Text(
+                                      'App Category',
+                                      style: TextStyle(color: Colors.white, fontSize: 18),
+                                    ),
+                                    const SizedBox(
+                                      height: 18,
+                                    ),
+                                    ListView.separated(
+                                      separatorBuilder: (context, index) {
+                                        return Divider(
+                                          color: Colors.grey.shade600,
+                                          height: 1,
+                                        );
+                                      },
+                                      shrinkWrap: true,
+                                      itemCount: categories.length,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemBuilder: (context, index) {
+                                        return InkWell(
+                                          onTap: () {
+                                            provider.setAppCategory(categories[index].id);
+                                            Navigator.pop(context);
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                              children: [
+                                                const SizedBox(
+                                                  width: 6,
+                                                ),
+                                                Text(
+                                                  categories[index].title,
+                                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                                ),
+                                                const Spacer(),
+                                                Checkbox(
+                                                  value: provider.appCategory == categories[index].id,
+                                                  onChanged: (value) {
+                                                    provider.setAppCategory(categories[index].id);
+                                                    Navigator.pop(context);
+                                                  },
+                                                  side: BorderSide(color: Colors.grey.shade300),
+                                                  shape: const CircleBorder(),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          });
+                        },
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      width: double.infinity,
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 12,
                           ),
                           Text(
-                            '${imageUrl == null ? 'Upload' : 'Replace'} App Icon',
-                            style: TextStyle(color: Colors.grey),
+                            (category?.isNotEmpty == true ? category : 'Select Category') ?? 'Select Category',
+                            style: TextStyle(
+                                color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(
+                            width: 12,
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-        ),
-        const SizedBox(
-          height: 20,
-        ),
-        TextFormField(
-          controller: appNameController,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter app name';
-            }
-            return null;
-          },
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(
-                color: Colors.white,
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'Creator Name',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    width: double.infinity,
+                    child: TextFormField(
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter creator name';
+                        }
+                        return null;
+                      },
+                      controller: creatorNameController,
+                      decoration: const InputDecoration(
+                        contentPadding: EdgeInsets.only(top: 6, bottom: 6),
+                        isDense: true,
+                        errorText: null,
+                        border: InputBorder.none,
+                        hintText: 'Nik Shevchenko',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'Email Address',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    width: double.infinity,
+                    child: TextFormField(
+                      controller: creatorEmailController,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter creator email';
+                        }
+                        return null;
+                      },
+                      decoration: const InputDecoration(
+                        contentPadding: EdgeInsets.only(top: 6, bottom: 6),
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'nik@basedhardware.com',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      'Description',
+                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    width: double.infinity,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: MediaQuery.sizeOf(context).height * 0.1,
+                        maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                      ),
+                      child: Scrollbar(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          reverse: false,
+                          child: TextFormField(
+                            maxLines: null,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please provide a valid description';
+                              }
+                              return null;
+                            },
+                            controller: appDescriptionController,
+                            decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.only(top: 6, bottom: 2),
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText:
+                                  'My Awesome App is a great app that does amazing things. It is the best app ever!',
+                              hintMaxLines: 4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.apps,
-                    color: WidgetStateColor.resolveWith(
-                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Text(
-                  'App Name',
-                ),
-              ],
-            ),
-            alignLabelWithHint: true,
-            labelStyle: const TextStyle(
-              color: Colors.grey,
-            ),
-            floatingLabelStyle: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
+          ],
         ),
-        const SizedBox(
-          height: 24,
-        ),
-        DropdownButtonFormField(
-          validator: (value) {
-            if (value == null) {
-              return 'Please select an app category';
-            }
-            return null;
-          },
-          value: category,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(
-                color: Colors.white,
-              ),
-            ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.category,
-                    color: WidgetStateColor.resolveWith(
-                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Text(
-                  'App Category',
-                ),
-              ],
-            ),
-            labelStyle: const TextStyle(
-              color: Colors.grey,
-            ),
-            floatingLabelStyle: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
-          items: categories
-              .map(
-                (category) => DropdownMenuItem(
-                  value: category.id,
-                  child: Text(category.title),
-                ),
-              )
-              .toList(),
-          onChanged: setAppCategory,
-        ),
-        const SizedBox(
-          height: 24,
-        ),
-        TextFormField(
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter creator name';
-            }
-            return null;
-          },
-          controller: creatorNameController,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(
-                color: Colors.white,
-              ),
-            ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.person,
-                    color: WidgetStateColor.resolveWith(
-                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Text(
-                  'Creator Name',
-                ),
-              ],
-            ),
-            alignLabelWithHint: true,
-            labelStyle: const TextStyle(
-              color: Colors.grey,
-            ),
-            floatingLabelStyle: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(
-          height: 24,
-        ),
-        TextFormField(
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter creator email';
-            }
-            return null;
-          },
-          controller: creatorEmailController,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(
-                color: Colors.white,
-              ),
-            ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.email,
-                    color: WidgetStateColor.resolveWith(
-                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Text(
-                  'Email Address',
-                ),
-              ],
-            ),
-            alignLabelWithHint: true,
-            labelStyle: const TextStyle(
-              color: Colors.grey,
-            ),
-            floatingLabelStyle: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(
-          height: 24,
-        ),
-        TextFormField(
-          maxLines: null,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please provide a valid description';
-            }
-            return null;
-          },
-          controller: appDescriptionController,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-              borderSide: BorderSide(
-                color: Colors.white,
-              ),
-            ),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.description,
-                    color: WidgetStateColor.resolveWith(
-                        (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.grey)),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Text(
-                  'Description',
-                ),
-              ],
-            ),
-            alignLabelWithHint: true,
-            labelStyle: const TextStyle(
-              color: Colors.grey,
-            ),
-            floatingLabelStyle: const TextStyle(
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

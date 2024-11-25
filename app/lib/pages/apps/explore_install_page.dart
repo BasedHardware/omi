@@ -153,7 +153,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                               provider.searchApps(value);
                             },
                             decoration: InputDecoration(
-                              hintText: 'Search apps',
+                              hintText: 'Search Apps',
                               hintStyle: const TextStyle(color: Colors.white),
                               filled: true,
                               fillColor: Colors.grey[800],
