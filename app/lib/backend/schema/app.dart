@@ -174,15 +174,12 @@ class App {
   String? memoryPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
-
-  // can be used for
-
+  ProactiveNotification? proactiveNotification;
   List<AppReview> reviews;
   AppReview? userReview;
   double? ratingAvg;
   int ratingCount;
   int installs;
-
   bool enabled;
   bool deleted;
 
@@ -209,6 +206,7 @@ class App {
     required this.enabled,
     required this.deleted,
     this.private = false,
+    this.proactiveNotification,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -246,6 +244,9 @@ class App {
       enabled: json['enabled'] ?? false,
       installs: json['installs'] ?? 0,
       private: json['private'] ?? json['id'].toString().contains('private'),
+      proactiveNotification: json['proactive_notification'] != null
+          ? ProactiveNotification.fromJson(json['proactive_notification'])
+          : null,
     );
   }
 
@@ -309,10 +310,18 @@ class App {
       'status': status,
       'uid': uid,
       'email': email,
+      'proactive_notification': proactiveNotification?.toJson(),
     };
   }
 
   static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
+
+  List<NotificationScope> getNotificationScopesFromIds(List<NotificationScope> allScopes) {
+    if (proactiveNotification == null) {
+      return [];
+    }
+    return allScopes.where((e) => proactiveNotification!.scopes.contains(e.id)).toList();
+  }
 }
 
 class Category {
@@ -431,5 +440,25 @@ class NotificationScope {
 
   static List<NotificationScope> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => NotificationScope.fromJson(e)).toList();
+  }
+}
+
+class ProactiveNotification {
+  List<String> scopes;
+
+  ProactiveNotification({
+    required this.scopes,
+  });
+
+  factory ProactiveNotification.fromJson(Map<String, dynamic> json) {
+    return ProactiveNotification(
+      scopes: json['scopes'].map<String>((e) => e.toString()).toList(),
+    );
+  }
+
+  toJson() {
+    return {
+      'scopes': scopes,
+    };
   }
 }
