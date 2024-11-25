@@ -1,16 +1,15 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class ChatAppsDropdownWidget extends StatelessWidget {
-  const ChatAppsDropdownWidget({super.key});
+  final PageController? controller;
+  const ChatAppsDropdownWidget({super.key, this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -31,8 +30,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               ? GestureDetector(
                   onTap: () {
                     MixpanelManager().pageOpened('Chat Apps');
-
-                    routeToPage(context, const AppsPage(filterChatOnly: true));
+                    // routeToPage(context, const AppsPage(filterChatOnly: true));
+                    context.read<HomeProvider>().setIndex(2);
+                    controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                   },
                   child: const Row(
                     children: [
@@ -52,8 +52,11 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     value: provider.selectedChatAppId,
                     onChanged: (s) async {
                       if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                        routeToPage(context, const AppsPage(filterChatOnly: true));
+                        // routeToPage(context, const AppsPage(filterChatOnly: true));
                         MixpanelManager().pageOpened('Chat Apps');
+                        context.read<HomeProvider>().setIndex(2);
+                        controller?.animateToPage(2,
+                            duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                         return;
                       }
                       if (s == null || s == provider.selectedChatAppId) return;
