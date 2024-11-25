@@ -52,7 +52,9 @@
 				"BOARD": "xiao_ble_sense",
 				"CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv2-adafruit.conf",
 				"CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_devkitv2-adafruit.conf",
-				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv2-adafruit.overlay"
+				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv2-adafruit.overlay",
+				"CONFIG_BOOTLOADER_MCUBOOT": "y",
+				"CONFIG_MCUBOOT_SERIAL": "y"
             }
         }
     ]

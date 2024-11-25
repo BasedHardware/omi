@@ -151,3 +151,29 @@ Some users are experiencing issues with the sd card streaming. One cause is the 
 3. Device auto-generates required files
 
 💡 **Tip:** Always check for empty audio files if streaming issues occur.
+
+## **🔄 Testing OTA Updates for Omi DevKit 2**
+
+The Omi DevKit 2 now supports OTA firmware updates. Follow the instructions below to test OTA updates.
+
+### **Steps for Verifying OTA Update Functionality**
+
+1. **Generate OTA .zip File**  
+   - Use the `adafruit-nrfutil` tool to generate the OTA .zip file.
+   - Install `adafruit-nrfutil`:
+     ```bash
+     pip3 install --user adafruit-nrfutil
+     ```
+   - Generate the OTA .zip file:
+     ```bash
+     adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --application zephyr.hex zephyr.zip
+     ```
+
+2. **Apply OTA Update**  
+   - Put the device in bootloader mode by double-tapping the reset button. The device will appear as a USB drive on your computer.
+   - Copy the generated `zephyr.zip` file to the USB drive.
+   - The device will automatically apply the OTA update and restart with the new firmware.
+
+3. **Verify OTA Update**  
+   - Ensure the device restarts successfully with the new firmware.
+   - Check the firmware version from the Omi app to confirm the update.

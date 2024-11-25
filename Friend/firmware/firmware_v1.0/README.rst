@@ -81,3 +81,31 @@ of acknowledgement. All of them are one byte each, so check for these status cod
 Messages to the device take the form [a,b] or [a,b,c,d,e,f], where a denotes (0 for read) and (1 for delete), while b denotes the file number (1 is the first file, 2 is the second, etc. There is no notion of a 0th file). The optional [c,d,e,f] bytes denote the offset in uint format
 in case you want to read from a file at some offset.
 
+## OTA Updates for Omi DevKit 2
+
+The Omi DevKit 2 now supports OTA firmware updates. Follow the instructions below to generate and apply OTA updates.
+
+### Generating OTA .zip Files
+
+To generate OTA .zip files for the Omi DevKit 2, use the `adafruit-nrfutil` tool. Follow these steps:
+
+1. Install `adafruit-nrfutil`:
+
+   ```bash
+   pip3 install --user adafruit-nrfutil
+   ```
+
+2. Generate the OTA .zip file:
+
+   ```bash
+   adafruit-nrfutil dfu genpkg --dev-type 0x0052 --dev-revision 0xCE68 --application zephyr.hex zephyr.zip
+   ```
+
+### Applying OTA Updates
+
+To apply OTA updates to the Omi DevKit 2, follow these steps:
+
+1. Put the device in bootloader mode by double-tapping the reset button. The device will appear as a USB drive on your computer.
+2. Copy the generated `zephyr.zip` file to the USB drive.
+3. The device will automatically apply the OTA update and restart with the new firmware.
+
