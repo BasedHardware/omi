@@ -20,11 +20,10 @@ class AppSectionCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return Container(
-      padding: const EdgeInsets.only(top: 16.0, left: 10, right: 10),
       height: height ?? MediaQuery.sizeOf(context).height * 0.4,
       margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 14),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        // color: Colors.grey.shade900,
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -77,7 +76,7 @@ class SectionAppItemCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
           decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 25, 24, 24),
+            // color: const Color.fromARGB(255, 25, 24, 24),
             borderRadius: BorderRadius.circular(12.0),
           ),
           child: Row(
