@@ -7,7 +7,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
-
+# import os
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
@@ -28,7 +29,6 @@ from utils.llm import (
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
-# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 model = ChatOpenAI(model="gpt-4o-mini")
 
@@ -62,11 +62,11 @@ class GraphState(TypedDict):
 
 def determine_conversation_type(
         s: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "no_context_omi_question"]:
+) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
     is_omi_question = retrieve_is_an_omi_question(s.get("messages", []))
     # TODO: after asked many questions this is causing issues.
     if is_omi_question:
-        return "no_context_omi_question"
+        return "omi_question"
 
     requires = requires_context(s.get("messages", []))
 
@@ -80,7 +80,7 @@ def no_context_conversation(state: GraphState):
     return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
 
 
-def no_context_omi_question(state: GraphState):
+def omi_question(state: GraphState):
     print("no_context_omi_question node")
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
@@ -166,11 +166,11 @@ workflow.add_conditional_edges(
 )
 
 workflow.add_node("no_context_conversation", no_context_conversation)
-workflow.add_node("no_context_omi_question", no_context_omi_question)
+workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
 
 workflow.add_edge("no_context_conversation", END)
-workflow.add_edge("no_context_omi_question", END)
+workflow.add_edge("omi_question", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
@@ -208,7 +208,7 @@ def _pretty_print_conversation(messages: List[Message]):
 
 
 if __name__ == "__main__":
-    # graph.get_graph().draw_png("workflow.png")
+    graph.get_graph().draw_png("workflow.png")
     uid = "ccQJWj5mwhSY1dwjS1FPFBfKIXe2"
     # def _send_message(text: str, sender: str = 'human'):
     #     message = Message(
@@ -225,8 +225,8 @@ if __name__ == "__main__":
             type="text",
         )
     ]
-    result = execute_graph_chat(uid, messages)
-    print("result:", print(result))
+    # result = execute_graph_chat(uid, messages)
+    # print("result:", print(result))
     # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     # _pretty_print_conversation(messages)
     # # print(messages[-1].text)
