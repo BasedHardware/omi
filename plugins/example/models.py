@@ -168,10 +168,20 @@ class RealtimePluginRequest(BaseModel):
     segments: List[TranscriptSegment]
 
 
-class MentorResponse(BaseModel):
+class ProactiveNotificationContextFitlersResponse(BaseModel):
+    people: List[str] = Field(description="A list of people. ", default=[])
+    entities: List[str] = Field(description="A list of entity. ", default=[])
+    topics: List[str] = Field(description="A list of topic. ", default=[])
+
+class ProactiveNotificationContextResponse(BaseModel):
+    question: str = Field(description="A question to query the embeded vector database.", default='')
+    filters: ProactiveNotificationContextFitlersResponse = Field(description="Filter options to query the embeded vector database. ", default=None)
+
+class ProactiveNotificationResponse(BaseModel):
     prompt: str = Field(description="A prompt or a template with the parameters such as {{user_name}} {{user_facts}}.", default='')
     params: List[str] = Field(description="A list of string that match with proactive notification scopes. ", default=[])
+    context: ProactiveNotificationContextResponse = Field(description="An object to guide the system in retrieving the users context", default=None)
 
-class MentorEndpointResponse(BaseModel):
+class ProactiveNotificationEndpointResponse(BaseModel):
     message: str = Field(description="A short message to be sent as notification to the user, if needed.", default='')
-    mentor: MentorResponse = Field(description="An object to guide the system in generating the proactive notification", default=None)
+    notification: ProactiveNotificationResponse = Field(description="An object to guide the system in generating the proactive notification", default=None)

@@ -79,6 +79,10 @@ def delete_user_data(uid: str):
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 
+# **************************************
+# ************* Analytics **************
+# **************************************
+
 def set_memory_summary_rating_score(uid: str, memory_id: str, value: int):
     doc_id = document_id_from_seed('memory_summary' + memory_id)
     db.collection('analytics').document(doc_id).set({
@@ -103,3 +107,15 @@ def get_memory_summary_rating_score(memory_id: str):
 def get_all_ratings():
     ratings = db.collection('analytics').where('type', '==', 'memory_summary').stream()
     return [rating.to_dict() for rating in ratings]
+
+
+def set_chat_message_rating_score(uid: str, message_id: str, value: int):
+    doc_id = document_id_from_seed('chat_message' + message_id)
+    db.collection('analytics').document(doc_id).set({
+        'id': doc_id,
+        'message_id': message_id,
+        'uid': uid,
+        'value': value,
+        'created_at': datetime.now(timezone.utc),
+        'type': 'chat_message',
+    })

@@ -75,13 +75,14 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 timeout=15,
             )
             print('realtime_transcript_webhook:', webhook_url, response.status_code)
-            response_data = response.json()
-            if not response_data:
-                return
-            message = response_data.get('message', '')
-            if message and len(message) > 5:
-                token = notification_db.get_token_only(uid)
-                send_webhook_notification(token, message)
+            if response.status_code == 200:
+                response_data = response.json()
+                if not response_data:
+                    return
+                message = response_data.get('message', '')
+                if len(message) > 5:
+                    token = notification_db.get_token_only(uid)
+                    send_webhook_notification(token, message)
         except Exception as e:
             print(f"Error sending realtime transcript to developer webhook: {e}")
     else:

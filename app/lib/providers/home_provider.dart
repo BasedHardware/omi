@@ -8,6 +8,8 @@ class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
   final FocusNode memoryFieldFocusNode = FocusNode();
   final FocusNode chatFieldFocusNode = FocusNode();
+  final FocusNode appsSearchFieldFocusNode = FocusNode();
+  bool isAppsSearchFieldFocused = false;
   bool isMemoryFieldFocused = false;
   bool isChatFieldFocused = false;
   bool hasSpeakerProfile = true;
@@ -54,11 +56,13 @@ class HomeProvider extends ChangeNotifier {
   HomeProvider() {
     memoryFieldFocusNode.addListener(_onFocusChange);
     chatFieldFocusNode.addListener(_onFocusChange);
+    appsSearchFieldFocusNode.addListener(_onFocusChange);
   }
 
   void _onFocusChange() {
     isMemoryFieldFocused = memoryFieldFocusNode.hasFocus;
     isChatFieldFocused = chatFieldFocusNode.hasFocus;
+    isAppsSearchFieldFocused = appsSearchFieldFocusNode.hasFocus;
     notifyListeners();
   }
 
@@ -107,8 +111,10 @@ class HomeProvider extends ChangeNotifier {
   void dispose() {
     memoryFieldFocusNode.removeListener(_onFocusChange);
     chatFieldFocusNode.removeListener(_onFocusChange);
+    appsSearchFieldFocusNode.removeListener(_onFocusChange);
     memoryFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();
+    appsSearchFieldFocusNode.dispose();
     super.dispose();
   }
 }

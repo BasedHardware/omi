@@ -1,0 +1,20 @@
+{
+    "applinks":{
+      "apps":[
+         
+      ],
+      "details":[
+        {
+          "appIDs":[
+            "9536L8KLMP.com.friend-app-with-wearable.ios12"
+          ],
+          "components":[
+            {
+              "/":"/apps/*",
+              "comment":"Matches any URL with a path that starts with /apps/."
+            }
+          ]
+        }
+      ]
+    }
+  }

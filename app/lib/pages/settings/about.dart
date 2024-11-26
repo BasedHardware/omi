@@ -64,7 +64,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');
-                launchUrl(Uri.parse('https://discord.gg/based-hardware-1192313062041067520'));
+                launchUrl(Uri.parse('https://discord.gg/omi'));
               },
             ),
           ],

@@ -216,3 +216,13 @@ def get_memory_summary_rating(
     if not rating:
         return {'has_rating': False}
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
+
+
+@router.post('/v1/users/analytics/chat_message', tags=['v1'])
+def set_chat_message_analytics(
+        message_id: str,
+        value: int,
+        uid: str = Depends(auth.get_current_user_uid),
+):
+    set_chat_message_rating_score(uid, message_id, value)
+    return {'status': 'ok'}

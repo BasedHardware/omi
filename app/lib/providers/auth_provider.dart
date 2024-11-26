@@ -14,18 +14,17 @@ class AuthenticationProvider extends BaseProvider {
   User? user;
   String? authToken;
 
-  bool isSignedIn() {
-    return _auth.currentUser != null;
-  }
-
   AuthenticationProvider() {
     _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) return;
+
       this.user = user;
       SharedPreferencesUtil().uid = user?.uid ?? '';
       SharedPreferencesUtil().email = user?.email ?? '';
       SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
     });
     _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      if (SharedPreferencesUtil().customBackendUrl.isNotEmpty) return;
       if (user == null) {
         debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
         SharedPreferencesUtil().authToken = '';
@@ -45,6 +44,8 @@ class AuthenticationProvider extends BaseProvider {
       notifyListeners();
     });
   }
+
+  bool isSignedIn() => _auth.currentUser != null;
 
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {

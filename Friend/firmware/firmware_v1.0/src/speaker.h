@@ -53,4 +53,6 @@ void play_haptic_milli(uint32_t duration);
 
 void speaker_off();
 
+void register_speaker_service();
+
 #endif

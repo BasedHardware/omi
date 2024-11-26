@@ -120,7 +120,6 @@ def get_plugin_result(transcript: str, plugin: Plugin) -> str:
 
     Conversation: ```{transcript.strip()}```,
 
-    Output your response in plain text, without markdown.
     Make sure to be concise and clear.
     '''
 
@@ -211,8 +210,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     else:
         prompt = f'''
@@ -225,8 +222,6 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
 
         Send an initial message to start the conversation, make sure this message reflects your personality, \
         humor, and characteristics.
-
-        Output your response in plain text, without markdown.
         '''
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
@@ -251,7 +246,7 @@ class DatesContext(BaseModel):
 
 def requires_context(messages: List[Message]) -> bool:
     prompt = f'''
-    Based on the current conversation your task is to determine if the user is asking a question that requires context outside the conversation to be answered.
+    Based on the current conversation your task is to determine whether the user is asking a question or a follow up question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
     
     Conversation History:    
@@ -265,7 +260,33 @@ def requires_context(messages: List[Message]) -> bool:
         return False
 
 
-# TODO: try query expansion
+class IsAnOmiQuestion(BaseModel):
+    value: bool = Field(description="If the message is an Omi/Friend related question")
+
+
+def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
+    prompt = f'''
+    The user is using the chat functionality of an app known as Omi or Friend.
+    Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
+    
+    Questions like, 
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it"
+    - "Where do I get it"
+    - "How the chat works?"
+    - ...
+    
+    Conversation History:    
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
 
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
@@ -353,7 +374,29 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
 
     Answer:
     """.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
+    return llm_mini.invoke(prompt).content
+
+
+def answer_omi_question(messages: List[Message], context: str) -> str:
+    conversation_history = Message.get_messages_as_string(
+        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+    )
+
+    prompt = f"""
+    You are an assistant for answering questions about the app Omi, also known as Friend.
+    Continue the conversation, answering the question based on the context provided.
+    
+    Context:
+    ```
+    {context}
+    ```
+
+    Conversation History:
+    {conversation_history}
+
+    Answer:
+    """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -385,7 +428,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     ```
     Answer:
     """.replace('    ', '').strip()
-    print('QA Using context:', context)
+    # print('qa_rag prompt', prompt)
     return llm_mini.invoke(prompt).content
 
 
@@ -452,7 +495,7 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        max_items=3,
+        # max_items=3,
         description="List of new user facts, preferences, interests, or topics.",
     )
 
@@ -471,18 +514,18 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     You are an experienced detective, whose job is to create detailed profile personas based on conversations.
 
     You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
-    Your task is to determine **new** facts, preferences, and interests about {user_name}, based on the transcript.
-
+    Your task is to determine **new** facts like age, city of living, marriage status, health, friends names, preferences,work facts, allergies, preferences, interests or anything else that is important to know about {user_name}, based on the transcript.
     Make sure these facts are:
     - Relevant, and are not repetitive or similar to the existing facts we know about {user_name}, in this case, is preferred to have breadth than too much depth on specifics.
-    - Use a format of "{user_name} likes to play tennis on weekends.".
+    - Use a format of "{user_name} is 25 years old".
     - Contain one of the categories available.
     - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
+    - Examples: "{user_name} lives in San Francisco", "{user_name} is single but currently dating Anna", "{user_name} has a friend called "John" who is a 26yo entrepreneur working on a health startup", "{user_name} recently learned that it's important to hire people only when you have Product Market Fit", "{user_name} recently learned that Pavel Durov recommends not to drink alcohol".
 
     This way we can create a more accurate profile. 
-    Include from 0 up to 3 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+    Include from 0 up to 5 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
 
-    Existing Facts that were: {facts_str}
+    Existing Facts that were before (ignore previous structure): {facts_str}
 
     Conversation:
     ```
@@ -625,7 +668,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     prompt = f'''
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the last few messages, and identify the single question that the user is asking.
+    your task is to understand the last few messages, and identify the single question or follow-up question the user is asking. \
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
 
     Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
 
@@ -735,7 +780,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
-        print('select_structured_filters:', response.dict())
+        # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
@@ -816,11 +861,12 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
 
+
 # **************************************************
-# ************* MENTOR PLUGIN **************
+# ************* PROACTIVE NOTIFICATION PLUGIN **************
 # **************************************************
 
-def get_metoring_message(uid: str, plugin_prompt: str, params: [str]) -> str:
+def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     prompt = plugin_prompt
@@ -831,6 +877,10 @@ def get_metoring_message(uid: str, plugin_prompt: str, params: [str]) -> str:
         if param == "user_facts":
             prompt = prompt.replace("{{user_facts}}", facts_str)
             continue
+        if param == "user_context":
+            prompt = prompt.replace("{{user_context}}", context if context else "")
+            continue
     prompt = prompt.replace('    ', '').strip()
+    # print(prompt)
 
     return llm_mini.invoke(prompt).content

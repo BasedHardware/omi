@@ -4,14 +4,14 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
-      app_store_connect: codemagic_v2
+      app_store_connect: codemagic_v3
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v2
+          - codemagic_v3
           - codemagic_v2_OneSignalNotificationServiceExten
         certificates:
-          - codemagic_v2
+          - codemagic_v3
       groups:
         - app_env
         - firebase
@@ -98,7 +98,7 @@ workflows:
 
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Instals pod
         script: |
@@ -292,7 +292,7 @@ workflows:
           flutter packages pub get
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
       - name: Build AAB with Flutter
         script: | 
           # TODO: Don't tricky
@@ -369,14 +369,14 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
-      app_store_connect: codemagic_v2
+      app_store_connect: codemagic_v3
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v2
+          - codemagic_v3
           - codemagic_v2_OneSignalNotificationServiceExten
         certificates:
-          - codemagic_v2
+          - codemagic_v3
       groups:
         - app_env
         - firebase
@@ -470,7 +470,7 @@ workflows:
 
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Instals pod
         script: |
@@ -635,7 +635,7 @@ workflows:
           flutter packages pub get
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
       - name: Patch Android app with Shorebird
         script: | 
           # TODO: Don't tricky

@@ -19,6 +19,8 @@ class FriendDeviceConnection extends DeviceConnection {
   BluetoothService? _friendService;
   BluetoothService? _storageService;
   BluetoothService? _accelService;
+  BluetoothService? _buttonService;
+  BluetoothService? _speakerService;
 
   FriendDeviceConnection(super.device, super.bleDevice);
 
@@ -45,9 +47,19 @@ class FriendDeviceConnection extends DeviceConnection {
       logServiceNotFoundError('Storage', deviceId);
     }
 
+    _speakerService = await getService(speakerDataStreamServiceUuid);
+    if (_speakerService == null) {
+      logServiceNotFoundError('Speaker', deviceId);
+    }
+
     _accelService = await getService(accelDataStreamServiceUuid);
     if (_accelService == null) {
       logServiceNotFoundError('Accelerometer', deviceId);
+    }
+
+    _buttonService = await getService(buttonServiceUuid);
+    if (_buttonService == null) {
+      logServiceNotFoundError('Button', deviceId);
     }
   }
 
@@ -112,6 +124,62 @@ class FriendDeviceConnection extends DeviceConnection {
 
     final device = bleDevice;
     device.cancelWhenDisconnected(listener);
+
+    return listener;
+  }
+
+  Future<StreamSubscription?> performGetBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    if (_buttonService == null) {
+      logServiceNotFoundError('Button', deviceId);
+      return null;
+    }
+
+    var buttonDataStreamCharacteristic = getCharacteristic(_buttonService!, buttonTriggerCharacteristicUuid);
+    if (buttonDataStreamCharacteristic == null) {
+      logCharacteristicNotFoundError('Button data stream', deviceId);
+      return null;
+    }
+
+    try {
+      // TODO: Unknown GATT error here (code 133) on Android. StackOverflow says that it has to do with smaller MTU size
+      // The creator of the plugin says not to use autoConnect
+      // https://github.com/chipweinberger/flutter_blue_plus/issues/612
+      final device = bleDevice;
+      if (device.isConnected) {
+        if (Platform.isAndroid && device.mtuNow < 512) {
+          await device.requestMtu(512); // This might fix the code 133 error
+        }
+        if (device.isConnected) {
+          try {
+            await buttonDataStreamCharacteristic.setNotifyValue(true); // device could be disconnected here.
+          } on PlatformException catch (e) {
+            Logger.error('Error setting notify value for audio data stream $e');
+          }
+        } else {
+          Logger.handle(Exception('Device disconnected before setting notify value'), StackTrace.current,
+              message: 'Device is disconnected. Please reconnect and try again');
+        }
+      }
+    } catch (e, stackTrace) {
+      logSubscribeError('Button data stream', deviceId, e, stackTrace);
+      return null;
+    }
+
+    debugPrint('Subscribed to button stream from Friend Device');
+    var listener = buttonDataStreamCharacteristic.lastValueStream.listen((value) {
+      debugPrint("new button value ${value}");
+      if (value.isNotEmpty) onButtonReceived(value);
+    });
+
+    final device = bleDevice;
+    device.cancelWhenDisconnected(listener);
+
+    // This will cause a crash in OpenGlass devices
+    // due to a race with discoverServices() that triggers
+    // a bug in the device firmware.
+    if (Platform.isAndroid && device.isConnected) await device.requestMtu(512);
 
     return listener;
   }
@@ -302,6 +370,28 @@ class FriendDeviceConnection extends DeviceConnection {
     return listener;
   }
 
+  // level
+  //   1 - play 20ms
+  //   2 - play 50ms
+  //   3 - play 500ms
+  @override
+  Future<bool> performPlayToSpeakerHaptic(int level) async {
+    if (_speakerService == null) {
+      logServiceNotFoundError('Speaker Write', deviceId);
+      return false;
+    }
+
+    var speakerDataStreamCharacteristic = getCharacteristic(_speakerService!, speakerDataStreamCharacteristicUuid);
+    if (speakerDataStreamCharacteristic == null) {
+      logCharacteristicNotFoundError('Speaker data stream', deviceId);
+      return false;
+    }
+    debugPrint('About to play to speaker haptic');
+    await speakerDataStreamCharacteristic.write([level & 0xFF]);
+    return true;
+  }
+
+  @override
   Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
     if (_storageService == null) {
       logServiceNotFoundError('Storage Write', deviceId);

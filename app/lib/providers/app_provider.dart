@@ -14,6 +14,7 @@ class AppProvider extends BaseProvider {
   bool filterMemories = true;
   bool filterExternal = true;
   String searchQuery = '';
+  bool installedAppsOptionSelected = true;
 
   List<bool> appLoading = [];
 
@@ -23,6 +24,148 @@ class AppProvider extends BaseProvider {
   bool appPublicToggled = false;
 
   bool isLoading = false;
+
+  List<Category> categories = [];
+  List<AppCapability> capabilities = [];
+  Map<String, dynamic> filters = {};
+  List<App> filteredApps = [];
+
+  List<App> get userPrivateApps => apps.where((app) => app.private).toList();
+
+  List<App> get userPublicApps =>
+      apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
+
+  Future<App?> getAppFromId(String id) async {
+    if (apps.isEmpty) {
+      apps = SharedPreferencesUtil().appsList;
+    }
+    var app = apps.firstWhereOrNull((app) => app.id == id);
+    if (app == null) {
+      var appRes = await getAppDetailsServer(id);
+      if (appRes != null) {
+        app = App.fromJson(appRes);
+      }
+      return app;
+    }
+    return app;
+  }
+
+  void updateInstalledAppsOptionSelected(bool value) {
+    installedAppsOptionSelected = value;
+    notifyListeners();
+  }
+
+  void addOrRemoveFilter(String filter, String filterGroup) {
+    if (filters.containsKey(filterGroup)) {
+      filters[filterGroup] = filter;
+    } else {
+      filters.addAll({filterGroup: filter});
+    }
+    notifyListeners();
+  }
+
+  void addOrRemoveCategoryFilter(Category category) {
+    if (filters.containsKey('Category')) {
+      filters['Category'] = category;
+    } else {
+      filters.addAll({'Category': category});
+    }
+    notifyListeners();
+  }
+
+  void addOrRemoveCapabilityFilter(AppCapability capability) {
+    if (filters.containsKey('Capabilities')) {
+      filters['Capabilities'] = capability;
+    } else {
+      filters.addAll({'Capabilities': capability});
+    }
+    notifyListeners();
+  }
+
+  bool isFilterSelected(String filter, String filterGroup) {
+    return filters.containsKey(filterGroup) && filters[filterGroup] == filter;
+  }
+
+  bool isCategoryFilterSelected(Category category) {
+    return filters.containsKey('Category') && filters['Category'] == category;
+  }
+
+  bool isCapabilityFilterSelected(AppCapability capability) {
+    return filters.containsKey('Capabilities') && filters['Capabilities'] == capability;
+  }
+
+  void clearFilters() {
+    filters.clear();
+    notifyListeners();
+  }
+
+  void removeFilter(String filterGroup) {
+    filters.remove(filterGroup);
+    notifyListeners();
+  }
+
+  bool isFilterActive() {
+    return filters.isNotEmpty;
+  }
+
+  bool isSearchActive() {
+    return searchQuery.isNotEmpty;
+  }
+
+  void searchApps(String query) {
+    if (query.isEmpty) {
+      filteredApps = apps;
+      searchQuery = '';
+    } else {
+      searchQuery = query;
+      filteredApps = apps.where((app) => app.name.toLowerCase().contains(query.toLowerCase())).toList();
+    }
+    notifyListeners();
+  }
+
+  void filterApps() {
+    if (!isFilterActive()) {
+      filteredApps = apps;
+      return;
+    }
+    filteredApps = apps;
+    filters.forEach((key, value) {
+      switch (key) {
+        case 'Apps':
+          if (value == 'Installed Apps') {
+            filteredApps = filteredApps.where((app) => app.enabled).toList();
+          } else if (value == 'My Apps') {
+            filteredApps = filteredApps.where((app) => app.isOwner(SharedPreferencesUtil().uid)).toList();
+          }
+          break;
+        case 'Sort':
+          if (value == 'A-Z') {
+            filteredApps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          } else if (value == 'Z-A') {
+            filteredApps.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          } else if (value == 'Highest Rating') {
+            filteredApps.sort((a, b) => (b.ratingAvg ?? 0.0).compareTo(a.ratingAvg ?? 0.0));
+          } else if (value == 'Lowest Rating') {
+            filteredApps.sort((a, b) => (a.ratingAvg ?? 0.0).compareTo(b.ratingAvg ?? 0.0));
+          }
+          break;
+        case 'Category':
+          filteredApps = filteredApps.where((app) => app.category == (value as Category).id).toList();
+          break;
+        case 'Rating':
+          value = value as String;
+          value = value.replaceAll('+ Stars', '');
+          filteredApps = filteredApps.where((app) => (app.ratingAvg ?? 0.0) >= double.parse(value)).toList();
+          break;
+        case 'Capabilities':
+          filteredApps = filteredApps.where((app) => app.capabilities.contains((value as AppCapability).id)).toList();
+          break;
+        default:
+          break;
+      }
+    });
+    notifyListeners();
+  }
 
   void setIsLoading(bool value) {
     isLoading = value;
@@ -57,7 +200,7 @@ class AppProvider extends BaseProvider {
     if (isLoading) return;
     setIsLoading(true);
     apps = await retrieveApps();
-    appLoading = List.filled(apps.length, false);
+    appLoading = List.filled(apps.length, false, growable: true);
     setIsLoading(false);
     notifyListeners();
   }
@@ -66,6 +209,16 @@ class AppProvider extends BaseProvider {
     var idx = apps.indexWhere((element) => element.id == app.id);
     if (idx != -1) {
       apps[idx] = app;
+      updatePrefApps();
+      setApps();
+    }
+    notifyListeners();
+  }
+
+  void updateLocalAppReviewResponse(String appId, String response, String reviewId) {
+    var idx = apps.indexWhere((element) => element.id == appId);
+    if (idx != -1) {
+      apps[idx].updateReviewResponse(response, reviewId, DateTime.now());
       updatePrefApps();
       setApps();
     }
@@ -93,7 +246,10 @@ class AppProvider extends BaseProvider {
   Future deleteApp(String appId) async {
     var res = await deleteAppServer(appId);
     if (res) {
-      apps.removeWhere((app) => app.id == appId);
+      var appIndex = apps.indexWhere((app) => app.id == appId);
+      apps.removeAt(appIndex);
+      filteredApps.removeWhere((app) => app.id == appId);
+      appLoading.removeAt(appIndex);
       updatePrefApps();
       setApps();
       AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
@@ -107,7 +263,8 @@ class AppProvider extends BaseProvider {
     appPublicToggled = value;
     changeAppVisibilityServer(appId, value);
     getApps();
-    apps.removeWhere((app) => app.id == appId);
+    var appIndex = apps.indexWhere((app) => app.id == appId);
+    apps[appIndex].private = !value;
     updatePrefApps();
     setApps();
     AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');

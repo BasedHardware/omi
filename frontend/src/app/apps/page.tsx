@@ -13,7 +13,7 @@ interface PluginReview {
   // Define PluginReview properties here if needed
 }
 
-interface Plugin {
+export interface Plugin {
   id: string;
   name: string;
   author: string;
@@ -33,7 +33,7 @@ interface Plugin {
   trigger_workflow_memories: boolean;
 }
 
-interface PluginStat {
+export interface PluginStat {
   id: string;
   money: number,
 }
@@ -97,7 +97,7 @@ export default async function SleekPluginList() {
   //     document.documentElement.classList.remove('dark');
   //   }
   // }, [darkMode]);
-  var response = await fetch(`${envConfig.API_URL}/plugins?uid=s5rl6e7nk8cc9rn2`);
+  var response = await fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`);
 
 
   const plugins = (await response.json()) as Plugin[];
@@ -111,7 +111,7 @@ export default async function SleekPluginList() {
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Omi App Marketplace</h1>
+        <h1 className="pt-6 text-3xl font-bold text-gray-800 dark:text-white">Omi Apps Marketplace</h1>
         {/* <button
           variant="outline"
           size="icon"
@@ -145,7 +145,7 @@ function PluginCard({ plugin, stat }: { plugin: Plugin, stat?: PluginStat }) {
       <div className="flex h-full flex-col p-6">
         <div className="mb-4 flex items-center">
           <img
-            src={`https://raw.githubusercontent.com/BasedHardware/Omi/main${plugin.image}`}
+            src={plugin.image}
             alt={plugin.name}
             className="mr-4 h-16 w-16 rounded-full object-cover"
           />
