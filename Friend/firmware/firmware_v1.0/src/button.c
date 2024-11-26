@@ -214,21 +214,23 @@ void check_button_level(struct k_work *work_item)
             {
                 //If button is pressed for a long time.......
                 notify_long_tap();
+                //play_haptic_milli(10);
                 //Fire the long mode notify and enter a grace period
                 //turn off herre
-                if(!from_wakeup)
-                {
-                    is_off = !is_off;
-                }
-                else
-                {
-                    from_wakeup = false;
-                }
-                if (is_off)
-                {
-                    bt_off();
-                    turnoff_all();
-                }
+                // TODO: FIXME
+                //if(!from_wakeup)
+                //{
+                //    is_off = !is_off;
+                //}
+                //else
+                //{
+                //    from_wakeup = false;
+                //}
+                //if (is_off)
+                //{
+                //    bt_off();
+                //    turnoff_all();
+                //}
                 current_button_state = GRACE;
                 reset_count();
             }
@@ -254,6 +256,20 @@ void check_button_level(struct k_work *work_item)
             else if (inc_count_0 > 10)
             {
                 notify_tap(); //Fire the notify and enter a grace period
+                if(!from_wakeup)
+                {
+                    is_off = !is_off;
+                }
+                else
+                {
+                    from_wakeup = false;
+                }
+                //Fire the notify and enter a grace period
+                if (is_off)
+                {
+                    bt_off();
+                    turnoff_all();
+                }
                 current_button_state = GRACE;
                 reset_count();
             }
@@ -272,20 +288,22 @@ void check_button_level(struct k_work *work_item)
             if (inc_count_1 > threshold) 
             {
                 notify_long_tap();
-                if(!from_wakeup)
-                {
-                    is_off = !is_off;
-                }
-                else
-                {
-                    from_wakeup = false;
-                }
-                //Fire the notify and enter a grace period
-                if (is_off)
-                {
-                    bt_off();
-                    turnoff_all();
-                }
+                //play_haptic_milli(10);
+                // TODO: FIXME
+                //if(!from_wakeup)
+                //{
+                //    is_off = !is_off;
+                //}
+                //else
+                //{
+                //    from_wakeup = false;
+                //}
+                ////Fire the notify and enter a grace period
+                //if (is_off)
+                //{
+                //    bt_off();
+                //    turnoff_all();
+                //}
                 current_button_state = GRACE;
                 reset_count();
             }
