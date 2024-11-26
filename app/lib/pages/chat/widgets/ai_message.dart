@@ -127,13 +127,13 @@ Widget buildMessageWidget(
 ) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeString,
-      updateMemory: updateMemory,
-      message: message,
-      setMessageNps: sendMessageNps,
-    );
+        showTypingIndicator: showTypingIndicator,
+        messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+        messageText: message.isEmpty ? '...' : message.text.decodeString,
+        updateMemory: updateMemory,
+        message: message,
+        setMessageNps: sendMessageNps,
+        date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
@@ -149,9 +149,8 @@ Widget buildMessageWidget(
       messageText: message.text.decodeString,
       message: message,
       setMessageNps: sendMessageNps,
-  createdAt: message.createdAt,
+      createdAt: message.createdAt,
     );
-
   }
 }
 
@@ -372,7 +371,7 @@ class NormalMessageWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
+          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
           child: Text(
             formatChatTimestamp(createdAt),
             style: TextStyle(
@@ -394,6 +393,7 @@ class NormalMessageWidget extends StatelessWidget {
                   ],
                 )
               : _getMarkdownWidget(context, messageText),
+        ),
         _getNpsWidget(context, message, setMessageNps),
         if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
@@ -408,6 +408,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final Function(ServerMemory) updateMemory;
   final ServerMessage message;
   final Function(int) setMessageNps;
+  final DateTime date;
 
   const MemoriesMessageWidget({
     super.key,
@@ -417,6 +418,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.updateMemory,
     required this.message,
     required this.setMessageNps,
+    required this.date,
   });
 
   @override
@@ -435,7 +437,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
+          child: Text(
+            formatChatTimestamp(widget.date),
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ),
         SelectionArea(
             child: widget.showTypingIndicator
                 ? const Row(
