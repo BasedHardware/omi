@@ -799,10 +799,8 @@ int transport_start()
         LOG_ERR("Speaker failed to start");
         return 0;
     }
-    else
-    {
-        LOG_INF("Speaker initialized");
-    }
+    LOG_INF("Speaker initialized");
+    register_speaker_service();
 
 
 #endif
