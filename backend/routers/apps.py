@@ -10,8 +10,8 @@ from slugify import slugify
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
-from database.redis_db import delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
-    disable_plugin, decrease_plugin_installs_count, get_specific_user_review
+from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
+    decrease_app_installs_count, enable_app, disable_app
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews
 from utils.notifications import send_notification
@@ -249,7 +249,7 @@ def get_plugin_capabilities():
 # ******************************************************
 
 @router.post('/v1/apps/enable')
-def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -263,13 +263,17 @@ def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
     if app.private is None or app.private is False:
-        increase_plugin_installs_count(app_id)
-    enable_plugin(uid, app_id)
+        if app.uid is not None:
+            if app.uid != uid:
+                increase_app_installs_count(app_id)
+        else:
+            increase_app_installs_count(app_id)
+    enable_app(uid, app_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/disable')
-def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -277,9 +281,13 @@ def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.private is None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    disable_plugin(uid, app_id)
+    disable_app(uid, app_id)
     if app.private is None or app.private is False:
-        decrease_plugin_installs_count(app_id)
+        if app.uid is not None:
+            if app.uid != uid:
+                decrease_app_installs_count(app_id)
+        else:
+            decrease_app_installs_count(app_id)
     return {'status': 'ok'}
 
 
