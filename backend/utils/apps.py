@@ -6,7 +6,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews
+    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, set_app_review_cache
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
@@ -47,7 +47,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = plugins_install.get(app['id'],0)
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
@@ -112,10 +112,9 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     return apps
 
 
-
 def set_app_review(app_id: str, uid: str, review: dict):
     set_app_review_in_db(app_id, uid, review)
-    set_plugin_review(app_id, uid, review)
+    set_app_review_cache(app_id, uid, review)
     return {'status': 'ok'}
 
 
