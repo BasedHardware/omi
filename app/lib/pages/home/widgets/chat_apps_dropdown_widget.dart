@@ -87,10 +87,30 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(size: 20, Icons.chat, color: Colors.white),
+                Container(
+                  decoration: const BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage("assets/images/background.png"),
+                      fit: BoxFit.cover,
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                  ),
+                  height: 24,
+                  width: 24,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset(
+                        "assets/images/herologo.png",
+                        height: 16,
+                        width: 16,
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Text(
-                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
+                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Omi',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 )
               ],
