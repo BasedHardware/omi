@@ -194,14 +194,14 @@ Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) 
             setMessageNps(0);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
         ),
         IconButton(
           onPressed: () {
             setMessageNps(1);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
         ),
       ],
     ),
@@ -606,7 +606,7 @@ class CopyButton extends StatelessWidget {
               ),
             ),
             Text(
-              'Copy response',
+              'Copy message',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             SizedBox(width: 8,),
