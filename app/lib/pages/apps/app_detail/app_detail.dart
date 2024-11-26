@@ -290,6 +290,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     ),
                   ),
+            (widget.app.isUnderReview() || widget.app.private) && !widget.app.isOwner(SharedPreferencesUtil().uid)
+                ? Column(
+                    children: [
+                      const SizedBox(
+                        height: 10,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Colors.grey,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width * 0.78,
+                            child: const Text(
+                                'You are a beta tester for this app. It is not public yet. It will be public once approved.',
+                                style: TextStyle(color: Colors.grey)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
             widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
                 ? Column(
                     children: [
