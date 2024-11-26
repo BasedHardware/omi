@@ -7,7 +7,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 ![Omi](https://github.com/user-attachments/assets/0c757e55-c030-4ae7-a15b-7218950c8ba0)
 
-[![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/based-hardware-1192313062041067520) &ensp;&ensp;&ensp;
+[![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/omi) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
 

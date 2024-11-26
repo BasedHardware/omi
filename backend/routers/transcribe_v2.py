@@ -1,11 +1,12 @@
 import uuid
+import asyncio
 import struct
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 import opuslib
 import webrtcvad
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from pydub import AudioSegment
 from starlette.websockets import WebSocketState
@@ -21,7 +22,9 @@ from utils.plugins import trigger_external_integrations
 from utils.stt.streaming import *
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
-from utils.pusher import connect_to_transcript_pusher, connect_to_audio_bytes_pusher, connect_to_trigger_pusher
+from utils.pusher import connect_to_trigger_pusher
+
+from utils.other import endpoints as auth
 
 router = APIRouter()
 
@@ -64,9 +67,12 @@ async def _websocket_util(
 
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
+    if not uid or len(uid) <= 0:
+        raise HTTPException(status_code=400, detail="Invalid UID")
+
     # Not when comes from the phone, and only Friend's with 1.0.4
-    if stt_service == STTService.soniox and language not in soniox_valid_languages:
-        stt_service = STTService.deepgram
+    # if stt_service == STTService.soniox and language not in soniox_valid_languages:
+    stt_service = STTService.deepgram
 
     try:
         await websocket.accept()
@@ -297,6 +303,8 @@ async def _websocket_util(
         nonlocal websocket_active
 
         pusher_ws = None
+        pusher_connect_lock = asyncio.Lock()
+        pusher_connected = False
 
         # Transcript
         transcript_ws = None
@@ -309,6 +317,8 @@ async def _websocket_util(
         async def transcript_consume():
             nonlocal websocket_active
             nonlocal segment_buffers
+            nonlocal transcript_ws
+            nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
                 if transcript_ws and len(segment_buffers) > 0:
@@ -321,6 +331,9 @@ async def _websocket_util(
                         await transcript_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
+                        transcript_ws = None
+                        pusher_connected = False
+                        await reconnect()
                     except Exception as e:
                         print(f"Pusher transcripts failed: {e}", uid)
 
@@ -336,6 +349,8 @@ async def _websocket_util(
         async def audio_bytes_consume():
             nonlocal websocket_active
             nonlocal audio_buffers
+            nonlocal audio_bytes_ws
+            nonlocal pusher_connected
             while websocket_active or len(audio_buffers) > 0:
                 await asyncio.sleep(1)
                 if audio_bytes_ws and len(audio_buffers) > 0:
@@ -348,18 +363,35 @@ async def _websocket_util(
                         await audio_bytes_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher audio_bytes Connection closed: {e}", uid)
+                        audio_bytes_ws = None
+                        pusher_connected = False
+                        await reconnect()
                     except Exception as e:
                         print(f"Pusher audio_bytes failed: {e}", uid)
+
+        async def reconnect():
+            nonlocal pusher_connected
+            nonlocal pusher_connect_lock
+            async with pusher_connect_lock:
+                if pusher_connected:
+                    return
+                await connect()
 
         async def connect():
             nonlocal pusher_ws
             nonlocal transcript_ws
             nonlocal audio_bytes_ws
             nonlocal audio_bytes_enabled
-            pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
-            transcript_ws = pusher_ws
-            if audio_bytes_enabled:
-                audio_bytes_ws = pusher_ws
+            nonlocal pusher_connected
+
+            try:
+                pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
+                pusher_connected = True
+                transcript_ws = pusher_ws
+                if audio_bytes_enabled:
+                    audio_bytes_ws = pusher_ws
+            except Exception as e:
+                print(f"Exception in connect: {e}")
 
         async def close(code: int = 1000):
             await pusher_ws.close(code)
@@ -552,6 +584,13 @@ async def _websocket_util(
 @router.websocket("/v2/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+):
+    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+
+@router.websocket("/v3/listen")
+async def websocket_endpoint_v3(
+        websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)

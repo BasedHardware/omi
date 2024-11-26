@@ -4,17 +4,19 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/memory.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
 import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
 import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -26,15 +28,17 @@ class AIMessage extends StatefulWidget {
   final bool displayOptions;
   final App? appSender;
   final Function(ServerMemory) updateMemory;
+  final Function(int) setMessageNps;
 
   const AIMessage({
     super.key,
-    this.showTypingIndicator = false,
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    this.appSender,
     required this.updateMemory,
+    required this.setMessageNps,
+    this.appSender,
+    this.showTypingIndicator = false,
   });
 
   @override
@@ -102,6 +106,7 @@ class _AIMessageState extends State<AIMessage> {
                 widget.displayOptions,
                 widget.appSender,
                 widget.updateMemory,
+                widget.setMessageNps,
               ),
             ],
           ),
@@ -111,30 +116,105 @@ class _AIMessageState extends State<AIMessage> {
   }
 }
 
-Widget buildMessageWidget(ServerMessage message, Function(String) sendMessage, bool showTypingIndicator,
-    bool displayOptions, App? appSender, Function(ServerMemory) updateMemory) {
+Widget buildMessageWidget(
+  ServerMessage message,
+  Function(String) sendMessage,
+  bool showTypingIndicator,
+  bool displayOptions,
+  App? appSender,
+  Function(ServerMemory) updateMemory,
+  Function(int) sendMessageNps,
+) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
       messageText: message.isEmpty ? '...' : message.text.decodeString,
       updateMemory: updateMemory,
+      message: message,
+      setMessageNps: sendMessageNps,
     );
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
   } else if (displayOptions) {
     return InitialMessageWidget(
-        showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, sendMessage: sendMessage);
+      showTypingIndicator: showTypingIndicator,
+      messageText: message.text.decodeString,
+      sendMessage: sendMessage,
+    );
   } else {
-    return NormalMessageWidget(showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, createdAt: message.createdAt);
+    return NormalMessageWidget(
+      showTypingIndicator: showTypingIndicator,
+      messageText: message.text.decodeString,
+      message: message,
+      setMessageNps: sendMessageNps,
+  createdAt: message.createdAt,
+    );
+
   }
+}
+
+Widget _getMarkdownWidget(BuildContext context, String content) {
+  var style = TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3);
+  return MarkdownBody(
+    shrinkWrap: true,
+    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      a: style,
+      p: style,
+      blockquote: style.copyWith(
+        backgroundColor: Colors.transparent,
+        color: Colors.black,
+      ),
+      blockquoteDecoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      code: style.copyWith(
+        backgroundColor: Colors.transparent,
+        decoration: TextDecoration.none,
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    data: content,
+  );
+}
+
+Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+  if (!message.askForNps) return const SizedBox();
+
+  return Padding(
+    padding: const EdgeInsetsDirectional.only(top: 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade300)),
+        IconButton(
+          onPressed: () {
+            setMessageNps(0);
+            AppSnackbar.showSnackbar('Thank you for your feedback!');
+          },
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+        ),
+        IconButton(
+          onPressed: () {
+            setMessageNps(1);
+            AppSnackbar.showSnackbar('Thank you for your feedback!');
+          },
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+        ),
+      ],
+    ),
+  );
 }
 
 class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
   final Function(String) sendMessage;
+
   const InitialMessageWidget(
       {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
 
@@ -143,23 +223,23 @@ class InitialMessageWidget extends StatelessWidget {
     return Column(
       children: [
         SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : AutoSizeText(
-                  messageText,
-                  // : utf8.decode(widget.message.text.codeUnits),
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
-        ),
+            child: showTypingIndicator
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 4),
+                      TypingIndicator(),
+                      Spacer(),
+                    ],
+                  )
+                : _getMarkdownWidget(context, messageText)
+            // AutoSizeText(
+            //         messageText,
+            // style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+            // ),
+            ),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -176,6 +256,7 @@ class DaySummaryWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final DateTime date;
   final String messageText;
+
   const DaySummaryWidget({super.key, required this.showTypingIndicator, required this.messageText, required this.date});
 
   @override
@@ -272,12 +353,16 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
+  final ServerMessage message;
+  final Function(int) setMessageNps;
   final DateTime createdAt;
 
   const NormalMessageWidget({
-    super.key, 
+    super.key,
     required this.showTypingIndicator,
     required this.messageText,
+    required this.message,
+    required this.setMessageNps,
     required this.createdAt,
   });
 
@@ -308,15 +393,8 @@ class NormalMessageWidget extends StatelessWidget {
                     Spacer(),
                   ],
                 )
-              : AutoSizeText(
-                  messageText,
-                  style: TextStyle(
-                    fontSize: 15.0,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade300
-                  ),
-                ),
-        ),
+              : _getMarkdownWidget(context, messageText),
+        _getNpsWidget(context, message, setMessageNps),
         if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
     );
@@ -328,12 +406,18 @@ class MemoriesMessageWidget extends StatefulWidget {
   final List<MessageMemory> messageMemories;
   final String messageText;
   final Function(ServerMemory) updateMemory;
-  const MemoriesMessageWidget(
-      {super.key,
-      required this.showTypingIndicator,
-      required this.messageMemories,
-      required this.messageText,
-      required this.updateMemory});
+  final ServerMessage message;
+  final Function(int) setMessageNps;
+
+  const MemoriesMessageWidget({
+    super.key,
+    required this.showTypingIndicator,
+    required this.messageMemories,
+    required this.messageText,
+    required this.updateMemory,
+    required this.message,
+    required this.setMessageNps,
+  });
 
   @override
   State<MemoriesMessageWidget> createState() => _MemoriesMessageWidgetState();
@@ -353,22 +437,23 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     return Column(
       children: [
         SelectionArea(
-          child: widget.showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : AutoSizeText(
-                  widget.messageText,
-                  style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                ),
-        ),
+            child: widget.showTypingIndicator
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 4),
+                      TypingIndicator(),
+                      Spacer(),
+                    ],
+                  )
+                : _getMarkdownWidget(context, widget.messageText)
+            // AutoSizeText(
+            //         widget.messageText,
+            //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
+            //       ),
+            ),
         CopyButton(messageText: widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
@@ -468,6 +553,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             ),
           ),
         ],
+        _getNpsWidget(context, widget.message, widget.setMessageNps),
       ],
     );
   }
@@ -483,6 +569,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+
   const CopyButton({super.key, required this.messageText});
 
   @override
@@ -534,6 +621,7 @@ class CopyButton extends StatelessWidget {
 class InitialOptionWidget extends StatelessWidget {
   final String optionText;
   final Function(String) sendMessage;
+
   const InitialOptionWidget({super.key, required this.optionText, required this.sendMessage});
 
   @override

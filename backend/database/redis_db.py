@@ -52,14 +52,55 @@ def delete_generic_cache(path: str):
     r.delete(f'cache:{key}')
 
 
-def set_plugin_review(plugin_id: str, uid: str, score: float, review: str = ''):
+# ******************************************************
+# *********************** APPS *************************
+# ******************************************************
+
+
+def set_app_usage_history_cache(app_id: str, usage: List[dict]):
+    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 5)  # 5 minutes
+
+
+def get_app_usage_history_cache(app_id: str) -> List[dict]:
+    usage = r.get(f'apps:{app_id}:usage')
+    if usage is None:
+        return []
+    usage = json.loads(usage)
+    if not usage:
+        return []
+    return usage
+
+
+def get_app_money_made_cache(app_id: str) -> dict:
+    money = r.get(f'apps:{app_id}:money')
+    if money is None:
+        return {}
+    money = json.loads(money)
+    if not money:
+        return {}
+    return money
+
+
+def set_app_money_made_cache(app_id: str, money: dict):
+    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 5)  # 5 minutes
+
+
+def set_plugin_review(plugin_id: str, uid: str, data: dict):
     reviews = r.get(f'plugins:{plugin_id}:reviews')
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
-    reviews[uid] = {'score': score, 'review': review, 'rated_at': datetime.now(timezone.utc).isoformat(), 'uid': uid}
+    reviews[uid] = data
     r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+
+
+def get_specific_user_review(app_id: str, uid: str) -> dict:
+    reviews = r.get(f'plugins:{app_id}:reviews')
+    if not reviews:
+        return {}
+    reviews = eval(reviews)
+    return reviews.get(uid, {})
 
 
 def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
@@ -96,6 +137,19 @@ def get_plugin_reviews(plugin_id: str) -> dict:
         return {}
     return eval(reviews)
 
+def get_plugins_reviews(plugin_ids: list) -> dict:
+    if not plugin_ids:
+        return {}
+
+    keys = [f'plugins:{plugin_id}:reviews' for plugin_id in plugin_ids]
+    reviews = r.mget(keys)
+    if reviews is None:
+        return {}
+    return {
+        plugin_id: eval(review) if review else {}
+        for plugin_id, review in zip(plugin_ids, reviews)
+    }
+
 
 def set_plugin_installs_count(plugin_id: str, count: int):
     r.set(f'plugins:{plugin_id}:installs', count)
@@ -114,6 +168,19 @@ def get_plugin_installs_count(plugin_id: str) -> int:
     if not count:
         return 0
     return int(count)
+
+def get_plugins_installs_count(plugin_ids: list) -> dict:
+    if not plugin_ids:
+        return {}
+
+    keys = [f'plugins:{plugin_id}:installs' for plugin_id in plugin_ids]
+    counts = r.mget(keys)
+    if counts is None:
+        return {}
+    return {
+        plugin_id: int(count) if count else 0
+        for plugin_id, count in zip(plugin_ids, counts)
+    }
 
 
 def set_user_has_soniox_speech_profile(uid: str):
@@ -276,3 +343,15 @@ def save_migrated_retrieval_memory_id(memory_id: str):
 
 def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
     return r.sismember('migrated_retrieval_memory_ids', memory_id)
+
+def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
+    r.set(f'{uid}:{plugin_id}:proactive_noti_sent_at', ts, ex=ttl)
+
+def get_proactive_noti_sent_at(uid: str, plugin_id: str):
+    val = r.get(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+    if not val:
+        return None
+    return int(val)
+
+def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
+    return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')

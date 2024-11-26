@@ -25,12 +25,14 @@ import {
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import PaidAmountDialog from '@/src/components/dashboard/paidamount';
+import { PluginStat, Plugin } from '../page';
+import { headers } from 'next/headers';
 
 const COST_CONSTANT = 0.05;
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
   // const [darkMode, setDarkMode] = useState(false);
-  var response = await fetch(`${envConfig.API_URL}/plugins?uid=s5rl6e7nk8cc9rn2`);
+  var response = await fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`);
   const plugins = (await response.json()) as Plugin[];
 
   // Get params in a server component
@@ -54,13 +56,23 @@ export default async function PluginDetailView({ params }: { params: { id: strin
   //   }
   // }, [darkMode]);
 
+  const userAgent = headers().get('user-agent') || '';
+  const isAndroid = /android/i.test(userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+
+  const link = isAndroid
+  ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+  : isIOS
+  ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+  : 'https://omi.me';
+
   return (
     <div className="bg-gray-100 transition-colors duration-300 dark:bg-gray-900">
       <div className="container mx-auto p-4">
         <div className="mb-6 flex items-center justify-between">
           <Link
             href="/apps"
-            className="flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
+            className="pt-8 flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
           >
             <ArrowLeft className="mr-2" />
             Back to Apps
@@ -84,7 +96,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
           <CardHeader>
             <div className="mb-4 flex items-center">
               <img
-                src={`https://raw.githubusercontent.com/BasedHardware/Omi/main${plugin.image}`}
+                src={plugin.image}
                 alt={plugin.name}
                 className="mr-6 h-24 w-24 rounded-full object-cover"
               />
@@ -111,7 +123,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
               <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
                 <DollarSign className="mb-2 h-8 w-8 text-green-500" />
                 <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  ${stat.money}
+                  ${stat == undefined ? 0 : stat.money}
                 </span>
                 <span className="text-gray-600 dark:text-gray-400">Total Earned</span>
               </div>
@@ -166,7 +178,9 @@ export default async function PluginDetailView({ params }: { params: { id: strin
               {/*<PaidAmountDialog plugin={plugin} />*/}
             </div>
             <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
-              <Link href={`https://omi.me`}>Try it</Link>
+              <Link href={link}>
+                Try it
+              </Link>
             </Button>
             <div className="mb-2 flex items-center">
               <Star className="mr-2 h-6 w-6 text-yellow-400" />

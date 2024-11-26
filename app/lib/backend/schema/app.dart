@@ -5,12 +5,20 @@ class AppReview {
   DateTime ratedAt;
   double score;
   String review;
+  String username;
+  String response;
+  DateTime? updatedAt;
+  DateTime? respondedAt;
 
   AppReview({
     required this.uid,
     required this.ratedAt,
     required this.score,
     required this.review,
+    this.username = '',
+    this.response = '',
+    this.updatedAt,
+    this.respondedAt,
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
@@ -19,6 +27,14 @@ class AppReview {
       ratedAt: DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
       review: json['review'],
+      username: json['user_name'] ?? '',
+      response: json['response'] ?? '',
+      updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
+          ? null
+          : DateTime.parse(json['updated_at']).toLocal(),
+      respondedAt: (json['responded_at'] == "" || json['responded_at'] == null)
+          ? null
+          : DateTime.parse(json['responded_at']).toLocal(),
     );
   }
 
@@ -28,6 +44,10 @@ class AppReview {
       'rated_at': ratedAt.toUtc().toIso8601String(),
       'score': score,
       'review': review,
+      'username': username,
+      'response': response,
+      'updated_at': updatedAt?.toUtc().toIso8601String() ?? '',
+      'responded_at': respondedAt?.toUtc().toIso8601String() ?? '',
     };
   }
 
@@ -154,15 +174,12 @@ class App {
   String? memoryPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
-
-  // can be used for
-
+  ProactiveNotification? proactiveNotification;
   List<AppReview> reviews;
   AppReview? userReview;
   double? ratingAvg;
   int ratingCount;
   int installs;
-
   bool enabled;
   bool deleted;
 
@@ -189,6 +206,7 @@ class App {
     required this.enabled,
     required this.deleted,
     this.private = false,
+    this.proactiveNotification,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -203,12 +221,12 @@ class App {
 
   factory App.fromJson(Map<String, dynamic> json) {
     return App(
-      category: json['category'],
-      approved: json['approved'],
-      status: json['status'],
+      category: json['category'] ?? 'other',
+      approved: json['approved'] ?? true,
+      status: json['status'] ?? 'approved',
       id: json['id'],
-      email: json['email'],
-      uid: json['uid'],
+      email: json['email'] ?? '',
+      uid: json['uid'] ?? '',
       name: json['name'],
       author: json['author'],
       description: json['description'],
@@ -226,6 +244,9 @@ class App {
       enabled: json['enabled'] ?? false,
       installs: json['installs'] ?? 0,
       private: json['private'] ?? json['id'].toString().contains('private'),
+      proactiveNotification: json['proactive_notification'] != null
+          ? ProactiveNotification.fromJson(json['proactive_notification'])
+          : null,
     );
   }
 
@@ -234,6 +255,14 @@ class App {
       return image;
     } else {
       return 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+    }
+  }
+
+  updateReviewResponse(String response, reviewId, DateTime respondedAt) {
+    var idx = reviews.indexWhere((element) => element.uid == reviewId);
+    if (idx != -1) {
+      reviews[idx].response = response;
+      reviews[idx].updatedAt = respondedAt;
     }
   }
 
@@ -281,10 +310,18 @@ class App {
       'status': status,
       'uid': uid,
       'email': email,
+      'proactive_notification': proactiveNotification?.toJson(),
     };
   }
 
   static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
+
+  List<NotificationScope> getNotificationScopesFromIds(List<NotificationScope> allScopes) {
+    if (proactiveNotification == null) {
+      return [];
+    }
+    return allScopes.where((e) => proactiveNotification!.scopes.contains(e.id)).toList();
+  }
 }
 
 class Category {
@@ -403,5 +440,25 @@ class NotificationScope {
 
   static List<NotificationScope> fromJsonList(List<dynamic> jsonList) {
     return jsonList.map((e) => NotificationScope.fromJson(e)).toList();
+  }
+}
+
+class ProactiveNotification {
+  List<String> scopes;
+
+  ProactiveNotification({
+    required this.scopes,
+  });
+
+  factory ProactiveNotification.fromJson(Map<String, dynamic> json) {
+    return ProactiveNotification(
+      scopes: json['scopes'].map<String>((e) => e.toString()).toList(),
+    );
+  }
+
+  toJson() {
+    return {
+      'scopes': scopes,
+    };
   }
 }

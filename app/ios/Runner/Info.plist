@@ -36,17 +36,17 @@
 				<key>CFBundleTypeRole</key>
 				<string>Editor</string>
 				<key>CFBundleURLName</key>
-				<string>friendprivate.com</string>
+				<string>h.omi.me</string>
 				<key>CFBundleURLSchemes</key>
 				<array>
-					<string>friendprivate</string>
+					<string>https</string>
 				</array>
 			</dict>
 		</array>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>FlutterDeepLinkingEnabled</key>
-		<true/>
+		<false/>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>comgooglemaps</string>

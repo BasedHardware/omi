@@ -1,19 +1,73 @@
 import threading
 from typing import List, Optional
-
+import os
 import requests
+import time
 
 import database.notifications as notification_db
+from database import mem_db
+from database import redis_db
+from database.apps import get_private_apps_db, get_public_apps_db
 from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage, get_private_plugins_db, get_public_plugins_db
+from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
+from models.app import App
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
+from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
-from utils.llm import get_metoring_message
+from utils.llm import (
+    generate_embedding,
+    get_proactive_message
+)
+from database.vector_db import query_vectors_by_metadata
+import database.memories as memories_db
+
+PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
+
+def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
+    """
+    Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
+    Returns a dict mapping file paths to their raw content.
+
+    If cached, returns cached content. (24 hours)
+    So any changes to the docs will take 24 hours to be reflected.
+    """
+    if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
+        return cached
+    docs_content = {}
+    headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
+
+    def get_contents(path):
+        url = f"https://api.github.com/repos/{repo}/contents/{path}"
+        response = requests.get(url, headers=headers)
+
+        if response.status_code != 200:
+            print(f"Failed to fetch contents for {path}: {response.status_code}")
+            return
+
+        contents = response.json()
+
+        if not isinstance(contents, list):
+            return
+
+        for item in contents:
+            if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
+                # Get raw content for documentation files
+                raw_response = requests.get(item["download_url"], headers=headers)
+                if raw_response.status_code == 200:
+                    docs_content[item["path"]] = raw_response.text
+
+            elif item["type"] == "dir":
+                # Recursively process subfolders
+                get_contents(item["path"])
+
+    get_contents(path)
+    set_generic_cache(f'get_github_docs_content_{repo}_{path}', docs_content, 60 * 24 * 7)
+    return docs_content
 
 
 # ***********************************
@@ -28,14 +82,6 @@ def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
     return next((p for p in plugins if p.id == plugin_id), None)
 
 
-def weighted_rating(plugin):
-    C = 3.0  # Assume 3.0 is the mean rating across all plugins
-    m = 5  # Minimum number of ratings required to be considered
-    R = plugin.rating_avg or 0
-    v = plugin.rating_count or 0
-    return (v / (v + m) * R) + (m / (v + m) * C)
-
-
 def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
     private_data = []
     public_data = []
@@ -46,8 +92,8 @@ def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Pl
     #     private_data = get_private_plugins_db(uid)
     #     pass
     # else:
-    private_data = get_private_plugins_db(uid)
-    public_data = get_public_plugins_db(uid)
+    private_data = get_private_apps_db(uid)
+    public_data = get_public_apps_db(uid)
     # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_plugins = private_data + public_data
@@ -82,7 +128,7 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
         data = response.json()
         set_generic_cache('get_plugins_data', data, 60 * 10)  # 10 minutes cached
 
-    user_enabled = set(get_enabled_plugins(uid))
+    user_enabled = set(get_enabled_plugins(uid)) if uid else []
     # print('get_plugins_data, user_enabled', user_enabled)
     plugins = []
     for plugin in data:
@@ -114,7 +160,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     if not memory or memory.discarded:
         return []
 
-    plugins: List[Plugin] = get_plugins_data_from_db(uid)
+    plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [plugin for plugin in plugins if
                         plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
     if not filtered_plugins:
@@ -123,7 +169,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     threads = []
     results = {}
 
-    def _single(plugin: Plugin):
+    def _single(plugin: App):
         if not plugin.external_integration.webhook_url:
             return
 
@@ -142,7 +188,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         try:
             response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'result:', response.content)
+                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
 
             record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
@@ -176,8 +222,94 @@ async def trigger_realtime_integrations(uid: str, segments: list[dict]):
     _trigger_realtime_integrations(uid, token, segments)
 
 
+# proactive notification
+def _retrieve_contextual_memories(uid: str, user_context):
+    vector = (
+        generate_embedding(user_context.get('question', ''))
+        if user_context.get('question')
+        else [0] * 3072
+    )
+    print("query_vectors vector:", vector[:5])
+
+    date_filters = {}  # not support yet
+    filters = user_context.get('filters', {})
+    memories_id = query_vectors_by_metadata(
+        uid,
+        vector,
+        dates_filter=[date_filters.get("start"), date_filters.get("end")],
+        people=filters.get("people", []),
+        topics=filters.get("topics", []),
+        entities=filters.get("entities", []),
+        dates=filters.get("dates", []),
+    )
+    return memories_db.get_memories_by_id(uid, memories_id)
+
+def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
+    sent_at = mem_db.get_proactive_noti_sent_at(uid, plugin.id)
+    if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
+        return True
+
+    # remote
+    sent_at = redis_db.get_proactive_noti_sent_at(uid, plugin.id)
+    if not sent_at:
+        return False
+    ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, plugin.id)
+    if ttl > 0:
+        mem_db.set_proactive_noti_sent_at(uid, plugin.id, int(time.time() + ttl), ttl=ttl)
+
+    return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
+
+def _set_proactive_noti_sent_at(uid: str, plugin: App):
+    ts = time.time()
+    mem_db.set_proactive_noti_sent_at(uid, plugin, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, plugin.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+
+
+def _process_proactive_notification(uid: str, token: str, plugin: App, data):
+    if not plugin.has_capability("proactive_notification") or not data:
+        print(f"Plugins {plugin.id} is not proactive_notification or data invalid", uid)
+        return None
+
+    # rate limits
+    if _hit_proactive_notification_rate_limits(uid, plugin):
+        print(f"Plugins {plugin.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
+        return None
+
+    max_prompt_char_limit = 8000
+    min_message_char_limit = 5
+
+    prompt = data.get('prompt', '')
+    if len(prompt) > max_prompt_char_limit:
+        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
+        return None
+
+    filter_scopes = plugin.filter_proactive_notification_scopes(data.get('params', []))
+
+    # context
+    context = None
+    if 'user_context' in filter_scopes:
+        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        if len(memories) > 0:
+            context = Memory.memories_to_string(memories, True)
+
+    # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
+
+    # retrive message
+    message = get_proactive_message(uid, prompt, filter_scopes, context)
+    if not message or len(message) < min_message_char_limit:
+        print(f"Plugins {plugin.id}, message too short", uid)
+        return None
+
+    # send notification
+    send_plugin_notification(token, plugin.name, plugin.id, message)
+
+    # set rate
+    _set_proactive_noti_sent_at(uid, plugin)
+    return message
+
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
-    plugins: List[Plugin] = get_plugins_data_from_db(uid, include_reviews=False)
+    plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [
         plugin for plugin in plugins if
         plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
@@ -188,7 +320,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
     threads = []
     results = {}
 
-    def _single(plugin: Plugin):
+    def _single(plugin: App):
         if not plugin.external_integration.webhook_url:
             return
 
@@ -201,7 +333,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', plugin.id, 'result:', response.content)
+                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:', response.text[:100])
                 return
 
             response_data = response.json()
@@ -210,25 +342,18 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
 
             # message
             message = response_data.get('message', '')
-            mentor = response_data.get('mentor', None)
-            print('Plugin', plugin.id, 'response:', message, mentor)
+            # print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
                 send_plugin_notification(token, plugin.name, plugin.id, message)
                 results[plugin.id] = message
 
             # proactive_notification
+            noti = response_data.get('notification', None)
+            # print('Plugin', plugin.id, 'response notification:', noti)
             if plugin.has_capability("proactive_notification"):
-                mentor = response_data.get('mentor', None)
-                if mentor:
-                    prompt = mentor.get('prompt', '')
-                    if len(prompt) > 0 and len(prompt) <= 5000:
-                        params = mentor.get('params', [])
-                        message = get_metoring_message(uid, prompt, plugin.fitler_proactive_notification_scopes(params))
-                        if message and len(message) > 5:
-                            send_plugin_notification(token, plugin.name, plugin.id, message)
-                            results[plugin.id] = message
-                    elif len(prompt) > 5000:
-                        print(f"Plugin {plugin.id} prompt too long, length: {len(prompt)}/5000")
+                message = _process_proactive_notification(uid, token, plugin, noti)
+                if message:
+                    results[plugin.id] = message
 
         except Exception as e:
             print(f"Plugin integration error: {e}")

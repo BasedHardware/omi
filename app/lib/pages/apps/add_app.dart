@@ -6,7 +6,6 @@ import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:friend_private/widgets/gradient_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -40,6 +39,7 @@ class _AddAppPageState extends State<AddAppPage> {
           title: const Text('Submit Your App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
+        extendBody: true,
         body: provider.isLoading || provider.isSubmitting
             ? Center(
                 child: Column(
@@ -65,6 +65,9 @@ class _AddAppPageState extends State<AddAppPage> {
                   padding: const EdgeInsets.all(16.0),
                   child: Form(
                     key: provider.formKey,
+                    onChanged: () {
+                      provider.checkValidity();
+                    },
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,14 +93,6 @@ class _AddAppPageState extends State<AddAppPage> {
                           ),
                         ),
                         const SizedBox(
-                          height: 12,
-                        ),
-                        const Text(
-                          'App Capabilities',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                        const SizedBox(height: 60, child: CapabilitiesChipsWidget()),
-                        const SizedBox(
                           height: 18,
                         ),
                         AppMetadataWidget(
@@ -111,41 +106,119 @@ class _AddAppPageState extends State<AddAppPage> {
                           categories: provider.categories,
                           setAppCategory: provider.setAppCategory,
                           imageFile: provider.imageFile,
+                          category: provider.mapCategoryIdToName(provider.appCategory),
                         ),
                         const SizedBox(
-                          height: 30,
+                          height: 12,
                         ),
-                        if (provider.capabilitySelected())
-                          const Text(
-                            'App Specific Details',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900,
+                            borderRadius: BorderRadius.circular(12.0),
                           ),
-                        if (provider.isCapabilitySelectedById('chat'))
-                          const SizedBox(
-                            height: 20,
+                          padding: const EdgeInsets.all(14.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Text(
+                                  'App Capabilities',
+                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 10,
+                              ),
+                              const SizedBox(height: 48, child: CapabilitiesChipsWidget()),
+                            ],
                           ),
-                        if (provider.isCapabilitySelectedById('chat'))
-                          PromptTextField(
-                            controller: provider.chatPromptController,
-                            label: 'Chat Prompt',
-                            icon: Icons.chat,
-                          ),
-                        if (provider.isCapabilitySelectedById('memories'))
-                          const SizedBox(
-                            height: 24,
-                          ),
-                        if (provider.isCapabilitySelectedById('memories'))
-                          PromptTextField(
-                            controller: provider.memoryPromptController,
-                            label: 'Memory Prompt',
-                            icon: Icons.memory,
+                        ),
+                        if (provider.isCapabilitySelectedById('chat') || provider.isCapabilitySelectedById('memories'))
+                          Column(
+                            children: [
+                              const SizedBox(
+                                height: 12,
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                },
+                                child: Form(
+                                  key: provider.promptKey,
+                                  onChanged: () {
+                                    provider.checkValidity();
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade900,
+                                      borderRadius: BorderRadius.circular(12.0),
+                                    ),
+                                    padding: const EdgeInsets.all(14.0),
+                                    child: Column(
+                                      children: [
+                                        if (provider.isCapabilitySelectedById('chat'))
+                                          PromptTextField(
+                                            controller: provider.chatPromptController,
+                                            label: 'Chat Prompt',
+                                            hint:
+                                                'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                          ),
+                                        if (provider.isCapabilitySelectedById('memories') &&
+                                            provider.isCapabilitySelectedById('chat'))
+                                          const SizedBox(
+                                            height: 20,
+                                          ),
+                                        if (provider.isCapabilitySelectedById('memories'))
+                                          PromptTextField(
+                                            controller: provider.memoryPromptController,
+                                            label: 'Memory Prompt',
+                                            hint:
+                                                'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         const ExternalTriggerFieldsWidget(),
-                        if (provider.capabilitySelected())
-                          const SizedBox(
-                            height: 30,
+                        if (provider.isCapabilitySelectedById('proactive_notification'))
+                          Column(
+                            children: [
+                              const SizedBox(
+                                height: 12,
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade900,
+                                  borderRadius: BorderRadius.circular(12.0),
+                                ),
+                                padding: const EdgeInsets.all(14.0),
+                                width: double.infinity,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 8.0),
+                                      child: Text(
+                                        'Notification Scopes',
+                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      height: 10,
+                                    ),
+                                    const SizedBox(height: 48, child: NotificationScopesChipsWidget()),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        const NotificationScopesChipsWidget(),
+                        const SizedBox(
+                          height: 22,
+                        ),
                         const Text(
                           'App Privacy',
                           style: TextStyle(color: Colors.white, fontSize: 16),
@@ -162,6 +235,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                   provider.setIsPrivate(value);
                                 }
                               },
+                              shape: const CircleBorder(),
                             ),
                             SizedBox(
                               width: MediaQuery.of(context).size.width * 0.80,
@@ -177,6 +251,7 @@ class _AddAppPageState extends State<AddAppPage> {
                             Checkbox(
                               value: provider.termsAgreed,
                               onChanged: provider.setTermsAgreed,
+                              shape: const CircleBorder(),
                             ),
                             SizedBox(
                               width: MediaQuery.of(context).size.width * 0.80,
@@ -186,61 +261,85 @@ class _AddAppPageState extends State<AddAppPage> {
                           ],
                         ),
                         const SizedBox(
-                          height: 12,
-                        ),
-                        GradientButton(
-                          title: 'Submit App',
-                          onPressed: () {
-                            var isValid = provider.validateForm();
-                            if (isValid) {
-                              showDialog(
-                                context: context,
-                                builder: (ctx) {
-                                  return ConfirmationDialog(
-                                    title: 'Submit App?',
-                                    description: provider.makeAppPublic
-                                        ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
-                                        : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
-                                    checkboxText: "Don't show it again",
-                                    checkboxValue: !showSubmitAppConfirmation,
-                                    updateCheckboxValue: (value) {
-                                      if (value != null) {
-                                        setState(() {
-                                          showSubmitAppConfirmation = !value;
-                                        });
-                                      }
-                                    },
-                                    onConfirm: () async {
-                                      if (provider.makeAppPublic) {
-                                        MixpanelManager().publicAppSubmitted({
-                                          'app_name': provider.appNameController.text,
-                                          'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities,
-                                        });
-                                      } else {
-                                        MixpanelManager().privateAppSubmitted({
-                                          'app_name': provider.appNameController.text,
-                                          'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities,
-                                        });
-                                      }
-                                      SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-                                      Navigator.pop(context);
-                                      await provider.submitApp();
-                                    },
-                                    onCancel: () {
-                                      Navigator.pop(context);
-                                    },
-                                  );
-                                },
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(
-                          height: 30,
+                          height: 90,
                         ),
                       ],
+                    ),
+                  ),
+                ),
+              ),
+        bottomNavigationBar: (provider.isLoading || provider.isSubmitting)
+            ? null
+            : Container(
+                padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12.0),
+                  color: Colors.grey.shade900,
+                  gradient: LinearGradient(
+                    colors: [Colors.black, Colors.black.withOpacity(0)],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                  ),
+                ),
+                child: GestureDetector(
+                  onTap: !provider.isValid
+                      ? null
+                      : () {
+                          var isValid = provider.validateForm();
+                          if (isValid) {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) {
+                                return ConfirmationDialog(
+                                  title: 'Submit App?',
+                                  description: provider.makeAppPublic
+                                      ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                                      : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+                                  checkboxText: "Don't show it again",
+                                  checkboxValue: !showSubmitAppConfirmation,
+                                  updateCheckboxValue: (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        showSubmitAppConfirmation = !value;
+                                      });
+                                    }
+                                  },
+                                  onConfirm: () async {
+                                    if (provider.makeAppPublic) {
+                                      MixpanelManager().publicAppSubmitted({
+                                        'app_name': provider.appNameController.text,
+                                        'app_category': provider.appCategory,
+                                        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                      });
+                                    } else {
+                                      MixpanelManager().privateAppSubmitted({
+                                        'app_name': provider.appNameController.text,
+                                        'app_category': provider.appCategory,
+                                        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                      });
+                                    }
+                                    SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+                                    Navigator.pop(context);
+                                    await provider.submitApp();
+                                  },
+                                  onCancel: () {
+                                    Navigator.pop(context);
+                                  },
+                                );
+                              },
+                            );
+                          }
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.all(12.0),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.0),
+                      color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                    ),
+                    child: const Text(
+                      'Submit App',
+                      style: TextStyle(color: Colors.black, fontSize: 16),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),

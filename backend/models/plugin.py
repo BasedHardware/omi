@@ -56,6 +56,7 @@ class Plugin(BaseModel):
     trigger_workflow_memories: bool = True  # default true
     installs: int = 0
     proactive_notification: Optional[ProactiveNotification] = None
+    created_at: Optional[datetime] = None
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -78,7 +79,7 @@ class Plugin(BaseModel):
     def triggers_realtime(self) -> bool:
         return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
 
-    def fitler_proactive_notification_scopes(self, params: [str]) -> []:
+    def filter_proactive_notification_scopes(self, params: [str]) -> []:
         if not self.proactive_notification:
             return []
         return [param for param in params if param in self.proactive_notification.scopes]
