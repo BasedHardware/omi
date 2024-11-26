@@ -1,21 +1,45 @@
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Dict
+from typing import List
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
-    get_public_unapproved_apps_tester_db, get_private_apps_tester_db
+    add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
+    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
-admins = ['bZENWi3veHS6o0ko2hdsdrIG8CF3']
+
+# ********************************
+# ************ TESTER ************
+# ********************************
+
+def is_tester(uid: str) -> bool:
+    return is_tester_db(uid)
 
 
-def check_tester(uid: str) -> bool:
-    return uid in admins
+def can_tester_access_app(uid: str, app_id: str) -> bool:
+    return can_tester_access_app_db(app_id, uid)
 
+
+def add_tester(data: dict):
+    add_tester_db(data)
+
+
+def remove_tester(uid: str):
+    remove_tester_db(uid)
+
+
+def add_app_access_for_tester(app_id: str, uid: str):
+    add_app_access_for_tester_db(app_id, uid)
+
+
+def remove_app_access_for_tester(app_id: str, uid: str):
+    remove_app_access_for_tester_db(app_id, uid)
+
+# ********************************
 
 def weighted_rating(plugin):
     C = 3.0  # Assume 3.0 is the mean rating across all plugins
@@ -29,7 +53,9 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     private_data = []
     public_approved_data = []
     public_unapproved_data = []
+    tester_apps = []
     all_apps = []
+    tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
         print('get_public_approved_plugins_data from cache----------------------------')
         public_approved_data = cachedApps
@@ -42,8 +68,10 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         public_approved_data = get_public_approved_apps_db()
         public_unapproved_data = get_public_unapproved_apps(uid)
         set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
+    if tester:
+        tester_apps = get_apps_for_tester_db(uid)
     user_enabled = set(get_enabled_plugins(uid))
-    all_apps = private_data + public_approved_data + public_unapproved_data
+    all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -92,18 +120,12 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
 
 
 def get_public_unapproved_apps(uid: str) -> List:
-    if check_tester(uid):
-        data = get_public_unapproved_apps_tester_db()
-    else:
-        data = get_public_unapproved_apps_db(uid)
+    data = get_public_unapproved_apps_db(uid)
     return data
 
 
 def get_private_apps(uid: str) -> List:
-    if check_tester(uid):
-        data = get_private_apps_tester_db()
-    else:
-        data = get_private_apps_db(uid)
+    data = get_private_apps_db(uid)
     return data
 
 

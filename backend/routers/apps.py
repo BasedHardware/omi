@@ -13,7 +13,9 @@ from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
     disable_plugin, decrease_plugin_installs_count, get_specific_user_review
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
-    get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, check_tester
+    get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
+    add_app_access_for_tester, remove_app_access_for_tester
+
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
@@ -255,14 +257,14 @@ def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.private is not None:
-        if app.private and app.uid != uid and not check_tester(uid):
+        if app.private and app.uid != uid and not is_tester(uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         print('enable_app_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
-    if (app.private is None or app.private is False) and not check_tester(uid):
+    if (app.private is None or app.private is False) and not is_tester(uid):
         increase_plugin_installs_count(app_id)
     enable_plugin(uid, app_id)
     return {'status': 'ok'}
@@ -275,10 +277,10 @@ def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.private is None:
-        if app.private and app.uid != uid and not check_tester(uid):
+        if app.private and app.uid != uid and not is_tester(uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     disable_plugin(uid, app_id)
-    if (app.private is None or app.private is False) and not check_tester(uid):
+    if (app.private is None or app.private is False) and not is_tester(uid):
         decrease_plugin_installs_count(app_id)
     return {'status': 'ok'}
 
@@ -287,21 +289,48 @@ def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
 
+@router.post('/v1/apps/tester', tags=['v1'])
+def add_new_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('apps'):
+        raise HTTPException(status_code=422, detail='apps is required')
+    data['added_at'] = datetime.now(timezone.utc).isoformat()
+    add_tester(data)
+    return {'status': 'ok'}
+
+
+@router.post('/v1/apps/tester/add-access', tags=['v1'])
+def add_app_access_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('app_id'):
+        raise HTTPException(status_code=422, detail='app_id is required')
+    add_app_access_for_tester(data['app_id'], data['uid'])
+    return {'status': 'ok'}
+
+
+@router.post('/v1/apps/tester/remove-access', tags=['v1'])
+def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('app_id'):
+        raise HTTPException(status_code=422, detail='app_id is required')
+    remove_app_access_for_tester(data['app_id'], data['uid'])
+    return {'status': 'ok'}
+
 
 @router.get('/v1/apps/tester/check', tags=['v1'])
 def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
-    if check_tester(uid):
+    if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
-
-
-@router.get('/v1/apps/unapproved/read-only', tags=['v1'])
-def get_all_unapproved_apps_read_only(uid: str = Depends(auth.get_current_user_uid)):
-    if check_tester(uid):
-        apps = get_all_unapproved_apps_db()
-        if not apps:
-            return []
-        return apps
 
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'])

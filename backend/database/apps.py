@@ -2,6 +2,8 @@ import os
 from typing import List
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
+from google.cloud.firestore import ArrayUnion, ArrayRemove
+
 from ulid import ULID
 
 from ._client import db
@@ -80,18 +82,17 @@ def get_public_unapproved_apps_db(uid: str) -> List:
     return [doc.to_dict() for doc in public_apps]
 
 
-def get_public_unapproved_apps_tester_db() -> List:
-    filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False),
-               FieldFilter('private', '==', False)]
-    public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
-    return [doc.to_dict() for doc in public_apps]
-
-
-def get_private_apps_tester_db() -> List:
-    filters = [FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
-    private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
-    data = [doc.to_dict() for doc in private_apps]
-    return data
+def get_apps_for_tester_db(uid: str) -> List:
+    tester_ref = db.collection('testers').document(uid)
+    doc = tester_ref.get()
+    if doc.exists:
+        apps = doc.to_dict().get('apps', [])
+        if not apps:
+            return []
+        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps), FieldFilter('deleted', '==', False)]
+        public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+        return [doc.to_dict() for doc in public_apps]
+    return []
 
 
 def add_app_to_db(app_data: dict):
@@ -140,3 +141,40 @@ def get_app_usage_history_db(app_id: str):
 def set_app_review_in_db(app_id: str, uid: str, review: dict):
     app_ref = db.collection('plugins_data').document(app_id).collection('reviews').document(uid)
     app_ref.set(review)
+
+
+# ********************************
+# ************ TESTER ************
+# ********************************
+
+def add_tester_db(data: dict):
+    app_ref = db.collection('testers').document(data['uid'])
+    app_ref.set(data)
+
+
+def add_app_access_for_tester_db(app_id: str, uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.update({'apps': ArrayUnion([app_id])})
+
+
+def remove_app_access_for_tester_db(app_id: str, uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.update({'apps': ArrayRemove([app_id])})
+
+
+def remove_tester_db(uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.delete()
+
+
+def can_tester_access_app_db(app_id: str, uid: str) -> bool:
+    app_ref = db.collection('testers').document(uid)
+    doc = app_ref.get()
+    if doc.exists:
+        return app_id in doc.to_dict().get('apps', [])
+    return False
+
+
+def is_tester_db(uid: str) -> bool:
+    app_ref = db.collection('testers').document(uid)
+    return app_ref.get().exists
