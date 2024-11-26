@@ -9,7 +9,7 @@ const String friendServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
 const String audioDataStreamCharacteristicUuid = '19b10001-e8f2-537e-4f6c-d104768a1214';
 const String audioCodecCharacteristicUuid = '19b10002-e8f2-537e-4f6c-d104768a1214';
 
-const String buttonDataStreamCharacteristicUuid = '23ba7924-0000-1000-7450-346eac492e92';
+const String buttonServiceUuid = '23ba7924-0000-1000-7450-346eac492e92';
 const String buttonTriggerCharacteristicUuid = '23ba7925-0000-1000-7450-346eac492e92';
 
 const String imageDataStreamCharacteristicUuid = '19b10005-e8f2-537e-4f6c-d104768a1214';
@@ -25,11 +25,15 @@ const String accelDataStreamCharacteristicUuid = '32403791-0000-1000-7450-bf445e
 const String batteryServiceUuid = '0000180f-0000-1000-8000-00805f9b34fb';
 const String batteryLevelCharacteristicUuid = '00002a19-0000-1000-8000-00805f9b34fb';
 
+const String speakerDataStreamServiceUuid = 'cab1ab95-2ea5-4f4d-bb56-874b72cfc984';
+const String speakerDataStreamCharacteristicUuid = 'cab1ab96-2ea5-4f4d-bb56-874b72cfc984';
+
 const String deviceInformationServiceUuid = '0000180a-0000-1000-8000-00805f9b34fb';
 const String modelNumberCharacteristicUuid = '00002a24-0000-1000-8000-00805f9b34fb';
 const String firmwareRevisionCharacteristicUuid = '00002a26-0000-1000-8000-00805f9b34fb';
 const String hardwareRevisionCharacteristicUuid = '00002a27-0000-1000-8000-00805f9b34fb';
 const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805f9b34fb';
+
 
 const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
 
