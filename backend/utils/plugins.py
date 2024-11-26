@@ -9,7 +9,6 @@ from database import mem_db
 from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
 from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache
 from models.app import App
@@ -18,7 +17,6 @@ from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
-from utils.other.endpoints import timeit
 from utils.llm import (
     generate_embedding,
     get_proactive_message
