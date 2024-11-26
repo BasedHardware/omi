@@ -1,8 +1,6 @@
 import json
 import os
-import random
 from datetime import datetime, timezone
-from collections import defaultdict
 from typing import List
 
 import requests
@@ -12,8 +10,8 @@ from slugify import slugify
 from ulid import ULID
 
 from database.apps import add_app_to_db
-from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
-    decrease_plugin_installs_count
+from database.redis_db import set_app_review_cache, increase_app_installs_count, enable_app, decrease_app_installs_count, \
+    disable_app
 from models.app import App
 from models.plugin import Plugin
 from utils.apps import get_available_app_by_id, get_app_usage_history, get_app_money_made
@@ -36,8 +34,8 @@ def enable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_u
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='Plugin setup is not completed')
     if plugin.private is not None and plugin.private is False:
-        increase_plugin_installs_count(plugin_id)
-    enable_plugin(uid, plugin_id)
+        increase_app_installs_count(plugin_id)
+    enable_app(uid, plugin_id)
     return {'status': 'ok'}
 
 
@@ -47,9 +45,9 @@ def disable_plugin_endpoint(plugin_id: str, uid: str = Depends(auth.get_current_
     plugin = App(**plugin) if plugin else None
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
-    disable_plugin(uid, plugin_id)
+    disable_app(uid, plugin_id)
     if plugin.private is not None and plugin.private is False:
-        decrease_plugin_installs_count(plugin_id)
+        decrease_app_installs_count(plugin_id)
     return {'status': 'ok'}
 
 
@@ -79,7 +77,7 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
 
     score = data['score']
     review = data.get('review', '')
-    set_plugin_review(plugin_id, uid, {'score': score, 'review': review})
+    set_app_review_cache(plugin_id, uid, {'score': score, 'review': review})
     return {'status': 'ok'}
 
 
