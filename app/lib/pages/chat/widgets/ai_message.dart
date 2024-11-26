@@ -561,13 +561,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+  final bool isUserMessage;
 
-  const CopyButton({super.key, required this.messageText});
+  const CopyButton({
+    super.key,
+    required this.messageText,
+    this.isUserMessage = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 6.0, 0.0, 0.0),
+      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8, 0.0, 0.0),
       child: InkWell(
         splashColor: Colors.transparent,
         focusColor: Colors.transparent,
@@ -578,7 +583,7 @@ class CopyButton extends StatelessWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Response copied to clipboard.',
+                'Message copied to clipboard.',
                 style: TextStyle(
                   color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 12.0,
@@ -590,6 +595,7 @@ class CopyButton extends StatelessWidget {
         },
         child: Row(
           mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: isUserMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
@@ -603,6 +609,7 @@ class CopyButton extends StatelessWidget {
               'Copy response',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            SizedBox(width: 8,),
           ],
         ),
       ),
