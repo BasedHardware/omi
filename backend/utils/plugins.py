@@ -357,10 +357,10 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
             if app.has_capability("proactive_notification"):
                 message = _process_proactive_notification(uid, token, app, noti)
                 if message:
-                    results[plugin.id] = message
+                    results[app.id] = message
 
         except Exception as e:
-            print(f"Plugin integration error: {e}")
+            print(f"App integration error: {e}")
             return
 
     for app in filtered_apps:
@@ -377,13 +377,13 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
     return messages
 
 
-def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, message: str):
+def send_plugin_notification(token: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
-        plugin_id=plugin_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
     )
 
-    send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
