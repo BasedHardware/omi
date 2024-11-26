@@ -1,4 +1,8 @@
 #include <zephyr/kernel.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/l2cap.h>
+#include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2s.h>
@@ -38,6 +42,72 @@ struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)
 
 
 struct gpio_dt_spec speaker_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_INT_DISABLE};
+
+// ble service
+//
+
+static void speaker_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t speaker_haptic_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
+
+static struct bt_uuid_128 speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0xCAB1AB95, 0x2EA5, 0x4F4D, 0xBB56, 0x874B72CFC984));
+static struct bt_uuid_128 speaker_haptic_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0xCAB1AB96, 0x2EA5, 0x4F4D, 0xBB56, 0x874B72CFC984));
+
+static struct bt_gatt_attr speaker_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&speaker_uuid),
+    BT_GATT_CHARACTERISTIC(&speaker_haptic_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, speaker_haptic_handler, NULL),
+    BT_GATT_CCC(speaker_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+};
+static struct bt_gatt_service speaker_service = BT_GATT_SERVICE(speaker_service_attr);
+
+void register_speaker_service() 
+{
+    bt_gatt_service_register(&speaker_service);
+}
+
+static void speaker_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
+{
+    if (value == BT_GATT_CCC_NOTIFY)
+    {
+        LOG_INF("Client subscribed for notifications");
+    }
+    else if (value == 0)
+    {
+        LOG_INF("Client unsubscribed from notifications");
+    }
+    else
+    {
+        LOG_ERR("Invalid CCC value: %u", value);
+    }
+
+}
+
+static ssize_t speaker_haptic_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags) 
+{
+    LOG_INF("play the haptic");
+
+    uint8_t value = ((uint8_t*)buf)[0];
+    LOG_INF("value %d  ", value);
+
+	if (value < 1 || value > 3)
+	{
+		return 0;
+	}
+
+	if (value == 1)
+	{
+		play_haptic_milli(20);
+	}
+	else if (value == 2)
+	{
+		play_haptic_milli(50);
+	}
+	else if (value == 3)
+	{
+		play_haptic_milli(500);
+	}
+
+    return 1;
+}
 
 int speaker_init() 
 {
