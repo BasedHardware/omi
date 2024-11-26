@@ -98,7 +98,7 @@ workflows:
 
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Instals pod
         script: |
@@ -292,7 +292,7 @@ workflows:
           flutter packages pub get
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
       - name: Build AAB with Flutter
         script: | 
           # TODO: Don't tricky
@@ -470,7 +470,7 @@ workflows:
 
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Instals pod
         script: |
@@ -635,7 +635,7 @@ workflows:
           flutter packages pub get
       - name: Run build runner
         script: |
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
       - name: Patch Android app with Shorebird
         script: | 
           # TODO: Don't tricky
