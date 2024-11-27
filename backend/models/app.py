@@ -72,6 +72,8 @@ class App(BaseModel):
     installs: int = 0
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
+    money_made: Optional[float] = None
+    usage_count: Optional[int] = None
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
