@@ -402,18 +402,21 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
     prompt = f"""
     You are an assistant for question-answering tasks. 
-    You are made for {user_name}, {facts_str}
     
-    Use what you know about {user_name}, the following pieces of retrieved context to answer the user question.
-    If there's no context or the context is not related, tell the user that they didn't record any conversations about that specific topic.
-    Never say that you don't have enough information. 
+    Your task is to use the context provided to answer the user question.
+    
+    If the user is asking for advice/recommendations, you must always answer, even if there's no context at all.
+    Never say that you don't have enough information, unless the user is referring or specifically asking about stuff in the past, and nothing related was provided.
     
     Use three sentences maximum and keep the answer concise.
     
@@ -424,12 +427,17 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
 
     Context:
     ```
+    {facts_str.strip()}
+    
     {context}
     ```
     Answer:
-    """.replace('    ', '').strip()
-    # print('qa_rag prompt', prompt)
+    """.replace('    ', '').replace('\n\n\n','\n\n').strip()
+    print('qa_rag prompt', prompt)
     return llm_mini.invoke(prompt).content
+
+
+# def force_recomendation(uid: str, question: str, response: str, plugin: Optional[Plugin] = None) -> str:
 
 
 # **************************************************
@@ -669,10 +677,6 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
     your task is to understand the last few messages, and identify the single question or follow-up question the user is asking. \
-
-    If the user is not asking a question or does not want to follow up, respond with an empty message.
-
-    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
 
     Conversation:
     ```
