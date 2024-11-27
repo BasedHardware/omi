@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Dict
+from typing import List
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
@@ -47,7 +47,9 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = plugins_install.get(app['id'],0)
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
+        app_dict['money_made'] = get_app_money_made_amount(app['id'])
+        app_dict['usage_count'] = get_app_usage_count(app['id'])
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
@@ -99,6 +101,8 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     for app in all_apps:
         app_dict = app
         app_dict['installs'] = get_plugin_installs_count(app['id'])
+        app_dict['money_made'] = get_app_money_made_amount(app['id'])
+        app_dict['usage_count'] = get_app_usage_count(app['id'])
         if include_reviews:
             reviews = get_plugin_reviews(app['id'])
             sorted_reviews = reviews.values()
@@ -110,7 +114,6 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     if include_reviews:
         apps = sorted(apps, key=weighted_rating, reverse=True)
     return apps
-
 
 
 def set_app_review(app_id: str, uid: str, review: dict):
@@ -142,15 +145,22 @@ def get_app_usage_history(app_id: str) -> list:
     return data
 
 
+def get_app_usage_count(app_id: str) -> int:
+    usage = get_app_usage_history(app_id)
+    return sum([x['count'] for x in usage])
+
+
+def get_app_money_made_amount(app_id: str) -> float:
+    money = get_app_money_made(app_id)
+    return money['money']
+
+
 def get_app_money_made(app_id: str) -> dict[str, int | float]:
     cached_money = get_app_money_made_cache(app_id)
     if cached_money:
         return cached_money
     usage = get_app_usage_history_db(app_id)
     usage = [UsageHistoryItem(**x) for x in usage]
-    for item in usage:
-        if item.timestamp.date() < datetime(2024, 11, 1, tzinfo=timezone.utc).date():
-            usage.remove(item)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
