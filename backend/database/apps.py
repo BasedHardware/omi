@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from typing import List
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
@@ -108,7 +109,7 @@ def change_app_approval_status(plugin_id: str, approved: bool):
 
 
 def get_app_usage_history_db(app_id: str):
-    usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(filter=FieldFilter('timestamp','>=', datetime(2024, 11, 1, tzinfo=timezone.utc))).stream()
     return [doc.to_dict() for doc in usage]
   
     
