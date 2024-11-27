@@ -90,6 +90,7 @@ class Plugin(BaseModel):
 
 class UsageHistoryType(str, Enum):
     memory_created_external_integration = 'memory_created_external_integration'
+    transcript_processed_external_integration = 'transcript_processed_external_integration'
     memory_created_prompt = 'memory_created_prompt'
     chat_message_sent = 'chat_message_sent'
 
