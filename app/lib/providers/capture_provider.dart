@@ -191,7 +191,7 @@ class CaptureProvider extends ChangeNotifier
     return file;
   }
 
-  void _processVoiceCommandBytes(List<List<int>> data) async {
+  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
     if (data.isEmpty) {
       debugPrint("voice frames is empty");
       return;
@@ -205,6 +205,7 @@ class CaptureProvider extends ChangeNotifier
       debugPrint("Command respond: ${messages.map((m) => m.text).join(" | ")}");
       if (messages.isNotEmpty) {
         messageProvider?.refreshMessages();
+        _playSpeakerHaptic(deviceId, 2);
       }
     } catch (e) {
       debugPrint(e.toString());
@@ -228,7 +229,7 @@ class CaptureProvider extends ChangeNotifier
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
-        _processVoiceCommandBytes(data);
+        _processVoiceCommandBytes(deviceId, data);
       }
     });
   }
@@ -254,7 +255,7 @@ class CaptureProvider extends ChangeNotifier
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
-        _processVoiceCommandBytes(data);
+        _processVoiceCommandBytes(deviceId, data);
       }
     });
   }
