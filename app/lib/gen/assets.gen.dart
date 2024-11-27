@@ -106,6 +106,14 @@ class $AssetsImagesGen {
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
 
+  /// File path: assets/images/speaker_0_icon.png
+  AssetGenImage get speaker0Icon =>
+      const AssetGenImage('assets/images/speaker_0_icon.png');
+
+  /// File path: assets/images/speaker_1_icon.png
+  AssetGenImage get speaker1Icon =>
+      const AssetGenImage('assets/images/speaker_1_icon.png');
+
   /// File path: assets/images/splash.png
   AssetGenImage get splash => const AssetGenImage('assets/images/splash.png');
 
@@ -128,6 +136,8 @@ class $AssetsImagesGen {
         instruction3,
         logoTransparent,
         recordingGreenCircleIcon,
+        speaker0Icon,
+        speaker1Icon,
         splash,
         splashIcon,
         stars
