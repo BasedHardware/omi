@@ -2,9 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/apps/analytics.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
@@ -532,17 +533,60 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 : const SizedBox.shrink(),
             // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
             // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: GestureDetector(
-                onTap: () {
-                  routeToPage(context, AppAnalytics(app: widget.app));
-                },
-                child: const Text(
-                  'App Analytics',
-                  style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
-                ),
+              width: double.infinity,
+              padding: const EdgeInsets.all(16.0),
+              margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade900,
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              SvgPicture.asset(Assets.images.icChart, width: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.app.usageCount.toString(),
+                                style: const TextStyle(color: Colors.white, fontSize: 30),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                        ],
+                      ),
+                      const Spacer(flex: 2),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              SvgPicture.asset(Assets.images.icDollar, width: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                "\$${widget.app.moneyMade}",
+                                style: const TextStyle(color: Colors.white, fontSize: 28),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                        ],
+                      ),
+                      const Spacer(flex: 2),
+                    ],
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 60),
