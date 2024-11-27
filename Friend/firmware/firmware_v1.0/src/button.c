@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -20,11 +21,11 @@ static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struc
 static struct gpio_callback button_cb_data;
 
 static struct bt_uuid_128 button_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7924,0x0000,0x1000,0x7450,0x346EAC492E92));
-static struct bt_uuid_128 button_uuid_x = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7925 ,0x0000,0x1000,0x7450,0x346EAC492E92));
+static struct bt_uuid_128 button_characteristic_data_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7925 ,0x0000,0x1000,0x7450,0x346EAC492E92));
 
 static struct bt_gatt_attr button_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&button_uuid),
-    BT_GATT_CHARACTERISTIC(&button_uuid_x.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, button_data_read_characteristic, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&button_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, button_data_read_characteristic, NULL, NULL),
     BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
@@ -49,35 +50,24 @@ static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, u
 struct gpio_dt_spec d4_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=4, .dt_flags = GPIO_OUTPUT_ACTIVE}; //3.3
 struct gpio_dt_spec d5_pin_input = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin=5, .dt_flags = GPIO_INT_EDGE_RISING};
 
-static uint32_t current_button_time = 0;
-static uint32_t previous_button_time = 0;
-
-const int max_debounce_interval = 700;
 static bool was_pressed = false;
 
 //
 // button
 //
-void button_pressed(const struct device *dev, struct gpio_callback *cb,
+void button_pressed_callback(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
-    current_button_time = k_cycle_get_32();
-	if (current_button_time - previous_button_time < max_debounce_interval) 
-    { //too low!
-	}
-	else 
-    { //right...    
-        int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
-        if (temp) 
-        {
-            was_pressed = false;
-        }
-        else 
-        {
-            was_pressed = true;
-        }
-	}
-	previous_button_time = current_button_time;
+    int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
+    printf("button_pressed_callback %d\n", temp);
+    if (temp) 
+    {
+        was_pressed = false;
+    }
+    else 
+    {
+        was_pressed = true;
+    }
 }
 #define BUTTON_CHECK_INTERVAL 40 // 0.04 seconds, 25 Hz
 
@@ -122,9 +112,11 @@ static inline void notify_unpress()
 {
     final_button_state[0] = BUTTON_RELEASE; 
     LOG_INF("unpressed");
+    printf("unpressed\n");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
+        printf("unpressed sent");
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
@@ -162,186 +154,321 @@ static inline void notify_long_tap()
     }
 }
 
-#define LONG_PRESS_INTERVAL 25
-#define SINGLE_PRESS_INTERVAL 2
+#define BUTTON_PRESSED     1
+#define BUTTON_RELEASED    0
+
+#define TAP_THRESHOLD      300  // 300 ms for single tap
+#define DOUBLE_TAP_WINDOW  600  // 600 ms maximum for double-tap
+#define LONG_PRESS_TIME    1000 // 1000 ms for long press
+
+typedef enum {
+    BUTTON_EVENT_NONE,
+    BUTTON_EVENT_SINGLE_TAP,
+    BUTTON_EVENT_DOUBLE_TAP,
+    BUTTON_EVENT_LONG_PRESS,
+    BUTTON_EVENT_RELEASE
+} ButtonEvent;
+
+static uint32_t current_time = 0;
+static uint32_t btn_press_start_time;
+static uint32_t btn_release_time;
+static uint32_t btn_last_tap_time;
+static bool btn_is_pressed;
+
+static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
+
 void check_button_level(struct k_work *work_item) 
 {
-     //insert the current button state here
-    int state_ = was_pressed ? 1 : 0;
-    if (current_button_state == IDLE) 
-    {
-        if (state_ == 0) 
-        {
-            //Do nothing!
+    current_time = current_time + 1;
+
+    ButtonEvent event = BUTTON_EVENT_NONE;
+
+    u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
+
+    // Debouncing pressed state
+    if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
+        btn_is_pressed = true;
+        btn_press_start_time = current_time;
+    } else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
+        btn_is_pressed = false;
+        btn_release_time = current_time;
+
+        // Check for double tap
+        uint32_t press_duration = (btn_release_time - btn_press_start_time)*BUTTON_CHECK_INTERVAL;
+        if (press_duration < TAP_THRESHOLD) {
+            if (btn_last_tap_time > 0 && (current_time - btn_last_tap_time)*BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
+                event = BUTTON_EVENT_DOUBLE_TAP;
+                btn_last_tap_time = 0; // Reset double-tap / single-tap detection
+            } else {
+                btn_last_tap_time = current_time;
+            }
         }
-        else if (state_ == 1) 
-        {
-            //Also do nothing, but transition to the next state
-            notify_press();
-            current_button_state = ONE_PRESS;
-            if (is_off)
-           {
-             is_off = false;
-             bt_on();
-             play_haptic_milli(50);
-           }
+    } 
+
+    // Check for single tap
+    if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
+        uint32_t press_duration = (btn_release_time - btn_press_start_time)*BUTTON_CHECK_INTERVAL;
+        if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 && (current_time - btn_press_start_time)*BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
+            event = BUTTON_EVENT_SINGLE_TAP;
+            btn_last_tap_time = 0;
+        } else if ((current_time - btn_press_start_time)*BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
+            event = BUTTON_EVENT_RELEASE;
         }
     }
 
-    else if (current_button_state == ONE_PRESS) 
-    {
-        if (state_ == 0) 
-        {
-            
-            if(inc_count_0 == 0) 
-            {
-                notify_unpress();
-            }
-            inc_count_0++; //button is unpressed
-            if (inc_count_0 > SINGLE_PRESS_INTERVAL) 
-            {
-                //If button is not pressed for a little while....... 
-                //transition to Two_press. button could be a single or double tap
-                current_button_state = TWO_PRESS;
-                reset_count();          
-            }
-        }
-        if (state_ == 1) 
-        {
-            inc_count_1++; //button is pressed
-
-            if (inc_count_1 > LONG_PRESS_INTERVAL) 
-            {
-                //If button is pressed for a long time.......
-                notify_long_tap();
-                //play_haptic_milli(10);
-                //Fire the long mode notify and enter a grace period
-                //turn off herre
-                // TODO: FIXME
-                //if(!from_wakeup)
-                //{
-                //    is_off = !is_off;
-                //}
-                //else
-                //{
-                //    from_wakeup = false;
-                //}
-                //if (is_off)
-                //{
-                //    bt_off();
-                //    turnoff_all();
-                //}
-                current_button_state = GRACE;
-                reset_count();
-            }
-
-        }
-
+    // Check for long press
+    if (btn_is_pressed && (current_time - btn_press_start_time)*BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
+        event = BUTTON_EVENT_LONG_PRESS;
     }
 
-    else if (current_button_state == TWO_PRESS) 
+    // Single tap
+    if (event == BUTTON_EVENT_SINGLE_TAP)
     {
-        if (state_ == 0) 
+        printk("single tap detected\n");
+        btn_last_event = event;
+        notify_tap();
+
+        //Fire the long mode notify and enter a grace period
+        //turn off herre
+        if(!from_wakeup)
         {
-            if (inc_count_1 > 0) 
-            { // if button has been pressed......
-                notify_unpress();
-                notify_double_tap();
-                
-                //Fire the notify and enter a grace period
-                current_button_state = GRACE;
-                reset_count();
-            }
-             //single button press
-            else if (inc_count_0 > 10)
-            {
-                notify_tap(); //Fire the notify and enter a grace period
-                if(!from_wakeup)
-                {
-                    is_off = !is_off;
-                }
-                else
-                {
-                    from_wakeup = false;
-                }
-                //Fire the notify and enter a grace period
-                if (is_off)
-                {
-                    bt_off();
-                    turnoff_all();
-                }
-                current_button_state = GRACE;
-                reset_count();
-            }
-            else 
-            {
-                inc_count_0++; //not pressed
-            }
+            is_off = !is_off;
         }
-        else if (state_ == 1 ) 
+        else
         {
-            if (inc_count_1 == 0) 
-            {
-                notify_press();
-                inc_count_1++;
-            }
-            if (inc_count_1 > threshold) 
-            {
-                notify_long_tap();
-                //play_haptic_milli(10);
-                // TODO: FIXME
-                //if(!from_wakeup)
-                //{
-                //    is_off = !is_off;
-                //}
-                //else
-                //{
-                //    from_wakeup = false;
-                //}
-                ////Fire the notify and enter a grace period
-                //if (is_off)
-                //{
-                //    bt_off();
-                //    turnoff_all();
-                //}
-                current_button_state = GRACE;
-                reset_count();
-            }
+            from_wakeup = false;
+        }
+        if (is_off)
+        {
+            bt_off();
+            turnoff_all();
         }
     }
 
-    else if (current_button_state == GRACE) 
+    // Double tap
+    if (event == BUTTON_EVENT_DOUBLE_TAP)
     {
-        if (state_ == 0) 
-        {
-            if (inc_count_0 == 0 && (inc_count_1 > 0)) 
-            {
-                notify_unpress();
-            }
-            inc_count_0++;
-            if (inc_count_0 > 1) 
-            {
-                current_button_state = IDLE;
-                reset_count();
-            }
-        }
-        else if (state_ == 1) 
-        {
-            inc_count_1++;
-        }
+        printk("double tap detected\n");
+        btn_last_event = event;
+        notify_double_tap();
     }
+
+    // Long press, one time event
+    if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS)
+    {
+        printk("long press detected\n");
+        btn_last_event = event;
+        notify_long_tap();
+    }
+
+    // Releases, one time event
+    if (event == BUTTON_EVENT_RELEASE && btn_last_event != BUTTON_EVENT_RELEASE)
+    {
+        printk("release detected\n");
+        btn_last_event = event;
+        notify_unpress();
+
+        // Reset
+        current_time = 0;
+        btn_press_start_time = 0;
+        btn_release_time = 0;
+        btn_last_tap_time = 0;
+    }
+    if (event == BUTTON_EVENT_RELEASE)
+    {
+        current_button_state = GRACE;
+    }
+
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
+    return 0;
 }
 
+#define LONG_PRESS_INTERVAL 25
+#define SINGLE_PRESS_INTERVAL 2
+// void check_button_level(struct k_work *work_item) 
+// {
+//      //insert the current button state here
+//     int state_ = was_pressed ? 1 : 0;
+//     if (current_button_state == IDLE) 
+//     {
+//         if (state_ == 0) 
+//         {
+//             //Do nothing!
+//         }
+//         else if (state_ == 1) 
+//         {
+//             //Also do nothing, but transition to the next state
+//             notify_press();
+//             current_button_state = ONE_PRESS;
+//             if (is_off)
+//            {
+//              is_off = false;
+//              bt_on();
+//              play_haptic_milli(50);
+//            }
+//         }
+//     }
+// 
+//     else if (current_button_state == ONE_PRESS) 
+//     {
+//         if (state_ == 0) 
+//         {
+//             
+//             if(inc_count_0 == 0) 
+//             {
+//                 notify_unpress();
+//             }
+//             inc_count_0++; //button is unpressed
+//             if (inc_count_0 > SINGLE_PRESS_INTERVAL) 
+//             {
+//                 //If button is not pressed for a little while....... 
+//                 //transition to Two_press. button could be a single or double tap
+//                 current_button_state = TWO_PRESS;
+//                 reset_count();          
+//             }
+//         }
+//         if (state_ == 1) 
+//         {
+//             inc_count_1++; //button is pressed
+// 
+//             if (inc_count_1 > LONG_PRESS_INTERVAL) 
+//             {
+//                 //If button is pressed for a long time.......
+//                 notify_long_tap();
+//                 //play_haptic_milli(10);
+//                 //Fire the long mode notify and enter a grace period
+//                 //turn off herre
+//                 // TODO: FIXME
+//                 //if(!from_wakeup)
+//                 //{
+//                 //    is_off = !is_off;
+//                 //}
+//                 //else
+//                 //{
+//                 //    from_wakeup = false;
+//                 //}
+//                 //if (is_off)
+//                 //{
+//                 //    bt_off();
+//                 //    turnoff_all();
+//                 //}
+//                 current_button_state = GRACE;
+//                 reset_count();
+//             }
+// 
+//         }
+// 
+//     }
+// 
+//     else if (current_button_state == TWO_PRESS) 
+//     {
+//         if (state_ == 0) 
+//         {
+//             if (inc_count_1 > 0) 
+//             { // if button has been pressed......
+//                 notify_unpress();
+//                 notify_double_tap();
+//                 
+//                 //Fire the notify and enter a grace period
+//                 current_button_state = GRACE;
+//                 reset_count();
+//             }
+//              //single button press
+//             else if (inc_count_0 > 10)
+//             {
+//                 notify_tap(); //Fire the notify and enter a grace period
+//                 if(!from_wakeup)
+//                 {
+//                     is_off = !is_off;
+//                 }
+//                 else
+//                 {
+//                     from_wakeup = false;
+//                 }
+//                 //Fire the notify and enter a grace period
+//                 if (is_off)
+//                 {
+//                     bt_off();
+//                     turnoff_all();
+//                 }
+//                 current_button_state = GRACE;
+//                 reset_count();
+//             }
+//             else 
+//             {
+//                 inc_count_0++; //not pressed
+//             }
+//         }
+//         else if (state_ == 1 ) 
+//         {
+//             if (inc_count_1 == 0) 
+//             {
+//                 notify_press();
+//                 inc_count_1++;
+//             }
+//             if (inc_count_1 > threshold) 
+//             {
+//                 notify_long_tap();
+//                 //play_haptic_milli(10);
+//                 // TODO: FIXME
+//                 //if(!from_wakeup)
+//                 //{
+//                 //    is_off = !is_off;
+//                 //}
+//                 //else
+//                 //{
+//                 //    from_wakeup = false;
+//                 //}
+//                 ////Fire the notify and enter a grace period
+//                 //if (is_off)
+//                 //{
+//                 //    bt_off();
+//                 //    turnoff_all();
+//                 //}
+//                 current_button_state = GRACE;
+//                 reset_count();
+//             }
+//         }
+//     }
+// 
+//     else if (current_button_state == GRACE) 
+//     {
+//         if (state_ == 0) 
+//         {
+//             if (inc_count_0 == 0 && (inc_count_1 > 0)) 
+//             {
+//                 notify_unpress();
+//             }
+//             inc_count_0++;
+//             if (inc_count_0 > 1) 
+//             {
+//                 current_button_state = IDLE;
+//                 reset_count();
+//             }
+//         }
+//         else if (state_ == 1) 
+//         {
+//             inc_count_1++;
+//         }
+//     }
+//     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
+// }
+// 
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
 {
     LOG_INF("button_data_read_characteristic");
-    int lint = 1;
     LOG_INF("was_pressed: %d", was_pressed);
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &lint, sizeof(lint));
-
+    printf("was_pressed: %d\n", final_button_state[0]);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
+
+//static ssize_t audio_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+//{
+//    LOG_DBG("audio_data_read_characteristic");
+//    return bt_gatt_attr_read(conn, attr, buf, len, offset, NULL, 0);
+//}
+
 int button_init() 
 {
     if (gpio_is_ready_dt(&d4_pin)) 
@@ -397,7 +524,7 @@ int button_init()
 	}
   
 
-    gpio_init_callback(&button_cb_data, button_pressed, BIT(d5_pin_input.pin));
+    gpio_init_callback(&button_cb_data, button_pressed_callback, BIT(d5_pin_input.pin));
 	gpio_add_callback(d5_pin_input.port, &button_cb_data);
 
     return 0;

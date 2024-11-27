@@ -80,7 +80,7 @@ class CaptureProvider extends ChangeNotifier
   get bleBytesStream => _bleBytesStream;
 
   StreamSubscription? _bleButtonStream;
-  bool _isDeviceButtonLongPressStart = false;
+  DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
 
   StreamSubscription? _storageStream;
@@ -191,10 +191,15 @@ class CaptureProvider extends ChangeNotifier
     return file;
   }
 
-  void _processVoiceCommandBytes() async {
-    debugPrint("Send ${_commandBytes.length} voice frames to backend");
-    var file = await _flushBytesToTempFile(
-        _commandBytes, DateTime.now().millisecondsSinceEpoch ~/ 1000 - (_commandBytes.length / 100).ceil());
+  void _processVoiceCommandBytes(List<List<int>> data) async {
+    if (data.isEmpty) {
+      debugPrint("voice frames is empty");
+      return;
+    }
+
+    debugPrint("Send ${data.length} voice frames to backend");
+    var file =
+        await _flushBytesToTempFile(data, DateTime.now().millisecondsSinceEpoch ~/ 1000 - (data.length / 100).ceil());
     try {
       var messages = await sendVoiceMessageServer([file]);
       debugPrint("Command respond: ${messages.map((m) => m.text).join(" | ")}");
@@ -206,6 +211,28 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
+  // Just incase the ble connection get loss
+  void _watchVoiceCommands(String deviceId, DateTime session) {
+    Timer.periodic(const Duration(seconds: 3), (t) async {
+      debugPrint("voice command watch");
+      if (session != _voiceCommandSession) {
+        t.cancel();
+        return;
+      }
+      var value = await _getBleButtonState(deviceId);
+      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("watch device button ${buttonState}");
+
+      // Force process
+      if (buttonState == 5 && session == _voiceCommandSession) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(data);
+      }
+    });
+  }
+
   Future streamButton(String deviceId) async {
     debugPrint('streamButton in capture_provider');
     _bleButtonStream?.cancel();
@@ -215,18 +242,19 @@ class CaptureProvider extends ChangeNotifier
       debugPrint("device button ${buttonState}");
 
       // start long press
-      if (buttonState == 3) {
-        _isDeviceButtonLongPressStart = true;
+      if (buttonState == 3 && _voiceCommandSession == null) {
+        _voiceCommandSession = DateTime.now();
         _commandBytes = [];
+        _watchVoiceCommands(deviceId, _voiceCommandSession!);
         _playSpeakerHaptic(deviceId, 1);
       }
 
       // release
-      if (buttonState == 5 && _isDeviceButtonLongPressStart) {
-        Future.delayed(const Duration(seconds: 1)).then((_) {
-          _isDeviceButtonLongPressStart = false;
-          _processVoiceCommandBytes();
-        });
+      if (buttonState == 5 && _voiceCommandSession != null) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(data);
       }
     });
   }
@@ -238,7 +266,7 @@ class CaptureProvider extends ChangeNotifier
       if (value.isEmpty) return;
 
       // command button triggered
-      if (_isDeviceButtonLongPressStart) {
+      if (_voiceCommandSession != null) {
         _commandBytes.add(value.sublist(3));
       }
 
@@ -332,6 +360,14 @@ class CaptureProvider extends ChangeNotifier
       return Future.value(null);
     }
     return connection.getBleButtonListener(onButtonReceived: onButtonReceived);
+  }
+
+  Future<List<int>> _getBleButtonState(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(<int>[]);
+    }
+    return connection.getBleButtonState();
   }
 
   Future<bool> _recheckCodecChange() async {
