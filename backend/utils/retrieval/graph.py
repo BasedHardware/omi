@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
+
 # import os
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.memories as memories_db
@@ -28,7 +29,6 @@ from utils.llm import (
 )
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
-
 
 model = ChatOpenAI(model="gpt-4o-mini")
 
@@ -193,7 +193,9 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 
 @timeit
-def execute_graph_chat(uid: str, messages: List[Message], plugin: Optional[Plugin]) -> Tuple[str, bool, List[Memory]]:
+def execute_graph_chat(
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None
+) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin)
     result = graph.invoke(
         {"uid": uid, "messages": messages, "plugin_selected": plugin},
@@ -219,14 +221,16 @@ if __name__ == "__main__":
     messages = [
         Message(
             id=str(uuid.uuid4()),
-            text="How can I build a plugin?",
+            # text="What did I do yesterday?",
+            # text="What are my main conversations topics?",
+            text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
             created_at=datetime.datetime.now(datetime.timezone.utc),
             sender="human",
             type="text",
         )
     ]
-    # result = execute_graph_chat(uid, messages)
-    # print("result:", print(result))
+    result = execute_graph_chat(uid, messages)
+    print("result:", print(result[0]))
     # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     # _pretty_print_conversation(messages)
     # # print(messages[-1].text)
