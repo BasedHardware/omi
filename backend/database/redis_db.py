@@ -58,7 +58,7 @@ def delete_generic_cache(path: str):
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[dict]):
-    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 5)  # 5 minutes
+    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 10)  # 10 minutes
 
 
 def get_app_usage_history_cache(app_id: str) -> List[dict]:
@@ -82,7 +82,7 @@ def get_app_money_made_cache(app_id: str) -> dict:
 
 
 def set_app_money_made_cache(app_id: str, money: dict):
-    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 5)  # 5 minutes
+    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
 def set_plugin_review(plugin_id: str, uid: str, data: dict):
