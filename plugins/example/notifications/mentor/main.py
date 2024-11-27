@@ -86,7 +86,7 @@ class MessageBuffer:
 # Initialize message buffer
 message_buffer = MessageBuffer()
 
-ANALYSIS_INTERVAL = 5  # 30 seconds between analyses
+ANALYSIS_INTERVAL = 120  # 120 seconds between analyses
 
 def extract_topics(discussion_text: str) -> list:
     """Extract topics from the discussion using OpenAI"""
