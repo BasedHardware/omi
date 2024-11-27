@@ -257,6 +257,12 @@ class FrameDeviceConnection extends DeviceConnection {
     return Future.value(BleAudioCodec.pcm8);
   }
 
+  @override
+  Future<List<int>> performGetButtonState() async {
+    return Future.value(<int>[]);
+  }
+
+  @override
   Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {}
 
   @override
