@@ -128,6 +128,23 @@ class FriendDeviceConnection extends DeviceConnection {
     return listener;
   }
 
+  @override
+  Future<List<int>> performGetButtonState() async {
+    debugPrint('perform button state called');
+    if (_buttonService == null) {
+      return Future.value(<int>[]);
+    }
+
+    var buttonStateCharacteristic = getCharacteristic(_buttonService!, buttonTriggerCharacteristicUuid);
+    if (buttonStateCharacteristic == null) {
+      logCharacteristicNotFoundError('Button state', deviceId);
+      return Future.value(<int>[]);
+    }
+    var value = await buttonStateCharacteristic.read();
+    return value;
+  }
+
+  @override
   Future<StreamSubscription?> performGetBleButtonListener({
     required void Function(List<int>) onButtonReceived,
   }) async {
@@ -281,6 +298,7 @@ class FriendDeviceConnection extends DeviceConnection {
     return codec;
   }
 
+  @override
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
       debugPrint('storage list called');
@@ -291,7 +309,7 @@ class FriendDeviceConnection extends DeviceConnection {
     return Future.value(<int>[]);
   }
 
-  // @override
+  @override
   Future<List<int>> performGetStorageList() async {
     debugPrint(' perform storage list called');
     if (_storageService == null) {
