@@ -47,7 +47,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict = app
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
-        app_dict['installs'] = plugins_install.get(app['id'],0)
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
@@ -112,7 +112,6 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     return apps
 
 
-
 def set_app_review(app_id: str, uid: str, review: dict):
     set_app_review_in_db(app_id, uid, review)
     set_plugin_review(app_id, uid, review)
@@ -154,11 +153,13 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
+    type4 = len(list(filter(lambda x: x.type == UsageHistoryType.transcript_processed_external_integration, usage)))
 
     # tbd based on current prod stats
     t1multiplier = 0.02
     t2multiplier = 0.01
     t3multiplier = 0.005
+    t4multiplier = 0.00001  # This is for transcript processed triggered for every segment, so it should be very low
 
     money = {
         'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),

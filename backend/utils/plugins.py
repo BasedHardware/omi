@@ -28,6 +28,7 @@ import database.memories as memories_db
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
+
 def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
     """
     Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
@@ -188,7 +189,8 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         try:
             response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:', response.text[:100])
+                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:',
+                      response.text[:100])
                 return
 
             record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
@@ -244,6 +246,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
     )
     return memories_db.get_memories_by_id(uid, memories_id)
 
+
 def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
     sent_at = mem_db.get_proactive_noti_sent_at(uid, plugin.id)
     if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
@@ -258,6 +261,7 @@ def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
         mem_db.set_proactive_noti_sent_at(uid, plugin.id, int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
+
 
 def _set_proactive_noti_sent_at(uid: str, plugin: App):
     ts = time.time()
@@ -280,7 +284,8 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
     prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
-        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        send_plugin_notification(token, plugin.name, plugin.id,
+                                 f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
         print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
@@ -308,6 +313,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     _set_proactive_noti_sent_at(uid, plugin)
     return message
 
+
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
     plugins: List[App] = get_available_apps(uid)
     filtered_plugins = [
@@ -333,8 +339,15 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:', response.text[:100])
+                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:',
+                      response.text[:100])
                 return
+
+            if plugin.uid is not None:
+                if plugin.uid != uid:
+                    record_plugin_usage(uid, plugin.id, UsageHistoryType.transcript_processed_external_integration)
+            else:
+                record_plugin_usage(uid, plugin.id, UsageHistoryType.transcript_processed_external_integration)
 
             response_data = response.json()
             if not response_data:
