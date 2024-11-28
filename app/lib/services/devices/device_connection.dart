@@ -183,6 +183,17 @@ abstract class DeviceConnection {
     return null;
   }
 
+  Future<List<int>> getBleButtonState() async {
+    if (await isConnected()) {
+      debugPrint('button state called');
+      return await performGetButtonState();
+    }
+    debugPrint('button state error');
+    return Future.value(<int>[]);
+  }
+
+  Future<List<int>> performGetButtonState();
+
   Future<StreamSubscription?> getBleButtonListener({
     required void Function(List<int>) onButtonReceived,
   }) async {
