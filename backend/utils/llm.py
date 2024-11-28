@@ -495,14 +495,13 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        # max_items=3,
-        description="List of new user facts, preferences, interests, or topics.",
+        max_items=3,
+        description="List of **new** facts.",
     )
 
 
 def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fact]:
     user_name, facts_str = get_prompt_facts(uid)
-
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 100:  # less than 100 chars, probably nothing
         return []
@@ -552,7 +551,7 @@ Each fact you provide should fall under one of the following categories:
 
 **Output Instructions**:
 
-- Provide up to 5 valuable new facts.
+- Provide none up to 3 valuable new facts.
 - If you do not find any new or noteworthy facts, provide an empty list.
 - Do not include any explanations or additional text; only list the facts.
 
