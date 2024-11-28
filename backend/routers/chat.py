@@ -31,15 +31,15 @@ def filter_messages(messages, plugin_id):
 
 @router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
-        data: SendMessageRequest, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    print('send_message', data.text, app_id, uid)
+    print('send_message', data.text, plugin_id, uid)
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
     chat_db.add_message(uid, message.dict())
 
-    app = get_available_app_by_id(app_id, uid)
+    app = get_available_app_by_id(plugin_id, uid)
     app = App(**app) if app else None
 
     app_id = app.id if app else None
