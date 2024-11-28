@@ -6,6 +6,13 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 import threading
+from openai import OpenAI
+import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(env_path)
 
 app = Flask(__name__)
 
@@ -21,6 +28,12 @@ logging.basicConfig(level=logging.INFO,
                        logging.StreamHandler()
                    ])
 logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client (updated initialization)
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+if not os.getenv('OPENAI_API_KEY'):
+    logger.error("OPENAI_API_KEY not found in environment variables")
+    raise ValueError("OPENAI_API_KEY environment variable is required")
 
 class MessageBuffer:
     def __init__(self):
@@ -73,7 +86,29 @@ class MessageBuffer:
 # Initialize message buffer
 message_buffer = MessageBuffer()
 
-ANALYSIS_INTERVAL = 120  # 30 seconds between analyses
+ANALYSIS_INTERVAL = 120  # 120 seconds between analyses
+
+def extract_topics(discussion_text: str) -> list:
+    """Extract topics from the discussion using OpenAI"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]"},
+                {"role": "user", "content": f"Extract all topics from this conversation:\n{discussion_text}"}
+            ],
+            temperature=0.3,
+            max_tokens=150
+        )
+        
+        # Parse the response text as JSON
+        response_text = response.choices[0].message.content.strip()
+        topics = json.loads(response_text)
+        logger.info(f"Extracted topics: {topics}")
+        return topics
+    except Exception as e:
+        logger.error(f"Error extracting topics: {str(e)}")
+        return []
 
 def create_notification_prompt(messages: list) -> dict:
     """Create notification with prompt template"""
@@ -86,10 +121,13 @@ def create_notification_prompt(messages: list) -> dict:
     
     discussion_text = "\n".join(formatted_discussion)
     
+    # Extract topics from the discussion
+    topics = extract_topics(discussion_text)
+    
     system_prompt = """You are {{{{user_name}}}}'s personal AI mentor. Your FIRST task is to determine if this conversation warrants interruption. 
 
 STEP 1 - Evaluate SILENTLY if ALL these conditions are met:
-1. {{{{user_name}}}} is participating in the conversation (not just listening)
+1. {{{{user_name}}}} is participating in the conversation (messages marked with '({{{{user_name}}}})' must be present)
 2. {{{{user_name}}}} has expressed a specific problem, challenge, goal, or question
 3. You have a STRONG, CLEAR opinion that would significantly impact {{{{user_name}}}}'s situation
 4. The insight is time-sensitive and worth interrupting for
@@ -110,12 +148,21 @@ What we know about {{{{user_name}}}}: {{{{user_facts}}}}
 Current discussion:
 {text}
 
+Previous discussions and context: {{{{user_context}}}}
+
 Remember: First evaluate silently, then either respond with empty string OR give direct, opinionated advice.""".format(text=discussion_text)
 
     return {
         "notification": {
             "prompt": system_prompt,
-            "params": ["user_name", "user_facts"]
+            "params": ["user_name", "user_facts", "user_context"],
+            "context": {
+                "filters": {
+                    "people": [],
+                    "entities": [],
+                    "topics": topics  # Add extracted topics here
+                }
+            }
         }
     }
 

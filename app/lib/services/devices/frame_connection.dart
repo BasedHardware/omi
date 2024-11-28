@@ -258,6 +258,14 @@ class FrameDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<List<int>> performGetButtonState() async {
+    return Future.value(<int>[]);
+  }
+
+  @override
+  Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {}
+
+  @override
   Future<StreamSubscription?> performGetBleAudioBytesListener(
       {required void Function(List<int>) onAudioBytesReceived}) async {
     if (_frame == null || _frame!.isConnected == false) {
@@ -423,6 +431,11 @@ class FrameDeviceConnection extends DeviceConnection {
   }) async {
     // not yet implemented
     return null;
+  }
+
+  @override
+  Future<bool> performPlayToSpeakerHaptic(int mode) async {
+    return false;
   }
 
   @override

@@ -12,15 +12,14 @@ from slugify import slugify
 from ulid import ULID
 
 from database.apps import add_app_to_db
-from database.plugins import get_plugin_usage_history
 from database.redis_db import set_plugin_review, enable_plugin, disable_plugin, increase_plugin_installs_count, \
     decrease_plugin_installs_count
 from models.app import App
-from models.plugin import Plugin, UsageHistoryItem, UsageHistoryType
-from utils.apps import get_available_app_by_id
+from models.plugin import Plugin
+from utils.apps import get_available_app_by_id, get_app_usage_history, get_app_money_made
 from utils.other import endpoints as auth
 from utils.other.storage import upload_plugin_logo
-from utils.plugins import get_plugins_data, get_plugin_by_id, get_plugins_data_from_db
+from utils.plugins import get_plugins_data, get_plugins_data_from_db
 
 router = APIRouter()
 
@@ -80,50 +79,26 @@ def review_plugin(plugin_id: str, data: dict, uid: str = Depends(auth.get_curren
 
     score = data['score']
     review = data.get('review', '')
-    set_plugin_review(plugin_id, uid, score, review)
+    set_plugin_review(plugin_id, uid, {'score': score, 'review': review})
     return {'status': 'ok'}
 
 
 @router.get('/v1/plugins/{plugin_id}/usage', tags=['v1'])
 def get_plugin_usage(plugin_id: str):
-    plugin = get_plugin_by_id(plugin_id)
-    if not plugin:
+    app = get_available_app_by_id(plugin_id, None)
+    if not app:
         raise HTTPException(status_code=404, detail='Plugin not found')
-    usage = get_plugin_usage_history(plugin_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
-    # return usage by date grouped count
-    by_date = defaultdict(int)
-    for item in usage:
-        date = item.timestamp.date()
-        by_date[date] += 1
-
-    data = [{'date': k, 'count': v} for k, v in by_date.items()]
-    data = sorted(data, key=lambda x: x['date'])
+    data = get_app_usage_history(plugin_id)
     return data
 
 
 @router.get('/v1/plugins/{plugin_id}/money', tags=['v1'])
 def get_plugin_money_made(plugin_id: str):
-    plugin = get_plugin_by_id(plugin_id)
-    if not plugin:
-        raise HTTPException(status_code=404, detail='Plugin not found')
-    usage = get_plugin_usage_history(plugin_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
-    type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
-    type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
-    type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
-
-    # tbd based on current prod stats
-    t1multiplier = 0.02
-    t2multiplier = 0.01
-    t3multiplier = 0.005
-
-    return {
-        'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),
-        'type1': type1,
-        'type2': type2,
-        'type3': type3
-    }
+    app = get_available_app_by_id(plugin_id, None)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    money = get_app_money_made(plugin_id)
+    return money
 
 
 # @router.get('/v1/migrate-plugins', tags=['v1'])

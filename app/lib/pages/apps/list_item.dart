@@ -8,7 +8,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
-import 'app_detail.dart';
+import 'app_detail/app_detail.dart';
 
 class AppListItem extends StatelessWidget {
   final App app;
@@ -63,6 +63,7 @@ class AppListItem extends StatelessWidget {
                         Text(
                           app.name.decodeString,
                           maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                         ),
                         app.private && showPrivateIcon
@@ -116,7 +117,7 @@ class AppListItem extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              provider.appLoading.isNotEmpty && provider.appLoading[index]
+              provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),
                       child: SizedBox(

@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.44+163
+version: 1.0.47+176
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -94,6 +94,8 @@ dependencies:
     git:
       url: https://github.com/char5742/flutter_silero_vad.git
   image_picker: ^1.1.2
+  timeago: ^3.7.0
+  app_links: ^6.3.2
 
 
 dependency_overrides:
@@ -133,6 +135,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   flutter_flavorizr: ^2.2.3
+  flutter_gen_runner: ^5.8.0
 
 
 flutter_launcher_icons:
@@ -150,7 +153,6 @@ flutter:
     - assets/images/blob.png
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/images/backbutton.svg
     - assets/fonts/
     - assets/images/
     - assets/lottie_animations/
@@ -181,6 +183,20 @@ flutter:
         - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
           weight: 900
           style: italic
+
+flutter_gen:
+  output: lib/gen/
+  class_name: Assets
+  integrations:
+  flutter_svg: true
+  flare_flutter: true
+  rive: true
+  lottie: true
+  gen_package_path: true
+  ignore_resolution: true
+  omit_path_levels: 3
+  format_dart_code: false
+  
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"

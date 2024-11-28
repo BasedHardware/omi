@@ -16,6 +16,9 @@ class AddAppProvider extends ChangeNotifier {
   AppProvider? appProvider;
 
   GlobalKey<FormState> formKey = GlobalKey<FormState>();
+  GlobalKey<FormState> metadataKey = GlobalKey<FormState>();
+  GlobalKey<FormState> externalIntegrationKey = GlobalKey<FormState>();
+  GlobalKey<FormState> promptKey = GlobalKey<FormState>();
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
@@ -48,6 +51,7 @@ class AddAppProvider extends ChangeNotifier {
   bool isLoading = false;
   bool isUpdating = false;
   bool isSubmitting = false;
+  bool isValid = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
@@ -104,6 +108,9 @@ class AddAppProvider extends ChangeNotifier {
       webhookUrlController.text = app.externalIntegration!.webhookUrl;
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      if (app.externalIntegration!.authSteps.isNotEmpty) {
+        authUrlController.text = app.externalIntegration!.authSteps.first.url;
+      }
     }
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
@@ -111,6 +118,11 @@ class AddAppProvider extends ChangeNotifier {
     if (app.memoryPrompt != null) {
       memoryPromptController.text = app.memoryPrompt!.decodeString;
     }
+    if (app.proactiveNotification != null) {
+      selectedScopes = app.getNotificationScopesFromIds(
+          capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
+    }
+    checkValidity();
     setIsLoading(false);
     notifyListeners();
   }
@@ -141,6 +153,20 @@ class AddAppProvider extends ChangeNotifier {
     categories = await getAppCategories();
     appProvider!.categories = categories;
     notifyListeners();
+  }
+
+  String mapCategoryIdToName(String? id) {
+    if (id == null) {
+      return '';
+    }
+    return categories.firstWhere((element) => element.id == id).title;
+  }
+
+  String? mapTriggerEventIdToName(String? id) {
+    if (id == null) {
+      return null;
+    }
+    return getTriggerEvents().firstWhere((element) => element.id == id).title;
   }
 
   Future<void> getAppCapabilities() async {
@@ -194,8 +220,59 @@ class AddAppProvider extends ChangeNotifier {
     return false;
   }
 
+  void checkValidity() {
+    isValid = isFormValid();
+    notifyListeners();
+  }
+
+  bool isFormValid() {
+    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null && termsAgreed) {
+      if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
+        bool isValid = false;
+        for (var capability in selectedCapabilities) {
+          if (capability.id == 'external_integration') {
+            if (externalIntegrationKey.currentState != null) {
+              isValid = externalIntegrationKey.currentState!.validate();
+            } else {
+              isValid = false;
+            }
+          }
+          if (capability.id == 'chat') {
+            isValid = chatPromptController.text.isNotEmpty;
+          }
+          if (capability.id == 'memories') {
+            isValid = memoryPromptController.text.isNotEmpty;
+          }
+          if (capability.id == 'proactive_notification') {
+            isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
+          }
+        }
+        return isValid;
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
   bool validateForm() {
     if (formKey.currentState!.validate()) {
+      if (promptKey.currentState != null) {
+        if (!promptKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (metadataKey.currentState != null) {
+        if (!metadataKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (externalIntegrationKey.currentState != null) {
+        if (!externalIntegrationKey.currentState!.validate()) {
+          return false;
+        }
+      }
       if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
         if (selectedScopes.isEmpty) {
           AppSnackbar.showSnackbarError('Please select one more core capability for your app to proceed');
@@ -377,6 +454,7 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
       }
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -394,6 +472,7 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
       }
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -403,6 +482,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       selectedCapabilities.add(capability);
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -416,6 +496,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       selectedScopes.add(scope);
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -464,6 +545,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     termsAgreed = agreed;
+    checkValidity();
     notifyListeners();
   }
 
@@ -480,6 +562,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     appCategory = category;
+    checkValidity();
     notifyListeners();
   }
 }
