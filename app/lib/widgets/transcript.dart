@@ -68,10 +68,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   children: [
                     Image.asset(
                       data.isUser
-                          ? 'assets/images/speaker_0_icon.png'
+                          ? Assets.images.speaker0Icon.path
                           : person != null
                               ? speakerImagePath[person.colorIdx!]
-                              : 'assets/images/speaker_1_icon.png',
+                              : Assets.images.speaker1Icon.path,
                       width: 26,
                       height: 26,
                     ),
