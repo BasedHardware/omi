@@ -9,6 +9,7 @@ from models.memory import CategoryEnum
 
 
 class FactCategory(str, Enum):
+    core = "core"
     hobbies = "hobbies"
     lifestyle = "lifestyle"
     interests = "interests"
