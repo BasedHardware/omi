@@ -43,8 +43,7 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    new_app_id = slugify(data['name']) + '-' + str(ULID())
-    data['id'] = new_app_id
+    data['id'] = str(ULID())
     if external_integration := data.get('external_integration'):
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):
