@@ -23,6 +23,7 @@ from utils.llm import (
     retrieve_context_dates,
     qa_rag,
     retrieve_is_an_omi_question,
+    retrieve_is_an_omi_question,
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
@@ -65,6 +66,7 @@ def determine_conversation_type(
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
     is_omi_question = retrieve_is_an_omi_question(s.get("messages", []))
     # TODO: after asked many questions this is causing issues.
+    # TODO: an option to be considered, single prompt outputs response needed type (omi,no context, context, suggestion)
     if is_omi_question:
         return "omi_question"
 
@@ -210,8 +212,8 @@ def _pretty_print_conversation(messages: List[Message]):
 
 
 if __name__ == "__main__":
-    graph.get_graph().draw_png("workflow.png")
-    uid = "ccQJWj5mwhSY1dwjS1FPFBfKIXe2"
+    # graph.get_graph().draw_png("workflow.png")
+    uid = "viUv7GtdoHXbK1UBCDlPuTDuPgJ2"
     # def _send_message(text: str, sender: str = 'human'):
     #     message = Message(
     #         id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
@@ -222,8 +224,9 @@ if __name__ == "__main__":
         Message(
             id=str(uuid.uuid4()),
             # text="What did I do yesterday?",
-            # text="What are my main conversations topics?",
-            text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
+            # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
+            text="Should I build the features myself or hire people?",
+            # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
             created_at=datetime.datetime.now(datetime.timezone.utc),
             sender="human",
             type="text",
