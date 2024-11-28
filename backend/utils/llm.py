@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
-from database.redis_db import add_filter_category_item, add_filter_category_items
+from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message
 from models.facts import Fact
