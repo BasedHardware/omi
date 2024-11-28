@@ -371,7 +371,7 @@ class NormalMessageWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
+          padding: const EdgeInsets.only(bottom: 4.0),
           child: Text(
             formatChatTimestamp(createdAt),
             style: TextStyle(
@@ -440,7 +440,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4.0, bottom: 4.0),
+          padding: const EdgeInsets.only(bottom: 4.0),
           child: Text(
             formatChatTimestamp(widget.date),
             style: TextStyle(
@@ -630,7 +630,9 @@ class CopyButton extends StatelessWidget {
               'Copy message',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            SizedBox(width: 8,),
+            const SizedBox(
+              width: 8,
+            ),
           ],
         ),
       ),
