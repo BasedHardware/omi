@@ -15,7 +15,7 @@ def get_prompt_facts(uid: str) -> str:
 
 def get_prompt_data(uid: str) -> Tuple[str, List[Fact], List[Fact]]:
     # TODO: cache this
-    existing_facts = facts_db.get_facts(uid)
+    existing_facts = facts_db.get_facts(uid, limit=250)  # TODO: what the fuck to do here? too much context for llm
     user_made = [Fact(**fact) for fact in existing_facts if fact['manually_added']]
     # TODO: filter only reviewed True
     generated = [Fact(**fact) for fact in existing_facts if not fact['manually_added']]
