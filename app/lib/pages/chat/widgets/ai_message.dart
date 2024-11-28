@@ -194,14 +194,14 @@ Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) 
             setMessageNps(0);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
         ),
         IconButton(
           onPressed: () {
             setMessageNps(1);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
         ),
       ],
     ),
@@ -561,13 +561,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+  final bool isUserMessage;
 
-  const CopyButton({super.key, required this.messageText});
+  const CopyButton({
+    super.key,
+    required this.messageText,
+    this.isUserMessage = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 6.0, 0.0, 0.0),
+      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8, 0.0, 0.0),
       child: InkWell(
         splashColor: Colors.transparent,
         focusColor: Colors.transparent,
@@ -578,7 +583,7 @@ class CopyButton extends StatelessWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Response copied to clipboard.',
+                'Message copied to clipboard.',
                 style: TextStyle(
                   color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 12.0,
@@ -590,6 +595,7 @@ class CopyButton extends StatelessWidget {
         },
         child: Row(
           mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: isUserMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
@@ -600,9 +606,10 @@ class CopyButton extends StatelessWidget {
               ),
             ),
             Text(
-              'Copy response',
+              'Copy message',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            SizedBox(width: 8,),
           ],
         ),
       ),

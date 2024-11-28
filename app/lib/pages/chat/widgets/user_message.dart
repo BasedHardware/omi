@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 
 class HumanMessage extends StatelessWidget {
@@ -25,6 +26,8 @@ class HumanMessage extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
+          CopyButton(messageText: message.text, isUserMessage: true,),
+
         ],
       ),
     );

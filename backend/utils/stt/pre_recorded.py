@@ -27,7 +27,7 @@ def fal_whisperx(
             },
         )
         result = handler.get()
-        print(result)
+        # print(result)
         words = result.get('chunks', [])
         if not words:
             raise Exception('No chunks found')

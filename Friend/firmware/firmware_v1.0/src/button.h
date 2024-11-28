@@ -3,8 +3,6 @@
 
 typedef enum {
     IDLE, 
-    ONE_PRESS,
-    TWO_PRESS,
     GRACE
 } FSM_STATE_T;
 

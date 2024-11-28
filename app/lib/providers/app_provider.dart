@@ -35,6 +35,21 @@ class AppProvider extends BaseProvider {
   List<App> get userPublicApps =>
       apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
 
+  Future<App?> getAppFromId(String id) async {
+    if (apps.isEmpty) {
+      apps = SharedPreferencesUtil().appsList;
+    }
+    var app = apps.firstWhereOrNull((app) => app.id == id);
+    if (app == null) {
+      var appRes = await getAppDetailsServer(id);
+      if (appRes != null) {
+        app = App.fromJson(appRes);
+      }
+      return app;
+    }
+    return app;
+  }
+
   void updateInstalledAppsOptionSelected(bool value) {
     installedAppsOptionSelected = value;
     notifyListeners();
@@ -185,7 +200,7 @@ class AppProvider extends BaseProvider {
     if (isLoading) return;
     setIsLoading(true);
     apps = await retrieveApps();
-    appLoading = List.filled(apps.length, false);
+    appLoading = List.filled(apps.length, false, growable: true);
     setIsLoading(false);
     notifyListeners();
   }
@@ -194,6 +209,16 @@ class AppProvider extends BaseProvider {
     var idx = apps.indexWhere((element) => element.id == app.id);
     if (idx != -1) {
       apps[idx] = app;
+      updatePrefApps();
+      setApps();
+    }
+    notifyListeners();
+  }
+
+  void updateLocalAppReviewResponse(String appId, String response, String reviewId) {
+    var idx = apps.indexWhere((element) => element.id == appId);
+    if (idx != -1) {
+      apps[idx].updateReviewResponse(response, reviewId, DateTime.now());
       updatePrefApps();
       setApps();
     }
@@ -221,7 +246,10 @@ class AppProvider extends BaseProvider {
   Future deleteApp(String appId) async {
     var res = await deleteAppServer(appId);
     if (res) {
-      apps.removeWhere((app) => app.id == appId);
+      var appIndex = apps.indexWhere((app) => app.id == appId);
+      apps.removeAt(appIndex);
+      filteredApps.removeWhere((app) => app.id == appId);
+      appLoading.removeAt(appIndex);
       updatePrefApps();
       setApps();
       AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
@@ -235,7 +263,8 @@ class AppProvider extends BaseProvider {
     appPublicToggled = value;
     changeAppVisibilityServer(appId, value);
     getApps();
-    apps.removeWhere((app) => app.id == appId);
+    var appIndex = apps.indexWhere((app) => app.id == appId);
+    apps[appIndex].private = !value;
     updatePrefApps();
     setApps();
     AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');

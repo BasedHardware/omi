@@ -57,7 +57,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}';
-    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v2/listen$params';
+    String url = '${Env.apiBaseUrl!.replaceAll('https', 'wss')}v3/listen$params';
 
     _socket = PureSocket(url);
     _socket.setListener(this);
@@ -78,7 +78,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       debugPrint("Can not connect to websocket");
     }
   }
-
   Future stop({String? reason}) async {
     await _socket.stop();
     _listeners.clear();

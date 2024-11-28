@@ -25,6 +25,8 @@ import {
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import PaidAmountDialog from '@/src/components/dashboard/paidamount';
+import { PluginStat, Plugin } from '../page';
+import { headers } from 'next/headers';
 
 const COST_CONSTANT = 0.05;
 
@@ -53,6 +55,16 @@ export default async function PluginDetailView({ params }: { params: { id: strin
   //     document.documentElement.classList.remove('dark');
   //   }
   // }, [darkMode]);
+
+  const userAgent = headers().get('user-agent') || '';
+  const isAndroid = /android/i.test(userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+
+  const link = isAndroid
+  ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+  : isIOS
+  ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+  : 'https://omi.me';
 
   return (
     <div className="bg-gray-100 transition-colors duration-300 dark:bg-gray-900">
@@ -166,7 +178,9 @@ export default async function PluginDetailView({ params }: { params: { id: strin
               {/*<PaidAmountDialog plugin={plugin} />*/}
             </div>
             <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
-              <Link href={`https://omi.me`}>Try it</Link>
+              <Link href={link}>
+                Try it
+              </Link>
             </Button>
             <div className="mb-2 flex items-center">
               <Star className="mr-2 h-6 w-6 text-yellow-400" />
