@@ -20,5 +20,5 @@ def get_prompt_data(uid: str) -> Tuple[str, List[Fact], List[Fact]]:
     # TODO: filter only reviewed True
     generated = [Fact(**fact) for fact in existing_facts if not fact['manually_added']]
     user_name = get_user_name(uid)
-    print('get_prompt_data', user_name, len(user_made), len(generated))
+    # print('get_prompt_data', user_name, len(user_made), len(generated))
     return user_name, user_made, generated

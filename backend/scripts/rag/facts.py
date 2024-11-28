@@ -4,19 +4,16 @@ from typing import Tuple
 import firebase_admin
 
 from _shared import *
-from database._client import *
 from models.facts import Fact, FactDB
 
 firebase_admin.initialize_app()
-from database.auth import get_user_name
 from utils.llm import new_facts_extractor
+import database.facts as facts_db
 
 
-def get_facts_from_memory(memories: List[dict], uid: str) -> List[Tuple[str, List[Fact]]]:
+def get_facts_from_memories(memories: List[dict], uid: str) -> List[Tuple[str, List[Fact]]]:
     all_facts = {}
-    user_name = get_user_name(uid)
-    print('User:', user_name)
-    chunks = [memories[i:i + 50] for i in range(0, len(memories), 50)]
+    chunks = [memories[i:i + 25] for i in range(0, len(memories), 25)]
 
     def execute(chunk):
         only_facts: List[Fact] = []
@@ -37,40 +34,42 @@ def get_facts_from_memory(memories: List[dict], uid: str) -> List[Tuple[str, Lis
 
     [t.start() for t in threads]
     [t.join() for t in threads]
-    data: List[Tuple[str, List[Fact]]] = []
-    for key, value in all_facts.items():
-        data.append([key, value])
 
-    return data
+    for key, value in all_facts.items():
+        memory_id, facts = key, value
+        memory = next((m for m in memories if m['id'] == memory_id), None)
+        parsed_facts = []
+        for fact in facts:
+            parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category']))
+        facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+
 
 
 def execute_for_user(uid: str):
     facts_db.delete_facts(uid)
 
     memories = memories_db.get_memories(uid, limit=2000)
-    data: List[Tuple[str, List[Fact]]] = get_facts_from_memory(memories, uid)
-    parsed_facts = []
-    for item in data:
-        memory_id, facts = item
-        memory = next((m for m in memories if m['id'] == memory_id), None)
-        for fact in facts:
-            parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category']))
-        facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+    get_facts_from_memories(memories, uid)
 
 
 def script_migrate_users():
-    uids = get_users_uid()
-    print('Migrating', len(uids), 'users')
-    # uids = ['DX8n89KAmUaG9O7Qvj8xTi81Zu12']
+    # uids = get_users_uid()
+    # print('Migrating', len(uids), 'users')
+    uids = ['yOnlnL4a3CYHe6Zlfotrngz9T3w2']
+    execute_for_user(uids[0])
 
-    threads = []
-    for uid in uids:
-        t = threading.Thread(target=execute_for_user, args=(uid,))
-        threads.append(t)
+    # threads = []
+    # for uid in uids:
+    #     t = threading.Thread(target=execute_for_user, args=(uid,))
+    #     threads.append(t)
 
-    chunk_size = 25
-    chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
-    for i, chunk in enumerate(chunks):
-        print('STARTING CHUNK', i + 1)
-        [t.start() for t in chunk]
-        [t.join() for t in chunk]
+    # chunk_size = 1
+    # chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
+    # for i, chunk in enumerate(chunks):
+    #     print('STARTING CHUNK', i + 1)
+    #     [t.start() for t in chunk]
+    #     [t.join() for t in chunk]
+
+
+if __name__ == '__main__':
+    script_migrate_users()
