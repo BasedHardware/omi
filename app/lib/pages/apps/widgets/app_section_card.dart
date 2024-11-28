@@ -5,7 +5,6 @@ import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class AppSectionCard extends StatelessWidget {
@@ -38,9 +37,9 @@ class AppSectionCard extends StatelessWidget {
           Expanded(
             child: GridView.builder(
               scrollDirection: Axis.horizontal,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                childAspectRatio: 0.25,
+                childAspectRatio: MediaQuery.sizeOf(context).width < 400 ? 0.25 : 0.3,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -85,18 +84,18 @@ class SectionAppItemCard extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
-                  width: 52,
-                  height: 52,
+                  width: MediaQuery.sizeOf(context).width * 0.12,
+                  height: MediaQuery.sizeOf(context).width * 0.12,
                   decoration: BoxDecoration(
                     shape: BoxShape.rectangle,
                     borderRadius: BorderRadius.circular(8),
                     image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                   ),
                 ),
-                placeholder: (context, url) => const SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: CircularProgressIndicator(
+                placeholder: (context, url) => SizedBox(
+                  width: MediaQuery.sizeOf(context).width * 0.12,
+                  height: MediaQuery.sizeOf(context).width * 0.12,
+                  child: const CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
@@ -116,9 +115,10 @@ class SectionAppItemCard extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        app.category.decodeString,
+                        app.getCategoryName(),
                         maxLines: 2,
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                        style:
+                            TextStyle(color: Colors.grey, fontSize: MediaQuery.sizeOf(context).width < 400 ? 12 : 14),
                       ),
                     ),
                     app.ratingAvg != null || app.installs > 0
