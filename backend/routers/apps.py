@@ -40,6 +40,7 @@ def get_approved_apps(include_reviews: bool = False):
 def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
+    data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     new_app_id = slugify(data['name']) + '-' + str(ULID())
