@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-from datetime import datetime, timezone
 from typing import List, Union
 
 import redis
@@ -137,6 +136,7 @@ def get_plugin_reviews(plugin_id: str) -> dict:
         return {}
     return eval(reviews)
 
+
 def get_plugins_reviews(plugin_ids: list) -> dict:
     if not plugin_ids:
         return {}
@@ -168,6 +168,7 @@ def get_plugin_installs_count(plugin_id: str) -> int:
     if not count:
         return 0
     return int(count)
+
 
 def get_plugins_installs_count(plugin_ids: list) -> dict:
     if not plugin_ids:
@@ -344,14 +345,17 @@ def save_migrated_retrieval_memory_id(memory_id: str):
 def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
     return r.sismember('migrated_retrieval_memory_ids', memory_id)
 
+
 def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{plugin_id}:proactive_noti_sent_at', ts, ex=ttl)
+
 
 def get_proactive_noti_sent_at(uid: str, plugin_id: str):
     val = r.get(f'{uid}:{plugin_id}:proactive_noti_sent_at')
     if not val:
         return None
     return int(val)
+
 
 def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
     return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')

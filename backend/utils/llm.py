@@ -385,9 +385,9 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
 
     prompt = f"""
     You are an assistant for answering questions about the app Omi, also known as Friend.
-    Continue the conversation, answering the question based on the context provided.
+    Continue the conversation, answering the question based on the documentation provided.
     
-    Context:
+    Documentation:
     ```
     {context}
     ```
@@ -412,8 +412,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
 
     prompt = f"""
     You are an assistant for question-answering tasks. 
-    
-    Your task is to use the context provided to answer the user question.
+    You answer question in the most personalized way possible, using the context provided.
     
     If the user is asking for advice/recommendations, you must always answer, even if there's no context at all.
     Never say that you don't have enough information, unless the user is referring or specifically asking about stuff in the past, and nothing related was provided.
@@ -427,8 +426,10 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
 
     Context:
     ```
+    **User Facts:**
     {facts_str.strip()}
     
+    **Related Conversations:**
     {context}
     ```
     Answer:
@@ -503,7 +504,7 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        # max_items=3,
+        max_items=5,
         description="List of new user facts, preferences, interests, or topics.",
     )
 
