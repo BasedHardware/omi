@@ -260,6 +260,19 @@ def get_memory_uid(memory_id: str) -> str:
         return ''
     return uid.decode()
 
+def get_memory_uids(memory_ids: list) -> dict:
+    if not memory_ids:
+        return {}
+
+    memory_keys = [f'memories-visibility:{memory_id}' for memory_id in memory_ids]
+    uids = r.mget(memory_keys)
+    if uids is None:
+        return {}
+    memory_uids = {}
+    for memory_id, uid in zip(memory_ids, uids):
+        if uid:
+            memory_uids[memory_id] = uid.decode()
+    return memory_uids
 
 def add_public_memory(memory_id: str):
     r.sadd('public-memories', memory_id)
@@ -327,6 +340,10 @@ def get_filter_category_items(uid: str, category: str) -> List[str]:
 
 def add_filter_category_item(uid: str, category: str, item: str):
     r.sadd(f'users:{uid}:filters:{category}', item)
+
+def add_filter_category_items(uid: str, category: str, items: list):
+    if items:
+        r.sadd(f'users:{uid}:filters:{category}', *items)
 
 
 def remove_filter_category_item(uid: str, category: str, item: str):

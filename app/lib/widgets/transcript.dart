@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -67,10 +68,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   children: [
                     Image.asset(
                       data.isUser
-                          ? 'assets/images/speaker_0_icon.png'
+                          ? Assets.images.speaker0Icon.path
                           : person != null
                               ? speakerImagePath[person.colorIdx!]
-                              : 'assets/images/speaker_1_icon.png',
+                              : Assets.images.speaker1Icon.path,
                       width: 26,
                       height: 26,
                     ),
