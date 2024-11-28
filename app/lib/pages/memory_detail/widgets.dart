@@ -634,7 +634,7 @@ class GetAppsWidgets extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () {
-                    routeToPage(context, const AppsPage());
+                    routeToPage(context, const AppsPage(showAppBar: true));
                     MixpanelManager().pageOpened('Memory Detail Apps');
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
