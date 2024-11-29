@@ -227,7 +227,8 @@ def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
         {'title': 'User Facts', 'id': 'user_facts'},
-        {'title': 'User Memories', 'id': 'user_context'}
+        {'title': 'User Memories', 'id': 'user_context'},
+        {'title': 'User Chat', 'id': 'user_chat'}
     ]
 
 
@@ -243,7 +244,8 @@ def get_plugin_capabilities():
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
             {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'}
+            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Chat', 'id': 'user_chat'}
         ]}
     ]
 

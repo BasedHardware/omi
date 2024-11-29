@@ -857,7 +857,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
 # ************* PROACTIVE NOTIFICATION PLUGIN **************
 # **************************************************
 
-def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str) -> str:
+def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str, chat_messages: List[Message]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     prompt = plugin_prompt
@@ -870,6 +870,9 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             continue
         if param == "user_context":
             prompt = prompt.replace("{{user_context}}", context if context else "")
+            continue
+        if param == "user_chat":
+            prompt = prompt.replace("{{user_chat}}", Message.get_messages_as_string(chat_messages) if chat_messages else "")
             continue
     prompt = prompt.replace('    ', '').strip()
     # print(prompt)
