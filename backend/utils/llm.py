@@ -496,7 +496,8 @@ class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
         max_items=3,
-        description="List of **new** facts.",
+        description="List of **new** facts. If any",
+        default=[],
     )
 
 
@@ -516,7 +517,7 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment], user_name: 
 You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
 
 You will be provided with a low-quality audio transcript of a conversation or something {user_name} listened to, along with a list of existing facts about {user_name}. \
-Your task is to identify **new** facts about {user_name}, such as age, city of residence, marital status, health, friends' names, \
+Your task is to identify **new** facts about {user_name} if any, such as age, city of residence, marital status, health, friends' names, \
 occupation, allergies, preferences, interests, or any other important information.
 
 **Categories for Facts**:
@@ -554,18 +555,21 @@ Each fact you provide should fall under one of the following categories:
 
 **Output Instructions**:
 
-- Provide none up to 3 valuable new facts.
-- If you do not find any new or noteworthy facts, provide an empty list.
+- Provide up to 3 valuable new facts.
+- If you do not find any new (different to the list of existing ones below) or new noteworthy facts, provide an empty list.
 - Do not include any explanations or additional text; only list the facts.
 
-**Existing facts about {user_name}**:
-
+**Existing facts you already know about {user_name} (DO NOT REPEAT ANY)**:
+```
 {facts_str}
+```
 
 **Conversation transcript**:
+```
 {content}
+```
 '''.replace('    ', '').strip()
-
+    # print(prompt)
     try:
         with_parser = llm_mini.with_structured_output(Facts)
         response: Facts = with_parser.invoke(prompt)
