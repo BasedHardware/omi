@@ -52,6 +52,24 @@ def delete_generic_cache(path: str):
 
 
 # ******************************************************
+# ********************* APP BY ID **********************
+# ******************************************************
+
+def set_app_cache_by_id(app_id: str, app: dict):
+    r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
+
+
+def get_app_cache_by_id(app_id: str) -> dict | None:
+    app = r.get(f'apps:{app_id}')
+    app = json.loads(app) if app else None
+    return app
+
+
+def delete_app_cache_by_id(app_id: str):
+    r.delete(f'apps:{app_id}')
+
+
+# ******************************************************
 # *********************** APPS *************************
 # ******************************************************
 
@@ -260,6 +278,7 @@ def get_memory_uid(memory_id: str) -> str:
         return ''
     return uid.decode()
 
+
 def get_memory_uids(memory_ids: list) -> dict:
     if not memory_ids:
         return {}
@@ -273,6 +292,7 @@ def get_memory_uids(memory_ids: list) -> dict:
         if uid:
             memory_uids[memory_id] = uid.decode()
     return memory_uids
+
 
 def add_public_memory(memory_id: str):
     r.sadd('public-memories', memory_id)
@@ -340,6 +360,7 @@ def get_filter_category_items(uid: str, category: str) -> List[str]:
 
 def add_filter_category_item(uid: str, category: str, item: str):
     r.sadd(f'users:{uid}:filters:{category}', item)
+
 
 def add_filter_category_items(uid: str, category: str, items: list):
     if items:
