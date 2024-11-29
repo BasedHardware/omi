@@ -7,7 +7,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
-
 # import os
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.memories as memories_db
@@ -107,19 +106,20 @@ def retrieve_topics_filters(state: GraphState):
         # 'dates': get_filter_category_items(state.get('uid'), 'dates'),
     }
     result = select_structured_filters(state.get("parsed_question", ""), filters)
-    return {
-        "filters": {
-            "topics": result.get("topics", []),
-            "people": result.get("people", []),
-            "entities": result.get("entities", []),
-            # 'dates': result.get('dates', []),
-        }
+    filters = {
+        "topics": result.get("topics", []),
+        "people": result.get("people", []),
+        "entities": result.get("entities", []),
+        # 'dates': result.get('dates', []),
     }
+    print("retrieve_topics_filters filters", filters)
+    return {"filters": filters}
 
 
 def retrieve_date_filters(state: GraphState):
     dates_range = retrieve_context_dates(state.get("messages", []))
     if dates_range and len(dates_range) == 2:
+        print('retrieve_date_filters dates_range:', dates_range)
         return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
     return {"date_filters": {}}
 
@@ -222,10 +222,10 @@ if __name__ == "__main__":
     messages = [
         Message(
             id=str(uuid.uuid4()),
-            # text="What did I do yesterday?",
+            text="What did I record on November 17th?",
             # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
             # text="Should I build the features myself or hire people?",
-            text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
+            # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
             created_at=datetime.datetime.now(datetime.timezone.utc),
             sender="human",
             type="text",
