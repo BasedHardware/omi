@@ -117,6 +117,8 @@ def retrieve_topics_filters(state: GraphState):
 
 
 def retrieve_date_filters(state: GraphState):
+    print('retrieve_date_filters')
+    # TODO: if this makes vector search fail further, query firestore instead
     dates_range = retrieve_context_dates(state.get("messages", []))
     if dates_range and len(dates_range) == 2:
         print('retrieve_date_filters dates_range:', dates_range)
