@@ -302,7 +302,7 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/add-access', tags=['v1'])
+@router.post('/v1/apps/tester/access', tags=['v1'])
 def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -314,7 +314,7 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/remove-access', tags=['v1'])
+@router.delete('/v1/apps/tester/access', tags=['v1'])
 def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
