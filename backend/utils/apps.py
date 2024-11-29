@@ -63,11 +63,18 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
 
 
 def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
+    cached_app = get_app_cache_by_id(app_id)
+    if cached_app:
+        print('get_app_cache_by_id from cache')
+        if cached_app['private'] and cached_app['uid'] != uid:
+            return None
+        return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
     if app['private'] and app['uid'] != uid:
         return None
+    set_app_cache_by_id(app_id, app)
     return app
 
 
