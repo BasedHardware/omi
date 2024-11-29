@@ -319,6 +319,7 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
     
     For context, today is {datetime.now().isoformat()}.
+    Year: {datetime.now().year}, Month: {datetime.now().month}, Day: {datetime.now().day}
     
 
     Conversation:
