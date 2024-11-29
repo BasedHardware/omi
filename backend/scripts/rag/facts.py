@@ -15,6 +15,7 @@ def get_facts_from_memories(memories: List[dict], uid: str) -> List[Tuple[str, L
     all_facts = {}
     # TODO: use user_name here + facts_str as input to extractor
     # TODO: process every 20 memories threaded, save, and then use those prev facts in next 20 that will be executed.
+    # TODO: migrate Nik's and ask for feedback.
     chunks = [memories[i:i + 25] for i in range(0, len(memories), 25)]
 
     def execute(chunk):
@@ -58,19 +59,18 @@ def script_migrate_users():
     # uids = get_users_uid()
     # print('Migrating', len(uids), 'users')
     uids = ['yOnlnL4a3CYHe6Zlfotrngz9T3w2']
-    execute_for_user(uids[0])
 
-    # threads = []
-    # for uid in uids:
-    #     t = threading.Thread(target=execute_for_user, args=(uid,))
-    #     threads.append(t)
+    threads = []
+    for uid in uids:
+        t = threading.Thread(target=execute_for_user, args=(uid,))
+        threads.append(t)
 
-    # chunk_size = 1
-    # chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
-    # for i, chunk in enumerate(chunks):
-    #     print('STARTING CHUNK', i + 1)
-    #     [t.start() for t in chunk]
-    #     [t.join() for t in chunk]
+    chunk_size = 1
+    chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
+    for i, chunk in enumerate(chunks):
+        # print('STARTING CHUNK', i + 1)
+        [t.start() for t in chunk]
+        [t.join() for t in chunk]
 
 
 if __name__ == '__main__':
