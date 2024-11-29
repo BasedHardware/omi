@@ -79,10 +79,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     );
   }
 
-  Future getLatestVersion({required String deviceName}) async {
-    int device = deviceName == 'Friend' ? 1 : 2;
+  Future getLatestVersion(
+      {required String deviceModelNumber,
+      required String firmwareRevision,
+      required String hardwareRevision,
+      required String manufacturerName}) async {
     var res = await makeApiCall(
-        url: "${Env.apiBaseUrl}v1/firmware/latest?device=$device", headers: {}, body: '', method: 'GET');
+        url:
+            "${Env.apiBaseUrl}v2/firmware/latest?device_model=$deviceModelNumber&firmware_revision=$firmwareRevision&hardware_revision=$hardwareRevision&manufacturer_name=$manufacturerName",
+        headers: {},
+        body: '',
+        method: 'GET');
     if (res == null) {
       latestFirmwareDetails = {};
       return;
