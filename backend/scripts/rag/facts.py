@@ -16,7 +16,6 @@ def get_facts_from_memories(
         memories: List[dict], uid: str, user_name: str, existing_facts: List[Fact]
 ) -> List[Tuple[str, List[Fact]]]:
     print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
-    # TODO: migrate Nik's and ask for feedback.
 
     all_facts = {}
 
