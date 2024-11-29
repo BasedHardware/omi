@@ -1,6 +1,6 @@
 ---
 title: Developing Integration Apps for OMI
-description: ''
+description: ""
 ---
 
 Integration apps allow OMI to interact with external services and process data in real-time. This guide will walk
@@ -52,14 +52,13 @@ expect:
 
 `POST /your-endpoint?uid=user123`
 
-```python
+```json
 
 {
   "id": 0,
   "created_at": "2024-07-22T23:59:45.910559+00:00",
   "started_at": "2024-07-21T22:34:43.384323+00:00",
   "finished_at": "2024-07-21T22:35:43.384323+00:00",
-  "transcript": "Full transcript text...",
   "transcript_segments": [
     {
       "text": "Segment text",
@@ -107,7 +106,7 @@ uid as query parameters. Here's the structure:
 
 `POST /your-endpoint?session_id=abc123&uid=user123`
 
-```python
+```json
 [
   {
     "text": "Segment text",
@@ -146,9 +145,9 @@ Time to put your app through its paces! Follow these steps to test both types of
 
 4. Set your endpoint URL in the "Memory Creation Webhook" field. If you don't have an endpoint yet, [create a test webhook](https://webhook-test.com/)
 5. To test without creating a new memory:
-    - Go to any memory detail view.
-    - Click on the top right corner (3 dots menu).
-    - In the Developer Tools section, trigger the endpoint call with existing memory data.
+   - Go to any memory detail view.
+   - Click on the top right corner (3 dots menu).
+   - In the Developer Tools section, trigger the endpoint call with existing memory data.
 
 [![Memory trigger app](https://img.youtube.com/vi/dYVSbEpoV0U/0.jpg)](https://youtube.com/shorts/dYVSbEpoV0U)
 
@@ -167,73 +166,28 @@ For **Real-Time Processors**, simply start a conversation with OMI to see your a
 
 Happy app crafting! We can't wait to see what you create! 🎉
 
-### Step 4: Prepare Your App for Submission
+### Step 4: Submit Your App
 
-Create a JSON object defining your app:
+Submit your app using the Omi mobile app.
 
-```python
-{
-  "id": "your-app-id",
-  "name": "Your App Name",
-  "author": "Your Name",
-  "description": "Brief description of your app",
-  "image": "/apps/logos/your-app-logo.jpg",
-  "capabilities": [
-    "external_integration"
-  ],
-  "external_integration": {
-    // "memory_creation" | "transcript_processed"
-    "triggers_on": "memory_creation",
-    // a POST request with the memory object will be sent here as a JSON payload
-    "webhook_url": "https://your-endpoint-url.com",
-    // GET endpoint, that returns {'is_setup_completed': boolean} (Optional) if your app doesn't require setup, set to null.
-    "setup_completed_url": "https://your-setup-completion-url.com",
-    // Include a Readme with more details about your app in the PR
-    "setup_instructions_file_path": "/apps/instructions/your-app/README.md"
-  },
-  "deleted": false
-}
-```
+The **webhook URL** should be a POST request in which the memory object is sent as a JSON payload.
 
-### Integration Instructions Documentation
+The **setup completed URL** is optional and should be a GET endpoint that returns `{'is_setup_completed': boolean}`.
 
-Create a markdown file at `setup_instructions_file_path` with:
+The **auth URL** is optional as well and is utilized by users to setup your app. The `uid` query paramater will be appended to this URL upon usage.
 
-1. Step-by-step setup guide
+The setup instructions can be either a link to instructions or text instructions for users on how to setup your app.
+
+### Setup Instructions Documentation
+
+When writing your setup instructions, consider including:
+
+1. A step-by-step setup guide
 2. Screenshots (if applicable)
 3. Authentication steps (if required)
 4. Troubleshooting tips
 
 Example structure:
-
-```markdown
-# Setting Up [Your App Name]
-
-1. [First step]
-   ![Step 1](assets/step_1.png)
-
-2. [Second step]
-   ![Step 2](assets/step_2.png)
-
-## Authentication (if required)
-
-If your app requires user-specific authentication (e.g., connecting to a user's Notion table):
-
-1. In your authentication flow, use the `uid` query parameter we append this as query param to all your links in your
-   README, so you can map user credentials.
-2. [Authentication steps]
-3. After successful authentication, return `{"is_setup_completed": true}` from your `setup_completed_url`.
-
-If your app doesn't require user authentication (e.g., it's a purely LLM-based service), you can skip this section.
-
-## Troubleshooting
-
-[Common issues and solutions]
-
----
-
-> Experimental feature. Feedback: [your email]
-```
 
 **Notes:**
 

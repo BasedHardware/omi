@@ -50,7 +50,7 @@ clearly specify the information to be extracted and how it should be formatted.
 
 ### Step 3: Test Your App
 
-Before submitting, it's crucial to test your app to ensure it behaves as expected.
+Before making your app public, it's crucial to test your app to ensure it behaves as expected.
 
 #### For Memory Prompts:
 
@@ -64,32 +64,8 @@ Before submitting, it's crucial to test your app to ensure it behaves as expecte
 
 #### For Chat Prompts:
 
-Currently, there isn't an easy way to test chat prompts directly within the app. We're working on improving this
-process. In the meantime, you can use your best judgment and thorough proofreading to ensure your chat prompt will
-produce the desired results.
+Create a private app and use the bot normally.
 
-### Step 4: Prepare Your App for Submission
+### Step 4: Release Your App
 
-Once you're satisfied with your app's performance, you'll need to create a JSON object that defines your app for
-submission. Here's a template:
-
-```json
-{
-  "id": "your-app-id",
-  "name": "Your App Name",
-  "author": "Your Name",
-  "description": "A brief description of what your app does",
-  "image": "/apps/logos/your-app-logo.jpg",
-  "memories": false, 
-  "chat": true,
-  "capabilities": [
-    "chat"
-  ],
-  // or ["memories"] or ["chat", "memories"]
-  "chat_prompt": "Your chat prompt here",
-  // for Chat Prompts
-  "memory_prompt": "Your memory prompt here",
-  // for Memory Prompts
-  "deleted": false
-}
-```
+Once you're satisfied with your app's performance, you'll need to change your apps visibility to public or submit your app if you haven't already. Your app should be reviewed within a week.
