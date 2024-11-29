@@ -39,8 +39,8 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     #     else:
     #         fact['content'] = str(fact["content"]).capitalize()
     print(len(facts))
-    # return list(sorted(facts, key=lambda x: x['category'], reverse=True))
-    return facts
+    return list(sorted(facts, key=lambda x: x['category'], reverse=True))
+    # return facts
 
 
 @router.delete('/v1/facts/{fact_id}', tags=['facts'])
