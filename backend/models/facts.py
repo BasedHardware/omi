@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
@@ -25,9 +26,16 @@ class Fact(BaseModel):
 
     @staticmethod
     def get_facts_as_str(facts: List):
-        result = ''
+        grouped_facts = defaultdict(list)
         for f in facts:
-            result += f"- {f.content} ({f.category.value})\n"
+            grouped_facts[f.category].append(f"- {f.content}\n")
+
+        result = ''
+        for category, facts_list in grouped_facts.items():
+            result += f"{category.value.capitalize()}:\n"
+            result += ''.join(facts_list)
+            result += '\n'
+
         return result
 
 

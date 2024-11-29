@@ -501,8 +501,10 @@ class Facts(BaseModel):
     )
 
 
-def new_facts_extractor(uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
-                        facts_str: Optional[str] = None) -> List[Fact]:
+def new_facts_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
     if user_name is None or facts_str is None:
         user_name, facts_str = get_prompt_facts(uid)
 
@@ -555,7 +557,8 @@ Each fact you provide should fall under one of the following categories:
 
 **Output Instructions**:
 
-- Provide up to 3 valuable new facts.
+- Identify up to 3 valuable **new** facts (max 3).
+- Before outputting a fact, ensure it is not already known about {user_name}.
 - If you do not find any new (different to the list of existing ones below) or new noteworthy facts, provide an empty list.
 - Do not include any explanations or additional text; only list the facts.
 

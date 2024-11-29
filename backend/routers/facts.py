@@ -20,7 +20,7 @@ def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v1/facts', tags=['facts'], response_model=List[Fact])  # filters
 def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = facts_db.get_facts(uid, limit, offset)
-    facts = list(filter(lambda x: x['category'] == 'core', facts))
+    # facts = list(filter(lambda x: x['category'] == 'skills', facts))
     # TODO: consider this "$name" part if really is an issue, when changing name or smth.
     # TODO: what happens when "The User" is at the beggining, user will feel it random.
     # TODO: consider replika facts categories, probably perform better.
@@ -39,6 +39,7 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     #     else:
     #         fact['content'] = str(fact["content"]).capitalize()
     print(len(facts))
+    # return list(sorted(facts, key=lambda x: x['category'], reverse=True))
     return facts
 
 
