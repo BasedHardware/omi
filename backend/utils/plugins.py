@@ -10,7 +10,7 @@ from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
 from database.chat import add_plugin_message
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
-    set_generic_cache
+    set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
@@ -89,13 +89,18 @@ def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Pl
     # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_plugins = private_data + public_data
+
+    plugin_ids = [plugin['id'] for plugin in all_plugins]
+    plugins_install = get_plugins_installs_count(plugin_ids)
+    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
+
     plugins = []
     for plugin in all_plugins:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
+        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
         if include_reviews:
-            reviews = get_plugin_reviews(plugin['id'])
+            reviews = plugins_review.get(plugin['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             plugin_dict['reviews'] = []
@@ -122,13 +127,18 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
     user_enabled = set(get_enabled_plugins(uid)) if uid else []
     # print('get_plugins_data, user_enabled', user_enabled)
+
+    plugin_ids = [plugin['id'] for plugin in data]
+    plugins_install = get_plugins_installs_count(plugin_ids)
+    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
+
     plugins = []
     for plugin in data:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
+        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
         if include_reviews:
-            reviews = get_plugin_reviews(plugin['id'])
+            reviews = plugins_review.get(plugin['id'], {})
             sorted_reviews = reviews.values()
 
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None

@@ -495,13 +495,18 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        # max_items=3,
-        description="List of new user facts, preferences, interests, or topics.",
+        max_items=3,
+        description="List of **new** facts. If any",
+        default=[],
     )
 
 
-def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fact]:
-    user_name, facts_str = get_prompt_facts(uid)
+def new_facts_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 100:  # less than 100 chars, probably nothing
@@ -511,28 +516,63 @@ def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fac
     # TODO: make it more strict?
 
     prompt = f'''
-    You are an experienced detective, whose job is to create detailed profile personas based on conversations.
+You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
 
-    You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
-    Your task is to determine **new** facts like age, city of living, marriage status, health, friends names, preferences,work facts, allergies, preferences, interests or anything else that is important to know about {user_name}, based on the transcript.
-    Make sure these facts are:
-    - Relevant, and are not repetitive or similar to the existing facts we know about {user_name}, in this case, is preferred to have breadth than too much depth on specifics.
-    - Use a format of "{user_name} is 25 years old".
-    - Contain one of the categories available.
-    - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
-    - Examples: "{user_name} lives in San Francisco", "{user_name} is single but currently dating Anna", "{user_name} has a friend called "John" who is a 26yo entrepreneur working on a health startup", "{user_name} recently learned that it's important to hire people only when you have Product Market Fit", "{user_name} recently learned that Pavel Durov recommends not to drink alcohol".
+You will be provided with a low-quality audio transcript of a conversation or something {user_name} listened to, along with a list of existing facts about {user_name}. \
+Your task is to identify **new** facts about {user_name} if any, such as age, city of residence, marital status, health, friends' names, \
+occupation, allergies, preferences, interests, or any other important information.
 
-    This way we can create a more accurate profile. 
-    Include from 0 up to 5 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
+**Categories for Facts**:
 
-    Existing Facts that were before (ignore previous structure): {facts_str}
+Each fact you provide should fall under one of the following categories:
 
-    Conversation:
-    ```
-    {content}
-    ```
-    '''.replace('    ', '').strip()
+- **core**: Fundamental personal information like age, city of residence, marital status, and health.
+- **hobbies**: Activities {user_name} enjoys in their leisure time.
+- **lifestyle**: Details about {user_name}'s way of living, daily routines, or habits.
+- **interests**: Subjects or areas that {user_name} is curious or passionate about.
+- **habits**: Regular practices or tendencies of {user_name}.
+- **work**: Information related to {user_name}'s occupation, job, or professional life.
+- **skills**: Abilities or expertise that {user_name} possesses.
+- **other**: Any other relevant information that doesn't fit into the above categories.
 
+**Requirements for the facts you provide**:
+
+- **Relevance**: The facts should be pertinent and not repetitive or too similar to the existing facts about {user_name}. Aim for a broad range of information rather than excessive detail on specific points.
+- **Conciseness**: Present each fact clearly and succinctly in the format "{user_name} is 25 years old." or "{user_name} works as a software engineer."
+- **Inferred Information**: Include facts that are not only explicitly stated but also those that can be logically inferred from the conversation context and existing facts.
+- **Gender Neutrality**: Do not use gender-specific pronouns like "he," "she," "his," or "her," as {user_name}'s gender is unknown.
+- **Non-Repetition**: Ensure that none of the new facts repeat or closely mirror the existing facts.
+
+**Examples**:
+
+- "{user_name} is 28 years old and lives in New York City." (**core**)
+- "{user_name} has a friend named Martin who is a founder." (**core**)
+- "{user_name} enjoys hiking and photography during free time." (**hobbies**)
+- "{user_name} follows a vegetarian diet and practices yoga daily." (**lifestyle**)
+- "{user_name} is interested in artificial intelligence and machine learning." (**interests**)
+- "{user_name} reads a chapter of a book every night before bed." (**habits**)
+- "{user_name} works as a software engineer at a tech startup." (**work**)
+- "{user_name} is proficient in Python and Java programming languages." (**skills**)
+- "{user_name} has a pet dog named Max who is a golden retriever." (**other**)
+
+**Output Instructions**:
+
+- Identify up to 3 valuable **new** facts (max 3).
+- Before outputting a fact, ensure it is not already known about {user_name}.
+- If you do not find any new (different to the list of existing ones below) or new noteworthy facts, provide an empty list.
+- Do not include any explanations or additional text; only list the facts.
+
+**Existing facts you already know about {user_name} (DO NOT REPEAT ANY)**:
+```
+{facts_str}
+```
+
+**Conversation transcript**:
+```
+{content}
+```
+'''.replace('    ', '').strip()
+    # print(prompt)
     try:
         with_parser = llm_mini.with_structured_output(Facts)
         response: Facts = with_parser.invoke(prompt)
