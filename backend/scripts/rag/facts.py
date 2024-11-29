@@ -4,6 +4,7 @@ from typing import Tuple
 import firebase_admin
 
 from _shared import *
+from database.auth import get_user_name
 from models.facts import Fact, FactDB
 
 firebase_admin.initialize_app()
@@ -11,48 +12,53 @@ from utils.llm import new_facts_extractor
 import database.facts as facts_db
 
 
-def get_facts_from_memories(memories: List[dict], uid: str) -> List[Tuple[str, List[Fact]]]:
-    all_facts = {}
-    # TODO: use user_name here + facts_str as input to extractor
-    # TODO: process every 20 memories threaded, save, and then use those prev facts in next 20 that will be executed.
+def get_facts_from_memories(
+        memories: List[dict], uid: str, user_name: str, existing_facts: List[Fact]
+) -> List[Tuple[str, List[Fact]]]:
+    print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
     # TODO: migrate Nik's and ask for feedback.
-    chunks = [memories[i:i + 25] for i in range(0, len(memories), 25)]
 
-    def execute(chunk):
-        only_facts: List[Fact] = []
-        for i, memory in enumerate(chunk):
-            data = Memory(**memory)
-            new_facts = new_facts_extractor(uid, data.transcript_segments)
-            if not new_facts:
-                continue
-            all_facts[memory['id']] = new_facts
-            only_facts.extend(new_facts)
+    facts_str = f'you already know the following facts about {user_name}: \n{Fact.get_facts_as_str(existing_facts)}.'
+    all_facts = {}
 
-            print(uid, 'Memory #', i + 1, 'retrieved', len(new_facts), 'facts')
+    def execute(memory):
+        data = Memory(**memory)
+        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, facts_str)
+        if not new_facts:
+            return
+        all_facts[memory['id']] = new_facts
 
     threads = []
-    for chunk in chunks:
-        t = threading.Thread(target=execute, args=(chunk,))
+    for memory in memories:
+        t = threading.Thread(target=execute, args=(memory,))
         threads.append(t)
 
     [t.start() for t in threads]
     [t.join() for t in threads]
 
+    response = []
     for key, value in all_facts.items():
         memory_id, facts = key, value
         memory = next((m for m in memories if m['id'] == memory_id), None)
         parsed_facts = []
+        response += facts
         for fact in facts:
             parsed_facts.append(FactDB.from_fact(fact, uid, memory['id'], memory['structured']['category']))
         facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
+    return response
 
 
 def execute_for_user(uid: str):
     facts_db.delete_facts(uid)
-
+    print('execute_for_user', uid, 'deleted facts')
     memories = memories_db.get_memories(uid, limit=2000)
-    get_facts_from_memories(memories, uid)
+    print('execute_for_user', uid, 'found memories', len(memories))
+    user_name = get_user_name(uid)
+    facts = []
+    for i in range(0, len(memories), 20):
+        new_facts = get_facts_from_memories(memories[i:i + 20], uid, user_name, facts)
+        facts += new_facts
 
 
 def script_migrate_users():
