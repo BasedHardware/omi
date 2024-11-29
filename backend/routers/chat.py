@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 import database.chat as chat_db
 from database.apps import record_app_usage
@@ -14,6 +14,8 @@ from utils.apps import get_available_app_by_id
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat
+from utils.chat import process_voice_message_segment
+from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 
 router = APIRouter()
 
@@ -103,7 +105,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def send_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid, plugin_id)
 
 
@@ -113,3 +115,26 @@ def get_messages(uid: str = Depends(auth.get_current_user_uid)):
     if not messages:
         return [initial_message_util(uid)]
     return messages
+
+@router.post("/v1/voice-messages")
+async def create_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    paths = retrieve_file_paths(files, uid)
+    if len(paths) == 0:
+        raise HTTPException(status_code=400, detail='Paths is invalid')
+
+    # wav
+    wav_paths = decode_files_to_wav(paths)
+    if len(wav_paths) == 0:
+        raise HTTPException(status_code=400, detail='Wav path is invalid')
+
+    # segmented
+    segmented_paths = set()
+    retrieve_vad_segments(wav_paths[0], segmented_paths)
+    if len(segmented_paths) == 0:
+        raise HTTPException(status_code=400, detail='Segmented paths is invalid')
+
+    resp = process_voice_message_segment(list(segmented_paths)[0], uid)
+    if not resp:
+        raise HTTPException(status_code=400, detail='Bad params')
+
+    return resp

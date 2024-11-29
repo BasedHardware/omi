@@ -127,13 +127,13 @@ Widget buildMessageWidget(
 ) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeString,
-      updateMemory: updateMemory,
-      message: message,
-      setMessageNps: sendMessageNps,
-    );
+        showTypingIndicator: showTypingIndicator,
+        messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+        messageText: message.isEmpty ? '...' : message.text.decodeString,
+        updateMemory: updateMemory,
+        message: message,
+        setMessageNps: sendMessageNps,
+        date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
@@ -149,6 +149,7 @@ Widget buildMessageWidget(
       messageText: message.text.decodeString,
       message: message,
       setMessageNps: sendMessageNps,
+      createdAt: message.createdAt,
     );
   }
 }
@@ -194,14 +195,14 @@ Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) 
             setMessageNps(0);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
         ),
         IconButton(
           onPressed: () {
             setMessageNps(1);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
         ),
       ],
     ),
@@ -353,6 +354,7 @@ class NormalMessageWidget extends StatelessWidget {
   final String messageText;
   final ServerMessage message;
   final Function(int) setMessageNps;
+  final DateTime createdAt;
 
   const NormalMessageWidget({
     super.key,
@@ -360,6 +362,7 @@ class NormalMessageWidget extends StatelessWidget {
     required this.messageText,
     required this.message,
     required this.setMessageNps,
+    required this.createdAt,
   });
 
   @override
@@ -367,6 +370,16 @@ class NormalMessageWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Text(
+            formatChatTimestamp(createdAt),
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ),
         SelectionArea(
           child: showTypingIndicator
               ? const Row(
@@ -380,14 +393,9 @@ class NormalMessageWidget extends StatelessWidget {
                   ],
                 )
               : _getMarkdownWidget(context, messageText),
-          // AutoSizeText(
-          //         messageText,
-          //         // : utf8.decode(widget.message.text.codeUnits),
-          //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-          //       ),
         ),
         _getNpsWidget(context, message, setMessageNps),
-        CopyButton(messageText: messageText),
+        if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
     );
   }
@@ -400,6 +408,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final Function(ServerMemory) updateMemory;
   final ServerMessage message;
   final Function(int) setMessageNps;
+  final DateTime date;
 
   const MemoriesMessageWidget({
     super.key,
@@ -409,6 +418,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.updateMemory,
     required this.message,
     required this.setMessageNps,
+    required this.date,
   });
 
   @override
@@ -427,7 +437,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Text(
+            formatChatTimestamp(widget.date),
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ),
         SelectionArea(
             child: widget.showTypingIndicator
                 ? const Row(
@@ -561,13 +582,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+  final bool isUserMessage;
 
-  const CopyButton({super.key, required this.messageText});
+  const CopyButton({
+    super.key,
+    required this.messageText,
+    this.isUserMessage = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 6.0, 0.0, 0.0),
+      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8, 0.0, 0.0),
       child: InkWell(
         splashColor: Colors.transparent,
         focusColor: Colors.transparent,
@@ -578,7 +604,7 @@ class CopyButton extends StatelessWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Response copied to clipboard.',
+                'Message copied to clipboard.',
                 style: TextStyle(
                   color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 12.0,
@@ -590,6 +616,7 @@ class CopyButton extends StatelessWidget {
         },
         child: Row(
           mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: isUserMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
@@ -600,8 +627,11 @@ class CopyButton extends StatelessWidget {
               ),
             ),
             Text(
-              'Copy response',
+              'Copy message',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(
+              width: 8,
             ),
           ],
         ),

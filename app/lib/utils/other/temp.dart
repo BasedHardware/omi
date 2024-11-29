@@ -18,3 +18,20 @@ Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   }
   return Navigator.of(context).push(route);
 }
+
+String formatChatTimestamp(DateTime dateTime) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+  if (messageDate == today) {
+    // Today, show time only
+    return dateTimeFormat('h:mm a', dateTime);
+  } else if (messageDate == today.subtract(const Duration(days: 1))) {
+    // Yesterday
+    return 'Yesterday ${dateTimeFormat('h:mm a', dateTime)}';
+  } else {
+    // Other days
+    return dateTimeFormat('MMM d, h:mm a', dateTime);
+  }
+}
