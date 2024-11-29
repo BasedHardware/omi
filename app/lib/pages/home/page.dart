@@ -404,7 +404,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
-                      return const ChatAppsDropdownWidget();
+                      return ChatAppsDropdownWidget(
+                        controller: _controller,
+                      );
                     } else if (provider.selectedIndex == 2) {
                       return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
                     } else {

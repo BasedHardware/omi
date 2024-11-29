@@ -1,0 +1,74 @@
+&i2s0 {
+    status = "okay";
+    pinctrl-0 = <&i2s0_default>;
+    pinctrl-names = "default";
+    label = "I2S_0";
+};
+
+&pinctrl {
+    i2s0_default: i2s0_default {
+        group1 {
+            psels = <NRF_PSEL(I2S_SCK_M, 0, 29)>,    // SCK pin (bit clock) A3
+                    <NRF_PSEL(I2S_LRCK_M, 0, 28)>,   // LRCK pin (word select clock) A2
+                    <NRF_PSEL(I2S_SDOUT, 0, 3)>;    // SDOUT pin (data out) A1
+        };
+    };
+};
+
+&spi2 {
+    status = "okay";
+    pinctrl-0 = <&custom_spi>;
+    pinctrl-1 = <&custom_spi>;
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;  // CS pin on P0.28
+
+    sdhc0: sdhc@0 {
+        compatible = "zephyr,sdhc-spi-slot";
+        reg = <0>;
+        status = "okay";
+        label = "SDHC_0";
+        mmc {
+            compatible = "zephyr,sdmmc-disk";
+            status = "okay";
+        };
+        spi-max-frequency = <24000000>;  // 24 MHz SPI speed for SD card
+    };
+};
+
+&pinctrl {
+    custom_spi: custom_spi {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 1, 13)>,  // SCK on P1.13
+                    <NRF_PSEL(SPIM_MOSI, 1, 15)>, // MOSI on P1.15
+                    <NRF_PSEL(SPIM_MISO, 1, 14)>; // MISO on P1.14
+        };
+    };
+};
+
+&uart0 {
+    status = "disabled";
+};
+
+// &qspi {
+//     status = "disabled";
+// };
+
+&i2c0 {
+    lsm6ds3tr_c: lsm6ds3tr-c@6a {
+		compatible = "st,lsm6dsl";
+		reg = <0x6a>;
+		irq-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+        label = "b";
+        // wakeup-source = true;
+	};
+};
+
+&i2c1{
+    status = "disabled";
+};
+
+&temp {
+    status = "disabled";
+};
+

@@ -1,11 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
+import 'package:path/path.dart';
 
 Future<List<ServerMessage>> getMessagesServer() async {
   // TODO: Add pagination
@@ -71,4 +74,30 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
       throw Exception('Failed to send message');
     }
   });
+}
+
+Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/voice-messages'),
+  );
+  for (var file in files) {
+    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 200) {
+      debugPrint('sendVoiceMessageServer response body: ${jsonDecode(response.body)}');
+      return ((jsonDecode(response.body) ?? []) as List<dynamic>).map((m) => ServerMessage.fromJson(m)).toList();
+    } else {
+      debugPrint('Failed to upload sample. Status code: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadSample: $e');
+    throw Exception('An error occurred uploadSample: $e');
+  }
 }

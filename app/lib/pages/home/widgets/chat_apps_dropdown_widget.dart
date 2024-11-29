@@ -1,16 +1,18 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/page.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 class ChatAppsDropdownWidget extends StatelessWidget {
-  const ChatAppsDropdownWidget({super.key});
+  final PageController? controller;
+
+  ChatAppsDropdownWidget({super.key, this.controller});
+
+  final FocusNode focusNode = FocusNode();
 
   @override
   Widget build(BuildContext context) {
@@ -31,8 +33,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               ? GestureDetector(
                   onTap: () {
                     MixpanelManager().pageOpened('Chat Apps');
-
-                    routeToPage(context, const AppsPage(filterChatOnly: true));
+                    // routeToPage(context, const AppsPage(filterChatOnly: true));
+                    context.read<HomeProvider>().setIndex(2);
+                    controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                   },
                   child: const Row(
                     children: [
@@ -52,8 +55,11 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     value: provider.selectedChatAppId,
                     onChanged: (s) async {
                       if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                        routeToPage(context, const AppsPage(filterChatOnly: true));
+                        // routeToPage(context, const AppsPage(filterChatOnly: true));
                         MixpanelManager().pageOpened('Chat Apps');
+                        context.read<HomeProvider>().setIndex(2);
+                        controller?.animateToPage(2,
+                            duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                         return;
                       }
                       if (s == null || s == provider.selectedChatAppId) return;
@@ -61,7 +67,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       var app = provider.getSelectedApp();
                       context.read<MessageProvider>().sendInitialAppMessage(app);
                     },
-                    icon: Container(),
+                    focusNode: focusNode,
+                    // icon: Container(),
                     alignment: Alignment.center,
                     dropdownColor: Colors.black,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -84,12 +91,34 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(size: 20, Icons.chat, color: Colors.white),
+                Container(
+                  decoration: const BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage("assets/images/background.png"),
+                      fit: BoxFit.cover,
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                  ),
+                  height: 24,
+                  width: 24,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset(
+                        "assets/images/herologo.png",
+                        height: 16,
+                        width: 16,
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Text(
-                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps   ' : 'Select an App',
+                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps' : 'Omi',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                )
+                ),
+                // const SizedBox(width: 40),
+                // Icon(Icons.arrow_drop_down, color: Colors.white, size: 24)
               ],
             ),
           )

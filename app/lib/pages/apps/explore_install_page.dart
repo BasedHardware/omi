@@ -144,7 +144,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                           itemCount: provider.filters.length,
                         ))
                       : SizedBox(
-                          width: MediaQuery.sizeOf(context).width * 0.72,
+                          width: MediaQuery.sizeOf(context).width * 0.71,
                           height: 40,
                           child: TextFormField(
                             controller: searchController,
@@ -153,7 +153,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                               provider.searchApps(value);
                             },
                             decoration: InputDecoration(
-                              hintText: 'Search apps',
+                              hintText: 'Search Apps',
                               hintStyle: const TextStyle(color: Colors.white),
                               filled: true,
                               fillColor: Colors.grey[800],
@@ -266,7 +266,8 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                         .read<AppProvider>()
                         .apps
                         .where((p) => (p.installs > 50 && (p.ratingAvg ?? 0.0) > 4.0))
-                        .toList(),
+                        .toList()
+                        .sublist(0, 6),
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
