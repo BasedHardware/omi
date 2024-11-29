@@ -13,6 +13,8 @@ import database.facts as facts_db
 
 def get_facts_from_memories(memories: List[dict], uid: str) -> List[Tuple[str, List[Fact]]]:
     all_facts = {}
+    # TODO: use user_name here + facts_str as input to extractor
+    # TODO: process every 20 memories threaded, save, and then use those prev facts in next 20 that will be executed.
     chunks = [memories[i:i + 25] for i in range(0, len(memories), 25)]
 
     def execute(chunk):

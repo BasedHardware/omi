@@ -500,8 +500,11 @@ class Facts(BaseModel):
     )
 
 
-def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fact]:
-    user_name, facts_str = get_prompt_facts(uid)
+def new_facts_extractor(uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
+                        facts_str: Optional[str] = None) -> List[Fact]:
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
     if not content or len(content) < 100:  # less than 100 chars, probably nothing
         return []
