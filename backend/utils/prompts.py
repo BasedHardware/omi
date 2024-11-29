@@ -7,6 +7,9 @@ from langchain_core.prompts import ChatPromptTemplate
 # Never remove {format_instructions} variable, as this is what outputs an object instead of a string/json, thus breaking the app.
 # *
 
+
+# - **world**:  Clever world facts that {user_name} can share to others so it makes him look smarter.
+# - "{user_name} learned that second Notion cofounder joined 5 years after." (**world**)
 extract_facts_prompt = ChatPromptTemplate.from_messages([
     '''
     You are an experienced detective tasked with creating a detailed profile of {user_name} based on conversations.
@@ -46,6 +49,7 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
     - "{user_name} reads a chapter of a book every night before bed." (**habits**)
     - "{user_name} works as a software engineer at a tech startup." (**work**)
     - "{user_name} is proficient in Python and Java programming languages." (**skills**)
+    
     - "{user_name} has a pet dog named Max who is a golden retriever." (**other**)
 
     **Output Instructions**:
