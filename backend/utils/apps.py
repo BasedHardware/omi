@@ -98,9 +98,18 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
 
 
 def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
+    cached_app = get_app_cache_by_id(app_id)
+    if cached_app:
+        print('get_app_cache_by_id from cache')
+        if cached_app['private'] and cached_app['uid'] != uid:
+            return None
+        return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
+    if app['private'] and app['uid'] != uid:
+        return None
+    set_app_cache_by_id(app_id, app)
     return app
 
 
@@ -138,12 +147,17 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     else:
         all_apps = get_public_approved_apps_db()
         set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
+
+    app_ids = [app['id'] for app in all_apps]
+    plugins_install = get_plugins_installs_count(app_ids)
+    plugins_review = get_plugins_reviews(app_ids) if include_reviews else {}
+
     apps = []
     for app in all_apps:
         app_dict = app
-        app_dict['installs'] = get_plugin_installs_count(app['id'])
+        app_dict['installs'] = plugins_install.get(app['id'],0)
         if include_reviews:
-            reviews = get_plugin_reviews(app['id'])
+            reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             app_dict['reviews'] = []

@@ -6,8 +6,8 @@ import 'package:friend_private/providers/app_provider.dart';
 import 'package:provider/provider.dart';
 
 class AppsPage extends StatefulWidget {
-  final bool filterChatOnly;
-  const AppsPage({super.key, this.filterChatOnly = false});
+  final bool showAppBar;
+  const AppsPage({super.key, this.showAppBar = false});
 
   @override
   State<AppsPage> createState() => _AppsPageState();
@@ -26,7 +26,7 @@ class _AppsPageState extends State<AppsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: widget.filterChatOnly
+      appBar: widget.showAppBar
           ? AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
               automaticallyImplyLeading: true,

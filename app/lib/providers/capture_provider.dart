@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/memory.dart';
@@ -25,6 +28,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/enums.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
@@ -74,6 +78,10 @@ class CaptureProvider extends ChangeNotifier
   StreamSubscription? _bleBytesStream;
 
   get bleBytesStream => _bleBytesStream;
+
+  StreamSubscription? _bleButtonStream;
+  DateTime? _voiceCommandSession;
+  List<List<int>> _commandBytes = [];
 
   StreamSubscription? _storageStream;
 
@@ -162,11 +170,106 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<File> _flushBytesToTempFile(List<List<int>> chunk, int timerStart) async {
+    final directory = await getTemporaryDirectory();
+    String filePath = '${directory.path}/audio_${timerStart}.bin';
+    List<int> data = [];
+    for (int i = 0; i < chunk.length; i++) {
+      var frame = chunk[i];
+
+      // Format: <length>|<data> ; bytes: 4 | n
+      final byteFrame = ByteData(frame.length);
+      for (int i = 0; i < frame.length; i++) {
+        byteFrame.setUint8(i, frame[i]);
+      }
+      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+      data.addAll(byteFrame.buffer.asUint8List());
+    }
+    final file = File(filePath);
+    await file.writeAsBytes(data);
+
+    return file;
+  }
+
+  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    if (data.isEmpty) {
+      debugPrint("voice frames is empty");
+      return;
+    }
+
+    debugPrint("Send ${data.length} voice frames to backend");
+    var file =
+        await _flushBytesToTempFile(data, DateTime.now().millisecondsSinceEpoch ~/ 1000 - (data.length / 100).ceil());
+    try {
+      var messages = await sendVoiceMessageServer([file]);
+      debugPrint("Command respond: ${messages.map((m) => m.text).join(" | ")}");
+      if (messages.isNotEmpty) {
+        messageProvider?.refreshMessages();
+        _playSpeakerHaptic(deviceId, 2);
+      }
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+  }
+
+  // Just incase the ble connection get loss
+  void _watchVoiceCommands(String deviceId, DateTime session) {
+    Timer.periodic(const Duration(seconds: 3), (t) async {
+      debugPrint("voice command watch");
+      if (session != _voiceCommandSession) {
+        t.cancel();
+        return;
+      }
+      var value = await _getBleButtonState(deviceId);
+      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("watch device button ${buttonState}");
+
+      // Force process
+      if (buttonState == 5 && session == _voiceCommandSession) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(deviceId, data);
+      }
+    });
+  }
+
+  Future streamButton(String deviceId) async {
+    debugPrint('streamButton in capture_provider');
+    _bleButtonStream?.cancel();
+    _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (List<int> value) {
+      if (value.isEmpty) return;
+      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("device button ${buttonState}");
+
+      // start long press
+      if (buttonState == 3 && _voiceCommandSession == null) {
+        _voiceCommandSession = DateTime.now();
+        _commandBytes = [];
+        _watchVoiceCommands(deviceId, _voiceCommandSession!);
+        _playSpeakerHaptic(deviceId, 1);
+      }
+
+      // release
+      if (buttonState == 5 && _voiceCommandSession != null) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(deviceId, data);
+      }
+    });
+  }
+
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
     _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
+
+      // command button triggered
+      if (_voiceCommandSession != null) {
+        _commandBytes.add(value.sublist(3));
+      }
 
       // support: opus codec, 1m from the first device connectes
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
@@ -219,6 +322,14 @@ class CaptureProvider extends ChangeNotifier
     return connection.getAudioCodec();
   }
 
+  Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return false;
+    }
+    return connection.performPlayToSpeakerHaptic(level);
+  }
+
   Future<StreamSubscription?> _getBleStorageBytesListener(
     String deviceId, {
     required void Function(List<int>) onStorageBytesReceived,
@@ -239,6 +350,25 @@ class CaptureProvider extends ChangeNotifier
       return Future.value(null);
     }
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
+  Future<StreamSubscription?> _getBleButtonListener(
+    String deviceId, {
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleButtonListener(onButtonReceived: onButtonReceived);
+  }
+
+  Future<List<int>> _getBleButtonState(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(<int>[]);
+    }
+    return connection.getBleButtonState();
   }
 
   Future<bool> _recheckCodecChange() async {
@@ -274,6 +404,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Why is the _recordingDevice null at this point?
     if (_recordingDevice != null) {
+      await streamButton(_recordingDevice!.id);
       await streamAudioToWs(_recordingDevice!.id, codec);
     } else {
       // Is the app in foreground when this happens?

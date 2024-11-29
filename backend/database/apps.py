@@ -69,7 +69,7 @@ def get_public_apps_db(uid: str) -> List:
 
 
 def get_public_approved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False), FieldFilter('deleted', '==', False)]
     public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
