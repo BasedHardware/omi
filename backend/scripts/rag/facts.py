@@ -55,8 +55,9 @@ def execute_for_user(uid: str):
     print('execute_for_user', uid, 'found memories', len(memories))
     user_name = get_user_name(uid)
     facts = []
-    for i in range(0, len(memories), 20):
-        new_facts = get_facts_from_memories(memories[i:i + 20], uid, user_name, facts)
+    chunk_size = 10
+    for i in range(0, len(memories), chunk_size):
+        new_facts = get_facts_from_memories(memories[i:i + chunk_size], uid, user_name, facts)
         facts += new_facts
 
 
