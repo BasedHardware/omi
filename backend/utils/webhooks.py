@@ -165,3 +165,23 @@ def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
 
 def send_webhook_notification(token: str, message: str):
     send_notification(token, "Webhook" + ' says', message)
+
+def notifications_history_webhook(uid: str, message: NotificationMessage):
+    toggled = user_webhook_status_db(uid, WebhookType.notifications_history)
+    if toggled:
+        webhook_url = get_user_webhook_db(uid, WebhookType.notifications_history)
+        if not webhook_url:
+            return
+        webhook_url += f'?uid={uid}'
+        try:
+            response = requests.post(
+                webhook_url,
+                json=message.get_message_as_dict(message),
+                headers={'Content-Type': 'application/json'},
+                timeout=30,
+            )
+            print('notifications_history_webhook:', webhook_url, response.status_code)
+        except Exception as e:
+            print(f"Error sending notification to history webhook: {e}")
+    else:
+        return

@@ -331,7 +331,26 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      onSectionEnabledChanged: provider.onTranscriptsToggled),
+                      onSectionEnabledChanged: provider.onTranscriptsToggled,
+                  ),
+                  ToggleSectionWidget(
+                      isSectionEnabled: provider.notificationsHistoryToggled,
+                      sectionTitle: 'Notifications History',
+                      sectionDescription: 'Triggers when a notification is sent.',
+                      options: [
+                        TextField(
+                          controller: provider.webhookNotificationsHistory,
+                          obscureText: false,
+                          autocorrect: false,
+                          enabled: true,
+                          enableSuggestions: false,
+                          decoration: _getTextFieldDecoration('Endpoint URL'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      onSectionEnabledChanged: provider.onNotificationsHistoryToggled,
+                  ),
                   ToggleSectionWidget(
                       isSectionEnabled: provider.audioBytesToggled,
                       sectionTitle: 'Realtime Audio Bytes',
