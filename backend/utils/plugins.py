@@ -8,7 +8,7 @@ import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db
-from database.chat import add_plugin_message, get_messages
+from database.chat import add_plugin_message, get_plugin_messages
 from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache, get_plugins_reviews, get_plugins_installs_count
@@ -307,7 +307,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     # messages
     messages = []
     if 'user_chat' in filter_scopes:
-        messages = list(reversed([Message(**msg) for msg in get_messages(uid, limit=10)]))
+        messages = list(reversed([Message(**msg) for msg in get_plugin_messages(uid, plugin.id, limit=10)]))
 
     # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 

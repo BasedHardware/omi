@@ -6,7 +6,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews
+    set_app_money_made_cache, set_plugin_review, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
