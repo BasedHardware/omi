@@ -18,12 +18,11 @@ def get_facts_from_memories(
     print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
     # TODO: migrate Nik's and ask for feedback.
 
-    facts_str = f'you already know the following facts about {user_name}: \n{Fact.get_facts_as_str(existing_facts)}.'
     all_facts = {}
 
     def execute(memory):
         data = Memory(**memory)
-        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, facts_str)
+        new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Fact.get_facts_as_str(existing_facts))
         if not new_facts:
             return
         all_facts[memory['id']] = new_facts
@@ -64,7 +63,7 @@ def execute_for_user(uid: str):
 def script_migrate_users():
     # uids = get_users_uid()
     # print('Migrating', len(uids), 'users')
-    uids = ['yOnlnL4a3CYHe6Zlfotrngz9T3w2']
+    uids = ['viUv7GtdoHXbK1UBCDlPuTDuPgJ2']
 
     threads = []
     for uid in uids:
