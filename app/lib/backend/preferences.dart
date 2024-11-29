@@ -436,4 +436,14 @@ class SharedPreferencesUtil {
   String get customAuthPassword => getString('customAuthPassword') ?? '';
 
   set customAuthPassword(String value) => saveString('customAuthPassword', value);
+
+  // Notifications History Webhook
+  static const String _notificationsHistoryToggledKey = 'notifications_history_toggled';
+  static const String _webhookNotificationsHistoryKey = 'webhook_notifications_history';
+
+  bool get notificationsHistoryToggled => _prefs.getBool(_notificationsHistoryToggledKey) ?? false;
+  set notificationsHistoryToggled(bool value) => _prefs.setBool(_notificationsHistoryToggledKey, value);
+
+  String get webhookNotificationsHistory => _prefs.getString(_webhookNotificationsHistoryKey) ?? '';
+  set webhookNotificationsHistory(String value) => _prefs.setString(_webhookNotificationsHistoryKey, value);
 }

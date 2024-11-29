@@ -16,6 +16,7 @@ from models.app import App
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
+from omi.backend.utils.webhooks import notifications_history_webhook
 from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
 from utils.other.endpoints import timeit
@@ -392,4 +393,62 @@ def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, messa
         notification_type='plugin',
     )
 
+    # Send to notifications history webhook
+    notifications_history_webhook(token, ai_message)
+
     send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+def _process_proactive_notification(uid: str, token: str, plugin: App, data):
+    if not plugin.has_capability("proactive_notification") or not data:
+        print(f"Plugins {plugin.id} is not proactive_notification or data invalid", uid)
+        return None
+
+    # rate limits
+    if _hit_proactive_notification_rate_limits(uid, plugin):
+        print(f"Plugins {plugin.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
+        return None
+
+    max_prompt_char_limit = 8000
+    min_message_char_limit = 5
+
+    prompt = data.get('prompt', '')
+    if len(prompt) > max_prompt_char_limit:
+        send_plugin_notification(token, plugin.name, plugin.id, f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.")
+        print(f"Plugin {plugin.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
+        return None
+
+    filter_scopes = plugin.filter_proactive_notification_scopes(data.get('params', []))
+
+    # context
+    context = None
+    if 'user_context' in filter_scopes:
+        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        if len(memories) > 0:
+            context = Memory.memories_to_string(memories, True)
+    
+    # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
+
+    # retrive message
+    message = get_proactive_message(uid, prompt, filter_scopes, context)
+    if not message or len(message) < min_message_char_limit:
+        print(f"Plugins {plugin.id}, message too short", uid)
+        return None
+
+    # Create notification message
+    notification_message = NotificationMessage(
+        plugin_id=plugin.id,
+        from_integration='plugin',
+        type='proactive',
+        notification_type='info',
+        text=message,
+    )
+    
+    # Send to notifications history webhook
+    notifications_history_webhook(uid, notification_message)
+
+    # send notification
+    send_plugin_notification(token, plugin.name, plugin.id, message)
+    
+    # set rate
+    _set_proactive_noti_sent_at(uid, plugin)
+    return message
