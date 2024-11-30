@@ -209,7 +209,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
     } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
-      stateText = "Reconnecting";
+      stateText = "Listening...";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
