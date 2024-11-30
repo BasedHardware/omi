@@ -12,14 +12,14 @@ from pydantic import BaseModel, Field, ValidationError
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message
-from models.facts import Fact
+from models.facts import Fact, FactCategory
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
 from utils.memories.facts import get_prompt_facts
-from utils.prompts import extract_facts_prompt
+from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -535,6 +535,41 @@ def new_facts_extractor(
         return []
 
 
+class Learnings(BaseModel):
+    result: List[str] = Field(
+        min_items=0,
+        max_items=2,
+        description="List of **new** learnings. If any",
+        default=[],
+    )
+
+
+def new_learnings_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
+        learnings_str: Optional[str] = None
+) -> List[Fact]:
+    if user_name is None or learnings_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    if not content or len(content) < 100:
+        return []
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=Learnings)
+        chain = extract_learnings_prompt | llm_mini | parser
+        response: Learnings = chain.invoke({
+            'user_name': user_name,
+            'conversation': content,
+            'learnings_str': learnings_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return list(map(lambda x: Fact(content=x, category=FactCategory.learnings), response.result))
+    except Exception as e:
+        print(f'Error extracting new facts: {e}')
+        return []
+
+
 # **********************************
 # ************* TRENDS **************
 # **********************************
@@ -857,7 +892,8 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
 # ************* PROACTIVE NOTIFICATION PLUGIN **************
 # **************************************************
 
-def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str, chat_messages: List[Message]) -> str:
+def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str,
+                          chat_messages: List[Message]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     prompt = plugin_prompt
@@ -872,7 +908,8 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             prompt = prompt.replace("{{user_context}}", context if context else "")
             continue
         if param == "user_chat":
-            prompt = prompt.replace("{{user_chat}}", Message.get_messages_as_string(chat_messages) if chat_messages else "")
+            prompt = prompt.replace("{{user_chat}}",
+                                    Message.get_messages_as_string(chat_messages) if chat_messages else "")
             continue
     prompt = prompt.replace('    ', '').strip()
     # print(prompt)
