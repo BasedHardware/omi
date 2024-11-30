@@ -56,11 +56,12 @@ def get_public_apps_db(uid: str) -> List:
     public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
 
-    return [plugin for plugin in data if plugin['approved'] == True or plugin['uid'] == uid]
+    return [plugin for plugin in data if plugin.get('approved') == True or plugin.get('uid') == uid]
 
 
 def get_public_approved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False),
+               FieldFilter('deleted', '==', False)]
     public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
@@ -110,8 +111,8 @@ def change_app_approval_status(plugin_id: str, approved: bool):
 def get_app_usage_history_db(app_id: str):
     usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
     return [doc.to_dict() for doc in usage]
-  
-    
+
+
 # ********************************
 # *********** REVIEWS ************
 # ********************************
