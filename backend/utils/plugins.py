@@ -343,7 +343,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
                       response.text[:100])
                 return
 
-            if plugin.uid is None or plugin.uid == uid:
+            if plugin.uid is None or plugin.uid != uid:
                 record_plugin_usage(uid, plugin.id, UsageHistoryType.transcript_processed_external_integration, memory_id=memory_id)
 
             response_data = response.json()
