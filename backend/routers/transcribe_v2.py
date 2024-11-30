@@ -309,14 +309,18 @@ async def _websocket_util(
         # Transcript
         transcript_ws = None
         segment_buffers = []
+        in_progress_memory_id = None
 
-        def transcript_send(segments):
+        def transcript_send(segments, memory_id):
             nonlocal segment_buffers
+            nonlocal in_progress_memory_id
+            in_progress_memory_id = memory_id
             segment_buffers.extend(segments)
 
         async def transcript_consume():
             nonlocal websocket_active
             nonlocal segment_buffers
+            nonlocal in_progress_memory_id
             nonlocal transcript_ws
             nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
@@ -326,7 +330,7 @@ async def _websocket_util(
                         # 100|data
                         data = bytearray()
                         data.extend(struct.pack("I", 100))
-                        data.extend(bytes(json.dumps(segment_buffers), "utf-8"))
+                        data.extend(bytes(json.dumps({"segments":segment_buffers,"memory_id":in_progress_memory_id}), "utf-8"))
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
                     except websockets.exceptions.ConnectionClosed as e:
@@ -443,13 +447,13 @@ async def _websocket_util(
                 # Send to client
                 await websocket.send_json(segments)
 
-                # Send to external trigger
-                if transcript_send:
-                    transcript_send(segments)
-
                 memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+
+                # Send to external trigger
+                if transcript_send:
+                    transcript_send(segments,memory.id)
 
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
