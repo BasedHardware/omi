@@ -93,14 +93,18 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 
 @timeit
-def get_messages(uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False):
+def get_messages(
+        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None
+):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(limit)
-        .offset(offset)
     )
+    if plugin_id:
+        messages_ref = messages_ref.where('plugin_id', '==', plugin_id)
+    messages_ref = messages_ref.limit(limit).offset(offset)
+
     messages = []
     memories_id = set()
 

@@ -7,15 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import database.chat as chat_db
 from database.plugins import record_plugin_usage
 from models.app import App
-from models.plugin import UsageHistoryType
-from models.memory import Memory
 from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
+from models.memory import Memory
+from models.plugin import UsageHistoryType
+from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
+from utils.chat import process_voice_message_segment
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat
-from utils.chat import process_voice_message_segment
-from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 
 router = APIRouter()
 
@@ -110,11 +110,12 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
-def get_messages(uid: str = Depends(auth.get_current_user_uid)):
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True)  # for now retrieving first 100 messages
+def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     if not messages:
-        return [initial_message_util(uid)]
+        return [initial_message_util(uid, plugin_id)]
     return messages
+
 
 @router.post("/v1/voice-messages")
 async def create_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
