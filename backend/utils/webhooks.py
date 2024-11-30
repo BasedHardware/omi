@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List
 
 import requests
+from models.notification_message import NotificationMessage
 import websockets
 
 from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
