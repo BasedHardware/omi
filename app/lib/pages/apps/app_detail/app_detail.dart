@@ -452,7 +452,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     onTap: () {
                       if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
                         routeToPage(context,
-                            MarkdownViewer(title: 'Chat Persoality', markdown: widget.app.chatPrompt!.decodeString));
+                            MarkdownViewer(title: 'Chat Personality', markdown: widget.app.chatPrompt!.decodeString));
                       }
                     },
                     title: 'Chat Personality',
