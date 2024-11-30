@@ -18,6 +18,7 @@ class FactCategory(str, Enum):
     work = "work"
     skills = "skills"
     # world = "world"
+    learnings = "learnings"
     other = "other"
 
 

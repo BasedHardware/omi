@@ -8,7 +8,7 @@ from database.auth import get_user_name
 from models.facts import Fact, FactDB
 
 firebase_admin.initialize_app()
-from utils.llm import new_facts_extractor
+from utils.llm import new_facts_extractor, new_learnings_extractor
 import database.facts as facts_db
 
 
@@ -17,11 +17,18 @@ def get_facts_from_memories(
 ) -> List[Tuple[str, List[Fact]]]:
     print('get_facts_from_memories', len(memories), user_name, len(existing_facts))
 
+    # learning_facts = list(filter(lambda x: x.category == 'learnings', existing_facts))
     all_facts = {}
 
     def execute(memory):
         data = Memory(**memory)
         new_facts = new_facts_extractor(uid, data.transcript_segments, user_name, Fact.get_facts_as_str(existing_facts))
+        # new_learnings = new_learnings_extractor(
+        #     uid, data.transcript_segments, user_name,
+        #     Fact.get_facts_as_str(learning_facts)
+        # )
+        # print('Found', len(new_facts), 'new facts and', len(new_learnings), 'new learnings')
+        # new_facts += new_learnings
         if not new_facts:
             return
         all_facts[memory['id']] = new_facts
