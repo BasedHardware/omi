@@ -77,6 +77,22 @@ def send_message(
     return resp
 
 
+@router.post('/v1/messages/upload', tags=['chat'], response_model=ResponseMessage)
+async def send_message_with_file(
+        file: UploadFile = File(...), plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('send_message_with_file', file.filename, plugin_id, uid)
+    content = await file.read()
+    # TODO: steps
+    # - File should be uploaded to cloud storage
+    # - File content should be extracted and parsed, then sent to LLM, and ask it to "read it" say 5 words, and say "What questions do you have?"
+    # - Follow up questions, in langgraph should go through the path selection, and if referring to the file
+    # - A new graph path should be created that references the previous file.
+    # - if an image is received, it should ask gpt4vision for a description, but this is probably a different path
+    # - Limit content of the file to 10000 tokens, otherwise is too big.
+    # - If file is too big, it should do a mini RAG (later)
+
+
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
     err = chat_db.clear_chat(uid)
