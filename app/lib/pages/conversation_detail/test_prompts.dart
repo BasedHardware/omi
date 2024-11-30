@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/openai.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 
 class TestPromptsPage extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const TestPromptsPage({super.key, required this.memory});
 

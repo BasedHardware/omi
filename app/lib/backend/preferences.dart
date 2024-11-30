@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/services/wals.dart';
@@ -222,12 +222,12 @@ class SharedPreferencesUtil {
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
-  List<ServerMemory> get cachedMemories {
+  List<ServerConversation> get cachedMemories {
     final List<String> memories = getStringList('cachedMemories') ?? [];
-    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+    return memories.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
   }
 
-  set cachedMemories(List<ServerMemory> value) {
+  set cachedMemories(List<ServerConversation> value) {
     final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMemories', memories);
   }
@@ -281,13 +281,13 @@ class SharedPreferencesUtil {
     }
   }
 
-  ServerMemory? get modifiedMemoryDetails {
+  ServerConversation? get modifiedMemoryDetails {
     final String memory = getString('modifiedMemoryDetails') ?? '';
     if (memory.isEmpty) return null;
-    return ServerMemory.fromJson(jsonDecode(memory));
+    return ServerConversation.fromJson(jsonDecode(memory));
   }
 
-  set modifiedMemoryDetails(ServerMemory? value) {
+  set modifiedMemoryDetails(ServerConversation? value) {
     saveString('modifiedMemoryDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 

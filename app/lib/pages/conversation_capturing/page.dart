@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
@@ -101,7 +101,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
         // }
 
         // Memory source
-        var memorySource = MemorySource.friend;
+        var memorySource = ConversationSource.friend;
         // var captureProvider = context.read<CaptureProvider>();
         // if (captureProvider.isGlasses) {
         //   memorySource = MemorySource.openglass;
@@ -153,9 +153,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                   tabs: [
                     Tab(
-                      text: memorySource == MemorySource.openglass
+                      text: memorySource == ConversationSource.openglass
                           ? 'Photos'
-                          : memorySource == MemorySource.screenpipe
+                          : memorySource == ConversationSource.screenpipe
                               ? 'Raw Data'
                               : 'Transcript',
                     ),
@@ -179,7 +179,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                       const SizedBox(height: 80),
                                       Center(
                                         child: Text(
-                                          memorySource == MemorySource.friend ? "No transcript" : "Empty",
+                                          memorySource == ConversationSource.friend ? "No transcript" : "Empty",
                                         ),
                                       ),
                                     ],

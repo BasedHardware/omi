@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
-class ProcessingMemoryPage extends StatefulWidget {
-  final ServerMemory memory;
+class ProcessingConversationPage extends StatefulWidget {
+  final ServerConversation memory;
 
-  const ProcessingMemoryPage({
+  const ProcessingConversationPage({
     super.key,
     required this.memory,
   });
 
   @override
-  State<ProcessingMemoryPage> createState() => _ProcessingMemoryPageState();
+  State<ProcessingConversationPage> createState() => _ProcessingMemoryPageState();
 }
 
-class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with TickerProviderStateMixin {
+class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
 
@@ -40,7 +40,7 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationProvider>(builder: (context, provider, child) {
       // Track memory // FIXME
       // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
       //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
@@ -48,7 +48,7 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
       // }
 
       // Memory source
-      var memorySource = MemorySource.friend;
+      var memorySource = ConversationSource.friend;
       return PopScope(
         canPop: true,
         child: Scaffold(
@@ -87,9 +87,9 @@ class _ProcessingMemoryPageState extends State<ProcessingMemoryPage> with Ticker
                 labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                 tabs: [
                   Tab(
-                    text: memorySource == MemorySource.openglass
+                    text: memorySource == ConversationSource.openglass
                         ? 'Photos'
-                        : memorySource == MemorySource.screenpipe
+                        : memorySource == ConversationSource.screenpipe
                             ? 'Raw Data'
                             : 'Transcript',
                   ),

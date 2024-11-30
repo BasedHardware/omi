@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/widgets/transcript.dart';
 
 class CompareTranscriptsPage extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const CompareTranscriptsPage({super.key, required this.memory});
 
@@ -18,7 +18,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
 
   @override
   void initState() {
-    getMemoryTranscripts(widget.memory.id).then((result) {
+    getConversationTranscripts(widget.memory.id).then((result) {
       setState(() {
         transcripts = result;
       });

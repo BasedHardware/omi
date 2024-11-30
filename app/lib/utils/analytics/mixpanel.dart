@@ -1,6 +1,6 @@
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
@@ -119,7 +119,7 @@ class MixpanelManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
-  void appResultExpanded(ServerMemory memory, String appId) {
+  void appResultExpanded(ServerConversation memory, String appId) {
     track('App Result Expanded', properties: getMemoryEventProperties(memory)..['app_id'] = appId);
   }
 
@@ -184,7 +184,7 @@ class MixpanelManager {
     };
   }
 
-  Map<String, dynamic> getMemoryEventProperties(ServerMemory memory) {
+  Map<String, dynamic> getMemoryEventProperties(ServerConversation memory) {
     var properties = _getTranscriptProperties(memory.getTranscript());
     int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
@@ -193,7 +193,7 @@ class MixpanelManager {
     return properties;
   }
 
-  void memoryCreated(ServerMemory memory) {
+  void memoryCreated(ServerConversation memory) {
     var properties = getMemoryEventProperties(memory);
     properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = memory.structured.actionItems.length;
@@ -201,13 +201,14 @@ class MixpanelManager {
     track('Memory Created', properties: properties);
   }
 
-  void memoryListItemClicked(ServerMemory memory, int idx) =>
+  void memoryListItemClicked(ServerConversation memory, int idx) =>
       track('Memory List Item Clicked', properties: getMemoryEventProperties(memory));
 
-  void memoryShareButtonClick(ServerMemory memory) =>
+  void memoryShareButtonClick(ServerConversation memory) =>
       track('Memory Share Button Clicked', properties: getMemoryEventProperties(memory));
 
-  void memoryDeleted(ServerMemory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
+  void memoryDeleted(ServerConversation memory) =>
+      track('Memory Deleted', properties: getMemoryEventProperties(memory));
 
   void chatMessageSent(String message) => track('Chat Message Sent',
       properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
@@ -217,12 +218,12 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageMemoryClicked(ServerMemory memory) =>
+  void chatMessageMemoryClicked(ServerConversation memory) =>
       track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
 
   void addManualMemoryClicked() => track('Add Manual Memory Clicked');
 
-  void manualMemoryCreated(ServerMemory memory) =>
+  void manualMemoryCreated(ServerConversation memory) =>
       track('Manual Memory Created', properties: getMemoryEventProperties(memory));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
@@ -231,7 +232,8 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessMemory(ServerMemory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
+  void reProcessMemory(ServerConversation memory) =>
+      track('Re-process Memory', properties: getMemoryEventProperties(memory));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -253,16 +255,16 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
+  void copiedMemoryDetails(ServerConversation memory, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
 
-  void checkedActionItem(ServerMemory memory, int idx) =>
+  void checkedActionItem(ServerConversation memory, int idx) =>
       track('Checked Action Item', properties: getMemoryEventProperties(memory));
 
-  void uncheckedActionItem(ServerMemory memory, int idx) =>
+  void uncheckedActionItem(ServerConversation memory, int idx) =>
       track('Unchecked Action Item', properties: getMemoryEventProperties(memory));
 
-  void deletedActionItem(ServerMemory memory) =>
+  void deletedActionItem(ServerConversation memory) =>
       track('Deleted Action Item', properties: getMemoryEventProperties(memory));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');

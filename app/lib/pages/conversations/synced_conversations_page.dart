@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/synced_memory_list_item.dart';
 
-class SyncedMemoriesPage extends StatelessWidget {
-  const SyncedMemoriesPage({super.key});
+class SyncedConversationsPage extends StatelessWidget {
+  const SyncedConversationsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Synced Memories'),
+        title: const Text('Synced Conversations'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: Consumer<MemoryProvider>(
+      body: Consumer<ConversationProvider>(
         builder: (context, memoryProvider, child) {
           return SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                MemoriesListWidget(
-                  memories: memoryProvider.syncedMemoriesPointers
-                      .where((e) => e.type == SyncedMemoryType.updatedMemory)
+                ConversationsListWidget(
+                  memories: memoryProvider.syncedConversationsPointers
+                      .where((e) => e.type == SyncedConversationType.updatedConversation)
                       .toList(),
-                  title: 'Updated Memories',
+                  title: 'Updated Conversations',
                   showReprocess: true,
                 ),
-                MemoriesListWidget(
-                  memories:
-                      memoryProvider.syncedMemoriesPointers.where((e) => e.type == SyncedMemoryType.newMemory).toList(),
-                  title: 'New Memories',
+                ConversationsListWidget(
+                  memories: memoryProvider.syncedConversationsPointers
+                      .where((e) => e.type == SyncedConversationType.newConversation)
+                      .toList(),
+                  title: 'New Conversations',
                   showReprocess: false,
                 ),
               ],
@@ -44,11 +45,11 @@ class SyncedMemoriesPage extends StatelessWidget {
   }
 }
 
-class MemoriesListWidget extends StatelessWidget {
-  final List<SyncedMemoryPointer> memories;
+class ConversationsListWidget extends StatelessWidget {
+  final List<SyncedConversationPointer> memories;
   final String title;
   final bool showReprocess;
-  const MemoriesListWidget({super.key, required this.memories, required this.title, required this.showReprocess});
+  const ConversationsListWidget({super.key, required this.memories, required this.title, required this.showReprocess});
 
   @override
   Widget build(BuildContext context) {
