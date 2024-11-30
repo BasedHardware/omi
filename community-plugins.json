@@ -1420,8 +1420,8 @@
       "external_integration"
     ],
     "external_integration": {
-      "triggers_on": "memory_creation",
-      "webhook_url": "https://omi-weather-forecast.vercel.app/api/weather",
+      "triggers_on": "transcript_processed",
+      "webhook_url": "https://omi-weather-forecast.onrender.com/webhook",
       "setup_instructions_file_path": ""
     },
     "deleted": true
