@@ -266,8 +266,8 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                         .read<AppProvider>()
                         .apps
                         .where((p) => (p.installs > 50 && (p.ratingAvg ?? 0.0) > 4.0))
-                        .toList()
-                        .sublist(0, 6),
+                        .take(6)
+                        .toList(),
                   ),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
