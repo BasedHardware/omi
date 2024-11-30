@@ -7,8 +7,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
-import os
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+# import os
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
