@@ -231,6 +231,11 @@ class AddAppProvider extends ChangeNotifier {
         bool isValid = false;
         for (var capability in selectedCapabilities) {
           if (capability.id == 'external_integration') {
+            if (triggerEvent == null) {
+              isValid = false;
+            } else {
+              isValid = true;
+            }
             if (externalIntegrationKey.currentState != null) {
               isValid = externalIntegrationKey.currentState!.validate();
             } else {
@@ -384,6 +389,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
     }
+    checkValidity();
     setIsUpdating(false);
   }
 
@@ -438,6 +444,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       AppSnackbar.showSnackbarError('Failed to submit app. Please try again later');
     }
+    checkValidity();
     setIsSubmitting(false);
   }
 
