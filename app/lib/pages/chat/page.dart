@@ -50,7 +50,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     apps = prefs.appsList;
     scrollController = ScrollController();
     scrollController.addListener(() {
-      if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+      if (scrollController.position.userScrollDirection ==
+          ScrollDirection.reverse) {
         if (!isScrollingDown) {
           isScrollingDown = true;
           _showDeleteOption = true;
@@ -65,7 +66,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         }
       }
 
-      if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
+      if (scrollController.position.userScrollDirection ==
+          ScrollDirection.forward) {
         if (isScrollingDown) {
           isScrollingDown = false;
           _showDeleteOption = false;
@@ -141,7 +143,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             padding: EdgeInsets.all(8.0),
                             child: Text(
                               "Clear Chat  \u{1F5D1}",
-                              style: TextStyle(color: Colors.white, fontSize: 14),
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 14),
                             ),
                           ),
                         ),
@@ -159,7 +162,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         children: [
                           const SizedBox(height: 100),
                           const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -173,7 +177,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             children: [
                               SizedBox(height: 100),
                               CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                               SizedBox(height: 16),
                               Text(
@@ -191,7 +196,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           ? 'No messages yet!\nWhy don\'t you start a conversation?'
                                           : 'Please check your internet connection and try again',
                                       textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white)),
+                                      style:
+                                          const TextStyle(color: Colors.white)),
                                 ),
                               )
                             : ListView.builder(
@@ -202,7 +208,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 itemCount: provider.messages.length,
                                 itemBuilder: (context, chatIndex) {
                                   final message = provider.messages[chatIndex];
-                                  double topPadding = chatIndex == provider.messages.length - 1 ? 24 : 16;
+                                  double topPadding =
+                                      chatIndex == provider.messages.length - 1
+                                          ? 24
+                                          : 16;
                                   if (chatIndex != 0) message.askForNps = false;
 
                                   double bottomPadding = chatIndex == 0
@@ -212,20 +221,32 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       : 0;
                                   return Padding(
                                     key: ValueKey(message.id),
-                                    padding:
-                                        EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                                    padding: EdgeInsets.only(
+                                        bottom: bottomPadding,
+                                        left: 18,
+                                        right: 18,
+                                        top: topPadding),
                                     child: message.sender == MessageSender.ai
                                         ? AIMessage(
-                                            showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+                                            showTypingIndicator:
+                                                provider.showTypingIndicator &&
+                                                    chatIndex == 0,
                                             message: message,
                                             sendMessage: _sendMessageUtil,
-                                            displayOptions: provider.messages.length <= 1,
-                                            appSender: provider.messageSenderApp(message.appId),
-                                            updateMemory: (ServerMemory memory) {
-                                              context.read<MemoryProvider>().updateMemory(memory);
+                                            displayOptions:
+                                                provider.messages.length <= 1,
+                                            appSender:
+                                                provider.messageSenderApp(
+                                                    message.appId),
+                                            updateMemory:
+                                                (ServerMemory memory) {
+                                              context
+                                                  .read<MemoryProvider>()
+                                                  .updateMemory(memory);
                                             },
                                             setMessageNps: (int value) {
-                                              provider.setMessageNps(message, value);
+                                              provider.setMessageNps(
+                                                  message, value);
                                             },
                                           )
                                         : HumanMessage(message: message),
@@ -238,8 +259,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   alignment: Alignment.bottomCenter,
                   child: Container(
                     width: double.maxFinite,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    margin: EdgeInsets.only(left: 32, right: 32, bottom: home.isChatFieldFocused ? 40 : 120),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    margin: EdgeInsets.only(
+                        left: 32,
+                        right: 32,
+                        bottom: home.isChatFieldFocused ? 40 : 120),
                     decoration: const BoxDecoration(
                       color: Colors.black,
                       borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -257,15 +282,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     child: TextField(
                       enabled: true,
                       controller: textController,
-                      // textCapitalization: TextCapitalization.sentences,
                       obscureText: false,
                       focusNode: home.chatFieldFocusNode,
-                      // canRequestFocus: true,
                       textAlign: TextAlign.start,
-                      textAlignVertical: TextAlignVertical.center,
+                      textAlignVertical: TextAlignVertical.top,
                       decoration: InputDecoration(
                         hintText: 'message',
-                        hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
+                        hintStyle:
+                            const TextStyle(fontSize: 14.0, color: Colors.grey),
                         focusedBorder: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         suffixIcon: IconButton(
@@ -281,7 +305,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content: Text('Please check your internet connection and try again'),
+                                        content: Text(
+                                            'Please check your internet connection and try again'),
                                         duration: Duration(seconds: 2),
                                       ),
                                     );
@@ -292,7 +317,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
                                   ),
                                 )
                               : const Icon(
@@ -302,10 +328,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 ),
                         ),
                       ),
-                      maxLines: 8,
-                      minLines: 1,
+                      maxLines: null, // Allows unlimited lines
+                      minLines: 1, // Minimum number of visible lines
                       keyboardType: TextInputType.multiline,
-                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                      style: TextStyle(
+                          fontSize: 14.0, color: Colors.grey.shade200),
                     ),
                   ),
                 );
@@ -320,10 +347,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   _sendMessageUtil(String message) async {
     MixpanelManager().chatMessageSent(message);
     context.read<MessageProvider>().setSendingMessage(true);
-    String? appId =
-        SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
-    var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
+    String? appId = SharedPreferencesUtil().selectedChatAppId == 'no_selected'
+        ? null
+        : SharedPreferencesUtil().selectedChatAppId;
+    var newMessage = ServerMessage(const Uuid().v4(), DateTime.now(), message,
+        MessageSender.human, MessageType.text, appId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
     scrollToBottom();
     textController.clear();
