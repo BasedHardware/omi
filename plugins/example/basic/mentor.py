@@ -44,6 +44,7 @@ def mentoring(data: RealtimePluginRequest):
     user_name = "{{user_name}}"
     user_facts = "{{user_facts}}"
     user_context = "{{user_context}}"
+    user_chat = "{{user_chat}}"
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals during the meeting.
@@ -74,6 +75,11 @@ def mentoring(data: RealtimePluginRequest):
     ${transcript}
     ```
 
+    Converstation History:
+    ```
+    {user_chat}
+    ```
+
     Context:
     ```
     {user_context}
@@ -86,7 +92,7 @@ def mentoring(data: RealtimePluginRequest):
         'session_id': data.session_id,
         'notification': {
             'prompt': prompt,
-            'params': ['user_name', 'user_facts', 'user_context'],
+            'params': ['user_name', 'user_facts', 'user_context', 'user_chat'],
         }
     }
 
