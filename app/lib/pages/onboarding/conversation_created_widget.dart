@@ -1,33 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:friend_private/pages/conversations/widgets/memory_list_item.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-Future updateMemoryDetailProvider(BuildContext context, ServerMemory memory) {
+Future updateMemoryDetailProvider(BuildContext context, ServerConversation memory) {
   return Future.microtask(() {
-    context.read<MemoryProvider>().addMemory(memory);
+    context.read<ConversationProvider>().addMemory(memory);
     var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
-    context.read<MemoryDetailProvider>().updateMemory(0, date);
+    context.read<ConversationDetailProvider>().updateConversation(0, date);
   });
 }
 
-class MemoryCreatedWidget extends StatefulWidget {
+class ConversationCreatedWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const MemoryCreatedWidget({super.key, required this.goNext});
+  const ConversationCreatedWidget({super.key, required this.goNext});
 
   @override
-  State<MemoryCreatedWidget> createState() => _MemoryCreatedWidgetState();
+  State<ConversationCreatedWidget> createState() => _MemoryCreatedWidgetState();
 }
 
-class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
+class _MemoryCreatedWidgetState extends State<ConversationCreatedWidget> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {

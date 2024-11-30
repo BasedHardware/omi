@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memories/widgets/local_sync.dart';
-import 'package:friend_private/pages/memories/widgets/processing_capture.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/pages/conversations/widgets/local_sync.dart';
+import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_memories.dart';
-import 'widgets/memories_group_widget.dart';
+import 'widgets/conversations_group_widget.dart';
 
-class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key});
+class ConversationsPage extends StatefulWidget {
+  const ConversationsPage({super.key});
 
   @override
-  State<MemoriesPage> createState() => _MemoriesPageState();
+  State<ConversationsPage> createState() => _ConversationsPageState();
 }
 
-class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
 
   @override
@@ -26,8 +26,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (Provider.of<MemoryProvider>(context, listen: false).memories.isEmpty) {
-        await Provider.of<MemoryProvider>(context, listen: false).getInitialMemories();
+      if (Provider.of<ConversationProvider>(context, listen: false).conversations.isEmpty) {
+        await Provider.of<ConversationProvider>(context, listen: false).getInitialConversations();
       }
     });
     super.initState();
@@ -35,14 +35,14 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('building memories page');
+    debugPrint('building conversations page');
     super.build(context);
-    return Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
+    return Consumer<ConversationProvider>(builder: (context, memoryProvider, child) {
       return RefreshIndicator(
         backgroundColor: Colors.black,
         color: Colors.white,
         onRefresh: () async {
-          return await memoryProvider.getInitialMemories();
+          return await memoryProvider.getInitialConversations();
         },
         child: CustomScrollView(
           slivers: [
@@ -51,8 +51,8 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: MemoryCaptureWidget()),
-            getProcessingMemoriesWidget(memoryProvider.processingMemories),
-            if (memoryProvider.groupedMemories.isEmpty && !memoryProvider.isLoadingMemories)
+            getProcessingConversationsWidget(memoryProvider.processingConversations),
+            if (memoryProvider.groupedConversations.isEmpty && !memoryProvider.isLoadingConversations)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -61,7 +61,7 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                   ),
                 ),
               )
-            else if (memoryProvider.groupedMemories.isEmpty && memoryProvider.isLoadingMemories)
+            else if (memoryProvider.groupedConversations.isEmpty && memoryProvider.isLoadingConversations)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -75,11 +75,11 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
             else
               SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  childCount: memoryProvider.groupedMemories.length + 1,
+                  childCount: memoryProvider.groupedConversations.length + 1,
                   (context, index) {
-                    if (index == memoryProvider.groupedMemories.length) {
-                      print('loading more memories');
-                      if (memoryProvider.isLoadingMemories) {
+                    if (index == memoryProvider.groupedConversations.length) {
+                      print('loading more conversations');
+                      if (memoryProvider.isLoadingConversations) {
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.only(top: 32.0),
@@ -93,15 +93,15 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                       return VisibilityDetector(
                         key: const Key('memory-loader'),
                         onVisibilityChanged: (visibilityInfo) {
-                          if (visibilityInfo.visibleFraction > 0 && !memoryProvider.isLoadingMemories) {
-                            memoryProvider.getMoreMemoriesFromServer();
+                          if (visibilityInfo.visibleFraction > 0 && !memoryProvider.isLoadingConversations) {
+                            memoryProvider.getMoreConversationsFromServer();
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
                       );
                     } else {
-                      var date = memoryProvider.groupedMemories.keys.elementAt(index);
-                      List<ServerMemory> memoriesForDate = memoryProvider.groupedMemories[date]!;
+                      var date = memoryProvider.groupedConversations.keys.elementAt(index);
+                      List<ServerConversation> memoriesForDate = memoryProvider.groupedConversations[date]!;
                       bool hasDiscarded = memoriesForDate.any((element) => element.discarded);
                       bool hasNonDiscarded = memoriesForDate.any((element) => !element.discarded);
 
@@ -109,12 +109,12 @@ class _MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClie
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (index == 0) const SizedBox(height: 16),
-                          MemoriesGroupWidget(
+                          ConversationsgroupWidget(
                             isFirst: index == 0,
                             memories: memoriesForDate,
                             date: date,
                             hasNonDiscardedMemories: hasNonDiscarded,
-                            showDiscardedMemories: memoryProvider.showDiscardedMemories,
+                            showDiscardedMemories: memoryProvider.showDiscardedConversations,
                             hasDiscardedMemories: hasDiscarded,
                           ),
                         ],

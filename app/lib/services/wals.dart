@@ -4,10 +4,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -24,7 +24,7 @@ abstract class IWalServiceListener extends IWalSyncListener {
 
 abstract class IWalSyncListener {
   void onMissingWalUpdated();
-  void onWalSynced(Wal wal, {ServerMemory? memory});
+  void onWalSynced(Wal wal, {ServerConversation? memory});
 }
 
 abstract class IWalSync {
@@ -964,7 +964,7 @@ class WalService implements IWalService, IWalSyncListener {
   }
 
   @override
-  void onWalSynced(Wal wal, {ServerMemory? memory}) {
+  void onWalSynced(Wal wal, {ServerConversation? memory}) {
     for (var s in _subscriptions.values) {
       s.onWalSynced(wal, memory: memory);
     }

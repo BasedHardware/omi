@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memories/widgets/capture.dart';
-import 'package:friend_private/pages/memory_capturing/page.dart';
-import 'package:friend_private/pages/processing_memories/page.dart';
+import 'package:friend_private/pages/conversations/widgets/capture.dart';
+import 'package:friend_private/pages/conversation_capturing/page.dart';
+import 'package:friend_private/pages/processing_conversations/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -49,8 +49,9 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      var topMemoryId =
-          (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
+      var topMemoryId = (provider.memoryProvider?.conversations ?? []).isNotEmpty
+          ? provider.memoryProvider!.conversations.first.id
+          : null;
 
       // Waiting ready state, 3s for now
       if (!_isReady) {
@@ -319,7 +320,7 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
   );
 }
 
-Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
+Widget getProcessingConversationsWidget(List<ServerConversation> memories) {
   // FIXME, this has to be a single one always, and also a memory obj
   if (memories.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
@@ -341,7 +342,7 @@ Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
 // PROCESSING MEMORY
 
 class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const ProcessingMemoryWidget({
     super.key,
@@ -362,7 +363,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
             if (widget.memory.transcriptSegments.isEmpty) return;
             routeToPage(
                 context,
-                ProcessingMemoryPage(
+                ProcessingConversationPage(
                   memory: widget.memory,
                 ));
           },

@@ -5,16 +5,16 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -27,7 +27,7 @@ class AIMessage extends StatefulWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final App? appSender;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateMemory;
   final Function(int) setMessageNps;
 
   const AIMessage({
@@ -122,7 +122,7 @@ Widget buildMessageWidget(
   bool showTypingIndicator,
   bool displayOptions,
   App? appSender,
-  Function(ServerMemory) updateMemory,
+  Function(ServerConversation) updateMemory,
   Function(int) sendMessageNps,
 ) {
   if (message.memories.isNotEmpty) {
@@ -405,7 +405,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
   final List<MessageMemory> messageMemories;
   final String messageText;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateMemory;
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime date;
@@ -476,14 +476,14 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
               onTap: () async {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
-                  var memProvider = Provider.of<MemoryProvider>(context, listen: false);
+                  var memProvider = Provider.of<ConversationProvider>(context, listen: false);
                   var idx = -1;
                   var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedMemories[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
 
                   if (idx != -1) {
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
-                    var m = memProvider.groupedMemories[date]![idx];
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
+                    var m = memProvider.groupedConversations[date]![idx];
                     MixpanelManager().chatMessageMemoryClicked(m);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -495,12 +495,12 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   } else {
                     if (memoryDetailLoading[data.$1]) return;
                     setState(() => memoryDetailLoading[data.$1] = true);
-                    ServerMemory? m = await getMemoryById(data.$2.id);
+                    ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
                     (idx, date) = memProvider.addMemoryWithDateGrouped(m);
                     MixpanelManager().chatMessageMemoryClicked(m);
                     setState(() => memoryDetailLoading[data.$1] = false);
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => MemoryDetailPage(
@@ -509,7 +509,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       ),
                     );
                     if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                      ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
+                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
                       widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
                       var copy = List<MessageMemory>.from(widget.messageMemories);
                       copy[data.$1] = MessageMemory(

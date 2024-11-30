@@ -1,4 +1,4 @@
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 
 enum MessageEventType {
@@ -26,7 +26,7 @@ class ServerMessageEvent {
   MessageEventType type;
   // String? memoryId;
   // String? processingMemoryId;
-  ServerMemory? memory;
+  ServerConversation? memory;
   List<ServerMessage>? messages;
   // ServerProcessingMemoryStatus? processingMemoryStatus;
   String? name;
@@ -46,7 +46,7 @@ class ServerMessageEvent {
       MessageEventType.valuesFromString(json['type']),
       // json['memory_id'],
       // json['processing_memory_id'],
-      json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
+      json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null,
       ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
       // json['processing_memory_status'] != null
       //     ? ServerProcessingMemoryStatus.valuesFromString(json['processing_memory_status'])

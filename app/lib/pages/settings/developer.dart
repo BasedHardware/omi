@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -165,7 +165,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories =
+                                await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/memories.json');

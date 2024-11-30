@@ -20,7 +20,7 @@ import 'package:friend_private/flavors.dart';
 import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/auth_provider.dart';
@@ -30,7 +30,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
@@ -163,14 +163,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         providers: [
           ListenableProvider(create: (context) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          ChangeNotifierProvider(create: (context) => MemoryProvider()),
+          ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
           ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
             create: (context) => MessageProvider(),
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
-          ChangeNotifierProxyProvider2<MemoryProvider, MessageProvider, CaptureProvider>(
+          ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
             update: (BuildContext context, memory, message, CaptureProvider? previous) =>
                 (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
@@ -191,10 +191,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, device, SpeechProfileProvider? previous) =>
                 (previous?..setProviders(device)) ?? SpeechProfileProvider(),
           ),
-          ChangeNotifierProxyProvider2<AppProvider, MemoryProvider, MemoryDetailProvider>(
-            create: (context) => MemoryDetailProvider(),
-            update: (BuildContext context, app, memory, MemoryDetailProvider? previous) =>
-                (previous?..setProviders(app, memory)) ?? MemoryDetailProvider(),
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+            create: (context) => ConversationDetailProvider(),
+            update: (BuildContext context, app, memory, ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, memory)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),

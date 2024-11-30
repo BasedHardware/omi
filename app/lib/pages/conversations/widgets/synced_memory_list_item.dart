@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 class SyncedMemoryListItem extends StatefulWidget {
   final DateTime date;
   final int memoryIdx;
-  final ServerMemory memory;
+  final ServerConversation memory;
   final bool showReprocess;
 
   const SyncedMemoryListItem({
@@ -28,7 +28,7 @@ class SyncedMemoryListItem extends StatefulWidget {
 
 class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
   bool isReprocessing = false;
-  late ServerMemory memory;
+  late ServerConversation memory;
 
   void setReprocessing(bool value) {
     isReprocessing = value;
@@ -58,8 +58,8 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
 
     return GestureDetector(
       onTap: () async {
-        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
-        Provider.of<MemoryProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
+        context.read<ConversationDetailProvider>().updateConversation(widget.memoryIdx, widget.date);
+        Provider.of<ConversationProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
         routeToPage(
           context,
           MemoryDetailPage(memory: widget.memory, isFromOnboarding: false),
@@ -104,12 +104,12 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                     ? GestureDetector(
                         onTap: () async {
                           setReprocessing(true);
-                          var mem = await reProcessMemoryServer(memory.id);
+                          var mem = await reProcessConversationServer(memory.id);
                           if (mem != null) {
                             setState(() {
                               memory = mem;
                             });
-                            context.read<MemoryProvider>().updateSyncedMemory(mem);
+                            context.read<ConversationProvider>().updateSyncedMemory(mem);
                           }
                           setReprocessing(false);
                         },

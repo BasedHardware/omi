@@ -2,18 +2,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/apps/page.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/test_prompts.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/test_prompts.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -42,10 +42,10 @@ class GetSummaryWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, Tuple3<ServerMemory, TextEditingController?, FocusNode?>>(
+    return Selector<ConversationDetailProvider, Tuple3<ServerConversation, TextEditingController?, FocusNode?>>(
       selector: (context, provider) => Tuple3(provider.memory, provider.titleController, provider.titleFocusNode),
       builder: (context, data, child) {
-        ServerMemory memory = data.item1;
+        ServerConversation memory = data.item1;
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,7 +53,7 @@ class GetSummaryWidgets extends StatelessWidget {
             const SizedBox(height: 24),
             memory.discarded
                 ? Text(
-                    'Discarded Memory',
+                    'Discarded Conversation',
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
                   )
                 : GetEditTextField(
@@ -65,7 +65,7 @@ class GetSummaryWidgets extends StatelessWidget {
                   ),
             const SizedBox(height: 16),
             Text(
-              memory.source == MemorySource.sdcard
+              memory.source == ConversationSource.sdcard
                   ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}'
                   : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
@@ -120,7 +120,7 @@ class ActionItemsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
           provider.memory.structured.actionItems.isNotEmpty
@@ -205,8 +205,8 @@ class ActionItemsListWidget extends StatelessWidget {
                             value: item.completed,
                             onChanged: (value) {
                               if (value != null) {
-                                context.read<MemoryDetailProvider>().updateActionItemState(value, idx);
-                                setMemoryActionItemState(provider.memory.id, [idx], [value]);
+                                context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
+                                setConversationActionItemState(provider.memory.id, [idx], [value]);
                                 if (value) {
                                   MixpanelManager().checkedActionItem(provider.memory, idx);
                                 } else {
@@ -243,7 +243,7 @@ class EventsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
+    return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -364,8 +364,8 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-      if (provider.loadingReprocessMemory && provider.reprocessMemoryId == provider.memory.id) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
+      if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.memory.id) {
         return Center(
           child: Padding(
             padding: const EdgeInsets.only(top: 18.0),
@@ -414,7 +414,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () async {
-                    await provider.reprocessMemory();
+                    await provider.reprocessConversation();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
@@ -436,7 +436,7 @@ class GetAppsWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
+    return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -657,7 +657,7 @@ class GetGeolocationWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, Geolocation?>(selector: (context, provider) {
+    return Selector<ConversationDetailProvider, Geolocation?>(selector: (context, provider) {
       if (provider.memory.discarded) return null;
       return provider.memory.geolocation;
     }, builder: (context, geolocation, child) {
@@ -732,12 +732,12 @@ class GetSheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
           ListTile(
             title: Text(
-              provider.memory.discarded ? 'Discarded Memory' : provider.memory.structured.title,
+              provider.memory.discarded ? 'Discarded Conversation' : provider.memory.structured.title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             leading: const Icon(Icons.description),
@@ -756,7 +756,7 @@ class GetSheetTitle extends StatelessWidget {
 }
 
 class GetDevToolsOptions extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const GetDevToolsOptions({
     super.key,
@@ -782,7 +782,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Trigger Memory Created Integration'),
+          title: const Text('Trigger Conversation Created Integration'),
           leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
@@ -836,7 +836,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Test a Memory Prompt'),
+          title: const Text('Test a Conversation Prompt'),
           leading: const Icon(Icons.chat),
           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
           onTap: () {
@@ -881,7 +881,7 @@ _getLoadingIndicator() {
 }
 
 class GetShareOptions extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const GetShareOptions({
     super.key,
@@ -927,10 +927,10 @@ class _GetShareOptionsState extends State<GetShareOptions> {
             onTap: () async {
               if (loadingShareMemoryViaURL) return;
               changeLoadingShareMemoryViaURL(true);
-              bool shared = await setMemoryVisibility(widget.memory.id);
+              bool shared = await setConversationVisibility(widget.memory.id);
               if (!shared) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Memory URL could not be shared.')),
+                  const SnackBar(content: Text('Conversation URL could not be shared.')),
                 );
                 return;
               }
@@ -1015,7 +1015,7 @@ class GetSheetMainOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
           Card(
@@ -1043,7 +1043,7 @@ class GetSheetMainOptions extends StatelessWidget {
               children: [
                 ListTile(
                   title: Text(provider.memory.discarded ? 'Summarize' : 'Re-summarize'),
-                  leading: provider.loadingReprocessMemory
+                  leading: provider.loadingReprocessConversation
                       ? const SizedBox(
                           width: 24,
                           height: 24,
@@ -1052,12 +1052,12 @@ class GetSheetMainOptions extends StatelessWidget {
                           ),
                         )
                       : const Icon(Icons.refresh),
-                  onTap: provider.loadingReprocessMemory
+                  onTap: provider.loadingReprocessConversation
                       ? null
                       : () async {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
-                            await provider.reprocessMemory();
+                            await provider.reprocessConversation();
                             if (context.mounted) {
                               Navigator.pop(context);
                             }
@@ -1067,7 +1067,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
-                                'Unable to Re-summarize Memory',
+                                'Unable to Re-summarize Conversation',
                                 'Please check your internet connection and try again.',
                                 singleButton: true,
                                 okButtonText: 'OK',
@@ -1082,7 +1082,7 @@ class GetSheetMainOptions extends StatelessWidget {
                   leading: const Icon(
                     Icons.delete,
                   ),
-                  onTap: provider.loadingReprocessMemory
+                  onTap: provider.loadingReprocessConversation
                       ? null
                       : () {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
@@ -1093,12 +1093,14 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () {
-                                  context.read<MemoryProvider>().deleteMemory(provider.memory, provider.memoryIdx);
+                                  context
+                                      .read<ConversationProvider>()
+                                      .deleteMemory(provider.memory, provider.memoryIdx);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
                                 },
-                                'Delete Memory?',
+                                'Delete Conversation?',
                                 'Are you sure you want to delete this memory? This action cannot be undone.',
                                 okButtonText: 'Confirm',
                               ),
@@ -1109,7 +1111,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                   context,
                                   () => Navigator.pop(context),
                                   () => Navigator.pop(context),
-                                  'Unable to Delete Memory',
+                                  'Unable to Delete Conversation',
                                   'Please check your internet connection and try again.',
                                   singleButton: true,
                                   okButtonText: 'OK'),
@@ -1157,7 +1159,7 @@ class ShowOptionsBottomSheet extends StatelessWidget {
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      child: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [

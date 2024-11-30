@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 
 import 'date_list_item.dart';
 import 'memory_list_item.dart';
 
-class MemoriesGroupWidget extends StatelessWidget {
-  final List<ServerMemory> memories;
+class ConversationsgroupWidget extends StatelessWidget {
+  final List<ServerConversation> memories;
   final DateTime date;
   final bool showDiscardedMemories;
   final bool hasDiscardedMemories;
   final bool hasNonDiscardedMemories;
   final bool isFirst;
-  const MemoriesGroupWidget(
+  const ConversationsgroupWidget(
       {super.key,
       required this.memories,
       required this.date,

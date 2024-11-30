@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/env/env.dart';
@@ -11,7 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
-Future<CreateMemoryResponse?> processInProgressMemory() async {
+Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/memories',
     headers: {},
@@ -21,7 +21,7 @@ Future<CreateMemoryResponse?> processInProgressMemory() async {
   if (response == null) return null;
   debugPrint('createMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateMemoryResponse.fromJson(jsonDecode(response.body));
+    return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {
     // TODO: Server returns 304 doesn't recover
     CrashReporting.reportHandledCrash(
@@ -36,7 +36,8 @@ Future<CreateMemoryResponse?> processInProgressMemory() async {
   return null;
 }
 
-Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0, List<MemoryStatus> statuses = const []}) async {
+Future<List<ServerConversation>> getConversations(
+    {int limit = 50, int offset = 0, List<MemoryStatus> statuses = const []}) async {
   var response = await makeApiCall(
       url:
           '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
@@ -47,7 +48,7 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0, List<Mem
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerConversation.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
   } else {
@@ -56,7 +57,7 @@ Future<List<ServerMemory>> getMemories({int limit = 50, int offset = 0, List<Mem
   return [];
 }
 
-Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
+Future<ServerConversation?> reProcessConversationServer(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess',
     headers: {},
@@ -66,12 +67,12 @@ Future<ServerMemory?> reProcessMemoryServer(String memoryId) async {
   if (response == null) return null;
   debugPrint('reProcessMemoryServer: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerMemory.fromJson(jsonDecode(response.body));
+    return ServerConversation.fromJson(jsonDecode(response.body));
   }
   return null;
 }
 
-Future<bool> deleteMemoryServer(String memoryId) async {
+Future<bool> deleteConversationServer(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId',
     headers: {},
@@ -83,7 +84,7 @@ Future<bool> deleteMemoryServer(String memoryId) async {
   return response.statusCode == 204;
 }
 
-Future<ServerMemory?> getMemoryById(String memoryId) async {
+Future<ServerConversation?> getConversationById(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId',
     headers: {},
@@ -93,12 +94,12 @@ Future<ServerMemory?> getMemoryById(String memoryId) async {
   if (response == null) return null;
   debugPrint('getMemoryById: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerMemory.fromJson(jsonDecode(response.body));
+    return ServerConversation.fromJson(jsonDecode(response.body));
   }
   return null;
 }
 
-Future<bool> updateMemoryTitle(String memoryId, String title) async {
+Future<bool> updateConversationTitle(String memoryId, String title) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/title?title=$title',
     headers: {},
@@ -106,11 +107,11 @@ Future<bool> updateMemoryTitle(String memoryId, String title) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('updateMemoryTitle: ${response.body}');
+  debugPrint('updateConversationTitle: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
+Future<List<MemoryPhoto>> getConversationPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',
     headers: {},
@@ -118,7 +119,7 @@ Future<List<MemoryPhoto>> getMemoryPhotos(String memoryId) async {
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getMemoryPhotos: ${response.body}');
+  debugPrint('getConversationPhotos: ${response.body}');
   if (response.statusCode == 200) {
     return (jsonDecode(response.body) as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList();
   }
@@ -149,7 +150,7 @@ class TranscriptsResponse {
   }
 }
 
-Future<TranscriptsResponse> getMemoryTranscripts(String memoryId) async {
+Future<TranscriptsResponse> getConversationTranscripts(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/transcripts',
     headers: {},
@@ -157,7 +158,7 @@ Future<TranscriptsResponse> getMemoryTranscripts(String memoryId) async {
     body: '',
   );
   if (response == null) return TranscriptsResponse();
-  debugPrint('getMemoryTranscripts: ${response.body}');
+  debugPrint('getConversationTranscripts: ${response.body}');
   if (response.statusCode == 200) {
     var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
     return TranscriptsResponse.fromJson(transcripts);
@@ -165,7 +166,7 @@ Future<TranscriptsResponse> getMemoryTranscripts(String memoryId) async {
   return TranscriptsResponse();
 }
 
-Future<bool> hasMemoryRecording(String memoryId) async {
+Future<bool> hasConversationRecording(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/recording',
     headers: {},
@@ -173,14 +174,14 @@ Future<bool> hasMemoryRecording(String memoryId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getMemoryPhotos: ${response.body}');
+  debugPrint('getConversationPhotos: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_recording'] ?? false;
   }
   return false;
 }
 
-Future<bool> assignMemoryTranscriptSegment(
+Future<bool> assignConversationTranscriptSegment(
   String memoryId,
   int segmentIdx, {
   bool? isUser,
@@ -196,11 +197,11 @@ Future<bool> assignMemoryTranscriptSegment(
     body: '',
   );
   if (response == null) return false;
-  debugPrint('assignMemoryTranscriptSegment: ${response.body}');
+  debugPrint('assignConversationTranscriptSegment: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}) async {
+Future<bool> setConversationVisibility(String memoryId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/visibility?value=$visibility&visibility=$visibility',
     headers: {},
@@ -208,11 +209,11 @@ Future<bool> setMemoryVisibility(String memoryId, {String visibility = 'shared'}
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setMemoryVisibility: ${response.body}');
+  debugPrint('setConversationVisibility: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> setMemoryEventsState(
+Future<bool> setConversationEventsState(
   String memoryId,
   List<int> eventsIdx,
   List<bool> values,
@@ -231,11 +232,11 @@ Future<bool> setMemoryEventsState(
     }),
   );
   if (response == null) return false;
-  debugPrint('setMemoryEventsState: ${response.body}');
+  debugPrint('setConversationEventsState: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> setMemoryActionItemState(
+Future<bool> setConversationActionItemState(
   String memoryId,
   List<int> actionItemsIdx,
   List<bool> values,
@@ -254,11 +255,11 @@ Future<bool> setMemoryActionItemState(
     }),
   );
   if (response == null) return false;
-  debugPrint('setMemoryActionItemState: ${response.body}');
+  debugPrint('setConversationActionItemState: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> deleteMemoryActionItem(String memoryId, ActionItem item) async {
+Future<bool> deleteConversationActionItem(String memoryId, ActionItem item) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/action-items',
     headers: {},
@@ -269,12 +270,12 @@ Future<bool> deleteMemoryActionItem(String memoryId, ActionItem item) async {
     }),
   );
   if (response == null) return false;
-  debugPrint('deleteMemoryActionItem: ${response.body}');
+  debugPrint('deleteConversationActionItem: ${response.body}');
   return response.statusCode == 204;
 }
 
 //this is expected to return complete memories
-Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
+Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString'),
@@ -292,7 +293,8 @@ Future<List<ServerMemory>> sendStorageToBackend(File file, String sdCardDateTime
       return [];
     }
 
-    var memories = (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerMemory.fromJson(memory)).toList();
+    var memories =
+        (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerConversation.fromJson(memory)).toList();
     debugPrint('getMemories length: ${memories.length}');
 
     return memories;

@@ -10,15 +10,15 @@ import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/memories/page.dart';
+import 'package:friend_private/pages/conversations/page.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart' as mp;
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart' as mp;
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -60,7 +60,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
-      await context.read<mp.MemoryProvider>().getInitialMemories();
+      await context.read<mp.ConversationProvider>().getInitialConversations();
       if (mounted) {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
@@ -252,8 +252,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
-                    if (ctx.read<mp.MemoryProvider>().memories.isEmpty) {
-                      await ctx.read<mp.MemoryProvider>().getInitialMemories();
+                    if (ctx.read<mp.ConversationProvider>().conversations.isEmpty) {
+                      await ctx.read<mp.ConversationProvider>().getInitialConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -283,7 +283,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
-                        MemoriesPage(),
+                        ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
                       ],
@@ -327,7 +327,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               tabs: [
                                 Tab(
                                   child: Text(
-                                    'Memories',
+                                    'Home',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
@@ -434,14 +434,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
                 Row(
                   children: [
-                    Consumer2<MemoryProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
+                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
                       if (home.selectedIndex != 0 ||
-                          !memoryProvider.hasNonDiscardedMemories ||
-                          memoryProvider.isLoadingMemories) {
+                          !memoryProvider.hasNonDiscardedConversations ||
+                          memoryProvider.isLoadingConversations) {
                         return const SizedBox.shrink();
                       }
                       return IconButton(
-                          onPressed: memoryProvider.toggleDiscardMemories,
+                          onPressed: memoryProvider.toggleDiscardConversations,
                           icon: Icon(
                             SharedPreferencesUtil().showDiscardedMemories
                                 ? Icons.filter_list_off_sharp

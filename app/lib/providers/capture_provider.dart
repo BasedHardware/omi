@@ -6,16 +6,16 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -35,16 +35,16 @@ import 'package:uuid/uuid.dart';
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctipSegmentSocketServiceListener {
-  MemoryProvider? memoryProvider;
+  ConversationProvider? memoryProvider;
   MessageProvider? messageProvider;
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
   // In progress memory
-  ServerMemory? _inProgressMemory;
+  ServerConversation? _inProgressMemory;
 
-  ServerMemory? get inProgressMemory => _inProgressMemory;
+  ServerConversation? get inProgressMemory => _inProgressMemory;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -64,7 +64,7 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
+  void updateProviderInstances(ConversationProvider? mp, MessageProvider? p) {
     memoryProvider = mp;
     messageProvider = p;
     notifyListeners();
@@ -531,7 +531,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _loadInProgressMemory() async {
-    var memories = await getMemories(statuses: [MemoryStatus.in_progress], limit: 1);
+    var memories = await getConversations(statuses: [MemoryStatus.in_progress], limit: 1);
     _inProgressMemory = memories.isNotEmpty ? memories.first : null;
     if (_inProgressMemory != null) {
       segments = _inProgressMemory!.transcriptSegments;
@@ -567,9 +567,10 @@ class CaptureProvider extends ChangeNotifier
   Future<void> forceProcessingCurrentMemory() async {
     _resetStateVariables();
     memoryProvider!.addProcessingMemory(
-      ServerMemory(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
+      ServerConversation(
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
     );
-    processInProgressMemory().then((result) {
+    processInProgressConversation().then((result) {
       if (result == null || result.memory == null) {
         _initiateWebsocket();
         memoryProvider!.removeProcessingMemory('0');
@@ -584,7 +585,7 @@ class CaptureProvider extends ChangeNotifier
     return;
   }
 
-  Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
+  Future<void> _processMemoryCreated(ServerConversation? memory, List<ServerMessage> messages) async {
     if (memory == null) return;
     memoryProvider?.upsertMemory(memory);
     MixpanelManager().memoryCreated(memory);
@@ -748,7 +749,7 @@ class CaptureProvider extends ChangeNotifier
       //replace
       onMessageReceived: () {
         debugPrint('onMessageReceived');
-        memoryProvider?.getMemoriesFromServer();
+        memoryProvider?.getConversationsFromServer();
         notifyListeners();
         _notifySdCardComplete();
         return;
@@ -760,7 +761,7 @@ class CaptureProvider extends ChangeNotifier
       await sdCardSocket.setupSdCardWebSocket(
         onMessageReceived: () {
           debugPrint('onMessageReceived');
-          memoryProvider?.getMoreMemoriesFromServer();
+          memoryProvider?.getMoreConversationsFromServer();
           _notifySdCardComplete();
 
           return;
@@ -824,7 +825,7 @@ class CaptureProvider extends ChangeNotifier
           sdCardSocket.attemptReconnection(
             onMessageReceived: () {
               debugPrint('onMessageReceived');
-              memoryProvider?.getMoreMemoriesFromServer();
+              memoryProvider?.getMoreConversationsFromServer();
               _notifySdCardComplete();
               return;
             },

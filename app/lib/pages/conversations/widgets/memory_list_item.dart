@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
@@ -15,7 +15,7 @@ class MemoryListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
   final int memoryIdx;
-  final ServerMemory memory;
+  final ServerConversation memory;
 
   const MemoryListItem({
     super.key,
@@ -58,19 +58,19 @@ class _MemoryListItemState extends State<MemoryListItem> {
     }
 
     Structured structured = widget.memory.structured;
-    return Consumer<MemoryProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
           MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
-          context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
-          String startingTitle = context.read<MemoryDetailProvider>().memory.structured.title;
+          context.read<ConversationDetailProvider>().updateConversation(widget.memoryIdx, widget.date);
+          String startingTitle = context.read<ConversationDetailProvider>().memory.structured.title;
           provider.onMemoryTap(widget.memoryIdx);
 
           await routeToPage(
             context,
             MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
           );
-          String newTitle = context.read<MemoryDetailProvider>().memory.structured.title;
+          String newTitle = context.read<ConversationDetailProvider>().memory.structured.title;
           if (startingTitle != newTitle) {
             widget.memory.structured.title = newTitle;
             provider.upsertMemory(widget.memory);
