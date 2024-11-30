@@ -794,7 +794,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
               : const Icon(Icons.send_to_mobile_outlined),
           onTap: () {
             changeLoadingAppIntegrationTest(true);
-            if (SharedPreferencesUtil().webhookOnMemoryCreated.isEmpty) {
+            if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
               showDialog(
                 context: context,
                 builder: (c) => getDialog(
@@ -814,7 +814,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
               changeLoadingAppIntegrationTest(false);
               return;
             } else {
-              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+              webhookOnConversationCreatedCall(widget.memory, returnRawBody: true).then((response) {
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(

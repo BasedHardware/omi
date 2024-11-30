@@ -46,7 +46,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   // bool hasAudioRecording = false;
 
-  List<MemoryPhoto> photos = [];
+  List<ConversationPhoto> photos = [];
   List<Tuple2<String, String>> photosData = [];
 
   bool displayDevToolsInSheet = false;
@@ -231,8 +231,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         notifyListeners();
         return false;
       } else {
-        conversationProvider!.updateMemory(updatedConversation);
-        SharedPreferencesUtil().modifiedMemoryDetails = updatedConversation;
+        conversationProvider!.updateConversation(updatedConversation);
+        SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
         notifyInfo('REPROCESS_SUCCESS');
         notifyListeners();
         return true;

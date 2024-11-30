@@ -172,8 +172,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProxyProvider2<ConversationProvider, MessageProvider, CaptureProvider>(
             create: (context) => CaptureProvider(),
-            update: (BuildContext context, memory, message, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(memory, message)) ?? CaptureProvider(),
+            update: (BuildContext context, conversation, message, CaptureProvider? previous) =>
+                (previous?..updateProviderInstances(conversation, message)) ?? CaptureProvider(),
           ),
           ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
             create: (context) => DeviceProvider(),
@@ -193,8 +193,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
             create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, memory, ConversationDetailProvider? previous) =>
-                (previous?..setProviders(app, memory)) ?? ConversationDetailProvider(),
+            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
+                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
           ChangeNotifierProvider(create: (context) => CalenderProvider()),
           ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),

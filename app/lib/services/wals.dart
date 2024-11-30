@@ -24,7 +24,7 @@ abstract class IWalServiceListener extends IWalSyncListener {
 
 abstract class IWalSyncListener {
   void onMissingWalUpdated();
-  void onWalSynced(Wal wal, {ServerConversation? memory});
+  void onWalSynced(Wal wal, {ServerConversation? conversation});
 }
 
 abstract class IWalSync {
@@ -369,7 +369,7 @@ class SDCardWalSync implements IWalSync {
   Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset)? updates) async {
     debugPrint("sync wal: ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     List<File> files = [];
 
     var limit = 2;
@@ -386,9 +386,10 @@ class SDCardWalSync implements IWalSync {
         files = files.sublist(limit);
         try {
           var partialRes = await syncLocalFiles(syncFiles);
-          resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-          resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-              .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+          resp.newConversationIds
+              .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+          resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+              .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
         } catch (e) {
           debugPrint(e.toString());
         }
@@ -408,9 +409,10 @@ class SDCardWalSync implements IWalSync {
       var syncFiles = files;
       try {
         var partialRes = await syncLocalFiles(syncFiles);
-        resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-        resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-            .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+        resp.newConversationIds
+            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
       } catch (e) {
         debugPrint(e.toString());
       }
@@ -438,7 +440,7 @@ class SDCardWalSync implements IWalSync {
       debugPrint("All synced!");
       return null;
     }
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     for (var i = wals.length - 1; i >= 0; i--) {
       var wal = wals[i];
@@ -456,9 +458,10 @@ class SDCardWalSync implements IWalSync {
             (wal.storageOffset - storageOffsetStarts);
         listener.onMissingWalUpdated();
       });
-      resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-      resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-          .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
       wal.status = WalStatus.synced;
       wal.isSyncing = false;
@@ -470,7 +473,7 @@ class SDCardWalSync implements IWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     var walToSync = _wals.where((w) => w == wal).toList().first;
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();
     listener.onMissingWalUpdated();
@@ -484,9 +487,9 @@ class SDCardWalSync implements IWalSync {
           (walToSync.storageOffset - storageOffsetStarts);
       listener.onMissingWalUpdated();
     });
-    resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-    resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-        .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+    resp.newConversationIds.addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+    resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+        .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
     wal.status = WalStatus.synced;
     wal.isSyncing = false;
@@ -700,7 +703,7 @@ class LocalWalSync implements IWalSync {
     }
 
     // Empty resp
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     var steps = 10;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
@@ -751,9 +754,10 @@ class LocalWalSync implements IWalSync {
         var partialRes = await syncLocalFiles(files);
 
         // Ensure unique
-        resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-        resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-            .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+        resp.newConversationIds
+            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
       } catch (e) {
         debugPrint(e.toString());
         continue;
@@ -784,7 +788,7 @@ class LocalWalSync implements IWalSync {
     var walToSync = _wals.where((w) => w == wal).toList().first;
 
     // Empty resp
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     late File walFile;
     if (wal.filePath == null) {
@@ -811,9 +815,10 @@ class LocalWalSync implements IWalSync {
       var partialRes = await syncLocalFiles([walFile]);
 
       // Ensure unique
-      resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-      resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-          .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     } catch (e) {
       debugPrint(e.toString());
     }
@@ -873,22 +878,24 @@ class WalSyncs implements IWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
-    var resp = SyncLocalFilesResponse(newMemoryIds: [], updatedMemoryIds: []);
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     // sdcard
     var partialRes = await _sdcardSync.syncAll(progress: progress);
     if (partialRes != null) {
-      resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-      resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-          .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
 
     // phone
     partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
-      resp.newMemoryIds.addAll(partialRes.newMemoryIds.where((id) => !resp.newMemoryIds.contains(id)));
-      resp.updatedMemoryIds.addAll(partialRes.updatedMemoryIds
-          .where((id) => !resp.updatedMemoryIds.contains(id) && !resp.newMemoryIds.contains(id)));
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
 
     return resp;
@@ -964,9 +971,9 @@ class WalService implements IWalService, IWalSyncListener {
   }
 
   @override
-  void onWalSynced(Wal wal, {ServerConversation? memory}) {
+  void onWalSynced(Wal wal, {ServerConversation? conversation}) {
     for (var s in _subscriptions.values) {
-      s.onWalSynced(wal, memory: memory);
+      s.onWalSynced(wal, conversation: conversation);
     }
   }
 }

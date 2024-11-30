@@ -38,9 +38,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final captureProvider = context.read<CaptureProvider>();
       if (captureProvider.segments.isNotEmpty) {
-        if (captureProvider.inProgressMemory != null) {
+        if (captureProvider.inProgressConversation != null) {
           setState(() {
-            _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressMemory!.createdAt);
+            _elapsedTime = convertDateTimeToSeconds(captureProvider.inProgressConversation!.createdAt);
           });
         }
         _startTimer();
@@ -248,7 +248,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                           onTap: () {
                             if (provider.segments.isNotEmpty) {
                               if (!showSummarizeConfirmation) {
-                                context.read<CaptureProvider>().forceProcessingCurrentMemory();
+                                context.read<CaptureProvider>().forceProcessingCurrentConversation();
                                 Navigator.of(context).pop();
                                 return;
                               }
@@ -276,7 +276,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                           onConfirm: () {
                                             SharedPreferencesUtil().showSummarizeConfirmation =
                                                 showSummarizeConfirmation;
-                                            context.read<CaptureProvider>().forceProcessingCurrentMemory();
+                                            context.read<CaptureProvider>().forceProcessingCurrentConversation();
                                             Navigator.of(context).pop();
                                             Navigator.of(context).pop();
                                           },

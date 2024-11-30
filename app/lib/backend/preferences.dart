@@ -81,9 +81,9 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
-  String get webhookOnMemoryCreated => getString('webhookOnMemoryCreated') ?? '';
+  String get webhookOnConversationCreated => getString('webhookOnMemoryCreated') ?? '';
 
-  set webhookOnMemoryCreated(String value) => saveString('webhookOnMemoryCreated', value);
+  set webhookOnConversationCreated(String value) => saveString('webhookOnMemoryCreated', value);
 
   String get webhookOnTranscriptReceived => getString('webhookOnTranscriptReceived') ?? '';
 
@@ -105,9 +105,9 @@ class SharedPreferencesUtil {
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 
-  set memoryEventsToggled(bool value) => saveBool('memoryEventsToggled', value);
+  set conversationEventsToggled(bool value) => saveBool('memoryEventsToggled', value);
 
-  bool get memoryEventsToggled => getBool('memoryEventsToggled') ?? false;
+  bool get conversationEventsToggled => getBool('memoryEventsToggled') ?? false;
 
   set transcriptsToggled(bool value) => saveBool('transcriptsToggled', value);
 
@@ -281,13 +281,13 @@ class SharedPreferencesUtil {
     }
   }
 
-  ServerConversation? get modifiedMemoryDetails {
-    final String memory = getString('modifiedMemoryDetails') ?? '';
-    if (memory.isEmpty) return null;
-    return ServerConversation.fromJson(jsonDecode(memory));
+  ServerConversation? get modifiedConversationDetails {
+    final String conversation = getString('modifiedMemoryDetails') ?? '';
+    if (conversation.isEmpty) return null;
+    return ServerConversation.fromJson(jsonDecode(conversation));
   }
 
-  set modifiedMemoryDetails(ServerConversation? value) {
+  set modifiedConversationDetails(ServerConversation? value) {
     saveString('modifiedMemoryDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 

@@ -11,13 +11,13 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
-class MemoryListItem extends StatefulWidget {
+class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
   final int memoryIdx;
   final ServerConversation memory;
 
-  const MemoryListItem({
+  const ConversationListItem({
     super.key,
     required this.memory,
     required this.date,
@@ -26,10 +26,10 @@ class MemoryListItem extends StatefulWidget {
   });
 
   @override
-  State<MemoryListItem> createState() => _MemoryListItemState();
+  State<ConversationListItem> createState() => _ConversationListItemState();
 }
 
-class _MemoryListItemState extends State<MemoryListItem> {
+class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _memoryNewStatusResetTimer;
   bool isNew = false;
 

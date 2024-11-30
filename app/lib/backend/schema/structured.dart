@@ -144,16 +144,16 @@ class Event {
   }
 }
 
-class MemoryPhoto {
+class ConversationPhoto {
   int id = 0;
 
   String base64;
   String description;
 
-  MemoryPhoto(this.base64, this.description, {this.id = 0});
+  ConversationPhoto(this.base64, this.description, {this.id = 0});
 
-  factory MemoryPhoto.fromJson(Map<String, dynamic> json) {
-    return MemoryPhoto(json['base64'], json['description']);
+  factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
+    return ConversationPhoto(json['base64'], json['description']);
   }
 
   toJson() {

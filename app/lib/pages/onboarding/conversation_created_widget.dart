@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/pages/conversations/widgets/memory_list_item.dart';
+import 'package:friend_private/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/conversation_detail/page.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
@@ -54,7 +54,7 @@ class _MemoryCreatedWidgetState extends State<ConversationCreatedWidget> {
             const SizedBox(height: 24),
             context.read<SpeechProfileProvider>().memory == null
                 ? const SizedBox()
-                : MemoryListItem(
+                : ConversationListItem(
                     memory: context.read<SpeechProfileProvider>().memory!,
                     memoryIdx: 0,
                     isFromOnboarding: true,

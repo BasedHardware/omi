@@ -7,7 +7,7 @@ import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/empty_memories.dart';
+import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
@@ -57,7 +57,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 child: Center(
                   child: Padding(
                     padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyMemoriesWidget(),
+                    child: EmptyConversationsWidget(),
                   ),
                 ),
               )

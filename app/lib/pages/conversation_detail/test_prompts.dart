@@ -76,7 +76,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
   onTap() async {
     if (loading) return;
     loading = true;
-    var response = await triggerTestMemoryPrompt(
+    var response = await triggerTestConversationPrompt(
       controller.text,
       widget.memory.getTranscript(generate: true),
     );

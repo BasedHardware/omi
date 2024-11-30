@@ -49,8 +49,8 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      var topMemoryId = (provider.memoryProvider?.conversations ?? []).isNotEmpty
-          ? provider.memoryProvider!.conversations.first.id
+      var topMemoryId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
+          ? provider.conversationProvider!.conversations.first.id
           : null;
 
       // Waiting ready state, 3s for now

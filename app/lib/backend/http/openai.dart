@@ -17,7 +17,7 @@ class SummaryResult {
   SummaryResult(this.structured, this.appsResponse);
 }
 
-Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
+Future<String> triggerTestConversationPrompt(String prompt, String transcript) async {
   return await executeGptPrompt('''
         Your task is: $prompt
         
@@ -30,7 +30,6 @@ Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
       .replaceAll('    ', '')
       .trim());
 }
-
 
 Future<String> getPhotoDescription(Uint8List data) async {
   var messages = [

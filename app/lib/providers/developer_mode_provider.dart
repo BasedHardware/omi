@@ -84,7 +84,7 @@ class DeveloperModeProvider extends BaseProvider {
       audioBytesToggled = res['audio_bytes'];
       daySummaryToggled = res['day_summary'];
     }
-    SharedPreferencesUtil().memoryEventsToggled = memoryEventsToggled;
+    SharedPreferencesUtil().conversationEventsToggled = memoryEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
     SharedPreferencesUtil().daySummaryToggled = daySummaryToggled;
@@ -96,12 +96,12 @@ class DeveloperModeProvider extends BaseProvider {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
-    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
+    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnConversationCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
-    memoryEventsToggled = SharedPreferencesUtil().memoryEventsToggled;
+    memoryEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
@@ -126,7 +126,7 @@ class DeveloperModeProvider extends BaseProvider {
       }),
       getUserWebhookUrl(type: 'memory_created').then((url) {
         webhookOnMemoryCreated.text = url;
-        SharedPreferencesUtil().webhookOnMemoryCreated = url;
+        SharedPreferencesUtil().webhookOnConversationCreated = url;
       }),
       getUserWebhookUrl(type: 'day_summary').then((url) {
         webhookDaySummary.text = url;
@@ -204,7 +204,7 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookAudioBytes = webhookAudioBytes.text;
       prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
-      prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text;
+      prefs.webhookOnConversationCreated = webhookOnMemoryCreated.text;
       prefs.webhookDaySummary = webhookDaySummary.text;
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');

@@ -35,16 +35,16 @@ import 'package:uuid/uuid.dart';
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctipSegmentSocketServiceListener {
-  ConversationProvider? memoryProvider;
+  ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
   // In progress memory
-  ServerConversation? _inProgressMemory;
+  ServerConversation? _inProgressConversation;
 
-  ServerConversation? get inProgressMemory => _inProgressMemory;
+  ServerConversation? get inProgressConversation => _inProgressConversation;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -64,8 +64,8 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  void updateProviderInstances(ConversationProvider? mp, MessageProvider? p) {
-    memoryProvider = mp;
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+    conversationProvider = cp;
     messageProvider = p;
     notifyListeners();
   }
@@ -96,7 +96,7 @@ class CaptureProvider extends ChangeNotifier
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
   // -----------------------
-  // Memory creation variables
+  // Conversation creation variables
   String conversationId = const Uuid().v4();
 
   void setHasTranscripts(bool value) {
@@ -104,9 +104,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setMemoryCreating(bool value) {
-    debugPrint('set memory creating $value');
-    // memoryCreating = value;
+  void setConversationCreating(bool value) {
+    debugPrint('set Conversation creating $value');
+    // ConversationCreating = value;
     notifyListeners();
   }
 
@@ -165,7 +165,7 @@ class CaptureProvider extends ChangeNotifier
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
 
-    _loadInProgressMemory();
+    _loadInProgressConversation();
 
     notifyListeners();
   }
@@ -310,7 +310,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _cleanupCurrentState() {
     closeBleStream();
-    cancelMemoryCreationTimer();
+    cancelConversationCreationTimer();
   }
 
   // TODO: use connection directly
@@ -426,7 +426,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void cancelMemoryCreationTimer() {
+  void cancelConversationCreationTimer() {
     notifyListeners();
   }
 
@@ -491,8 +491,8 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    // Wait for in process memory or reset
-    if (inProgressMemory == null) {
+    // Wait for in process Conversation or reset
+    if (inProgressConversation == null) {
       _resetStateVariables();
     }
 
@@ -530,11 +530,11 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _loadInProgressMemory() async {
-    var memories = await getConversations(statuses: [MemoryStatus.in_progress], limit: 1);
-    _inProgressMemory = memories.isNotEmpty ? memories.first : null;
-    if (_inProgressMemory != null) {
-      segments = _inProgressMemory!.transcriptSegments;
+  void _loadInProgressConversation() async {
+    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    _inProgressConversation = memories.isNotEmpty ? memories.first : null;
+    if (_inProgressConversation != null) {
+      segments = _inProgressConversation!.transcriptSegments;
       setHasTranscripts(segments.isNotEmpty);
     }
     notifyListeners();
@@ -542,53 +542,53 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
-    if (event.type == MessageEventType.memoryProcessingStarted) {
-      if (event.memory == null) {
+    if (event.type == MessageEventType.conversationProcessingStarted) {
+      if (event.conversation == null) {
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      memoryProvider!.addProcessingMemory(event.memory!);
+      conversationProvider!.addProcessingMemory(event.conversation!);
       _resetStateVariables();
       return;
     }
 
-    if (event.type == MessageEventType.memoryCreated) {
-      if (event.memory == null) {
+    if (event.type == MessageEventType.conversationCreated) {
+      if (event.conversation == null) {
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      event.memory!.isNew = true;
-      memoryProvider!.removeProcessingMemory(event.memory!.id);
-      _processMemoryCreated(event.memory, event.messages ?? []);
+      event.conversation!.isNew = true;
+      conversationProvider!.removeProcessingMemory(event.conversation!.id);
+      _processConversationCreated(event.conversation, event.messages ?? []);
       return;
     }
   }
 
-  Future<void> forceProcessingCurrentMemory() async {
+  Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
-    memoryProvider!.addProcessingMemory(
+    conversationProvider!.addProcessingMemory(
       ServerConversation(
-          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
-      if (result == null || result.memory == null) {
+      if (result == null || result.conversation == null) {
         _initiateWebsocket();
-        memoryProvider!.removeProcessingMemory('0');
+        conversationProvider!.removeProcessingMemory('0');
         return;
       }
-      memoryProvider!.removeProcessingMemory('0');
-      result.memory!.isNew = true;
-      _processMemoryCreated(result.memory, result.messages);
+      conversationProvider!.removeProcessingMemory('0');
+      result.conversation!.isNew = true;
+      _processConversationCreated(result.conversation, result.messages);
       _initiateWebsocket();
     });
 
     return;
   }
 
-  Future<void> _processMemoryCreated(ServerConversation? memory, List<ServerMessage> messages) async {
-    if (memory == null) return;
-    memoryProvider?.upsertMemory(memory);
-    MixpanelManager().memoryCreated(memory);
+  Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
+    if (conversation == null) return;
+    conversationProvider?.upsertMemory(conversation);
+    MixpanelManager().memoryCreated(conversation);
   }
 
   @override
@@ -598,7 +598,7 @@ class CaptureProvider extends ChangeNotifier
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      _loadInProgressMemory();
+      _loadInProgressConversation();
     }
     TranscriptSegment.combineSegments(segments, newSegments);
     hasTranscripts = true;
@@ -749,7 +749,7 @@ class CaptureProvider extends ChangeNotifier
       //replace
       onMessageReceived: () {
         debugPrint('onMessageReceived');
-        memoryProvider?.getConversationsFromServer();
+        conversationProvider?.getConversationsFromServer();
         notifyListeners();
         _notifySdCardComplete();
         return;
@@ -761,7 +761,7 @@ class CaptureProvider extends ChangeNotifier
       await sdCardSocket.setupSdCardWebSocket(
         onMessageReceived: () {
           debugPrint('onMessageReceived');
-          memoryProvider?.getMoreConversationsFromServer();
+          conversationProvider?.getMoreConversationsFromServer();
           _notifySdCardComplete();
 
           return;
@@ -825,7 +825,7 @@ class CaptureProvider extends ChangeNotifier
           sdCardSocket.attemptReconnection(
             onMessageReceived: () {
               debugPrint('onMessageReceived');
-              memoryProvider?.getMoreConversationsFromServer();
+              conversationProvider?.getMoreConversationsFromServer();
               _notifySdCardComplete();
               return;
             },
