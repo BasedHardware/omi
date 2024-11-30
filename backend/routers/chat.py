@@ -111,6 +111,9 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id == 'null':
+        plugin_id = None
+
     messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
