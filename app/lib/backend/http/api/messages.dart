@@ -2,17 +2,23 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
+import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
-Future<List<ServerMessage>> getMessagesServer() async {
+Future<List<ServerMessage>> getMessagesServer({String? pluginId}) async {
+  if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
   if (response == null) return [];
   debugPrint('getMessages: ${response.body}');
   if (response.statusCode == 200) {
