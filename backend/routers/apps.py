@@ -46,6 +46,8 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     new_app_id = slugify(data['name']) + '-' + str(ULID())
     data['id'] = new_app_id
     if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None:
+            raise HTTPException(status_code=422, detail='Triggers on is required')
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):
             external_integration['setup_instructions_file_path'] = external_integration[
