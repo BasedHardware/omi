@@ -8,11 +8,12 @@ import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db
-from database.chat import add_plugin_message
+from database.chat import add_plugin_message, get_plugin_messages
 from database.plugins import record_plugin_usage
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
     set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
+from models.chat import Message
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
@@ -303,10 +304,15 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         if len(memories) > 0:
             context = Memory.memories_to_string(memories, True)
 
+    # messages
+    messages = []
+    if 'user_chat' in filter_scopes:
+        messages = list(reversed([Message(**msg) for msg in get_plugin_messages(uid, plugin.id, limit=10)]))
+
     # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
-    message = get_proactive_message(uid, prompt, filter_scopes, context)
+    message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
     if not message or len(message) < min_message_char_limit:
         print(f"Plugins {plugin.id}, message too short", uid)
         return None
