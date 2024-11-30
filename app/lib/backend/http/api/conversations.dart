@@ -37,7 +37,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 }
 
 Future<List<ServerConversation>> getConversations(
-    {int limit = 50, int offset = 0, List<MemoryStatus> statuses = const []}) async {
+    {int limit = 50, int offset = 0, List<ConversationStatus> statuses = const []}) async {
   var response = await makeApiCall(
       url:
           '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
@@ -57,15 +57,15 @@ Future<List<ServerConversation>> getConversations(
   return [];
 }
 
-Future<ServerConversation?> reProcessConversationServer(String memoryId) async {
+Future<ServerConversation?> reProcessConversationServer(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/reprocess',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/reprocess',
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return null;
-  debugPrint('reProcessMemoryServer: ${response.body}');
+  debugPrint('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   }
@@ -80,7 +80,7 @@ Future<bool> deleteConversationServer(String memoryId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteMemory: ${response.statusCode}');
+  debugPrint('deleteConversation: ${response.statusCode}');
   return response.statusCode == 204;
 }
 
@@ -92,7 +92,7 @@ Future<ServerConversation?> getConversationById(String memoryId) async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getMemoryById: ${response.body}');
+  debugPrint('getConversationById: ${response.body}');
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   }
@@ -111,7 +111,7 @@ Future<bool> updateConversationTitle(String memoryId, String title) async {
   return response.statusCode == 200;
 }
 
-Future<List<MemoryPhoto>> getConversationPhotos(String memoryId) async {
+Future<List<ConversationPhoto>> getConversationPhotos(String memoryId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',
     headers: {},
@@ -121,7 +121,7 @@ Future<List<MemoryPhoto>> getConversationPhotos(String memoryId) async {
   if (response == null) return [];
   debugPrint('getConversationPhotos: ${response.body}');
   if (response.statusCode == 200) {
-    return (jsonDecode(response.body) as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList();
+    return (jsonDecode(response.body) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList();
   }
   return [];
 }

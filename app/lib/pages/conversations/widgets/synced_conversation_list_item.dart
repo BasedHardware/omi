@@ -8,13 +8,13 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
-class SyncedMemoryListItem extends StatefulWidget {
+class SyncedConversationListItem extends StatefulWidget {
   final DateTime date;
   final int memoryIdx;
   final ServerConversation memory;
   final bool showReprocess;
 
-  const SyncedMemoryListItem({
+  const SyncedConversationListItem({
     super.key,
     required this.memory,
     required this.date,
@@ -23,10 +23,10 @@ class SyncedMemoryListItem extends StatefulWidget {
   });
 
   @override
-  State<SyncedMemoryListItem> createState() => _SyncedMemoryListItemState();
+  State<SyncedConversationListItem> createState() => _SyncedConversationListItemState();
 }
 
-class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
+class _SyncedConversationListItemState extends State<SyncedConversationListItem> {
   bool isReprocessing = false;
   late ServerConversation memory;
 

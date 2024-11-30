@@ -5,10 +5,10 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 
-Future<String> webhookOnMemoryCreatedCall(ServerConversation? memory, {bool returnRawBody = false}) async {
-  if (memory == null) return '';
-  debugPrint('devModeWebhookCall: $memory');
-  String url = SharedPreferencesUtil().webhookOnMemoryCreated;
+Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation, {bool returnRawBody = false}) async {
+  if (conversation == null) return '';
+  debugPrint('devModeWebhookCall: $conversation');
+  String url = SharedPreferencesUtil().webhookOnConversationCreated;
   if (url.isEmpty) return '';
   if (url.contains('?')) {
     url += '&uid=${SharedPreferencesUtil().uid}';
@@ -16,7 +16,7 @@ Future<String> webhookOnMemoryCreatedCall(ServerConversation? memory, {bool retu
     url += '?uid=${SharedPreferencesUtil().uid}';
   }
   debugPrint('triggerMemoryRequestAtEndpoint: $url');
-  var data = memory.toJson();
+  var data = conversation.toJson();
   try {
     var response = await makeApiCall(
       url: url,
@@ -32,7 +32,7 @@ Future<String> webhookOnMemoryCreatedCall(ServerConversation? memory, {bool retu
     debugPrint('Response not a valid json: $e');
     return '';
   } catch (e) {
-    debugPrint('Error triggering memory request at endpoint: $e');
+    debugPrint('Error triggering conversation request at endpoint: $e');
     return '';
   }
 }

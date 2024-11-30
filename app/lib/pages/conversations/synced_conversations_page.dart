@@ -3,7 +3,7 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
-import 'widgets/synced_memory_list_item.dart';
+import 'widgets/synced_conversation_list_item.dart';
 
 class SyncedConversationsPage extends StatelessWidget {
   const SyncedConversationsPage({super.key});
@@ -74,8 +74,8 @@ class ConversationsListWidget extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (ctx, i) {
             var mem = memories[i];
-            return SyncedMemoryListItem(
-                memory: mem.memory, date: mem.key, memoryIdx: mem.index, showReprocess: showReprocess);
+            return SyncedConversationListItem(
+                memory: mem.conversation, date: mem.key, memoryIdx: mem.index, showReprocess: showReprocess);
           },
           separatorBuilder: (ctx, i) {
             return const SizedBox(

@@ -27,7 +27,7 @@ class AIMessage extends StatefulWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final App? appSender;
-  final Function(ServerConversation) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final Function(int) setMessageNps;
 
   const AIMessage({
@@ -35,7 +35,7 @@ class AIMessage extends StatefulWidget {
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.setMessageNps,
     this.appSender,
     this.showTypingIndicator = false,
@@ -105,7 +105,7 @@ class _AIMessageState extends State<AIMessage> {
                 widget.showTypingIndicator,
                 widget.displayOptions,
                 widget.appSender,
-                widget.updateMemory,
+                widget.updateConversation,
                 widget.setMessageNps,
               ),
             ],
@@ -403,7 +403,7 @@ class NormalMessageWidget extends StatelessWidget {
 
 class MemoriesMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
-  final List<MessageMemory> messageMemories;
+  final List<MessageConversation> messageMemories;
   final String messageText;
   final Function(ServerConversation) updateMemory;
   final ServerMessage message;
@@ -508,20 +508,20 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                       ),
                     );
-                    if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                      widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                      var copy = List<MessageMemory>.from(widget.messageMemories);
-                      copy[data.$1] = MessageMemory(
+                    if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
+                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
+                      widget.updateMemory(SharedPreferencesUtil().modifiedConversationDetails!);
+                      var copy = List<MessageConversation>.from(widget.messageMemories);
+                      copy[data.$1] = MessageConversation(
                           modifiedDetails.id,
                           modifiedDetails.createdAt,
-                          MessageMemoryStructured(
+                          MessageConversationStructured(
                             modifiedDetails.structured.title,
                             modifiedDetails.structured.emoji,
                           ));
                       widget.messageMemories.clear();
                       widget.messageMemories.addAll(copy);
-                      SharedPreferencesUtil().modifiedMemoryDetails = null;
+                      SharedPreferencesUtil().modifiedConversationDetails = null;
                       setState(() {});
                     }
                   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 
 import 'date_list_item.dart';
-import 'memory_list_item.dart';
+import 'conversation_list_item.dart';
 
 class ConversationsgroupWidget extends StatelessWidget {
   final List<ServerConversation> memories;
@@ -34,7 +34,7 @@ class ConversationsgroupWidget extends StatelessWidget {
             if (!showDiscardedMemories && memory.discarded) {
               return const SizedBox.shrink();
             }
-            return MemoryListItem(memory: memory, memoryIdx: memories.indexOf(memory), date: date);
+            return ConversationListItem(memory: memory, memoryIdx: memories.indexOf(memory), date: date);
           }),
           if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
             const SizedBox.shrink()
