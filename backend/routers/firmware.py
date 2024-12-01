@@ -63,9 +63,11 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
             print(release.get("tag_name"))
             if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
                 continue
+            print(bool(re.match(f"{release_prefix}_v\d+.\d+.\d+", release.get("tag_name"), re.IGNORECASE)))
             if not bool(re.match(f"{release_prefix}_v\d+.\d+.\d+", release.get("tag_name"), re.IGNORECASE)):
                 continue
             if not latest_release or release.get("published_at") > latest_release.get("published_at"):
+                print("hit")
                 latest_release = release
 
         if not latest_release:
