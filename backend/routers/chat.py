@@ -7,15 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.plugin import UsageHistoryType
-from models.memory import Memory
 from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
+from models.memory import Memory
+from models.plugin import UsageHistoryType
+from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
+from utils.chat import process_voice_message_segment
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat
-from utils.chat import process_voice_message_segment
-from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 
 router = APIRouter()
 
@@ -77,6 +77,22 @@ def send_message(
     return resp
 
 
+@router.post('/v1/messages/upload', tags=['chat'], response_model=ResponseMessage)
+async def send_message_with_file(
+        file: UploadFile = File(...), plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('send_message_with_file', file.filename, plugin_id, uid)
+    content = await file.read()
+    # TODO: steps
+    # - File should be uploaded to cloud storage
+    # - File content should be extracted and parsed, then sent to LLM, and ask it to "read it" say 5 words, and say "What questions do you have?"
+    # - Follow up questions, in langgraph should go through the path selection, and if referring to the file
+    # - A new graph path should be created that references the previous file.
+    # - if an image is received, it should ask gpt4vision for a description, but this is probably a different path
+    # - Limit content of the file to 10000 tokens, otherwise is too big.
+    # - If file is too big, it should do a mini RAG (later)
+
+
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
     err = chat_db.clear_chat(uid)
@@ -110,11 +126,15 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
-def get_messages(uid: str = Depends(auth.get_current_user_uid)):
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True)  # for now retrieving first 100 messages
+def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id == 'null':
+        plugin_id = None
+
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     if not messages:
-        return [initial_message_util(uid)]
+        return [initial_message_util(uid, plugin_id)]
     return messages
+
 
 @router.post("/v1/voice-messages")
 async def create_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):

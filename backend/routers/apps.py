@@ -5,7 +5,6 @@ from typing import List
 import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
-from slugify import slugify
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
@@ -43,9 +42,10 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    new_app_id = slugify(data['name']) + '-' + str(ULID())
-    data['id'] = new_app_id
+    data['id'] = str(ULID())
     if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None:
+            raise HTTPException(status_code=422, detail='Triggers on is required')
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):
             external_integration['setup_instructions_file_path'] = external_integration[
@@ -227,7 +227,8 @@ def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
         {'title': 'User Facts', 'id': 'user_facts'},
-        {'title': 'User Memories', 'id': 'user_context'}
+        {'title': 'User Memories', 'id': 'user_context'},
+        {'title': 'User Chat', 'id': 'user_chat'}
     ]
 
 
@@ -243,7 +244,8 @@ def get_plugin_capabilities():
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
             {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'}
+            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Chat', 'id': 'user_chat'}
         ]}
     ]
 
