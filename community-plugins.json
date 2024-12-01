@@ -1433,9 +1433,14 @@
     "description": "Help to improve speaking skill",
     "image": "/plugins/logos/charlie-coach.png",
     "capabilities": [
+      "external_integration",
       "memories"
     ],
-   "memeory_prompt": "Analyze conversation and help people improve their English speaking skills by giving suggestions",
-    "deleted": true
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://vbeyspwkwyaerbzzmxfi.supabase.co/functions/v1/omi-memory-event-trigger",
+      "setup_instructions_file_path": "/plugins/instructions/charlie-coach/README.md"
+    },
+    "deleted": false
   }
 ]
