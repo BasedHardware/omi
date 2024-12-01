@@ -74,6 +74,28 @@ def delete_app_cache_by_id(app_id: str):
 # ******************************************************
 
 
+def set_app_usage_count_cache(app_id: str, count: int):
+    r.set(f'apps:{app_id}:usage_count', count, ex=60 * 15)  # 15 minutes
+
+
+def get_app_usage_count_cache(app_id: str) -> int | None:
+    count = r.get(f'apps:{app_id}:usage_count')
+    if not count:
+        return None
+    return eval(count)
+
+
+def set_app_money_made_amount_cache(app_id: str, amount: float):
+    r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
+
+
+def get_app_money_made_amount_cache(app_id: str) -> float | None:
+    amount = r.get(f'apps:{app_id}:money_made')
+    if not amount:
+        return None
+    return eval(amount)
+
+
 def set_app_usage_history_cache(app_id: str, usage: List[dict]):
     r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 10)  # 10 minutes
 
