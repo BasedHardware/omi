@@ -57,6 +57,10 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         if device == DeviceModel.OPEN_GLASS:
             release_prefix = "OpenGlass"
         for release in releases:
+            print(release)
+            print(release.get("draft"))
+            print(release.get("published_at"))
+            print(release.get("tag_name"))
             if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
                 continue
             if not bool(re.match(f"{release_prefix}_v\d+.\d+.\d+", release.get("tag_name"), re.IGNORECASE)):
