@@ -139,9 +139,6 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause;
 
-    // print(
-    //     'internetConnectionStateOk: $internetConnectionStateOk deviceServiceStateOk: $deviceServiceStateOk transcriptServiceStateOk: $transcriptServiceStateOk isUsingPhoneMic: $isUsingPhoneMic isHavingDesireDevie: $isHavingDesireDevice');
-
     // Left
     Widget? left;
     if (isUsingPhoneMic || !isHavingDesireDevice) {
@@ -209,7 +206,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
     } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
-      stateText = "Listening...";
+      stateText = "Reconnecting...";
       statusIndicator = const CircularProgressIndicator(
         strokeWidth: 2.0,
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -264,7 +261,7 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1000), // Blink every half second
+      duration: const Duration(milliseconds: 1000), // Blink every second
       vsync: this,
     )..repeat(reverse: true);
     _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
@@ -287,37 +284,23 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
 
 getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState state) {
   if (SharedPreferencesUtil().btDevice.id.isNotEmpty) return const SizedBox.shrink();
-  return MaterialButton(
-    onPressed: state == RecordingState.initialising ? null : toggleRecording,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        state == RecordingState.initialising
-            ? const SizedBox(
-                height: 8,
-                width: 8,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : (state == RecordingState.record
-                ? const Icon(Icons.stop, color: Colors.red, size: 12)
-                : const Icon(Icons.mic, size: 18)),
-        const SizedBox(width: 4),
-        Text(
-          state == RecordingState.initialising
-              ? 'Initialising Recorder'
-              : (state == RecordingState.record ? 'Stop Recording' : 'Try With Phone Mic'),
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(width: 4),
-      ],
+
+  return GestureDetector(
+    onTap: () => toggleRecording(context),
+    child: Container(
+      decoration: BoxDecoration(
+        color: state == RecordingState.record ? Colors.red : Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Text(
+        state == RecordingState.record ? 'Stop Recording' : 'Start Recording',
+        style: const TextStyle(color: Colors.white),
+      ),
     ),
   );
 }
+
 
 Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
   // FIXME, this has to be a single one always, and also a memory obj
