@@ -12,12 +12,11 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.plugins import record_plugin_usage
+from database.apps import record_app_usage
 from database.vector_db import upsert_vector2, update_vector_metadata
-from models.app import App
+from models.app import App, UsageHistoryType
 from models.facts import FactDB
 from models.memory import *
-from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from utils.apps import get_available_apps
@@ -27,7 +26,6 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
-from utils.plugins import get_plugins_data, get_plugins_data_from_db
 from utils.retrieval.rag import retrieve_rag_memory_context
 from utils.webhooks import memory_created_webhook
 
@@ -103,20 +101,20 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
-    plugins: List[App] = get_available_apps(uid)
-    filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
+def _trigger_apps(uid: str, memory: Memory, is_reprocess: bool = False):
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     memory.plugins_results = []
     threads = []
 
-    def execute_plugin(plugin):
-        if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
-            memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+    def execute_app(app):
+        if result := get_plugin_result(memory.get_transcript(False), app).strip():
+            memory.plugins_results.append(PluginResult(plugin_id=app.id, content=result))
             if not is_reprocess:
-                record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
+                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
 
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=execute_app, args=(app,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
@@ -161,7 +159,7 @@ def process_memory(
     memory = _get_memory_obj(uid, structured, memory)
 
     if not discarded:
-        _trigger_plugins(uid, memory, is_reprocess=is_reprocess)
+        _trigger_apps(uid, memory, is_reprocess=is_reprocess)
         threading.Thread(target=save_structured_vector, args=(uid, memory,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
