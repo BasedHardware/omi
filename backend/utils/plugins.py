@@ -7,18 +7,17 @@ import time
 import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
-from database.apps import get_private_apps_db, get_public_apps_db
-from database.chat import add_plugin_message
-from database.plugins import record_plugin_usage
-from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
-    set_generic_cache
+from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
+from database.chat import add_plugin_message, get_plugin_messages
+from database.redis_db import get_enabled_plugins, get_generic_cache, \
+    set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
+from models.chat import Message
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
 from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
-from utils.other.endpoints import timeit
 from utils.llm import (
     generate_embedding,
     get_proactive_message
@@ -75,13 +74,6 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/docs"):
 # ************* BASICS **************
 # ***********************************
 
-@timeit
-def get_plugin_by_id(plugin_id: str) -> Optional[Plugin]:
-    if not plugin_id or plugin_id == 'null':
-        return None
-    plugins = get_plugins_data('', include_reviews=False)
-    return next((p for p in plugins if p.id == plugin_id), None)
-
 
 def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Plugin]:
     private_data = []
@@ -98,13 +90,18 @@ def get_plugins_data_from_db(uid: str, include_reviews: bool = False) -> List[Pl
     # set_generic_cache('get_public_plugins_data', public_data, 60 * 10)  # 10 minutes cached
     user_enabled = set(get_enabled_plugins(uid))
     all_plugins = private_data + public_data
+
+    plugin_ids = [plugin['id'] for plugin in all_plugins]
+    plugins_install = get_plugins_installs_count(plugin_ids)
+    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
+
     plugins = []
     for plugin in all_plugins:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
+        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
         if include_reviews:
-            reviews = get_plugin_reviews(plugin['id'])
+            reviews = plugins_review.get(plugin['id'], {})
             sorted_reviews = reviews.values()
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             plugin_dict['reviews'] = []
@@ -131,13 +128,18 @@ def get_plugins_data(uid: str, include_reviews: bool = False) -> List[Plugin]:
 
     user_enabled = set(get_enabled_plugins(uid)) if uid else []
     # print('get_plugins_data, user_enabled', user_enabled)
+
+    plugin_ids = [plugin['id'] for plugin in data]
+    plugins_install = get_plugins_installs_count(plugin_ids)
+    plugins_review = get_plugins_reviews(plugin_ids) if include_reviews else {}
+
     plugins = []
     for plugin in data:
         plugin_dict = plugin
         plugin_dict['enabled'] = plugin['id'] in user_enabled
-        plugin_dict['installs'] = get_plugin_installs_count(plugin['id'])
+        plugin_dict['installs'] = plugins_install.get(plugin['id'], 0)
         if include_reviews:
-            reviews = get_plugin_reviews(plugin['id'])
+            reviews = plugins_review.get(plugin['id'], {})
             sorted_reviews = reviews.values()
 
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
@@ -161,17 +163,17 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     if not memory or memory.discarded:
         return []
 
-    plugins: List[App] = get_available_apps(uid)
-    filtered_plugins = [plugin for plugin in plugins if
-                        plugin.triggers_on_memory_creation() and plugin.enabled and not plugin.deleted]
-    if not filtered_plugins:
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [app for app in apps if
+                     app.triggers_on_memory_creation() and app.enabled and not app.deleted]
+    if not filtered_apps:
         return []
 
     threads = []
     results = {}
 
-    def _single(plugin: App):
-        if not plugin.external_integration.webhook_url:
+    def _single(app: App):
+        if not app.external_integration.webhook_url:
             return
 
         memory_dict = memory.as_dict_cleaned_dates()
@@ -180,7 +182,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         if memory.source == MemorySource.workflow and 'external_data' in memory_dict:
             memory_dict['external_data'] = None
 
-        url = plugin.external_integration.webhook_url
+        url = app.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -189,22 +191,26 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
         try:
             response = requests.post(url, json=memory_dict, timeout=30, )  # TODO: failing?
             if response.status_code != 200:
-                print('Plugin integration failed', plugin.id, 'status:', response.status_code, 'result:',
-                      response.text[:100])
+                print('App integration failed', app.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
 
-            record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_external_integration,
-                                memory_id=memory.id)
+            if app.uid is not None:
+                if app.uid != uid:
+                    record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
+                                     memory_id=memory.id)
+            else:
+                record_app_usage(uid, app.id, UsageHistoryType.memory_created_external_integration,
+                                 memory_id=memory.id)
 
             # print('response', response.json())
             if message := response.json().get('message', ''):
-                results[plugin.id] = message
+                results[app.id] = message
         except Exception as e:
             print(f"Plugin integration error: {e}")
             return
 
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=_single, args=(plugin,)))
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=_single, args=(app,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
@@ -298,10 +304,15 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         if len(memories) > 0:
             context = Memory.memories_to_string(memories, True)
 
+    # messages
+    messages = []
+    if 'user_chat' in filter_scopes:
+        messages = list(reversed([Message(**msg) for msg in get_plugin_messages(uid, plugin.id, limit=10)]))
+
     # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
-    message = get_proactive_message(uid, prompt, filter_scopes, context)
+    message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
     if not message or len(message) < min_message_char_limit:
         print(f"Plugins {plugin.id}, message too short", uid)
         return None
@@ -315,22 +326,22 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
 
 def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str) -> dict:
-    plugins: List[App] = get_available_apps(uid)
-    filtered_plugins = [
-        plugin for plugin in plugins if
-        plugin.triggers_realtime() and plugin.enabled and not plugin.deleted
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [
+        app for app in apps if
+        app.triggers_realtime() and app.enabled and not app.deleted
     ]
-    if not filtered_plugins:
+    if not filtered_apps:
         return {}
 
     threads = []
     results = {}
 
-    def _single(plugin: App):
-        if not plugin.external_integration.webhook_url:
+    def _single(app: App):
+        if not app.external_integration.webhook_url:
             return
 
-        url = plugin.external_integration.webhook_url
+        url = app.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -339,7 +350,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
             if response.status_code != 200:
-                print('trigger_realtime_integrations', plugin.id, 'status: ', response.status_code, 'results:',
+                print('trigger_realtime_integrations', app.id, 'status: ', response.status_code, 'results:',
                       response.text[:100])
                 return
 
@@ -354,23 +365,23 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
             message = response_data.get('message', '')
             # print('Plugin', plugin.id, 'response message:', message)
             if message and len(message) > 5:
-                send_plugin_notification(token, plugin.name, plugin.id, message)
-                results[plugin.id] = message
+                send_plugin_notification(token, app.name, app.id, message)
+                results[app.id] = message
 
             # proactive_notification
             noti = response_data.get('notification', None)
             # print('Plugin', plugin.id, 'response notification:', noti)
-            if plugin.has_capability("proactive_notification"):
-                message = _process_proactive_notification(uid, token, plugin, noti)
+            if app.has_capability("proactive_notification"):
+                message = _process_proactive_notification(uid, token, app, noti)
                 if message:
-                    results[plugin.id] = message
+                    results[app.id] = message
 
         except Exception as e:
-            print(f"Plugin integration error: {e}")
+            print(f"App integration error: {e}")
             return
 
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=_single, args=(plugin,)))
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=_single, args=(app,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
@@ -383,13 +394,13 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
     return messages
 
 
-def send_plugin_notification(token: str, plugin_name: str, plugin_id: str, message: str):
+def send_plugin_notification(token: str, app_name: str, app_id: str, message: str):
     ai_message = NotificationMessage(
         text=message,
-        plugin_id=plugin_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
     )
 
-    send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

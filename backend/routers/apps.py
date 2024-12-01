@@ -5,13 +5,12 @@ from typing import List
 import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
-from slugify import slugify
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
 from database.notifications import get_token_only
-from database.redis_db import delete_generic_cache, increase_plugin_installs_count, enable_plugin, \
-    disable_plugin, decrease_plugin_installs_count, get_specific_user_review
+from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews
 from utils.notifications import send_notification
@@ -40,11 +39,13 @@ def get_approved_apps(include_reviews: bool = False):
 def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
+    data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
-    new_app_id = slugify(data['name']) + '-' + str(ULID())
-    data['id'] = new_app_id
+    data['id'] = str(ULID())
     if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None:
+            raise HTTPException(status_code=422, detail='Triggers on is required')
         # check if setup_instructions_file_path is a single url or a just a string of text
         if external_integration.get('setup_instructions_file_path'):
             external_integration['setup_instructions_file_path'] = external_integration[
@@ -85,6 +86,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -98,6 +100,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_app_from_db(app_id)
     if plugin['approved']:
         delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -215,6 +218,7 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     if app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     update_app_visibility_in_db(app_id, private)
+    delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
@@ -223,7 +227,8 @@ def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
         {'title': 'User Facts', 'id': 'user_facts'},
-        {'title': 'User Memories', 'id': 'user_context'}
+        {'title': 'User Memories', 'id': 'user_context'},
+        {'title': 'User Chat', 'id': 'user_chat'}
     ]
 
 
@@ -239,7 +244,8 @@ def get_plugin_capabilities():
         {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
             {'title': 'User Name', 'id': 'user_name'},
             {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'}
+            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Chat', 'id': 'user_chat'}
         ]}
     ]
 
@@ -249,7 +255,7 @@ def get_plugin_capabilities():
 # ******************************************************
 
 @router.post('/v1/apps/enable')
-def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -262,14 +268,14 @@ def enable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         print('enable_app_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
-    if app.private is None or app.private is False:
-        increase_plugin_installs_count(app_id)
-    enable_plugin(uid, app_id)
+    enable_app(uid, app_id)
+    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid):
+        increase_app_installs_count(app_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/disable')
-def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -277,9 +283,9 @@ def disable_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.private is None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    disable_plugin(uid, app_id)
-    if app.private is None or app.private is False:
-        decrease_plugin_installs_count(app_id)
+    disable_app(uid, app_id)
+    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid):
+        decrease_app_installs_count(app_id)
     return {'status': 'ok'}
 
 
@@ -300,6 +306,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
+    delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
@@ -313,6 +320,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
+    delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
