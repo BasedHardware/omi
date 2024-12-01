@@ -78,7 +78,8 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     }
     setLoadingMessages(true);
-    var mes = await getMessagesServer();
+    print(appProvider?.selectedChatAppId); // TODO: TEST ME
+    var mes = await getMessagesServer(); // pluginId: appProvider?.selectedChatAppId
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Learning from your memories...';
       notifyListeners();
