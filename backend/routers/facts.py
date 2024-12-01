@@ -17,7 +17,7 @@ def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
     return fact_db
 
 
-@router.get('/v1/facts', tags=['facts'], response_model=List[Fact])  # filters
+@router.get('/v1/facts', tags=['facts'], response_model=List[FactDB])  # filters
 def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = facts_db.get_facts(uid, limit, offset)
     # facts = list(filter(lambda x: x['category'] == 'skills', facts))
@@ -39,8 +39,8 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     #     else:
     #         fact['content'] = str(fact["content"]).capitalize()
     print(len(facts))
-    # return list(sorted(facts, key=lambda x: x['category'], reverse=True))
-    return facts
+    return list(sorted(facts, key=lambda x: x['category'], reverse=True))
+    # return facts
 
 
 @router.delete('/v1/facts/{fact_id}', tags=['facts'])
