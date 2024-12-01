@@ -46,11 +46,11 @@ class AIMessage extends StatefulWidget {
 }
 
 class _AIMessageState extends State<AIMessage> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.message.memories.length, false);
+    conversationDetailLoading = List.filled(widget.message.memories.length, false);
     super.initState();
   }
 
@@ -122,7 +122,7 @@ Widget buildMessageWidget(
   bool showTypingIndicator,
   bool displayOptions,
   App? appSender,
-  Function(ServerConversation) updateMemory,
+  Function(ServerConversation) updateConversation,
   Function(int) sendMessageNps,
 ) {
   if (message.memories.isNotEmpty) {
@@ -130,7 +130,7 @@ Widget buildMessageWidget(
         showTypingIndicator: showTypingIndicator,
         messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
         messageText: message.isEmpty ? '...' : message.text.decodeString,
-        updateMemory: updateMemory,
+        updateConversation: updateConversation,
         message: message,
         setMessageNps: sendMessageNps,
         date: message.createdAt);
@@ -405,7 +405,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
   final List<MessageConversation> messageMemories;
   final String messageText;
-  final Function(ServerConversation) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime date;
@@ -415,7 +415,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.showTypingIndicator,
     required this.messageMemories,
     required this.messageText,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.message,
     required this.setMessageNps,
     required this.date,
@@ -426,11 +426,11 @@ class MemoriesMessageWidget extends StatefulWidget {
 }
 
 class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.messageMemories.length, false);
+    conversationDetailLoading = List.filled(widget.messageMemories.length, false);
     super.initState();
   }
 
@@ -493,13 +493,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       ),
                     );
                   } else {
-                    if (memoryDetailLoading[data.$1]) return;
-                    setState(() => memoryDetailLoading[data.$1] = true);
+                    if (conversationDetailLoading[data.$1]) return;
+                    setState(() => conversationDetailLoading[data.$1] = true);
                     ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
                     (idx, date) = memProvider.addMemoryWithDateGrouped(m);
                     MixpanelManager().chatMessageMemoryClicked(m);
-                    setState(() => memoryDetailLoading[data.$1] = false);
+                    setState(() => conversationDetailLoading[data.$1] = false);
                     context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -510,7 +510,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     );
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
-                      widget.updateMemory(SharedPreferencesUtil().modifiedConversationDetails!);
+                      widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
                       var copy = List<MessageConversation>.from(widget.messageMemories);
                       copy[data.$1] = MessageConversation(
                           modifiedDetails.id,
@@ -552,7 +552,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    memoryDetailLoading[data.$1]
+                    conversationDetailLoading[data.$1]
                         ? const SizedBox(
                             height: 24,
                             width: 24,

@@ -25,7 +25,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   } else {
     // TODO: Server returns 304 doesn't recover
     CrashReporting.reportHandledCrash(
-      Exception('Failed to create memory'),
+      Exception('Failed to create conversation'),
       StackTrace.current,
       level: NonFatalExceptionLevel.info,
       userAttributes: {
@@ -48,7 +48,8 @@ Future<List<ServerConversation>> getConversations(
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>).map((memory) => ServerConversation.fromJson(memory)).toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     debugPrint('getMemories length: ${memories.length}');
     return memories;
   } else {
@@ -72,9 +73,9 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId) a
   return null;
 }
 
-Future<bool> deleteConversationServer(String memoryId) async {
+Future<bool> deleteConversationServer(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -84,9 +85,9 @@ Future<bool> deleteConversationServer(String memoryId) async {
   return response.statusCode == 204;
 }
 
-Future<ServerConversation?> getConversationById(String memoryId) async {
+Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
@@ -99,9 +100,9 @@ Future<ServerConversation?> getConversationById(String memoryId) async {
   return null;
 }
 
-Future<bool> updateConversationTitle(String memoryId, String title) async {
+Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/title?title=$title',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/title?title=$title',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -111,9 +112,9 @@ Future<bool> updateConversationTitle(String memoryId, String title) async {
   return response.statusCode == 200;
 }
 
-Future<List<ConversationPhoto>> getConversationPhotos(String memoryId) async {
+Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/photos',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/photos',
     headers: {},
     method: 'GET',
     body: '',
@@ -150,9 +151,9 @@ class TranscriptsResponse {
   }
 }
 
-Future<TranscriptsResponse> getConversationTranscripts(String memoryId) async {
+Future<TranscriptsResponse> getConversationTranscripts(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/transcripts',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/transcripts',
     headers: {},
     method: 'GET',
     body: '',
@@ -166,9 +167,9 @@ Future<TranscriptsResponse> getConversationTranscripts(String memoryId) async {
   return TranscriptsResponse();
 }
 
-Future<bool> hasConversationRecording(String memoryId) async {
+Future<bool> hasConversationRecording(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/recording',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/recording',
     headers: {},
     method: 'GET',
     body: '',
@@ -182,7 +183,7 @@ Future<bool> hasConversationRecording(String memoryId) async {
 }
 
 Future<bool> assignConversationTranscriptSegment(
-  String memoryId,
+  String conversationId,
   int segmentIdx, {
   bool? isUser,
   String? personId,
@@ -190,7 +191,7 @@ Future<bool> assignConversationTranscriptSegment(
 }) async {
   String assignType = isUser != null ? 'is_user' : 'person_id';
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/segments/$segmentIdx/assign?value=${isUser ?? personId}'
         '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
     headers: {},
     method: 'PATCH',
@@ -201,9 +202,9 @@ Future<bool> assignConversationTranscriptSegment(
   return response.statusCode == 200;
 }
 
-Future<bool> setConversationVisibility(String memoryId, {String visibility = 'shared'}) async {
+Future<bool> setConversationVisibility(String conversationId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/visibility?value=$visibility&visibility=$visibility',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/visibility?value=$visibility&visibility=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -214,7 +215,7 @@ Future<bool> setConversationVisibility(String memoryId, {String visibility = 'sh
 }
 
 Future<bool> setConversationEventsState(
-  String memoryId,
+  String conversationId,
   List<int> eventsIdx,
   List<bool> values,
 ) async {
@@ -223,7 +224,7 @@ Future<bool> setConversationEventsState(
     'values': values,
   }));
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/events',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/events',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({
@@ -237,7 +238,7 @@ Future<bool> setConversationEventsState(
 }
 
 Future<bool> setConversationActionItemState(
-  String memoryId,
+  String conversationId,
   List<int> actionItemsIdx,
   List<bool> values,
 ) async {
@@ -246,7 +247,7 @@ Future<bool> setConversationActionItemState(
     'values': values,
   }));
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/action-items',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/action-items',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({
@@ -259,9 +260,9 @@ Future<bool> setConversationActionItemState(
   return response.statusCode == 200;
 }
 
-Future<bool> deleteConversationActionItem(String memoryId, ActionItem item) async {
+Future<bool> deleteConversationActionItem(String conversationId, ActionItem item) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/memories/$memoryId/action-items',
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/action-items',
     headers: {},
     method: 'DELETE',
     body: jsonEncode({
@@ -293,8 +294,9 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
       return [];
     }
 
-    var memories =
-        (jsonDecode(response.body) as List<dynamic>).map((memory) => ServerConversation.fromJson(memory)).toList();
+    var memories = (jsonDecode(response.body) as List<dynamic>)
+        .map((conversation) => ServerConversation.fromJson(conversation))
+        .toList();
     debugPrint('getMemories length: ${memories.length}');
 
     return memories;
