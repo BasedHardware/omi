@@ -12,13 +12,14 @@ from pydantic import BaseModel, Field, ValidationError
 from database.redis_db import add_filter_category_item
 from models.app import App
 from models.chat import Message
-from models.facts import Fact
+from models.facts import Fact, FactCategory
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
 from models.transcript_segment import TranscriptSegment
 from models.trend import TrendEnum, ceo_options, company_options, software_product_options, hardware_product_options, \
     ai_product_options, TrendType
 from utils.memories.facts import get_prompt_facts
+from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -319,6 +320,7 @@ def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
     Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
     
     For context, today is {datetime.now().isoformat()}.
+    Year: {datetime.now().year}, Month: {datetime.now().month}, Day: {datetime.now().day}
     
 
     Conversation:
@@ -495,52 +497,76 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
 class Facts(BaseModel):
     facts: List[Fact] = Field(
         min_items=0,
-        # max_items=3,
-        description="List of new user facts, preferences, interests, or topics.",
+        max_items=3,
+        description="List of **new** facts. If any",
+        default=[],
     )
 
 
-def new_facts_extractor(uid: str, segments: List[TranscriptSegment]) -> List[Fact]:
-    user_name, facts_str = get_prompt_facts(uid)
+def new_facts_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
+) -> List[Fact]:
+    # print('new_facts_extractor', uid, 'segments', len(segments), user_name, 'len(facts_str)', len(facts_str))
+    if user_name is None or facts_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
-    if not content or len(content) < 100:  # less than 100 chars, probably nothing
+    if not content or len(content) < 100:  # less than 20 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?
     # TODO: make it more strict?
 
-    prompt = f'''
-    You are an experienced detective, whose job is to create detailed profile personas based on conversations.
-
-    You will be given a low quality audio recording transcript of a conversation or something {user_name} listened to, and a list of existing facts we know about {user_name}.
-    Your task is to determine **new** facts like age, city of living, marriage status, health, friends names, preferences,work facts, allergies, preferences, interests or anything else that is important to know about {user_name}, based on the transcript.
-    Make sure these facts are:
-    - Relevant, and are not repetitive or similar to the existing facts we know about {user_name}, in this case, is preferred to have breadth than too much depth on specifics.
-    - Use a format of "{user_name} is 25 years old".
-    - Contain one of the categories available.
-    - Non sex assignable, do not use "her", "his", "he", "she", as we don't know if {user_name} is a male or female.
-    - Examples: "{user_name} lives in San Francisco", "{user_name} is single but currently dating Anna", "{user_name} has a friend called "John" who is a 26yo entrepreneur working on a health startup", "{user_name} recently learned that it's important to hire people only when you have Product Market Fit", "{user_name} recently learned that Pavel Durov recommends not to drink alcohol".
-
-    This way we can create a more accurate profile. 
-    Include from 0 up to 5 valuable facts, If you don't find any new facts, or ones worth storing, output an empty list of facts. 
-
-    Existing Facts that were before (ignore previous structure): {facts_str}
-
-    Conversation:
-    ```
-    {content}
-    ```
-    '''.replace('    ', '').strip()
-
     try:
-        with_parser = llm_mini.with_structured_output(Facts)
-        response: Facts = with_parser.invoke(prompt)
+        parser = PydanticOutputParser(pydantic_object=Facts)
+        chain = extract_facts_prompt | llm_mini | parser
+        # with_parser = llm_mini.with_structured_output(Facts)
+        response: Facts = chain.invoke({
+            'user_name': user_name,
+            'conversation': content,
+            'facts_str': facts_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
         # for fact in response:
         #     fact.content = fact.content.replace(user_name, '').replace('The User', '').replace('User', '').strip()
         return response.facts
     except Exception as e:
-        # print(f'Error extracting new facts: {e}')
+        print(f'Error extracting new facts: {e}')
+        return []
+
+
+class Learnings(BaseModel):
+    result: List[str] = Field(
+        min_items=0,
+        max_items=2,
+        description="List of **new** learnings. If any",
+        default=[],
+    )
+
+
+def new_learnings_extractor(
+        uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None,
+        learnings_str: Optional[str] = None
+) -> List[Fact]:
+    if user_name is None or learnings_str is None:
+        user_name, facts_str = get_prompt_facts(uid)
+
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
+    if not content or len(content) < 100:
+        return []
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=Learnings)
+        chain = extract_learnings_prompt | llm_mini | parser
+        response: Learnings = chain.invoke({
+            'user_name': user_name,
+            'conversation': content,
+            'learnings_str': learnings_str,
+            'format_instructions': parser.get_format_instructions(),
+        })
+        return list(map(lambda x: Fact(content=x, category=FactCategory.learnings), response.result))
+    except Exception as e:
+        print(f'Error extracting new facts: {e}')
         return []
 
 
@@ -866,7 +892,8 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
 # ************* PROACTIVE NOTIFICATION PLUGIN **************
 # **************************************************
 
-def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str) -> str:
+def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: str,
+                          chat_messages: List[Message]) -> str:
     user_name, facts_str = get_prompt_facts(uid)
 
     prompt = plugin_prompt
@@ -879,6 +906,10 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
             continue
         if param == "user_context":
             prompt = prompt.replace("{{user_context}}", context if context else "")
+            continue
+        if param == "user_chat":
+            prompt = prompt.replace("{{user_chat}}",
+                                    Message.get_messages_as_string(chat_messages) if chat_messages else "")
             continue
     prompt = prompt.replace('    ', '').strip()
     # print(prompt)

@@ -20,9 +20,9 @@ Future<bool> createFact(String content, FactCategory category) async {
   return response.statusCode == 200;
 }
 
-Future<List<Fact>> getFacts({int limit = 100, int offset = 0}) async {
+Future<List<Fact>> getFacts({int limit = 5000, int offset = 0}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/facts?limit=$limit&offset=$offset',
+    url: '${Env.apiBaseUrl}v1/facts', // limit=$limit&offset=$offset
     headers: {},
     method: 'GET',
     body: '',

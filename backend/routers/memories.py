@@ -257,11 +257,10 @@ def get_shared_memory_by_id(memory_id: str):
 def get_public_memories(offset: int = 0, limit: int = 1000):
     memories = redis_db.get_public_memories()
     data = []
-    for memory_id in memories:
-        uid = redis_db.get_memory_uid(memory_id)
-        if not uid:
-            continue
-        data.append([uid, memory_id])
+
+    memory_uids = redis_db.get_memory_uids(memories)
+
+    data = [[uid, memory_id] for memory_id, uid in memory_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
     memories = memories_db.run_get_public_memories(data[offset:offset + limit])
