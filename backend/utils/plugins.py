@@ -8,11 +8,8 @@ import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
-from database.chat import add_plugin_message
-from database.apps import get_private_apps_db, get_public_apps_db, record_app_usage
 from database.chat import add_plugin_message, get_plugin_messages
-from database.plugins import record_plugin_usage
-from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_plugin_installs_count, get_generic_cache, \
+from database.redis_db import get_enabled_plugins, get_generic_cache, \
     set_generic_cache, get_plugins_reviews, get_plugins_installs_count
 from models.app import App
 from models.chat import Message

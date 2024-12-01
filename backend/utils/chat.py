@@ -5,11 +5,10 @@ from datetime import datetime, timezone
 from typing import List
 
 import database.chat as chat_db
-from database.plugins import record_plugin_usage
-from models.app import App
+from database.apps import record_app_usage
 from models.plugin import UsageHistoryType
 from models.memory import Memory
-from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
+from models.chat import Message
 from models.transcript_segment import TranscriptSegment
 from utils.retrieval.graph import execute_graph_chat
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
@@ -72,7 +71,7 @@ def process_voice_message_segment(path: str, uid: str):
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if plugin_id:
-        record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+        record_app_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     ai_message_resp = ai_message.dict()
 
