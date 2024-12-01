@@ -91,6 +91,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
             "min_app_version": kv.get("minimum_app_version"),
             "min_app_version_code": kv.get("minimum_app_version_code"),
             "zip_url": asset.get("browser_download_url"),
+            "draft": False,
         }
 
 
