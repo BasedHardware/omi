@@ -161,7 +161,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void setConversationRating(int value) {
-    setMemorySummaryRating(memory.id, value);
+    setConversationSummaryRating(memory.id, value);
     hasConversationSummaryRatingSet = true;
     setShowRatingUi(false);
   }
@@ -200,12 +200,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     appsList = appProvider!.apps;
     if (!memory.discarded) {
-      getHasMemorySummaryRating(memory.id).then((value) {
+      getHasConversationSummaryRating(memory.id).then((value) {
         hasConversationSummaryRatingSet = value;
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            setMemorySummaryRating(memory.id, -1); // set -1 to indicate is was shown
+            setConversationSummaryRating(memory.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });

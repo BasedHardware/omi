@@ -433,16 +433,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   .toList(),
             ),
 
-            widget.app.memoryPrompt != null
+            widget.app.conversationPrompt != null
                 ? InfoCardWidget(
                     onTap: () {
-                      if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
-                        routeToPage(context,
-                            MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
+                      if (widget.app.conversationPrompt!.decodeString.characters.length > 200) {
+                        routeToPage(
+                            context,
+                            MarkdownViewer(
+                                title: 'Conversation Prompt', markdown: widget.app.conversationPrompt!.decodeString));
                       }
                     },
-                    title: 'Memory Prompt',
-                    description: widget.app.memoryPrompt!,
+                    title: 'Conversation Prompt',
+                    description: widget.app.conversationPrompt!,
                     showChips: false,
                   )
                 : const SizedBox.shrink(),
