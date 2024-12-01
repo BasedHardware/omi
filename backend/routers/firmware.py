@@ -52,9 +52,9 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         # - Friend_v1.0.4
         # - OpenGlass_v1.0.4
         release_prefix = "Friend"
-        if DeviceModel.OMI_DEVKIT_2:
+        if device == DeviceModel.OMI_DEVKIT_2:
             release_prefix = "Omi_DK2"
-        if DeviceModel.OPEN_GLASS:
+        if device == DeviceModel.OPEN_GLASS:
             release_prefix = "OpenGlass"
         for release in releases:
             if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
