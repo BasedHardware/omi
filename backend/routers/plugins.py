@@ -8,7 +8,6 @@ from typing import List
 import requests
 from fastapi import APIRouter, HTTPException, Depends, UploadFile
 from fastapi.params import File, Form
-from slugify import slugify
 from ulid import ULID
 
 from database.apps import add_app_to_db
@@ -116,8 +115,7 @@ def add_plugin(plugin_data: str = Form(...), file: UploadFile = File(...), uid=D
     data = json.loads(plugin_data)
     data['approved'] = False
     data['name'] = data['name'].strip()
-    new_app_id = slugify(data['name']) + '-' + str(ULID())
-    data['id'] = new_app_id
+    data['id'] = str(ULID())
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
