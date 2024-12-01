@@ -1425,5 +1425,17 @@
       "setup_instructions_file_path": ""
     },
     "deleted": true
+  },
+  {
+    "id": "charlie-coach",
+    "name": "Charlie Coach",
+    "author": "Celia Zhang and Yudhvir Raj",
+    "description": "Help to improve speaking skill",
+    "image": "/plugins/logos/charlie-coach.png",
+    "capabilities": [
+      "memories"
+    ],
+   "memeory_prompt": "Analyze conversation and help people improve their English speaking skills by giving suggestions",
+    "deleted": true
   }
 ]
