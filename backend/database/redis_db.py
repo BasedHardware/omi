@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-from datetime import datetime, timezone
 from typing import List, Union
 
 import redis
@@ -53,6 +52,24 @@ def delete_generic_cache(path: str):
 
 
 # ******************************************************
+# ********************* APP BY ID **********************
+# ******************************************************
+
+def set_app_cache_by_id(app_id: str, app: dict):
+    r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
+
+
+def get_app_cache_by_id(app_id: str) -> dict | None:
+    app = r.get(f'apps:{app_id}')
+    app = json.loads(app) if app else None
+    return app
+
+
+def delete_app_cache_by_id(app_id: str):
+    r.delete(f'apps:{app_id}')
+
+
+# ******************************************************
 # *********************** APPS *************************
 # ******************************************************
 
@@ -85,14 +102,14 @@ def set_app_money_made_cache(app_id: str, money: dict):
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
-def set_plugin_review(plugin_id: str, uid: str, data: dict):
-    reviews = r.get(f'plugins:{plugin_id}:reviews')
+def set_app_review_cache(app_id: str, uid: str, data: dict):
+    reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
     reviews[uid] = data
-    r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+    r.set(f'plugins:{app_id}:reviews', str(reviews))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> dict:
@@ -116,12 +133,12 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
             r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 
-def enable_plugin(uid: str, plugin_id: str):
-    r.sadd(f'users:{uid}:enabled_plugins', plugin_id)
+def enable_app(uid: str, app_id: str):
+    r.sadd(f'users:{uid}:enabled_plugins', app_id)
 
 
-def disable_plugin(uid: str, plugin_id: str):
-    r.srem(f'users:{uid}:enabled_plugins', plugin_id)
+def disable_app(uid: str, app_id: str):
+    r.srem(f'users:{uid}:enabled_plugins', app_id)
 
 
 def get_enabled_plugins(uid: str):
@@ -136,6 +153,7 @@ def get_plugin_reviews(plugin_id: str) -> dict:
     if not reviews:
         return {}
     return eval(reviews)
+
 
 def get_plugins_reviews(plugin_ids: list) -> dict:
     if not plugin_ids:
@@ -155,12 +173,12 @@ def set_plugin_installs_count(plugin_id: str, count: int):
     r.set(f'plugins:{plugin_id}:installs', count)
 
 
-def increase_plugin_installs_count(plugin_id: str):
-    r.incr(f'plugins:{plugin_id}:installs')
+def increase_app_installs_count(app_id: str):
+    r.incr(f'plugins:{app_id}:installs')
 
 
-def decrease_plugin_installs_count(plugin_id: str):
-    r.decr(f'plugins:{plugin_id}:installs')
+def decrease_app_installs_count(app_id: str):
+    r.decr(f'plugins:{app_id}:installs')
 
 
 def get_plugin_installs_count(plugin_id: str) -> int:
@@ -168,6 +186,7 @@ def get_plugin_installs_count(plugin_id: str) -> int:
     if not count:
         return 0
     return int(count)
+
 
 def get_plugins_installs_count(plugin_ids: list) -> dict:
     if not plugin_ids:
@@ -259,6 +278,7 @@ def get_memory_uid(memory_id: str) -> str:
         return ''
     return uid.decode()
 
+
 def get_memory_uids(memory_ids: list) -> dict:
     if not memory_ids:
         return {}
@@ -272,6 +292,7 @@ def get_memory_uids(memory_ids: list) -> dict:
         if uid:
             memory_uids[memory_id] = uid.decode()
     return memory_uids
+
 
 def add_public_memory(memory_id: str):
     r.sadd('public-memories', memory_id)
@@ -340,6 +361,7 @@ def get_filter_category_items(uid: str, category: str) -> List[str]:
 def add_filter_category_item(uid: str, category: str, item: str):
     r.sadd(f'users:{uid}:filters:{category}', item)
 
+
 def add_filter_category_items(uid: str, category: str, items: list):
     if items:
         r.sadd(f'users:{uid}:filters:{category}', *items)
@@ -361,14 +383,17 @@ def save_migrated_retrieval_memory_id(memory_id: str):
 def has_migrated_retrieval_memory_id(memory_id: str) -> bool:
     return r.sismember('migrated_retrieval_memory_ids', memory_id)
 
+
 def set_proactive_noti_sent_at(uid: str, plugin_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{plugin_id}:proactive_noti_sent_at', ts, ex=ttl)
+
 
 def get_proactive_noti_sent_at(uid: str, plugin_id: str):
     val = r.get(f'{uid}:{plugin_id}:proactive_noti_sent_at')
     if not val:
         return None
     return int(val)
+
 
 def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
     return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
