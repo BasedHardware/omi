@@ -4,10 +4,9 @@ import os
 import firebase_admin
 from fastapi import FastAPI
 
-from modal import Image, App, asgi_app, Secret, Cron
+from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
     speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, apps, custom_auth
-from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -52,7 +51,7 @@ image = (
 
 @modal_app.function(
     image=image,
-    keep_warm=2,
+    keep_warm=0,
     memory=(512, 1024),
     cpu=2,
     allow_concurrent_inputs=10,
@@ -69,36 +68,37 @@ for path in paths:
         os.makedirs(path)
 
 
-@modal_app.function(image=image, schedule=Cron('* * * * *'))
-async def notifications_cronjob():
-    await start_cron_job()
+# @deprecated("use modal/job_modal.py")
+# @modal_app.function(image=image, schedule=Cron('* * * * *'))
+# async def notifications_cronjob():
+#     await start_cron_job()
 
 
-@app.post('/webhook')
-async def webhook(data: dict):
-    diarization = data['output']['diarization']
-    joined = []
-    for speaker in diarization:
-        if not joined:
-            joined.append(speaker)
-        else:
-            if speaker['speaker'] == joined[-1]['speaker']:
-                joined[-1]['end'] = speaker['end']
-            else:
-                joined.append(speaker)
-
-    print(data['jobId'], json.dumps(joined))
-    # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
-    with open('scripts/stt/diarization.json', 'r') as f:
-        diarization_data = json.loads(f.read())
-
-    memory_id = diarization_data.get(data['jobId'])
-    if memory_id:
-        diarization_data[memory_id] = joined
-        del diarization_data[data['jobId']]
-        with open('scripts/stt/diarization.json', 'w') as f:
-            json.dump(diarization_data, f, indent=2)
-    return 'ok'
+# @app.post('/webhook')
+# async def webhook(data: dict):
+#     diarization = data['output']['diarization']
+#     joined = []
+#     for speaker in diarization:
+#         if not joined:
+#             joined.append(speaker)
+#         else:
+#             if speaker['speaker'] == joined[-1]['speaker']:
+#                 joined[-1]['end'] = speaker['end']
+#             else:
+#                 joined.append(speaker)
+#
+#     print(data['jobId'], json.dumps(joined))
+#     # openn scripts/stt/diarization.json, get jobId=memoryId, delete but get memoryId, and save memoryId=joined
+#     with open('scripts/stt/diarization.json', 'r') as f:
+#         diarization_data = json.loads(f.read())
+#
+#     memory_id = diarization_data.get(data['jobId'])
+#     if memory_id:
+#         diarization_data[memory_id] = joined
+#         del diarization_data[data['jobId']]
+#         with open('scripts/stt/diarization.json', 'w') as f:
+#             json.dump(diarization_data, f, indent=2)
+#     return 'ok'
 
 # opuslib not found? brew install opus &
 # DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH
