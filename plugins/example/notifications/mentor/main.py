@@ -243,6 +243,16 @@ def webhook():
 def setup_status():
     return jsonify({"is_setup_completed": True}), 200
 
+@app.route('/notifications', methods=['POST'])
+def notifications_webhook():
+    """Process notifications history webhook"""
+    if request.method == 'POST':
+        data = request.json
+        uid = request.args.get('uid')
+        logger.info(f"Received notification for user {uid}: {data}")
+        return jsonify({"status": "success"}), 200
+    return jsonify({"status": "error", "message": "Method not allowed"}), 405
+
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
@@ -254,4 +264,4 @@ def status():
 start_time = time.time()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5010, debug=True)

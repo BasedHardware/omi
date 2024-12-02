@@ -9,6 +9,7 @@ import 'widgets/app_metadata_widget.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/notifications_history_webhook_field.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;
@@ -186,6 +187,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                           ],
                         ),
                       const ExternalTriggerFieldsWidget(),
+                      const NotificationsHistoryWebhookField(),
                       if (provider.isCapabilitySelectedById('proactive_notification'))
                         Column(
                           children: [

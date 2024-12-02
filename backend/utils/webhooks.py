@@ -9,6 +9,7 @@ import websockets
 
 from database.redis_db import get_user_webhook_db, user_webhook_status_db, disable_user_webhook_db, \
     enable_user_webhook_db, set_user_webhook_db
+from database.apps import get_public_apps_db, get_private_apps_db
 from models.memory import Memory
 from models.users import WebhookType
 import database.notifications as notification_db
@@ -167,22 +168,37 @@ def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
 def send_webhook_notification(token: str, message: str):
     send_notification(token, "Webhook" + ' says', message)
 
-def notifications_history_webhook(uid: str, message: NotificationMessage):
-    toggled = user_webhook_status_db(uid, WebhookType.notifications_history)
-    if toggled:
-        webhook_url = get_user_webhook_db(uid, WebhookType.notifications_history)
-        if not webhook_url:
-            return
-        webhook_url += f'?uid={uid}'
-        try:
-            response = requests.post(
-                webhook_url,
-                json=message.get_message_as_dict(message),
-                headers={'Content-Type': 'application/json'},
-                timeout=30,
-            )
-            print('notifications_history_webhook:', webhook_url, response.status_code)
-        except Exception as e:
-            print(f"Error sending notification to history webhook: {e}")
-    else:
+def notifications_history_webhook(uid: str, notification: NotificationMessage):
+    """Send notification to webhook if configured"""
+    # First try app-specific webhook if notification is from an app
+    if notification.plugin_id:
+        # Get app from both public and private apps
+        apps = get_public_apps_db(uid) + get_private_apps_db(uid)
+        app = next((app for app in apps if app['id'] == notification.plugin_id), None)
+        
+        if app and app.get('external_integration') and app['external_integration'].get('notifications_history_webhook'):
+            try:
+                requests.post(
+                    app['external_integration']['notifications_history_webhook'],
+                    json=notification.dict(),
+                    params={'uid': uid},
+                    timeout=5
+                )
+                return
+            except Exception as e:
+                print(f"Error sending notification to app webhook: {e}")
+
+    # Fallback to global webhook from developer settings
+    webhook_url = get_user_webhook_db(uid, WebhookType.notifications_history)
+    if not webhook_url:
         return
+
+    try:
+        requests.post(
+            webhook_url,
+            json=notification.dict(),
+            params={'uid': uid},
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Error sending notification to global webhook: {e}")
