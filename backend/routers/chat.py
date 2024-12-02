@@ -94,8 +94,8 @@ async def send_message_with_file(
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
-    err = chat_db.clear_chat(uid)
+def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
     return initial_message_util(uid)
@@ -122,17 +122,36 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+    # TODO: message embracces personality better in a shorter message
+    # TODO: use messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    #   so that initial message has a follow up type of interaction
+    # TODO: some irregularities when deleting messages + changing plugin selected on app
+    # TODO: app navigation when selecting a different plugin, feels taking too long!
+    # TODO: Facts FactCategory is dynamic.
     return initial_message_util(uid, plugin_id)
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
+def get_messages(uid: str = Depends(auth.get_current_user_uid)):
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True)
+    if not messages:
+        return [initial_message_util(uid)]
+    return messages
+
+
+@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id == 'null':
         plugin_id = None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    messages = chat_db.get_messages(
+        uid, limit=100, include_memories=True, plugin_id=plugin_id, include_plugin_id_filter=True
+    )
+    print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
+    # if dropdown_selected:
+    #     return messages + [initial_message_util(uid, plugin_id)]  # improve so that it does a follow-up
     return messages
 
 

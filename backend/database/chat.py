@@ -94,15 +94,18 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 @timeit
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None
+        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
+        include_plugin_id_filter: bool = False,
 ):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
-    if plugin_id:
-        messages_ref = messages_ref.where('plugin_id', '==', plugin_id)
+    # keep only when latest app version already deployed.
+    if include_plugin_id_filter:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    # if plugin_id:
     messages_ref = messages_ref.limit(limit).offset(offset)
 
     messages = []
@@ -140,8 +143,10 @@ def get_messages(
     return messages
 
 
-def batch_delete_messages(parent_doc_ref, batch_size=450):
-    messages_ref = parent_doc_ref.collection('messages')
+def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):
+    messages_ref = parent_doc_ref.collection('messages').where(filter=FieldFilter('deleted', '==', False))
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+
     last_doc = None  # For pagination
 
     while True:
@@ -170,13 +175,13 @@ def batch_delete_messages(parent_doc_ref, batch_size=450):
         last_doc = docs_list[-1]
 
 
-def clear_chat(uid: str):
+def clear_chat(uid: str, plugin_id: Optional[str] = None):
     try:
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(user_ref)
+        batch_delete_messages(user_ref, plugin_id=plugin_id)
         return None
     except Exception as e:
         return {"message": str(e)}
