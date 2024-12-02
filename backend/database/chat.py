@@ -13,6 +13,7 @@ from ._client import db
 @timeit
 def add_message(uid: str, message_data: dict):
     del message_data['memories']
+    message_data['deleted'] = False
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
     return message_data
@@ -95,18 +96,18 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 @timeit
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
-        include_plugin_id_filter: bool = False,
+        # include_plugin_id_filter: bool = True,
 ):
+    print('get_messages', uid, limit, offset, plugin_id, include_memories)
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .where(filter=FieldFilter('deleted', '==', False))
     )
-    # keep only when latest app version already deployed.
-    if include_plugin_id_filter:
-        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
-    # if plugin_id:
-    messages_ref = messages_ref.limit(limit).offset(offset)
+    # if include_plugin_id_filter:
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+
+    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
     messages = []
     memories_id = set()
@@ -114,10 +115,8 @@ def get_messages(
     # Fetch messages and collect memory IDs
     for doc in messages_ref.stream():
         message = doc.to_dict()
-
-        if message.get('deleted') is True:
-            continue
-
+        # if message.get('deleted') is True:
+        #     continue
         messages.append(message)
         memories_id.update(message.get('memories_id', []))
 
@@ -144,9 +143,12 @@ def get_messages(
 
 
 def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):
-    messages_ref = parent_doc_ref.collection('messages').where(filter=FieldFilter('deleted', '==', False))
+    messages_ref = (
+        parent_doc_ref.collection('messages')
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
-
+    print('batch_delete_messages', plugin_id)
     last_doc = None  # For pagination
 
     while True:
@@ -164,6 +166,7 @@ def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[st
         batch = db.batch()
 
         for doc in docs_list:
+            print('Deleting message:', doc.id)
             batch.update(doc.reference, {'deleted': True})
 
         batch.commit()
