@@ -10,11 +10,14 @@ import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
-Future<List<ServerMessage>> getMessagesServer({String? pluginId}) async {
+Future<List<ServerMessage>> getMessagesServer({
+  String? pluginId,
+  bool dropdownSelected = false,
+}) async {
   if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId&dropdown_selected=$dropdownSelected',
     headers: {},
     method: 'GET',
     body: '',
