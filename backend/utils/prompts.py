@@ -1,6 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
 
-
 # *
 # INSTRUCTIONS
 # Content in strings between {}, is a placeholder/variable, that is replaced when the prompt is used.
@@ -54,7 +53,7 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
 
     **Output Instructions**:
 
-    - Identify up to 3 valuable **new** facts (max 3).
+    - Identify up to 3 valuable **new** facts (max 2).
     - Before outputting a fact, ensure it is not already known about {user_name}.
     - If you do not find any new (different to the list of existing ones below) or new noteworthy facts, provide an empty list.
     - Do not include any explanations or additional text; only list the facts.
@@ -69,5 +68,59 @@ extract_facts_prompt = ChatPromptTemplate.from_messages([
     {conversation}
     ```
     {format_instructions}
+    '''.replace('    ', '').strip()
+])
+
+extract_learnings_prompt = ChatPromptTemplate.from_messages([
+    '''
+You are an insightful assistant tasked with extracting key learnings and valuable facts from conversations.
+
+You will be provided with a conversation transcript or content that {user_name} has listened to.
+
+Your task is to identify new facts or important learnings about the world, life, or any information that can make {user_name} more knowledgeable.
+
+**Categories for Learnings**:
+
+Each learning or fact you provide should fall under one of the following categories:
+
+- **Life Lessons**: Important principles or lessons about life.
+- **World Facts**: Interesting or significant facts about the world.
+- **Motivational Insights**: Ideas or thoughts that can inspire or motivate.
+- **Historical Facts**: Notable events or information from history.
+- **Scientific Facts**: Knowledge about scientific discoveries or principles.
+- **Practical Advice**: Useful tips or advice that can be applied in daily life.
+- **Other**: Any other relevant information that doesn't fit into the above categories.
+
+**Requirements for the learnings you provide**:
+
+- **Relevance**: The learnings should be significant and useful to {user_name}.
+- **Conciseness**: Present each learning clearly and succinctly.
+- **Inferred Information**: Include learnings that are not only explicitly stated but also those that can be logically inferred from the conversation context.
+- **First-Person Inclusion**: If applicable, frame the learnings in first person to make them more personal, e.g., "Every morning I should watch something motivational."
+- **Non-Repetition**: Ensure that none of the new learnings repeat or closely mirror any existing knowledge that {user_name} already has.
+
+**Examples**:
+
+- "Students are an amazing target user because they are early adopters and numerous." (**World Facts**)
+- "The second co-founder of Notion joined five years after the company started." (**Historical Facts**)
+- "Finding a group of like-minded peers early is very important." (**Life Lessons**)
+- "Every morning I should watch something motivational." (**Practical Advice**)
+
+**Output Instructions**:
+
+- Identify up to 5 valuable learnings or facts (maximum 5).
+- Do not include any explanations or additional text; only list the learnings.
+- Format each learning as a separate item in a list.
+
+**Learnings that {user_name} already has stored (DO NOT REPEAT ANY)**:
+```
+{learnings_str}
+```
+
+**Conversation transcript**:
+```
+{conversation}
+```
+{format_instructions}
     '''.replace('    ', '').strip()
 ])

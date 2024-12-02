@@ -36,6 +36,7 @@ class Message(BaseModel):
     type: MessageType
     memories_id: List[str] = []  # used in db
     memories: List[MessageMemory] = []  # used front facing
+    deleted: bool = False
 
     @staticmethod
     def get_messages_as_string(
@@ -52,7 +53,7 @@ class Message(BaseModel):
             #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
             #     if plugin:
             #         return plugin.name RESTORE ME
-            return message.sender.upper()
+            return message.sender.upper()  # TODO: use plugin id
 
         formatted_messages = [
             f"({message.created_at.strftime('%d %b, at %H:%M')}) {get_sender_name(message)}: {message.text}"

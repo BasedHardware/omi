@@ -7,8 +7,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import START, StateGraph
 from typing_extensions import TypedDict, Literal
-import os
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+# import os
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     messages = [
         Message(
             id=str(uuid.uuid4()),
-            text="What did I record on November 17th?",
+            text="Should I give equity to Ansh?",
             # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
             # text="Should I build the features myself or hire people?",
             # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",

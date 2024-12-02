@@ -1,236 +1,233 @@
-// import { useState, useEffect } from 'react';
 import envConfig from '@/src/constants/envConfig';
-import { Star, Download, DollarSign, Moon, Sun, ArrowLeft } from 'lucide-react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/src/components/ui/card';
-import { Progress } from '@/src/components/ui/progress';
-import Link from 'next/link';
-
+  Star,
+  Download,
+  ArrowLeft,
+  Brain,
+  Cpu,
+  Bell,
+  Plug2,
+  MessageSquare,
+  Info,
+} from 'lucide-react';
+import { Card, CardContent } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/src/components/ui/dialog';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import PaidAmountDialog from '@/src/components/dashboard/paidamount';
-import { PluginStat, Plugin } from '../page';
+import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
+import Link from 'next/link';
+import { cn } from '@/src/lib/utils';
 
-const COST_CONSTANT = 0.05;
+// Helper functions from PluginCard
+const getCapabilityColor = (capability: string): string => {
+  const colors: Record<string, string> = {
+    'ai-powered': 'bg-indigo-500/15 text-indigo-300',
+    memories: 'bg-rose-500/15 text-rose-300',
+    notification: 'bg-emerald-500/15 text-emerald-300',
+    integration: 'bg-sky-500/15 text-sky-300',
+    chat: 'bg-violet-500/15 text-violet-300',
+  };
+  return colors[capability.toLowerCase()] ?? 'bg-gray-700/20 text-gray-300';
+};
+
+const formatCapabilityName = (capability: string): string => {
+  const nameMap: Record<string, string> = {
+    memories: 'memories',
+    external_integration: 'integration',
+    proactive_notification: 'notification',
+    chat: 'chat',
+  };
+  return nameMap[capability.toLowerCase()] ?? capability;
+};
+
+const getCapabilityIcon = (capability: string) => {
+  const icons: Record<string, React.ElementType> = {
+    'ai-powered': Brain,
+    memories: Cpu,
+    notification: Bell,
+    integration: Plug2,
+    chat: MessageSquare,
+  };
+  return icons[capability.toLowerCase()] ?? Info;
+};
+
+// Helper function to format category name
+const formatCategoryName = (category: string): string => {
+  return category
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+// Helper function to determine platform and get appropriate link
+function getPlatformLink(userAgent: string) {
+  const isAndroid = /android/i.test(userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+
+  return isAndroid
+    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+    : isIOS
+    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+    : 'https://omi.me';
+}
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
-  // const [darkMode, setDarkMode] = useState(false);
-  var response = await fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`);
+  const response = await fetch(
+    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
+  );
   const plugins = (await response.json()) as Plugin[];
-
-  // Get params in a server component
   const { id } = params;
-
   const plugin = plugins.find((p) => p.id === id);
 
   if (!plugin) {
     throw new Error('App not found');
   }
 
-  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json");
-  const stats = (await response.json()) as PluginStat[];
+  const statsResponse = await fetch(
+    'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
+  );
+  const stats = (await statsResponse.json()) as PluginStat[];
   const stat = stats.find((p) => p.id === id);
 
-  // useEffect(() => {
-  //   if (darkMode) {
-  //     document.documentElement.classList.add('dark');
-  //   } else {
-  //     document.documentElement.classList.remove('dark');
-  //   }
-  // }, [darkMode]);
-
   const userAgent = headers().get('user-agent') || '';
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+  const link = getPlatformLink(userAgent);
 
-  const link = isAndroid
-  ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-  : isIOS
-  ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-  : 'https://omi.me';
+  // Get related apps based on category
+  const relatedApps = plugins
+    .filter((p) => p.category === plugin.category && p.id !== plugin.id)
+    .slice(0, 6);
+
+  const categoryName = formatCategoryName(plugin.category);
 
   return (
-    <div className="bg-gray-100 transition-colors duration-300 dark:bg-gray-900">
-      <div className="container mx-auto p-4">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen bg-[#0B0F17]">
+
+
+      {/* Main Content */}
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        {/* Navigation */}
+        <nav className="mb-4 flex items-center justify-between sm:mb-6 lg:mb-8 mt-6">
           <Link
             href="/apps"
-            className="pt-8 flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
+            className="group inline-flex items-center text-gray-400 transition-all duration-300 hover:text-white"
           >
-            <ArrowLeft className="mr-2" />
-            Back to Apps
+            <ArrowLeft className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-x-1 sm:h-5 sm:w-5" />
+            <span className="text-sm font-medium">Back to Apps</span>
           </Link>
-          {/* <button
-            variant="outline"
-            size="icon"
-            onClick={() => setDarkMode(!darkMode)}
-            className="rounded-full"
-          >
-            {darkMode ? (
-              <Sun className="h-[1.2rem] w-[1.2rem]" />
-            ) : (
-              <Moon className="h-[1.2rem] w-[1.2rem]" />
-            )}
-            <span className="sr-only">Toggle theme</span>
-          </button> */}
+          <div className="flex items-center space-x-2 text-xs text-gray-400 sm:text-sm">
+            <Link href="/apps" className="text-[#6C8EEF] hover:underline">
+              Apps
+            </Link>
+            <span>/</span>
+            <span>{categoryName}</span>
+          </div>
+        </nav>
+
+        {/* App Header */}
+        <div className="mb-12">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-8">
+              <div className="relative">
+                <div className="absolute -inset-4 rounded-2xl bg-white/5 opacity-0 transition-all duration-300 group-hover:opacity-100" />
+                <img
+                  src={plugin.image}
+                  alt={plugin.name}
+                  className="relative h-32 w-32 rounded-2xl object-cover shadow-xl"
+                />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white">{plugin.name}</h1>
+                <p className="mt-2 text-gray-400">by {plugin.author}</p>
+
+                {/* Capability Pills */}
+                <div className="flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
+                  {Array.from(plugin.capabilities).map((cap) => {
+                    const formattedCap = formatCapabilityName(cap);
+                    const Icon = getCapabilityIcon(formattedCap);
+                    return (
+                      <span
+                        key={cap}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium sm:px-3 sm:py-1.5 sm:text-sm',
+                          getCapabilityColor(formattedCap),
+                        )}
+                      >
+                        <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
+                        {formattedCap}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                <p className="max-w-3xl text-sm leading-relaxed text-gray-300 sm:mt-6 sm:text-base lg:text-lg">
+                  {plugin.description}
+                </p>
+
+                {/* Stats */}
+                <div className="flex items-center space-x-3 text-gray-400 sm:mt-4 sm:space-x-4">
+                  <div className="flex items-center">
+                    <Star className="mr-1 h-3 w-3 text-yellow-400 sm:h-4 sm:w-4" />
+                    <span className="text-sm sm:text-base">
+                      {(plugin.rating_avg ?? 0).toFixed(1)} ({plugin.rating_count})
+                    </span>
+                  </div>
+                  <span>•</span>
+                  <div className="flex items-center">
+                    <Download className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="text-sm sm:text-base">
+                      {plugin.installs.toLocaleString()} installs
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="mt-6 sm:mt-8">
+                  <Button
+                    className="inline-flex items-center space-x-2 bg-[#6C8EEF] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#5A7DE8] hover:shadow-lg sm:px-6 sm:py-3 sm:text-base lg:px-8 lg:py-4 lg:text-lg"
+                    asChild
+                  >
+                    <Link href={link}>
+                      <span>Try it</span>
+                      <ArrowLeft className="ml-2 h-4 w-4 rotate-180 sm:h-5 sm:w-5" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <div className="mb-4 flex items-center">
-              <img
-                src={plugin.image}
-                alt={plugin.name}
-                className="mr-6 h-24 w-24 rounded-full object-cover"
-              />
-              <div>
-                <CardTitle className="mb-2 text-3xl font-bold text-gray-800 dark:text-white">
-                  {plugin.name}
-                </CardTitle>
-                <CardDescription className="text-lg text-gray-600 dark:text-gray-400">
-                  by {plugin.author}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-6 text-gray-700 dark:text-gray-300">{plugin.description}</p>
-            <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
-                <Download className="mb-2 h-8 w-8 text-blue-500" />
-                <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  {plugin.installs.toLocaleString()}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">Installs</span>
-              </div>
-              <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
-                <DollarSign className="mb-2 h-8 w-8 text-green-500" />
-                <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  ${stat == undefined ? 0 : stat.money}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">Total Earned</span>
-              </div>
-              {/* <Dialog>
-                <DialogTrigger asChild>
-                  <div className="flex cursor-pointer flex-col items-center rounded-lg bg-white p-4 shadow transition-colors hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700">
-                    <DollarSign className="mb-2 h-8 w-8 text-purple-500" />
-                    <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                      ${plugin.comps || 0}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400">Paid Out</span>
-                  </div>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Set Paid Amount</DialogTitle>
-                    <DialogDescription>
-                      Enter the amount to be set as paid out and provide the admin key.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form action={updatePaidAmount}>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="amount" className="text-right">
-                          Amount
-                        </Label>
-                        <Input
-                          id="amount"
-                          name="amount"
-                          type="number"
-                          className="col-span-3"
-                        />
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="adminKey" className="text-right">
-                          Admin Key
-                        </Label>
-                        <Input
-                          id="adminKey"
-                          name="adminKey"
-                          type="password"
-                          className="col-span-3"
-                        />
+        {/* Related Apps Section */}
+        <div>
+          <h2 className="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-lg">
+            More {categoryName} Apps
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            {relatedApps.map((app) => (
+              <Link key={app.id} href={`/apps/${app.id}`}>
+                <Card className="h-[100px] border-none bg-[#1A1F2E] transition-all duration-300 hover:bg-[#242938] hover:shadow-xl sm:h-[120px]">
+                  <CardContent className="p-2 sm:p-3">
+                    <div className="flex space-x-2 sm:space-x-3">
+                      <img
+                        src={app.image}
+                        alt={app.name}
+                        className="h-10 w-10 rounded-lg object-cover sm:h-12 sm:w-12"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-sm font-medium text-white sm:text-base">
+                          {app.name}
+                        </h3>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 sm:mt-1">
+                          {app.description}
+                        </p>
                       </div>
                     </div>
-                    <DialogFooter>
-                      <Button type="submit">Set Paid Amount</Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog> */}
-              {/*<PaidAmountDialog plugin={plugin} />*/}
-            </div>
-            <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
-              <Link href={link}>
-                Try it
+                  </CardContent>
+                </Card>
               </Link>
-            </Button>
-            <div className="mb-2 flex items-center">
-              <Star className="mr-2 h-6 w-6 text-yellow-400" />
-              <span className="mr-2 text-2xl font-bold text-gray-800 dark:text-white">
-                {(plugin.rating_avg ?? 0).toFixed(1)}
-              </span>
-              <span className="text-gray-600 dark:text-gray-400">
-                ({plugin.rating_count} ratings)
-              </span>
-            </div>
-            <Progress value={plugin.rating_avg * 20} className="mb-6 h-2" />
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-// import { revalidatePath } from 'next/cache';
-
-// async function updatePaidAmount(formData: FormData) {
-//   'use server';
-
-//   const amount = formData.get('amount') as string;
-//   const adminKey = formData.get('adminKey') as string;
-//   const pluginId = formData.get('pluginId') as string;
-
-//   try {
-//     const response = await fetch('http://0.0.0.0:8000/v1/plugins/report-comp', {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json',
-//         Authorization: `Bearer ${adminKey}`,
-//       },
-//       body: JSON.stringify({
-//         plugin_id: pluginId,
-//         comp_count: parseInt(amount, 10),
-//       }),
-//     });
-//     if (!response.ok) {
-//       if (response.status === 401) {
-//         return { success: false, error: 'Unauthorized. Please check your admin key.' };
-//       }
-//       throw new Error('Failed to update paid amount');
-//     }
-
-//     // revalidatePath(`/dashboard/${pluginId}`);
-//     return { success: true };
-//   } catch (error) {
-//     console.error('Error updating paid amount:', error);
-//     return { success: false, error: 'Failed to update paid amount' };
-//   }
-// }
