@@ -102,7 +102,7 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer();
+    var mes = await clearChatServer(pluginId: appProvider?.selectedChatAppId);
     messages = mes;
     setClearingChat(false);
     notifyListeners();

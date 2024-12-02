@@ -37,8 +37,13 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'DELETE', body: '');
+Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/messages?pluginId=$pluginId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
     return [ServerMessage.fromJson(jsonDecode(response.body))];
