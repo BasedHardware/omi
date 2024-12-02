@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query, Body
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
@@ -316,7 +316,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'])
-def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
+def reject_app(app_id: str, uid: str, custom_message: bool = Query(False), rejection_data: dict = Body(None), secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
@@ -324,7 +324,9 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     app = get_available_app_by_id(app_id, uid)
     token = get_token_only(uid)
     if token:
-        # TODO: Add reason for rejection in payload and also redirect to the plugin page
-        send_notification(token, 'App Rejected 😔',
-                          f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
+        if custom_message and rejection_data and 'rejection_message' in rejection_data:
+            message = rejection_data['rejection_message']
+        else:
+            message = f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.'
+        send_notification(token, 'App Rejected 😔', message)
     return {'status': 'ok'}
