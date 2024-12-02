@@ -100,19 +100,12 @@ export default async function PluginDetailView({ params }: { params: { id: strin
 
   return (
     <div className="min-h-screen bg-[#0B0F17]">
-      {/* Banner */}
-      <div className="bg-[#1A1F2E] px-4 py-3 text-center text-sm text-white">
-        Submit your own App by November 30th and get a free trip to OMI HQ in San
-        Francisco
-        <Link href="/hackathon" className="text-[#6C8EEF] hover:underline">
-          Join Hackathon
-        </Link>
-      </div>
+
 
       {/* Main Content */}
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         {/* Navigation */}
-        <nav className="mb-4 flex items-center justify-between sm:mb-6 lg:mb-8">
+        <nav className="mb-4 flex items-center justify-between sm:mb-6 lg:mb-8 mt-6">
           <Link
             href="/apps"
             className="group inline-flex items-center text-gray-400 transition-all duration-300 hover:text-white"

@@ -37,8 +37,8 @@ export default async function SleekPluginList() {
   return (
     <div className="min-h-screen bg-[#0B0F17] px-6 py-8">
       <div className="container mx-auto">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-[#6C8EEF]">OMI Marketplace</h1>
+        <div className="mb-12 mt-10">
+          <h1 className="text-4xl font-bold text-[#6C8EEF]">Omi App Store</h1>
           <p className="mt-3 text-gray-400">
             Discover our most popular AI-powered applications
           </p>
