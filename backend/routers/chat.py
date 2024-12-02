@@ -37,7 +37,8 @@ def send_message(
 ):
     print('send_message', data.text, plugin_id, uid)
     message = Message(
-        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
+        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
+        plugin_id=plugin_id,
     )
     chat_db.add_message(uid, message.dict())
 
@@ -46,7 +47,7 @@ def send_message(
 
     app_id = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # plugin
     memories_id = []
     # check if the items in the memories list are dict
@@ -98,13 +99,24 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
     err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
-    return initial_message_util(uid)
+    return initial_message_util(uid, plugin_id)
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
+    print('initial_message_util', app_id)
+    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
+    print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
+    prev_messages_str = ''
+    if prev_messages:
+        prev_messages_str = 'Previous conversation history:\n'
+        prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
+
+    print('initial_message_util', len(prev_messages_str), app_id)
+    print('prev_messages:', [m['id'] for m in prev_messages])
+
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
-    text = initial_chat_message(uid, app)
+    text = initial_chat_message(uid, app, prev_messages_str)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -122,11 +134,6 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
-    # TODO: message embracces personality better in a shorter message
-    # TODO: use messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
-    #   so that initial message has a follow up type of interaction
-    # TODO: some irregularities when deleting messages + changing plugin selected on app
-    # TODO: app navigation when selecting a different plugin, feels taking too long!
     return initial_message_util(uid, plugin_id)
 
 
@@ -143,14 +150,10 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     if plugin_id == 'null':
         plugin_id = None
 
-    messages = chat_db.get_messages(
-        uid, limit=100, include_memories=True, plugin_id=plugin_id, include_plugin_id_filter=True
-    )
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
-    # if dropdown_selected:
-    #     return messages + [initial_message_util(uid, plugin_id)]  # improve so that it does a follow-up
     return messages
 
 
