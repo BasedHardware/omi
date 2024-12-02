@@ -41,7 +41,7 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     # print(len(facts))
     # return list(sorted(facts, key=lambda x: x['category'], reverse=True))
     # print(list(map(lambda x: x['category'], facts)))
-    return list(filter(lambda x: x['category'] != 'learnings', facts))
+    return list(filter(lambda x: x['category'] != 'learnings' and x['category'] != 'core', facts))
     # return facts
 
 
