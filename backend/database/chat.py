@@ -143,8 +143,10 @@ def get_messages(
     return messages
 
 
-def batch_delete_messages(parent_doc_ref, batch_size=450):
-    messages_ref = parent_doc_ref.collection('messages')
+def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):
+    messages_ref = parent_doc_ref.collection('messages').where(filter=FieldFilter('deleted', '==', False))
+    messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+
     last_doc = None  # For pagination
 
     while True:
@@ -173,13 +175,13 @@ def batch_delete_messages(parent_doc_ref, batch_size=450):
         last_doc = docs_list[-1]
 
 
-def clear_chat(uid: str):
+def clear_chat(uid: str, plugin_id: Optional[str] = None):
     try:
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(user_ref)
+        batch_delete_messages(user_ref, plugin_id=plugin_id)
         return None
     except Exception as e:
         return {"message": str(e)}
