@@ -126,6 +126,8 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
     # TODO: use messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
     #   so that initial message has a follow up type of interaction
     # TODO: some irregularities when deleting messages + changing plugin selected on app
+    # TODO: app navigation when selecting a different plugin, feels taking too long!
+    # TODO: Facts FactCategory is dynamic.
     return initial_message_util(uid, plugin_id)
 
 
