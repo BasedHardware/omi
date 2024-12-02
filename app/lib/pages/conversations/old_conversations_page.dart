@@ -10,14 +10,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 
-class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key});
+class OldConversationsPage extends StatefulWidget {
+  const OldConversationsPage({super.key});
 
   @override
-  State<ConversationsPage> createState() => _ConversationsPageState();
+  State<OldConversationsPage> createState() => _OldConversationsPageState();
 }
 
-class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
+class _OldConversationsPageState extends State<OldConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
 
   @override
@@ -91,7 +91,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
                       return VisibilityDetector(
-                        key: const Key('memory-loader'),
+                        key: const Key('old-key'),
                         onVisibilityChanged: (visibilityInfo) {
                           if (visibilityInfo.visibleFraction > 0 && !memoryProvider.isLoadingConversations) {
                             memoryProvider.getMoreConversationsFromServer();
@@ -109,7 +109,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (index == 0) const SizedBox(height: 16),
-                          ConversationsgroupWidget(
+                          ConversationsGroupWidget(
                             isFirst: index == 0,
                             memories: memoriesForDate,
                             date: date,

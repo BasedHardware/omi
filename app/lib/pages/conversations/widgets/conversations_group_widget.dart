@@ -4,14 +4,14 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'date_list_item.dart';
 import 'conversation_list_item.dart';
 
-class ConversationsgroupWidget extends StatelessWidget {
+class ConversationsGroupWidget extends StatelessWidget {
   final List<ServerConversation> memories;
   final DateTime date;
   final bool showDiscardedMemories;
   final bool hasDiscardedMemories;
   final bool hasNonDiscardedMemories;
   final bool isFirst;
-  const ConversationsgroupWidget(
+  const ConversationsGroupWidget(
       {super.key,
       required this.memories,
       required this.date,
@@ -39,7 +39,7 @@ class ConversationsgroupWidget extends StatelessWidget {
           if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
             const SizedBox.shrink()
           else
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
         ],
       );
     } else {

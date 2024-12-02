@@ -9,8 +9,9 @@ import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
+import 'package:friend_private/pages/home/widgets/home_sub_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/conversations/page.dart';
+import 'package:friend_private/pages/conversations/old_conversations_page.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -18,7 +19,6 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart' as mp;
-import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -283,7 +283,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
-                        ConversationsPage(),
+                        // OldConversationsPage(),
+                        HomeSubPage(),
                         ChatPage(),
                         AppsPage(),
                       ],
@@ -359,36 +360,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       }
                     },
                   ),
-                  if (scriptsInProgress)
-                    Center(
-                      child: Container(
-                        height: 150,
-                        width: 250,
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                            SizedBox(height: 16),
-                            Center(
-                                child: Text(
-                              'Running migration, please wait! 🚨',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                              textAlign: TextAlign.center,
-                            )),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -434,22 +405,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
                 Row(
                   children: [
-                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
-                      if (home.selectedIndex != 0 ||
-                          !memoryProvider.hasNonDiscardedConversations ||
-                          memoryProvider.isLoadingConversations) {
-                        return const SizedBox.shrink();
-                      }
-                      return IconButton(
-                          onPressed: memoryProvider.toggleDiscardConversations,
-                          icon: Icon(
-                            SharedPreferencesUtil().showDiscardedMemories
-                                ? Icons.filter_list_off_sharp
-                                : Icons.filter_list,
-                            color: Colors.white,
-                            size: 24,
-                          ));
-                    }),
+                    // Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
+                    //   if (home.selectedIndex != 0 ||
+                    //       !memoryProvider.hasNonDiscardedConversations ||
+                    //       memoryProvider.isLoadingConversations) {
+                    //     return const SizedBox.shrink();
+                    //   }
+                    //   return IconButton(
+                    //       onPressed: memoryProvider.toggleDiscardConversations,
+                    //       icon: Icon(
+                    //         SharedPreferencesUtil().showDiscardedMemories
+                    //             ? Icons.filter_list_off_sharp
+                    //             : Icons.filter_list,
+                    //         color: Colors.white,
+                    //         size: 24,
+                    //       ));
+                    // }),
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {

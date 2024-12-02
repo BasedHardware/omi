@@ -12,6 +12,54 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   List<ServerConversation> conversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
+  List<String> convoCategories = [
+    'personal',
+    'education',
+    'health',
+    'finance',
+    'legal',
+    'philosophy',
+    'spiritual',
+    'science',
+    'entrepreneurship',
+    'parenting'
+        'romantic',
+    'travel',
+    'inspiration',
+    'technology',
+    'business',
+    'social',
+    'work',
+    'sports',
+    'politics',
+    'literature',
+    'history',
+    'architecture',
+    'other'
+  ];
+
+  List<(DateTime, int, ServerConversation)> get recentConversations {
+    var sortedKeys = groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    List<(DateTime, int, ServerConversation)> recentConvos = [];
+    for (var key in sortedKeys) {
+      if (recentConvos.length >= 6) {
+        break;
+      }
+
+      for (int i = 0; i < groupedConversations[key]!.length; i++) {
+        if (groupedConversations[key]![i].discarded) {
+          continue;
+        }
+        var convo = groupedConversations[key]![i];
+        recentConvos.add((key, i, convo));
+        if (recentConvos.length >= 6) {
+          break;
+        }
+      }
+    }
+    return recentConvos;
+  }
+
   bool isLoadingConversations = false;
   bool hasNonDiscardedConversations = true;
   bool showDiscardedConversations = false;
@@ -48,6 +96,21 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   _preload() async {
     _missingWals = await _wal.getSyncs().getMissingWals();
+    notifyListeners();
+  }
+
+  Future getConversationCategories() async {
+    convoCategories = await getConversationCategoriesServer();
+    notifyListeners();
+  }
+
+  void searchConversations(String query) {
+    print('searchConversations $query');
+    if (query == previousQuery) {
+      return;
+    }
+    previousQuery = query;
+    filterGroupedConversations(query);
     notifyListeners();
   }
 
@@ -145,8 +208,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   void filterGroupedConversations(String query) {
-    // _filterGroupedConversationsWithoutNotify(query);
-    _groupConversationsByDateWithoutNotify();
+    _filterGroupedConversationsWithoutNotify(query);
     notifyListeners();
   }
 
@@ -178,7 +240,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     var newConversations = await getConversations(offset: conversations.length);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    filterGroupedConversations('');
+    filterGroupedConversations(previousQuery);
     setLoadingConversations(false);
     notifyListeners();
   }
