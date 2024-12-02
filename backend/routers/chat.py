@@ -146,7 +146,9 @@ def get_messages(
     if plugin_id == 'null':
         plugin_id = None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    messages = chat_db.get_messages(
+        uid, limit=100, include_memories=True, plugin_id=plugin_id, include_plugin_id_filter=True
+    )
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]

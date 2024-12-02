@@ -94,7 +94,8 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 @timeit
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None
+        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
+        include_plugin_id_filter: bool = False,
 ):
     user_ref = db.collection('users').document(uid)
     messages_ref = (
@@ -102,7 +103,8 @@ def get_messages(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     # keep only when latest app version already deployed.
-    # messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    if include_plugin_id_filter:
+        messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
     # if plugin_id:
     messages_ref = messages_ref.limit(limit).offset(offset)
 
