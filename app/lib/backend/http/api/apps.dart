@@ -152,7 +152,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
     debugPrint('Response not a valid json: $e');
     return false;
   } catch (e) {
-    debugPrint('Error triggering memory request at endpoint: $e');
+    debugPrint('Error triggering request at endpoint: $e');
     return false;
   }
 }
