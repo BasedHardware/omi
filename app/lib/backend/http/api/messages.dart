@@ -17,7 +17,7 @@ Future<List<ServerMessage>> getMessagesServer({
   if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId&dropdown_selected=$dropdownSelected',
+    url: '${Env.apiBaseUrl}v2/messages?plugin_id=$pluginId&dropdown_selected=$dropdownSelected',
     headers: {},
     method: 'GET',
     body: '',
