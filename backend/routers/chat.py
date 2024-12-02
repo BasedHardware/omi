@@ -127,7 +127,6 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
     #   so that initial message has a follow up type of interaction
     # TODO: some irregularities when deleting messages + changing plugin selected on app
     # TODO: app navigation when selecting a different plugin, feels taking too long!
-    # TODO: Facts FactCategory is dynamic.
     return initial_message_util(uid, plugin_id)
 
 

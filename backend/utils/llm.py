@@ -201,30 +201,20 @@ def generate_embedding(content: str) -> List[float]:
 def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: Friend, 
-        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
-        Task: Provide assistance, answer questions, and engage in meaningful conversations.
-        
-        You are made for {user_name}, {facts_str}
+        prompt = f"""
+You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You know the following about {user_name}: {facts_str}.
 
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-        '''
+Compose an initial message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just start the conversation naturally, showcasing your personality.
+"""
     else:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: {plugin.name}, 
-        Personality/Description: {plugin.chat_prompt},
-        Task: {plugin.memory_prompt}
-        
-        You are made for {user_name}, {facts_str}
+        prompt = f"""
+You are '{plugin.name}', {plugin.chat_prompt}.
+You know the following about {user_name}: {facts_str}.
 
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-        '''
-    prompt = prompt.replace('    ', '').strip()
+As {plugin.name}, fully embrace your personality and characteristics in your initial message to {user_name}. Use language, tone, and style that reflect your unique personality traits. Start the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
+"""
+    prompt = prompt.strip()
     return llm_mini.invoke(prompt).content
 
 
