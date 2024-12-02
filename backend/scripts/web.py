@@ -13,7 +13,7 @@ import json
 
 def get_user_messages_with_bot_name():
     user_messages_with_bot_name = {}
-    uids = get_users_uid()[:1000]
+    uids = get_users_uid()[:20]
     users_ref = db.collection("users")
     print(len(uids))
 
@@ -28,11 +28,20 @@ def get_user_messages_with_bot_name():
     with ThreadPoolExecutor() as executor:
         executor.map(process_user, uids)
 
-    with open('user_messages_with_bot_name.json', 'w') as f:
-        json.dump(user_messages_with_bot_name, f)
+    with open("user_messages_with_bot_name.json", "w") as f:
+        json.dump(user_messages_with_bot_name, f, default=str)
 
     return uids
 
 
 if __name__ == "__main__":
     get_user_messages_with_bot_name()
+    # TODO: map all plugin_data by persona_name so that we can map, local json
+    # TODO: questions
+    # -- % of people who provided their x vs someone else’s, and most popular questions
+    # -- If someone else, who were the top 3 most popular questions and to whom
+    # - how many users have personas messages?
+    # - how many conversations are just automatic messages? (no user messages)
+    # - how many users have no messages back at all? ratio
+    # - conversations length distribution
+    # - # of conversations distribution per user
