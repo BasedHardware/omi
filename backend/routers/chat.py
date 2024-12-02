@@ -122,10 +122,23 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)
 def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
+    # TODO: use messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    #   so that initial message has a follow up type of interaction
     return initial_message_util(uid, plugin_id)
 
 
+# TODO: v2/messages to migrate the plugin_id filter right away.
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
+def get_messages(
+        uid: str = Depends(auth.get_current_user_uid)
+):
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True)
+    if not messages:
+        return [initial_message_util(uid)]
+    return messages
+
+
+@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
         plugin_id: Optional[str] = None, dropdown_selected: Optional[bool] = True,
         uid: str = Depends(auth.get_current_user_uid)
@@ -138,7 +151,7 @@ def get_messages(
     if not messages:
         return [initial_message_util(uid, plugin_id)]
     # if dropdown_selected:
-    #     return messages + [initial_message_util(uid, plugin_id)]  # improve so that it does a follow up
+    #     return messages + [initial_message_util(uid, plugin_id)]  # improve so that it does a follow-up
     return messages
 
 
