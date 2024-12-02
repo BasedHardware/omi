@@ -96,13 +96,15 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None
 ):
+    print('get_messages plugin_id    :', plugin_id)
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
-    if plugin_id:
-        messages_ref = messages_ref.where('plugin_id', '==', plugin_id)
+    # keep only when latest app version already deployed.
+    # messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    # if plugin_id:
     messages_ref = messages_ref.limit(limit).offset(offset)
 
     messages = []
