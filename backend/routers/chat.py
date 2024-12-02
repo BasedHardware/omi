@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 import database.chat as chat_db
-from database.plugins import record_plugin_usage
+from database.apps import record_app_usage
 from models.app import App
 from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
 from models.memory import Memory
@@ -41,13 +41,13 @@ def send_message(
     )
     chat_db.add_message(uid, message.dict())
 
-    plugin = get_available_app_by_id(plugin_id, uid)
-    plugin = App(**plugin) if plugin else None
+    app = get_available_app_by_id(plugin_id, uid)
+    app = App(**app) if app else None
 
-    plugin_id = plugin.id if plugin else None
+    app_id = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, plugin)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # plugin
     memories_id = []
     # check if the items in the memories list are dict
     if memories:
@@ -63,14 +63,14 @@ def send_message(
         text=response,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=plugin_id,
+        plugin_id=app_id,
         type='text',
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
-    if plugin_id:
-        record_plugin_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+    if app_id:
+        record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
     resp = ai_message.dict()
     resp['ask_for_nps'] = ask_for_nps
@@ -101,17 +101,17 @@ def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid)
 
 
-def initial_message_util(uid: str, plugin_id: Optional[str] = None):
-    plugin = get_available_app_by_id(plugin_id, uid)
-    plugin = App(**plugin) if plugin else None
-    text = initial_chat_message(uid, plugin)
+def initial_message_util(uid: str, app_id: Optional[str] = None):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
+    text = initial_chat_message(uid, app)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
         created_at=datetime.now(timezone.utc),
         sender='ai',
-        plugin_id=plugin_id,
+        plugin_id=app_id,
         from_external_integration=False,
         type='text',
         memories_id=[],
