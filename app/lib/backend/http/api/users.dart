@@ -247,7 +247,7 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setMemorySummaryRating response: ${response.body}');
+  debugPrint('setConversationSummaryRating response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -271,7 +271,7 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getHasMemorySummaryRating response: ${response.body}');
+  debugPrint('getHasConversationSummaryRating response: ${response.body}');
 
   try {
     var jsonResponse = jsonDecode(response.body);
