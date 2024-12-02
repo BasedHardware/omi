@@ -86,6 +86,15 @@ class $AssetsImagesGen {
   AssetGenImage get herologo =>
       const AssetGenImage('assets/images/herologo.png');
 
+  /// File path: assets/images/ic_calendar_search.svg
+  String get icCalendarSearch => 'assets/images/ic_calendar_search.svg';
+
+  /// File path: assets/images/ic_check.svg
+  String get icCheck => 'assets/images/ic_check.svg';
+
+  /// File path: assets/images/ic_convo.svg
+  String get icConvo => 'assets/images/ic_convo.svg';
+
   /// File path: assets/images/instruction_1.png
   AssetGenImage get instruction1 =>
       const AssetGenImage('assets/images/instruction_1.png');
@@ -125,12 +134,15 @@ class $AssetsImagesGen {
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
   /// List of all assets
-  List<AssetGenImage> get values => [
+  List<dynamic> get values => [
         appLauncherIcon,
         background,
         blob,
         emotionalFeedback1,
         herologo,
+        icCalendarSearch,
+        icCheck,
+        icConvo,
         instruction1,
         instruction2,
         instruction3,
