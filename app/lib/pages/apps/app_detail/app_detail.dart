@@ -39,6 +39,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
+  double moneyMade = 0.0;
+  int usageCount = 0;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -51,7 +53,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!widget.app.private) {
+        var app = await context.read<AppProvider>().getAppDetails(widget.app.id);
+        setState(() {
+          if (app != null) {
+            moneyMade = app.moneyMade ?? 0.0;
+            usageCount = app.usageCount ?? 0;
+          }
+        });
+      }
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
     });
@@ -556,7 +567,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               SvgPicture.asset(Assets.images.icChart, width: 20),
                               const SizedBox(width: 8),
                               Text(
-                                widget.app.usageCount.toString(),
+                                usageCount.toString(),
                                 style: const TextStyle(color: Colors.white, fontSize: 30),
                               ),
                             ],
@@ -574,7 +585,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               SvgPicture.asset(Assets.images.icDollar, width: 20),
                               const SizedBox(width: 8),
                               Text(
-                                "\$${widget.app.moneyMade}",
+                                "\$$moneyMade",
                                 style: const TextStyle(color: Colors.white, fontSize: 28),
                               ),
                             ],

@@ -52,8 +52,6 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
         app_dict['installs'] = plugins_install.get(app['id'], 0)
-        app_dict['money_made'] = get_app_money_made_amount(app['id'])
-        app_dict['usage_count'] = get_app_usage_count(app['id'])
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
@@ -90,6 +88,8 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
         return None
     if app['private'] and app['uid'] != uid:
         return None
+    app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
+    app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
     reviews = get_plugin_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
@@ -117,8 +117,6 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     for app in all_apps:
         app_dict = app
         app_dict['installs'] = plugins_install.get(app['id'],0)
-        app_dict['money_made'] = get_app_money_made_amount(app['id'])
-        app_dict['usage_count'] = get_app_usage_count(app['id'])
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()
