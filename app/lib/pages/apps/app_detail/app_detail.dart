@@ -580,65 +580,67 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 : const SizedBox.shrink(),
             // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
             // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16.0),
-              margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade900,
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
-                  const SizedBox(height: 16),
-                  Skeletonizer(
-                    enabled: analyticsLoading,
-                    child: Row(
+            widget.app.private
+                ? const SizedBox.shrink()
+                : Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16.0),
+                    margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  usageCount.toString(),
-                                  style: const TextStyle(color: Colors.white, fontSize: 30),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                          ],
+                        const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        const SizedBox(height: 16),
+                        Skeletonizer(
+                          enabled: analyticsLoading,
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        usageCount.toString(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 30),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                                ],
+                              ),
+                              const Spacer(flex: 2),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "\$$moneyMade",
+                                        style: const TextStyle(color: Colors.white, fontSize: 28),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                                ],
+                              ),
+                              const Spacer(flex: 2),
+                            ],
+                          ),
                         ),
-                        const Spacer(flex: 2),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "\$$moneyMade",
-                                  style: const TextStyle(color: Colors.white, fontSize: 28),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                          ],
-                        ),
-                        const Spacer(flex: 2),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
             const SizedBox(height: 60),
           ],
         ),
