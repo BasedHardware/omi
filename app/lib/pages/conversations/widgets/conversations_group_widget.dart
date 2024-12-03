@@ -5,7 +5,7 @@ import 'date_list_item.dart';
 import 'conversation_list_item.dart';
 
 class ConversationsGroupWidget extends StatelessWidget {
-  final List<ServerConversation> memories;
+  final List<ServerConversation> conversations;
   final DateTime date;
   final bool showDiscardedMemories;
   final bool hasDiscardedMemories;
@@ -13,7 +13,7 @@ class ConversationsGroupWidget extends StatelessWidget {
   final bool isFirst;
   const ConversationsGroupWidget(
       {super.key,
-      required this.memories,
+      required this.conversations,
       required this.date,
       required this.hasNonDiscardedMemories,
       required this.showDiscardedMemories,
@@ -22,7 +22,7 @@ class ConversationsGroupWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (memories.isNotEmpty) {
+    if (conversations.isNotEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -30,11 +30,12 @@ class ConversationsGroupWidget extends StatelessWidget {
             const SizedBox.shrink()
           else
             DateListItem(date: date, isFirst: isFirst),
-          ...memories.map((memory) {
-            if (!showDiscardedMemories && memory.discarded) {
+          ...conversations.map((conversation) {
+            if (!showDiscardedMemories && conversation.discarded) {
               return const SizedBox.shrink();
             }
-            return ConversationListItem(memory: memory, memoryIdx: memories.indexOf(memory), date: date);
+            return ConversationListItem(
+                conversation: conversation, memoryIdx: conversations.indexOf(conversation), date: date);
           }),
           if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
             const SizedBox.shrink()

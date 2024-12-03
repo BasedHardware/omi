@@ -77,8 +77,8 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
   void _pushNewMemory(BuildContext context, memory) async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (c) => MemoryDetailPage(
-          memory: memory,
+        builder: (c) => ConversationDetailPage(
+          conversation: memory,
         ),
       ));
     });
