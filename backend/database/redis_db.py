@@ -74,8 +74,30 @@ def delete_app_cache_by_id(app_id: str):
 # ******************************************************
 
 
+def set_app_usage_count_cache(app_id: str, count: int):
+    r.set(f'apps:{app_id}:usage_count', count, ex=60 * 15)  # 15 minutes
+
+
+def get_app_usage_count_cache(app_id: str) -> int | None:
+    count = r.get(f'apps:{app_id}:usage_count')
+    if not count:
+        return None
+    return eval(count)
+
+
+def set_app_money_made_amount_cache(app_id: str, amount: float):
+    r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
+
+
+def get_app_money_made_amount_cache(app_id: str) -> float | None:
+    amount = r.get(f'apps:{app_id}:money_made')
+    if not amount:
+        return None
+    return eval(amount)
+
+
 def set_app_usage_history_cache(app_id: str, usage: List[dict]):
-    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 5)  # 5 minutes
+    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 10)  # 10 minutes
 
 
 def get_app_usage_history_cache(app_id: str) -> List[dict]:
@@ -99,17 +121,17 @@ def get_app_money_made_cache(app_id: str) -> dict:
 
 
 def set_app_money_made_cache(app_id: str, money: dict):
-    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 5)  # 5 minutes
+    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
-def set_plugin_review(plugin_id: str, uid: str, data: dict):
-    reviews = r.get(f'plugins:{plugin_id}:reviews')
+def set_app_review_cache(app_id: str, uid: str, data: dict):
+    reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         reviews = {}
     else:
         reviews = eval(reviews)
     reviews[uid] = data
-    r.set(f'plugins:{plugin_id}:reviews', str(reviews))
+    r.set(f'plugins:{app_id}:reviews', str(reviews))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> dict:
@@ -133,12 +155,12 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
             r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 
-def enable_plugin(uid: str, plugin_id: str):
-    r.sadd(f'users:{uid}:enabled_plugins', plugin_id)
+def enable_app(uid: str, app_id: str):
+    r.sadd(f'users:{uid}:enabled_plugins', app_id)
 
 
-def disable_plugin(uid: str, plugin_id: str):
-    r.srem(f'users:{uid}:enabled_plugins', plugin_id)
+def disable_app(uid: str, app_id: str):
+    r.srem(f'users:{uid}:enabled_plugins', app_id)
 
 
 def get_enabled_plugins(uid: str):
@@ -173,12 +195,12 @@ def set_plugin_installs_count(plugin_id: str, count: int):
     r.set(f'plugins:{plugin_id}:installs', count)
 
 
-def increase_plugin_installs_count(plugin_id: str):
-    r.incr(f'plugins:{plugin_id}:installs')
+def increase_app_installs_count(app_id: str):
+    r.incr(f'plugins:{app_id}:installs')
 
 
-def decrease_plugin_installs_count(plugin_id: str):
-    r.decr(f'plugins:{plugin_id}:installs')
+def decrease_app_installs_count(app_id: str):
+    r.decr(f'plugins:{app_id}:installs')
 
 
 def get_plugin_installs_count(plugin_id: str) -> int:

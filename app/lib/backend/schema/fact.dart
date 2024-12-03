@@ -1,4 +1,4 @@
-enum FactCategory { hobbies, lifestyle, interests, habits, work, skills, other }
+enum FactCategory { core, lifestyle, hobbies, interests, habits, work, skills, learnings, other }
 
 class Fact {
   String id;

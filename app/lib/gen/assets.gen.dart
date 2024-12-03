@@ -95,6 +95,12 @@ class $AssetsImagesGen {
   /// File path: assets/images/ic_convo.svg
   String get icConvo => 'assets/images/ic_convo.svg';
 
+  /// File path: assets/images/ic_chart.svg
+  String get icChart => 'assets/images/ic_chart.svg';
+
+  /// File path: assets/images/ic_dollar.svg
+  String get icDollar => 'assets/images/ic_dollar.svg';
+
   /// File path: assets/images/instruction_1.png
   AssetGenImage get instruction1 =>
       const AssetGenImage('assets/images/instruction_1.png');
@@ -143,6 +149,8 @@ class $AssetsImagesGen {
         icCalendarSearch,
         icCheck,
         icConvo,
+        icChart,
+        icDollar,
         instruction1,
         instruction2,
         instruction3,
