@@ -64,6 +64,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       }
                       if (s == null || s == provider.selectedChatAppId) return;
                       provider.setSelectedChatAppId(s);
+                      await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
                       var app = provider.getSelectedApp();
                       context.read<MessageProvider>().sendInitialAppMessage(app);
                     },

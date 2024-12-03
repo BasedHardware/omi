@@ -198,33 +198,27 @@ def generate_embedding(content: str) -> List[float]:
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
-def initial_chat_message(uid: str, plugin: Optional[App] = None) -> str:
+def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: Friend, 
-        Personality/Description: A friendly and helpful AI assistant that aims to make your life easier and more enjoyable.
-        Task: Provide assistance, answer questions, and engage in meaningful conversations.
-        
-        You are made for {user_name}, {facts_str}
+        prompt = f"""
+You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You know the following about {user_name}: {facts_str}.
 
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-        '''
+{prev_messages_str}
+
+Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
+"""
     else:
-        prompt = f'''
-        You are an AI with the following characteristics:
-        Name: {plugin.name}, 
-        Personality/Description: {plugin.chat_prompt},
-        Task: {plugin.memory_prompt}
-        
-        You are made for {user_name}, {facts_str}
+        prompt = f"""
+You are '{plugin.name}', {plugin.chat_prompt}.
+You know the following about {user_name}: {facts_str}.
 
-        Send an initial message to start the conversation, make sure this message reflects your personality, \
-        humor, and characteristics.
-        '''
-    prompt = prompt.replace('    ', '').strip()
+{prev_messages_str}
+
+As {plugin.name}, fully embrace your personality and characteristics in your {"initial" if not prev_messages_str else "follow-up"} message to {user_name}. Use language, tone, and style that reflect your unique personality traits. {"Start" if not prev_messages_str else "Continue"} the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
+"""
+    prompt = prompt.strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -404,34 +398,40 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
     prompt = f"""
     You are an assistant for question-answering tasks. 
-    You are made for {user_name}, {facts_str}
-    
-    Use what you know about {user_name}, the following pieces of retrieved context to answer the user question.
-    If there's no context or the context is not related, tell the user that they didn't record any conversations about that specific topic.
-    Never say that you don't have enough information. 
-    
+    You answer question in the most personalized way possible, using the context provided.
+
+    If the user is asking for advice/recommendations, you must always answer, even if there's no context at all.
+    Never say that you don't have enough information, unless the user is referring or specifically asking about stuff in the past, and nothing related was provided.
+
     Use three sentences maximum and keep the answer concise.
-    
+
     {plugin_info}
-    
+
     Question:
     {question}
 
     Context:
     ```
+    **User Facts:**
+    {facts_str.strip()}
+
+    **Related Conversations:**
     {context}
     ```
     Answer:
-    """.replace('    ', '').strip()
-    # print('qa_rag prompt', prompt)
-    return llm_mini.invoke(prompt).content
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    print('qa_rag prompt', prompt)
+    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 
 # **************************************************

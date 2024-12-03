@@ -22,11 +22,17 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void initState() {
+    var device = widget.device!;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() {
         isLoading = true;
       });
-      await getLatestVersion(deviceName: widget.device!.name);
+      await getLatestVersion(
+        deviceModelNumber: device.modelNumber,
+        firmwareRevision: device.firmwareRevision,
+        hardwareRevision: device.hardwareRevision,
+        manufacturerName: device.manufacturerName,
+      );
       var (a, b) =
           await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
       if (mounted) {

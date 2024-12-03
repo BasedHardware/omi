@@ -48,12 +48,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages() async {
+  Future refreshMessages({bool dropdownSelected = false}) async {
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
     }
-    messages = await getMessagesFromServer();
+    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
     if (messages.isEmpty) {
       messages = SharedPreferencesUtil().cachedMessages;
     } else {
@@ -72,14 +72,18 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer() async {
+  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+    print('getMessagesFromServer');
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
-    print(appProvider?.selectedChatAppId); // TODO: TEST ME
-    var mes = await getMessagesServer(); // pluginId: appProvider?.selectedChatAppId
+    print('appProvider?.selectedChatAppId: ${appProvider?.selectedChatAppId}');
+    var mes = await getMessagesServer(
+      pluginId: appProvider?.selectedChatAppId,
+      dropdownSelected: dropdownSelected,
+    );
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Learning from your memories...';
       notifyListeners();
@@ -98,7 +102,7 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer();
+    var mes = await clearChatServer(pluginId: appProvider?.selectedChatAppId);
     messages = mes;
     setClearingChat(false);
     notifyListeners();
