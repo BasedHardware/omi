@@ -11,6 +11,7 @@ export default function AppHeader() {
   const pathname = usePathname();
 
   const dreamforcePage = pathname.includes('dreamforce');
+  const appsPage = pathname.includes('/apps');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -68,16 +69,21 @@ export default function AppHeader() {
           </ul>
         </nav>
       </header>
-      <div className="fixed top-16 z-30 w-full bg-blue-500 p-2 text-center text-white">
-        <span>Submit your own App by November 30th and get a free trip to OMI HQ in San Francisco</span>
-        <Link
-          href="https://discord.gg/omi"
-          target="_blank"
-          className="ml-4 inline-block rounded-md bg-white px-3 py-1 text-blue-500 hover:bg-blue-100"
-        >
-          Join Hackathon
-        </Link>
-      </div>
+      {!appsPage && (
+        <div className="fixed top-16 z-30 w-full bg-blue-500 p-2 text-center text-white">
+          <span>
+            Submit your own App by November 30th and get a free trip to OMI HQ in
+            San Francisco
+          </span>
+          <Link
+            href="https://discord.gg/omi"
+            target="_blank"
+            className="ml-4 inline-block rounded-md bg-white px-3 py-1 text-blue-500 hover:bg-blue-100"
+          >
+            Join Hackathon
+          </Link>
+        </div>
+      )}
     </>
   ) : null;
 }
