@@ -15,11 +15,11 @@ class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
   final int memoryIdx;
-  final ServerConversation memory;
+  final ServerConversation conversation;
 
   const ConversationListItem({
     super.key,
-    required this.memory,
+    required this.conversation,
     required this.date,
     required this.memoryIdx,
     this.isFromOnboarding = false,
@@ -42,9 +42,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
   @override
   Widget build(BuildContext context) {
     // Is new memory
-    DateTime memorizedAt = widget.memory.createdAt;
-    if (widget.memory.finishedAt != null && widget.memory.finishedAt!.isAfter(memorizedAt)) {
-      memorizedAt = widget.memory.finishedAt!;
+    DateTime memorizedAt = widget.conversation.createdAt;
+    if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
+      memorizedAt = widget.conversation.finishedAt!;
     }
     int seconds = (DateTime.now().millisecondsSinceEpoch - memorizedAt.millisecondsSinceEpoch) ~/ 1000;
     isNew = 0 < seconds && seconds < 60; // 1m
@@ -57,23 +57,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.memory.structured;
+    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
-          MixpanelManager().memoryListItemClicked(widget.memory, widget.memoryIdx);
+          MixpanelManager().memoryListItemClicked(widget.conversation, widget.memoryIdx);
           context.read<ConversationDetailProvider>().updateConversation(widget.memoryIdx, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().memory.structured.title;
           provider.onMemoryTap(widget.memoryIdx);
 
           await routeToPage(
             context,
-            MemoryDetailPage(memory: widget.memory, isFromOnboarding: widget.isFromOnboarding),
+            ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
           String newTitle = context.read<ConversationDetailProvider>().memory.structured.title;
           if (startingTitle != newTitle) {
-            widget.memory.structured.title = newTitle;
-            provider.upsertMemory(widget.memory);
+            widget.conversation.structured.title = newTitle;
+            provider.upsertMemory(widget.conversation);
           }
         },
         child: Padding(
@@ -88,7 +88,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
-                key: Key(widget.memory.id),
+                key: Key(widget.conversation.id),
                 direction: DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
@@ -97,7 +97,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (direction) {
-                  var memory = widget.memory;
+                  var memory = widget.conversation;
                   var memoryIdx = widget.memoryIdx;
                   provider.deleteMemoryLocally(memory, memoryIdx, widget.date);
                   ScaffoldMessenger.of(context)
@@ -131,15 +131,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     children: [
                       _getMemoryHeader(),
                       const SizedBox(height: 16),
-                      widget.memory.discarded
+                      widget.conversation.discarded
                           ? const SizedBox.shrink()
                           : Text(
                               structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
-                      widget.memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-                      widget.memory.discarded
+                      widget.conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+                      widget.conversation.discarded
                           ? const SizedBox.shrink()
                           : Text(
                               structured.overview.decodeString,
@@ -149,9 +149,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   .copyWith(color: Colors.grey.shade300, height: 1.3),
                               maxLines: 2,
                             ),
-                      widget.memory.discarded
+                      widget.conversation.discarded
                           ? Text(
-                              widget.memory.getTranscript(maxCount: 100),
+                              widget.conversation.getTranscript(maxCount: 100),
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium!
@@ -175,23 +175,24 @@ class _ConversationListItemState extends State<ConversationListItem> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          widget.memory.discarded
+          widget.conversation.discarded
               ? const SizedBox.shrink()
-              : Text(widget.memory.structured.getEmoji(),
+              : Text(widget.conversation.structured.getEmoji(),
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-          widget.memory.structured.category.isNotEmpty && !widget.memory.discarded
+          widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded
               ? const SizedBox(width: 12)
               : const SizedBox.shrink(),
-          widget.memory.structured.category.isNotEmpty
+          widget.conversation.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
-                    color: widget.memory.getTagColor(),
+                    color: widget.conversation.getTagColor(),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
-                    widget.memory.getTag(),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.memory.getTagTextColor()),
+                    widget.conversation.getTag(),
+                    style:
+                        Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
                     maxLines: 1,
                   ),
                 )
@@ -206,7 +207,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: MemoryNewStatusIndicator(text: "New 🚀"),
                   )
                 : Text(
-                    dateTimeFormat('MMM d, h:mm a', widget.memory.startedAt ?? widget.memory.createdAt),
+                    dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     maxLines: 1,
                     textAlign: TextAlign.end,

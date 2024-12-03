@@ -55,7 +55,7 @@ class _MemoryCreatedWidgetState extends State<ConversationCreatedWidget> {
             context.read<SpeechProfileProvider>().memory == null
                 ? const SizedBox()
                 : ConversationListItem(
-                    memory: context.read<SpeechProfileProvider>().memory!,
+                    conversation: context.read<SpeechProfileProvider>().memory!,
                     memoryIdx: 0,
                     isFromOnboarding: true,
                     date: DateTime(
@@ -84,7 +84,7 @@ class _MemoryCreatedWidgetState extends State<ConversationCreatedWidget> {
                 onPressed: () {
                   // updateMemoryDetailProvider(context, provider.memory!);
                   MixpanelManager().memoryListItemClicked(provider.memory!, 0);
-                  routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
+                  routeToPage(context, ConversationDetailPage(conversation: provider.memory!, isFromOnboarding: true));
                 },
                 child: const Text(
                   'Check it out',

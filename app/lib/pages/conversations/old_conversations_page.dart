@@ -111,7 +111,7 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
                           if (index == 0) const SizedBox(height: 16),
                           ConversationsGroupWidget(
                             isFirst: index == 0,
-                            memories: memoriesForDate,
+                            conversations: memoriesForDate,
                             date: date,
                             hasNonDiscardedMemories: hasNonDiscarded,
                             showDiscardedMemories: memoryProvider.showDiscardedConversations,

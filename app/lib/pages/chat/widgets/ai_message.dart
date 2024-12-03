@@ -487,8 +487,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     MixpanelManager().chatMessageMemoryClicked(m);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );
@@ -503,8 +503,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );

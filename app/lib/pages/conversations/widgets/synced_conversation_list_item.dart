@@ -62,7 +62,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         Provider.of<ConversationProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
         routeToPage(
           context,
-          MemoryDetailPage(memory: widget.memory, isFromOnboarding: false),
+          ConversationDetailPage(conversation: widget.memory, isFromOnboarding: false),
         );
       },
       child: Padding(

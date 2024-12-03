@@ -21,17 +21,17 @@ import 'package:tuple/tuple.dart';
 
 import 'conversation_detail_provider.dart';
 
-class MemoryDetailPage extends StatefulWidget {
-  final ServerConversation memory;
+class ConversationDetailPage extends StatefulWidget {
+  final ServerConversation conversation;
   final bool isFromOnboarding;
 
-  const MemoryDetailPage({super.key, this.isFromOnboarding = false, required this.memory});
+  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
 
   @override
-  State<MemoryDetailPage> createState() => _MemoryDetailPageState();
+  State<ConversationDetailPage> createState() => _ConversationDetailPageState();
 }
 
-class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProviderStateMixin {
+class _ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
