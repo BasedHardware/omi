@@ -22,8 +22,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     'spiritual',
     'science',
     'entrepreneurship',
-    'parenting'
-        'romantic',
+    'parenting',
+    'romantic',
     'travel',
     'inspiration',
     'technology',
@@ -38,26 +38,24 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     'other'
   ];
 
-  List<(DateTime, int, ServerConversation)> get recentConversations {
-    var sortedKeys = groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+  String selectedCategory = '';
+
+  List<(DateTime, int, ServerConversation)> recentConversations = [];
+
+  void getRecentConversation() {
+    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     List<(DateTime, int, ServerConversation)> recentConvos = [];
-    for (var key in sortedKeys) {
+    for (var i = 0; i < conversations.length; i++) {
       if (recentConvos.length >= 6) {
         break;
       }
-
-      for (int i = 0; i < groupedConversations[key]!.length; i++) {
-        if (groupedConversations[key]![i].discarded) {
-          continue;
-        }
-        var convo = groupedConversations[key]![i];
-        recentConvos.add((key, i, convo));
-        if (recentConvos.length >= 6) {
-          break;
-        }
+      if (conversations[i].discarded) {
+        continue;
       }
+      recentConvos.add((conversations[i].createdAt, i, conversations[i]));
     }
-    return recentConvos;
+    recentConversations = recentConvos;
+    notifyListeners();
   }
 
   bool isLoadingConversations = false;
@@ -65,6 +63,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   bool showDiscardedConversations = false;
 
   String previousQuery = '';
+  bool queryAlreadyFetched = false;
 
   Timer? _processingMemoryWatchTimer;
 
@@ -104,13 +103,47 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
+  void setQueryAlreadyFetched(bool value) {
+    queryAlreadyFetched = value;
+    notifyListeners();
+  }
+
+  void clearQueryAndCategory() {
+    selectedCategory = '';
+    previousQuery = '';
+    queryAlreadyFetched = false;
+    _filterGroupedConversationsWithoutNotify('');
+  }
+
   void searchConversations(String query) {
-    print('searchConversations $query');
     if (query == previousQuery) {
+      setQueryAlreadyFetched(true);
       return;
     }
+    setQueryAlreadyFetched(false);
     previousQuery = query;
     filterGroupedConversations(query);
+    notifyListeners();
+  }
+
+  bool isCategorySelected(String category) {
+    return selectedCategory == category;
+  }
+
+  void selectCategory(String category) {
+    selectedCategory = category;
+    setQueryAlreadyFetched(false);
+    filterConversationsByCategory(category);
+  }
+
+  void deselectCategory() {
+    selectedCategory = '';
+    setQueryAlreadyFetched(false);
+    filterGroupedConversations('');
+  }
+
+  void filterConversationsByCategory(String category) {
+    _filterGroupedConversationsByCategoryWithoutNotify(category);
     notifyListeners();
   }
 
@@ -162,6 +195,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     } else {
       SharedPreferencesUtil().cachedMemories = conversations;
     }
+    getRecentConversation();
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
@@ -207,6 +241,39 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     }
   }
 
+  void _filterGroupedConversationsByCategoryWithoutNotify(String category) {
+    if (category.isEmpty) {
+      groupedConversations = {};
+      _groupConversationsByDateWithoutNotify();
+    } else {
+      groupedConversations = {};
+      if (previousQuery.isNotEmpty) {
+        for (var conversation in conversations) {
+          var date = conversation.createdAt;
+          if (!groupedConversations.containsKey(date)) {
+            groupedConversations[date] = [];
+          }
+          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
+                  .toLowerCase()
+                  .contains(previousQuery.toLowerCase()) &&
+              (conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
+            groupedConversations[date]?.add(conversation);
+          }
+        }
+      } else {
+        for (var conversation in conversations) {
+          var date = conversation.createdAt;
+          if (!groupedConversations.containsKey(date)) {
+            groupedConversations[date] = [];
+          }
+          if ((conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
+            groupedConversations[date]?.add(conversation);
+          }
+        }
+      }
+    }
+  }
+
   void filterGroupedConversations(String query) {
     _filterGroupedConversationsWithoutNotify(query);
     notifyListeners();
@@ -233,6 +300,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   //   }
   // }
 
+  void updateActionItemState(String convoId, bool state, int i, DateTime date) {
+    conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
+    groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
+        state;
+    notifyListeners();
+  }
+
   Future getMoreConversationsFromServer() async {
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
@@ -241,6 +315,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     filterGroupedConversations(previousQuery);
+    if (selectedCategory.isNotEmpty) {
+      filterConversationsByCategory(selectedCategory);
+    }
+    if (previousQuery.isNotEmpty) {
+      setQueryAlreadyFetched(true);
+    }
     setLoadingConversations(false);
     notifyListeners();
   }

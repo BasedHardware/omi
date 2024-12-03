@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/pages/action_items/action_items_page.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:friend_private/pages/conversations/widgets/empty_conversations.dart';
@@ -77,25 +78,30 @@ class _HomeSubPageState extends State<HomeSubPage> {
                         ),
                       ),
                     ),
-                    Container(
-                      width: MediaQuery.sizeOf(context).width * 0.44,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SvgPicture.asset(Assets.images.icCheck, width: 42, height: 42),
-                          const SizedBox(height: 10),
-                          const Text("Action Items", style: TextStyle(color: Colors.white, fontSize: 16)),
-                          const SizedBox(height: 6),
-                          Text(
-                            "Review and complete tasks",
-                            style: TextStyle(color: Colors.grey.shade200, fontSize: 12),
-                          ),
-                        ],
+                    InkWell(
+                      onTap: () {
+                        routeToPage(context, ActionItemsPage());
+                      },
+                      child: Container(
+                        width: MediaQuery.sizeOf(context).width * 0.44,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade900,
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SvgPicture.asset(Assets.images.icCheck, width: 42, height: 42),
+                            const SizedBox(height: 10),
+                            const Text("Action Items", style: TextStyle(color: Colors.white, fontSize: 16)),
+                            const SizedBox(height: 6),
+                            Text(
+                              "Review and complete tasks",
+                              style: TextStyle(color: Colors.grey.shade200, fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -151,7 +157,7 @@ class _HomeSubPageState extends State<HomeSubPage> {
                   childCount: convoProvider.recentConversations.length,
                   (context, index) {
                     return ConversationListItem(
-                      memory: convoProvider.recentConversations[index].$3,
+                      conversation: convoProvider.recentConversations[index].$3,
                       memoryIdx: convoProvider.recentConversations[index].$2,
                       date: convoProvider.recentConversations[index].$1,
                     );
