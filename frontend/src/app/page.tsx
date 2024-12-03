@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 export default function Home() {
-  redirect('/memories');
+  redirect('/apps');
   return (
     <div className="flex min-h-screen flex-col items-center justify-between p-12 text-xl text-white md:p-24 md:text-lg">
       <div className="mt-10">
