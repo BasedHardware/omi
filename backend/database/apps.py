@@ -210,7 +210,7 @@ def record_app_usage(
 # *********** PERSONAS ***********
 # ********************************
 
-def delete_personas_db(persona_id: str):
+def delete_persona_db(persona_id: str):
     persona_ref = db.collection('plugins_data').document(persona_id)
     persona_ref.update({'deleted': True})
 
