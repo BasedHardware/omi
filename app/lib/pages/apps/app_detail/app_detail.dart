@@ -2,9 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/apps/analytics.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
@@ -17,6 +18,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../backend/schema/app.dart';
@@ -38,6 +40,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
+  bool analyticsLoading = false;
+  double moneyMade = 0.0;
+  int usageCount = 0;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -48,9 +53,26 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
+  void setAnalyticsLoading(bool value) {
+    if (mounted && analyticsLoading != value) {
+      setState(() => analyticsLoading = value);
+    }
+  }
+
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!widget.app.private) {
+        setAnalyticsLoading(true);
+        var app = await context.read<AppProvider>().getAppDetails(widget.app.id);
+        setState(() {
+          if (app != null) {
+            moneyMade = app.moneyMade ?? 0.0;
+            usageCount = app.usageCount ?? 0;
+          }
+        });
+        setAnalyticsLoading(false);
+      }
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
     });
@@ -558,19 +580,67 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 : const SizedBox.shrink(),
             // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
             // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: GestureDetector(
-                onTap: () {
-                  routeToPage(context, AppAnalytics(app: widget.app));
-                },
-                child: const Text(
-                  'App Analytics',
-                  style: TextStyle(color: Colors.white, fontSize: 14, decoration: TextDecoration.underline),
-                ),
-              ),
-            ),
+            widget.app.private
+                ? const SizedBox.shrink()
+                : Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16.0),
+                    margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        const SizedBox(height: 16),
+                        Skeletonizer(
+                          enabled: analyticsLoading,
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        usageCount.toString(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 30),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                                ],
+                              ),
+                              const Spacer(flex: 2),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "\$$moneyMade",
+                                        style: const TextStyle(color: Colors.white, fontSize: 28),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                                ],
+                              ),
+                              const Spacer(flex: 2),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
             const SizedBox(height: 60),
           ],
         ),
