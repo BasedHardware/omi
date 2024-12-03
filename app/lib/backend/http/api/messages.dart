@@ -10,11 +10,14 @@ import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
 
-Future<List<ServerMessage>> getMessagesServer({String? pluginId}) async {
+Future<List<ServerMessage>> getMessagesServer({
+  String? pluginId,
+  bool dropdownSelected = false,
+}) async {
   if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v2/messages?plugin_id=$pluginId&dropdown_selected=$dropdownSelected',
     headers: {},
     method: 'GET',
     body: '',
@@ -34,8 +37,14 @@ Future<List<ServerMessage>> getMessagesServer({String? pluginId}) async {
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/messages', headers: {}, method: 'DELETE', body: '');
+Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
+  if (pluginId == 'no_selected') pluginId = null;
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
     return [ServerMessage.fromJson(jsonDecode(response.body))];

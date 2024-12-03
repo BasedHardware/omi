@@ -18,7 +18,8 @@ class AppProvider extends BaseProvider {
 
   List<bool> appLoading = [];
 
-  String selectedChatAppId = 'no_selected';
+  String selectedChatAppId =
+      SharedPreferencesUtil().selectedChatAppId.isEmpty ? 'no_selected' : SharedPreferencesUtil().selectedChatAppId;
 
   bool isAppOwner = false;
   bool appPublicToggled = false;

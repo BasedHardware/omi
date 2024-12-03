@@ -37,7 +37,8 @@ def send_message(
 ):
     print('send_message', data.text, plugin_id, uid)
     message = Message(
-        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text'
+        id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
+        plugin_id=plugin_id,
     )
     chat_db.add_message(uid, message.dict())
 
@@ -46,7 +47,7 @@ def send_message(
 
     app_id = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
     response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # plugin
     memories_id = []
     # check if the items in the memories list are dict
@@ -94,17 +95,28 @@ async def send_message_with_file(
 
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(uid: str = Depends(auth.get_current_user_uid)):
-    err = chat_db.clear_chat(uid)
+def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
-    return initial_message_util(uid)
+    return initial_message_util(uid, plugin_id)
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
+    print('initial_message_util', app_id)
+    prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
+    print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
+    prev_messages_str = ''
+    if prev_messages:
+        prev_messages_str = 'Previous conversation history:\n'
+        prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
+
+    print('initial_message_util', len(prev_messages_str), app_id)
+    print('prev_messages:', [m['id'] for m in prev_messages])
+
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
-    text = initial_chat_message(uid, app)
+    text = initial_chat_message(uid, app, prev_messages_str)
 
     ai_message = Message(
         id=str(uuid.uuid4()),
@@ -126,11 +138,20 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
+def get_messages(uid: str = Depends(auth.get_current_user_uid)):
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True)
+    if not messages:
+        return [initial_message_util(uid)]
+    return messages
+
+
+@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id == 'null':
         plugin_id = None
 
     messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
     return messages
