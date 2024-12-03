@@ -4,11 +4,14 @@ from typing import List
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
+    get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
-    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db
-from database.redis_db import get_enabled_plugins, get_plugin_installs_count, get_plugin_reviews, get_generic_cache, \
+    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db
+from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, set_app_review_cache
+    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
+    set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
+    set_app_usage_count_cache
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
@@ -119,6 +122,8 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
         return None
     if app['private'] and app['uid'] != uid:
         return None
+    app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
+    app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
     reviews = get_plugin_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
@@ -179,6 +184,33 @@ def get_app_reviews(app_id: str) -> dict:
     return get_plugin_reviews(app_id)
 
 
+def get_app_usage_count(app_id: str) -> int:
+    cached_count = get_app_usage_count_cache(app_id)
+    if cached_count:
+        return cached_count
+    usage = get_app_usage_count_db(app_id)
+    set_app_usage_count_cache(app_id, usage)
+    return usage
+
+
+def get_app_money_made_amount(app_id: str) -> float:
+    cached_money = get_app_money_made_amount_cache(app_id)
+    if cached_money:
+        return cached_money
+    type1_usage = get_app_memory_created_integration_usage_count_db(app_id)
+    type2_usage = get_app_memory_prompt_usage_count_db(app_id)
+    type3_usage = get_app_chat_message_sent_usage_count_db(app_id)
+
+    # tbd based on current prod stats
+    t1multiplier = 0.02
+    t2multiplier = 0.01
+    t3multiplier = 0.005
+
+    amount = round((type1_usage * t1multiplier) + (type2_usage * t2multiplier) + (type3_usage * t3multiplier), 2)
+    set_app_money_made_amount_cache(app_id, amount)
+    return amount
+
+
 def get_app_usage_history(app_id: str) -> list:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
@@ -204,9 +236,6 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
         return cached_money
     usage = get_app_usage_history_db(app_id)
     usage = [UsageHistoryItem(**x) for x in usage]
-    for item in usage:
-        if item.timestamp.date() < datetime(2024, 11, 1, tzinfo=timezone.utc).date():
-            usage.remove(item)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
