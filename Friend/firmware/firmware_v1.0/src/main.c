@@ -134,30 +134,33 @@ void set_led_state()
 
 }
 bool from_wakeup = false;
+
 // Main loop
 int main(void)
 {
 	int err;
-    //for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording
+    // TODO: what does it mean ? disabled from_usb_event for now
+    // for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording
     uint32_t reset_reas = NRF_POWER->RESETREAS;
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
 
     NRF_POWER->RESETREAS=1;
-    bool from_usb_event = (reset_reas & VBUS_DETECT);
+    // bool from_usb_event = (reset_reas & VBUS_DETECT);
     bool from_wakeup =  (reset_reas & WAKEUP_DETECT);
-    if (from_usb_event)
-    {
-        k_msleep(100);
-        printf("from reset \n");
-        is_off = true;
+    // if (from_usb_event)
+    // {
+    //     k_msleep(100);
+    //     printf("from reset \n");
+    //     is_off = true;
 
-        // usb_charge = true;
-        activate_everything_no_lights();
-        // bt_disable();
-        bt_off();
-    }
-    else if (from_wakeup)
+    //     // usb_charge = true;
+    //     activate_everything_no_lights();
+    //     // bt_disable();
+    //     bt_off();
+    // }
+    //else if (from_wakeup)
+    if (from_wakeup)
     {
 
         is_off = false;
