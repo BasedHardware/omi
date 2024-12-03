@@ -7,7 +7,8 @@ from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
-    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, get_all_unapproved_apps_db
+    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, delete_personas_db, \
+    get_personas_by_username_db, get_persona_by_id_db
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
@@ -374,3 +375,25 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
         send_notification(token, 'App Rejected 😔',
                           f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
     return {'status': 'ok'}
+
+
+@router.delete('/v1/personas/{persona_id}', tags=['v1'])
+def delete_persona(persona_id: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    personas = get_persona_by_id_db(persona_id)
+    if not personas:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    delete_personas_db(persona_id)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/personas/{persona_id}', tags=['v1'])
+def get_personas(persona_id: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    persona = get_personas_by_username_db(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    print(persona)
+    return persona
