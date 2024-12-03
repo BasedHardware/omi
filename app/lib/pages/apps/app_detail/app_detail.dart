@@ -18,6 +18,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../backend/schema/app.dart';
@@ -39,6 +40,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
+  bool analyticsLoading = false;
   double moneyMade = 0.0;
   int usageCount = 0;
 
@@ -51,10 +53,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
+  void setAnalyticsLoading(bool value) {
+    if (mounted && analyticsLoading != value) {
+      setState(() => analyticsLoading = value);
+    }
+  }
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!widget.app.private) {
+        setAnalyticsLoading(true);
         var app = await context.read<AppProvider>().getAppDetails(widget.app.id);
         setState(() {
           if (app != null) {
@@ -62,6 +71,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             usageCount = app.usageCount ?? 0;
           }
         });
+        setAnalyticsLoading(false);
       }
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
@@ -583,45 +593,48 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 children: [
                   const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              SvgPicture.asset(Assets.images.icChart, width: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                usageCount.toString(),
-                                style: const TextStyle(color: Colors.white, fontSize: 30),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                        ],
-                      ),
-                      const Spacer(flex: 2),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              SvgPicture.asset(Assets.images.icDollar, width: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                "\$$moneyMade",
-                                style: const TextStyle(color: Colors.white, fontSize: 28),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                        ],
-                      ),
-                      const Spacer(flex: 2),
-                    ],
+                  Skeletonizer(
+                    enabled: analyticsLoading,
+                    child: Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  usageCount.toString(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 30),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                          ],
+                        ),
+                        const Spacer(flex: 2),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "\$$moneyMade",
+                                  style: const TextStyle(color: Colors.white, fontSize: 28),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                          ],
+                        ),
+                        const Spacer(flex: 2),
+                      ],
+                    ),
                   ),
                 ],
               ),

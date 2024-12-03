@@ -31,6 +31,7 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   sign_in_button: ^3.2.0
   dotted_border: ^2.1.0
+  skeletonizer: ^1.4.2
 
   # Firebase
   firebase_core: 3.3.0
