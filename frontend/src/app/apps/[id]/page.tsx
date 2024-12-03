@@ -16,6 +16,7 @@ import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { cn } from '@/src/lib/utils';
+import { CompactPluginCard } from '../components/plugin-card/compact';
 
 // Helper functions from PluginCard
 const getCapabilityColor = (capability: string): string => {
@@ -100,12 +101,10 @@ export default async function PluginDetailView({ params }: { params: { id: strin
 
   return (
     <div className="min-h-screen bg-[#0B0F17]">
-
-
       {/* Main Content */}
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-7xl pt-24 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         {/* Navigation */}
-        <nav className="mb-4 flex items-center justify-between sm:mb-6 lg:mb-8 mt-6">
+        <nav className="mt-6 flex items-center justify-between sm:mb-6 lg:mb-8">
           <Link
             href="/apps"
             className="group inline-flex items-center text-gray-400 transition-all duration-300 hover:text-white"
@@ -197,33 +196,13 @@ export default async function PluginDetailView({ params }: { params: { id: strin
         </div>
 
         {/* Related Apps Section */}
-        <div>
-          <h2 className="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-lg">
+        <div className="mt-16 border-t border-white/5 pt-12">
+          <h2 className="mb-8 text-xl font-semibold text-white">
             More {categoryName} Apps
           </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-            {relatedApps.map((app) => (
-              <Link key={app.id} href={`/apps/${app.id}`}>
-                <Card className="h-[100px] border-none bg-[#1A1F2E] transition-all duration-300 hover:bg-[#242938] hover:shadow-xl sm:h-[120px]">
-                  <CardContent className="p-2 sm:p-3">
-                    <div className="flex space-x-2 sm:space-x-3">
-                      <img
-                        src={app.image}
-                        alt={app.name}
-                        className="h-10 w-10 rounded-lg object-cover sm:h-12 sm:w-12"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-sm font-medium text-white sm:text-base">
-                          {app.name}
-                        </h3>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 sm:mt-1">
-                          {app.description}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+          <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+            {relatedApps.map((app, index) => (
+              <CompactPluginCard key={app.id} plugin={app} index={index + 1} />
             ))}
           </div>
         </div>
