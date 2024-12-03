@@ -26,6 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   String? version;
   String? buildVersion;
+  bool isTester = false;
 
   @override
   void initState() {
