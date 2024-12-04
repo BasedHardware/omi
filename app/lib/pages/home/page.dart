@@ -11,7 +11,6 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/home_sub_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/conversations/old_conversations_page.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';

@@ -109,7 +109,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                             setState(() {
                               memory = mem;
                             });
-                            context.read<ConversationProvider>().updateSyncedMemory(mem);
+                            context.read<ConversationProvider>().updateSyncedConversation(mem);
                           }
                           setReprocessing(false);
                         },

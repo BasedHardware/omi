@@ -497,7 +497,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     setState(() => conversationDetailLoading[data.$1] = true);
                     ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
-                    (idx, date) = memProvider.addMemoryWithDateGrouped(m);
+                    (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     MixpanelManager().chatMessageMemoryClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
                     context.read<ConversationDetailProvider>().updateConversation(idx, date);

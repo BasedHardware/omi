@@ -1095,7 +1095,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                 () {
                                   context
                                       .read<ConversationProvider>()
-                                      .deleteMemory(provider.memory, provider.memoryIdx);
+                                      .deleteConversation(provider.memory, provider.memoryIdx);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
