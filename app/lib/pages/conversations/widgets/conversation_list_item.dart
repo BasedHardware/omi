@@ -14,14 +14,14 @@ import 'package:provider/provider.dart';
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
-  final int memoryIdx;
+  final int conversationIdx;
   final ServerConversation conversation;
 
   const ConversationListItem({
     super.key,
     required this.conversation,
     required this.date,
-    required this.memoryIdx,
+    required this.conversationIdx,
     this.isFromOnboarding = false,
   });
 
@@ -30,18 +30,18 @@ class ConversationListItem extends StatefulWidget {
 }
 
 class _ConversationListItemState extends State<ConversationListItem> {
-  Timer? _memoryNewStatusResetTimer;
+  Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
 
   @override
   void dispose() {
-    _memoryNewStatusResetTimer?.cancel();
+    _conversationNewStatusResetTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Is new memory
+    // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
       memorizedAt = widget.conversation.finishedAt!;
@@ -49,8 +49,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
     int seconds = (DateTime.now().millisecondsSinceEpoch - memorizedAt.millisecondsSinceEpoch) ~/ 1000;
     isNew = 0 < seconds && seconds < 60; // 1m
     if (isNew) {
-      _memoryNewStatusResetTimer?.cancel();
-      _memoryNewStatusResetTimer = Timer(const Duration(seconds: 60), () async {
+      _conversationNewStatusResetTimer?.cancel();
+      _conversationNewStatusResetTimer = Timer(const Duration(seconds: 60), () async {
         setState(() {
           isNew = false;
         });
@@ -61,16 +61,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
-          MixpanelManager().memoryListItemClicked(widget.conversation, widget.memoryIdx);
-          context.read<ConversationDetailProvider>().updateConversation(widget.memoryIdx, widget.date);
-          String startingTitle = context.read<ConversationDetailProvider>().memory.structured.title;
-          provider.onMemoryTap(widget.memoryIdx);
+          MixpanelManager().memoryListItemClicked(widget.conversation, widget.conversationIdx);
+          context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+          String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+          provider.onConversationTap(widget.conversationIdx);
 
           await routeToPage(
             context,
             ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
-          String newTitle = context.read<ConversationDetailProvider>().memory.structured.title;
+          String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           if (startingTitle != newTitle) {
             widget.conversation.structured.title = newTitle;
             provider.upsertConversation(widget.conversation);
@@ -97,9 +97,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (direction) {
-                  var memory = widget.conversation;
-                  var memoryIdx = widget.memoryIdx;
-                  provider.deleteConversationLocally(memory, memoryIdx, widget.date);
+                  var conversation = widget.conversation;
+                  var conversationIdx = widget.conversationIdx;
+                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
                         SnackBar(
@@ -109,7 +109,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             label: 'Undo',
                             textColor: Colors.white,
                             onPressed: () {
-                              provider.undoDeleteConversation(memory.id, memoryIdx);
+                              provider.undoDeleteConversation(conversation.id, conversationIdx);
                             },
                           ),
                         ),
@@ -117,8 +117,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       .closed
                       .then((reason) {
                     if (reason != SnackBarClosedReason.action) {
-                      if (provider.memoriesToDelete.containsKey(memory.id)) {
-                        provider.deleteConversationOnServer(memory.id);
+                      if (provider.memoriesToDelete.containsKey(conversation.id)) {
+                        provider.deleteConversationOnServer(conversation.id);
                       }
                     }
                   });
@@ -129,7 +129,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     mainAxisSize: MainAxisSize.max,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _getMemoryHeader(),
+                      _getConversationHeader(),
                       const SizedBox(height: 16),
                       widget.conversation.discarded
                           ? const SizedBox.shrink()
@@ -169,7 +169,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     });
   }
 
-  _getMemoryHeader() {
+  _getConversationHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
@@ -204,7 +204,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             child: isNew
                 ? const Align(
                     alignment: Alignment.centerRight,
-                    child: MemoryNewStatusIndicator(text: "New 🚀"),
+                    child: ConversationNewStatusIndicator(text: "New 🚀"),
                   )
                 : Text(
                     dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
@@ -219,16 +219,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 }
 
-class MemoryNewStatusIndicator extends StatefulWidget {
+class ConversationNewStatusIndicator extends StatefulWidget {
   final String text;
 
-  const MemoryNewStatusIndicator({super.key, required this.text});
+  const ConversationNewStatusIndicator({super.key, required this.text});
 
   @override
-  State<MemoryNewStatusIndicator> createState() => _MemoryNewStatusIndicatorState();
+  State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
 }
 
-class _MemoryNewStatusIndicatorState extends State<MemoryNewStatusIndicator> with SingleTickerProviderStateMixin {
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacityAnim;
 

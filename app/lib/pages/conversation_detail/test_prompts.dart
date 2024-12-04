@@ -3,9 +3,9 @@ import 'package:friend_private/backend/http/openai.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 
 class TestPromptsPage extends StatefulWidget {
-  final ServerConversation memory;
+  final ServerConversation conversation;
 
-  const TestPromptsPage({super.key, required this.memory});
+  const TestPromptsPage({super.key, required this.conversation});
 
   @override
   State<TestPromptsPage> createState() => _TestPromptsPageState();
@@ -20,7 +20,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Test Memory Prompt'),
+        title: const Text('Test Conversation Prompt'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           IconButton(
@@ -78,7 +78,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
     loading = true;
     var response = await triggerTestConversationPrompt(
       controller.text,
-      widget.memory.getTranscript(generate: true),
+      widget.conversation.getTranscript(generate: true),
     );
     print('response: $response');
     result = response.toString();

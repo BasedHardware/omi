@@ -21,7 +21,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   // late ServerConversation memory;
 
-  int memoryIdx = 0;
+  int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
   int selectedTab = 0;
@@ -32,9 +32,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   final scaffoldKey = GlobalKey<ScaffoldState>();
   List<App> appsList = [];
 
-  Structured get structured => conversationProvider!.groupedConversations[selectedDate]![memoryIdx].structured;
+  Structured get structured => conversationProvider!.groupedConversations[selectedDate]![conversationIdx].structured;
 
-  ServerConversation get memory => conversationProvider!.groupedConversations[selectedDate]![memoryIdx];
+  ServerConversation get conversation => conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
   List<bool> appResponseExpanded = [];
 
   TextEditingController? titleController;
@@ -111,38 +111,38 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void updateConversation(int memIdx, DateTime date) {
-    memoryIdx = memIdx;
+    conversationIdx = memIdx;
     selectedDate = date;
-    appResponseExpanded = List.filled(memory.appResults.length, false);
+    appResponseExpanded = List.filled(conversation.appResults.length, false);
     notifyListeners();
   }
 
   void updateEventState(bool state, int i) {
-    memory.structured.events[i].created = state;
+    conversation.structured.events[i].created = state;
     notifyListeners();
   }
 
   void updateActionItemState(bool state, int i) {
-    memory.structured.actionItems[i].completed = state;
+    conversation.structured.actionItems[i].completed = state;
     notifyListeners();
   }
 
   List<ActionItem> deletedActionItems = [];
 
   void deleteActionItem(int i) {
-    deletedActionItems.add(memory.structured.actionItems[i]);
-    memory.structured.actionItems.removeAt(i);
+    deletedActionItems.add(conversation.structured.actionItems[i]);
+    conversation.structured.actionItems.removeAt(i);
     notifyListeners();
   }
 
   void undoDeleteActionItem(int idx) {
-    memory.structured.actionItems.insert(idx, deletedActionItems.removeLast());
+    conversation.structured.actionItems.insert(idx, deletedActionItems.removeLast());
     notifyListeners();
   }
 
   void deleteActionItemPermanently(ActionItem item, int itemIdx) {
     deletedActionItems.removeWhere((element) => element == item);
-    deleteConversationActionItem(memory.id, item);
+    deleteConversationActionItem(conversation.id, item);
     notifyListeners();
   }
 
@@ -161,7 +161,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void setConversationRating(int value) {
-    setConversationSummaryRating(memory.id, value);
+    setConversationSummaryRating(conversation.id, value);
     hasConversationSummaryRatingSet = true;
     setShowRatingUi(false);
   }
@@ -177,35 +177,35 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
 
-    titleController!.text = memory.structured.title;
+    titleController!.text = conversation.structured.title;
     titleFocusNode!.addListener(() {
       print('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
-        memory.structured.title = titleController!.text;
-        updateConversationTitle(memory.id, titleController!.text);
+        conversation.structured.title = titleController!.text;
+        updateConversationTitle(conversation.id, titleController!.text);
       }
     });
 
     photos = [];
-    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(memory.transcriptSegments);
-    if (memory.source == ConversationSource.openglass) {
-      await getConversationPhotos(memory.id).then((value) async {
+    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
+    if (conversation.source == ConversationSource.openglass) {
+      await getConversationPhotos(conversation.id).then((value) async {
         photos = value;
         await populatePhotosData();
       });
-    } else if (memory.source == ConversationSource.friend) {
+    } else if (conversation.source == ConversationSource.friend) {
       // await hasMemoryRecording(memory.id).then((value) {
       //   hasAudioRecording = value;
       // });
     }
     appsList = appProvider!.apps;
-    if (!memory.discarded) {
-      getHasConversationSummaryRating(memory.id).then((value) {
+    if (!conversation.discarded) {
+      getHasConversationSummaryRating(conversation.id).then((value) {
         hasConversationSummaryRatingSet = value;
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            setConversationSummaryRating(memory.id, -1); // set -1 to indicate is was shown
+            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });
@@ -220,10 +220,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> reprocessConversation() async {
     debugPrint('_reProcessConversation');
     updateReprocessConversationLoadingState(true);
-    updateReprocessConversationId(memory.id);
+    updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await reProcessConversationServer(memory.id);
-      MixpanelManager().reProcessMemory(memory);
+      var updatedConversation = await reProcessConversationServer(conversation.id);
+      MixpanelManager().reProcessMemory(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
@@ -239,10 +239,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
     } catch (err, stacktrace) {
       print(err);
-      var memoryReporting = MixpanelManager().getMemoryEventProperties(memory);
+      var conversationReporting = MixpanelManager().getMemoryEventProperties(conversation);
       CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
-        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+        'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
+        'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
       });
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
@@ -252,10 +252,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  void unassignConversationTranscriptSegment(String memoryId, int segmentIdx) {
-    memory.transcriptSegments[segmentIdx].isUser = false;
-    memory.transcriptSegments[segmentIdx].personId = null;
-    assignConversationTranscriptSegment(memoryId, segmentIdx);
+  void unassignConversationTranscriptSegment(String conversationId, int segmentIdx) {
+    conversation.transcriptSegments[segmentIdx].isUser = false;
+    conversation.transcriptSegments[segmentIdx].personId = null;
+    assignConversationTranscriptSegment(conversationId, segmentIdx);
     notifyListeners();
   }
 }

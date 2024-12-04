@@ -56,7 +56,7 @@ class _MemoryCreatedWidgetState extends State<ConversationCreatedWidget> {
                 ? const SizedBox()
                 : ConversationListItem(
                     conversation: context.read<SpeechProfileProvider>().memory!,
-                    memoryIdx: 0,
+                    conversationIdx: 0,
                     isFromOnboarding: true,
                     date: DateTime(
                       provider.memory!.createdAt.year,

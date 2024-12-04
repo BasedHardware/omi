@@ -15,7 +15,7 @@ Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation
   } else {
     url += '?uid=${SharedPreferencesUtil().uid}';
   }
-  debugPrint('triggerMemoryRequestAtEndpoint: $url');
+  debugPrint('triggerConversationRequestAtEndpoint: $url');
   var data = conversation.toJson();
   try {
     var response = await makeApiCall(

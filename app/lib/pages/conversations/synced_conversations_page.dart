@@ -75,7 +75,10 @@ class ConversationsListWidget extends StatelessWidget {
           itemBuilder: (ctx, i) {
             var mem = memories[i];
             return SyncedConversationListItem(
-                memory: mem.conversation, date: mem.key, memoryIdx: mem.index, showReprocess: showReprocess);
+                conversation: mem.conversation,
+                date: mem.key,
+                conversationIdx: mem.index,
+                showReprocess: showReprocess);
           },
           separatorBuilder: (ctx, i) {
             return const SizedBox(

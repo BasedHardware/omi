@@ -45,7 +45,7 @@ class _HomeSubPageState extends State<HomeSubPage> {
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: LocalSyncWidget()),
-            const SliverToBoxAdapter(child: MemoryCaptureWidget()),
+            const SliverToBoxAdapter(child: ConversationCaptureWidget()),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8.0, 16, 8, 4),
@@ -158,7 +158,7 @@ class _HomeSubPageState extends State<HomeSubPage> {
                   (context, index) {
                     return ConversationListItem(
                       conversation: convoProvider.recentConversations[index].$3,
-                      memoryIdx: convoProvider.recentConversations[index].$2,
+                      conversationIdx: convoProvider.recentConversations[index].$2,
                       date: convoProvider.recentConversations[index].$1,
                     );
                   },
