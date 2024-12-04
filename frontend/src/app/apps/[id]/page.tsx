@@ -204,22 +204,22 @@ export default async function PluginDetailView({ params }: { params: { id: strin
         dangerouslySetInnerHTML={generateStructuredData(plugin, categoryName)}
       />
       {/* Fixed Header and Navigation */}
-      <div className="fixed inset-x-0 top-16 z-50 bg-[#0B0F17]">
+      <div className="fixed inset-x-0 top-[4rem] z-50 bg-[#0B0F17]">
         <div className="border-b border-white/5 shadow-lg">
-          <div className="container mx-auto px-6 py-8">
+          <div className="container mx-auto px-[1.5rem] py-[2rem]">
             <CategoryBreadcrumb category={plugin.category} />
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[160px] flex-grow">
-        <div className="container mx-auto px-6 pt-8">
+      <main className="relative z-0 mt-[10rem] flex-grow">
+        <div className="container mx-auto px-[1.5rem] pt-[2rem]">
           {/* Hero Section */}
-          <section className="grid grid-cols-1 gap-12 lg:grid-cols-5">
+          <section className="grid grid-cols-1 gap-[3rem] lg:grid-cols-5">
             {/* Image Column - 3 columns */}
             <div className="lg:col-span-2">
-              <div className="relative aspect-square overflow-hidden rounded-2xl bg-[#1A1F2E]">
+              <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
                 <img
                   src={plugin.image}
                   alt={plugin.name}
@@ -233,15 +233,15 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                 {/* App Info Container */}
                 <div>
                   <h1 className="text-4xl font-bold text-white">{plugin.name}</h1>
-                  <p className="mt-2 text-xl text-gray-400">by {plugin.author}</p>
+                  <p className="mt-[0.5rem] text-xl text-gray-400">by {plugin.author}</p>
 
                   {/* Stats Section */}
-                  <div className="mt-8 flex items-center gap-4">
+                  <div className="mt-[2rem] flex items-center gap-[1rem]">
                     <div className="flex items-center">
                       <span className="text-3xl font-bold text-yellow-400">
                         {plugin.rating_avg?.toFixed(1)}
                       </span>
-                      <div className="ml-2 flex flex-col">
+                      <div className="ml-[0.5rem] flex flex-col">
                         <span className="text-yellow-400">★</span>
                         <span className="text-sm text-gray-400">
                           ({plugin.rating_count} reviews)
