@@ -321,7 +321,7 @@ async def _websocket_util(
             nonlocal pusher_connected
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(1)
-                print(f"transcript consume check {len(segment_buffers)} {transcript_ws}")
+                print(f"transcript consume check {len(segment_buffers)} {transcript_ws}", uid)
                 if transcript_ws and len(segment_buffers) > 0:
                     try:
                         # 100|data
@@ -330,7 +330,7 @@ async def _websocket_util(
                         data.extend(bytes(json.dumps(segment_buffers), "utf-8"))
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
-                        print(f"transcript sent {len(data)}")
+                        print(f"transcript sent {len(data)}", uid)
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
                         transcript_ws = None
@@ -446,7 +446,7 @@ async def _websocket_util(
                 await websocket.send_json(segments)
 
                 # Send to external trigger
-                print(f"transcript send {transcript_send} {len(segments)}")
+                print(f"transcript send {transcript_send} {len(segments)}", uid)
                 if transcript_send:
                     transcript_send(segments)
 
