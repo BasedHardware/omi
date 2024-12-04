@@ -15,10 +15,10 @@
 #include "utils.h"
 // #include "nfc.h"
 #include "speaker.h"
-#include "button.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
+#include "mic.h"
 #include "lib/battery/battery.h"
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
