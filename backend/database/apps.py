@@ -138,6 +138,29 @@ def get_app_usage_history_db(app_id: str):
     return [doc.to_dict() for doc in usage]
 
 
+def get_app_memory_created_integration_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration)).count().get()
+    return usage[0][0].value
+
+
+def get_app_memory_prompt_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt)).count().get()
+    return usage[0][0].value
+
+
+def get_app_chat_message_sent_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent)).count().get()
+    return usage[0][0].value
+
+
+def get_app_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').count().get()
+    return usage[0][0].value
+
+
 # ********************************
 # *********** REVIEWS ************
 # ********************************
