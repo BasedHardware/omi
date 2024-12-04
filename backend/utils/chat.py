@@ -1,21 +1,22 @@
-import uuid
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import List
 
 import database.chat as chat_db
+import database.notifications as notification_db
 from database.apps import record_app_usage
-from models.plugin import UsageHistoryType
-from models.memory import Memory
 from models.chat import Message
+from models.memory import Memory
+from models.notification_message import NotificationMessage
+from models.plugin import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
+from utils.notifications import send_notification
+from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
-from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
-from models.notification_message import NotificationMessage
-import database.notifications as notification_db
-from utils.notifications import send_notification
+
 
 def process_voice_message_segment(path: str, uid: str):
     url = get_syncing_file_temporal_signed_url(path)
@@ -82,6 +83,7 @@ def process_voice_message_segment(path: str, uid: str):
     send_chat_message_notification(token, "Omi", None, ai_message.text)
 
     return [message.dict(), ai_message_resp]
+
 
 def send_chat_message_notification(token: str, plugin_name: str, plugin_id: str, message: str):
     ai_message = NotificationMessage(

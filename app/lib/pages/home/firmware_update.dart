@@ -22,11 +22,17 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void initState() {
+    var device = widget.device!;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setState(() {
         isLoading = true;
       });
-      await getLatestVersion(deviceName: widget.device!.name);
+      await getLatestVersion(
+        deviceModelNumber: device.modelNumber,
+        firmwareRevision: device.firmwareRevision,
+        hardwareRevision: device.hardwareRevision,
+        manufacturerName: device.manufacturerName,
+      );
       var (a, b) =
           await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision, deviceName: widget.device!.name);
       if (mounted) {
@@ -95,8 +101,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                               children: [
                                 const Text('Firmware Updated Successfully'),
                                 const SizedBox(height: 10),
-                                const Text(
-                                  'Please restart the Friend device to complete the update',
+                                Text(
+                                  'Please restart your ${widget.device?.name ?? "Omi device"} to complete the update',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 20),

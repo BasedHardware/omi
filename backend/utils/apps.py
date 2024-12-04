@@ -1,14 +1,48 @@
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Dict
+from typing import List
 
 from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
-    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db
+    get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
+    get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
+    add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
+    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
-    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, set_app_review_cache
+    set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
+    set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
+    set_app_usage_count_cache
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
+
+# ********************************
+# ************ TESTER ************
+# ********************************
+
+def is_tester(uid: str) -> bool:
+    return is_tester_db(uid)
+
+
+def can_tester_access_app(uid: str, app_id: str) -> bool:
+    return can_tester_access_app_db(app_id, uid)
+
+
+def add_tester(data: dict):
+    add_tester_db(data)
+
+
+def remove_tester(uid: str):
+    remove_tester_db(uid)
+
+
+def add_app_access_for_tester(app_id: str, uid: str):
+    add_app_access_for_tester_db(app_id, uid)
+
+
+def remove_app_access_for_tester(app_id: str, uid: str):
+    remove_app_access_for_tester_db(app_id, uid)
+
+# ********************************
 
 def weighted_rating(plugin):
     C = 3.0  # Assume 3.0 is the mean rating across all plugins
@@ -22,21 +56,25 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     private_data = []
     public_approved_data = []
     public_unapproved_data = []
+    tester_apps = []
     all_apps = []
+    tester = is_tester(uid)
     if cachedApps := get_generic_cache('get_public_approved_apps_data'):
         print('get_public_approved_plugins_data from cache----------------------------')
         public_approved_data = cachedApps
-        public_unapproved_data = get_public_unapproved_apps_db(uid)
-        private_data = get_private_apps_db(uid)
+        public_unapproved_data = get_public_unapproved_apps(uid)
+        private_data = get_private_apps(uid)
         pass
     else:
         print('get_public_approved_plugins_data from db----------------------------')
-        private_data = get_private_apps_db(uid)
+        private_data = get_private_apps(uid)
         public_approved_data = get_public_approved_apps_db()
-        public_unapproved_data = get_public_unapproved_apps_db(uid)
+        public_unapproved_data = get_public_unapproved_apps(uid)
         set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
+    if tester:
+        tester_apps = get_apps_for_tester_db(uid)
     user_enabled = set(get_enabled_plugins(uid))
-    all_apps = private_data + public_approved_data + public_unapproved_data
+    all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -84,6 +122,8 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
         return None
     if app['private'] and app['uid'] != uid:
         return None
+    app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
+    app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
     reviews = get_plugin_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
@@ -91,6 +131,16 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
     return app
+
+
+def get_public_unapproved_apps(uid: str) -> List:
+    data = get_public_unapproved_apps_db(uid)
+    return data
+
+
+def get_private_apps(uid: str) -> List:
+    data = get_private_apps_db(uid)
+    return data
 
 
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
@@ -134,6 +184,33 @@ def get_app_reviews(app_id: str) -> dict:
     return get_plugin_reviews(app_id)
 
 
+def get_app_usage_count(app_id: str) -> int:
+    cached_count = get_app_usage_count_cache(app_id)
+    if cached_count:
+        return cached_count
+    usage = get_app_usage_count_db(app_id)
+    set_app_usage_count_cache(app_id, usage)
+    return usage
+
+
+def get_app_money_made_amount(app_id: str) -> float:
+    cached_money = get_app_money_made_amount_cache(app_id)
+    if cached_money:
+        return cached_money
+    type1_usage = get_app_memory_created_integration_usage_count_db(app_id)
+    type2_usage = get_app_memory_prompt_usage_count_db(app_id)
+    type3_usage = get_app_chat_message_sent_usage_count_db(app_id)
+
+    # tbd based on current prod stats
+    t1multiplier = 0.02
+    t2multiplier = 0.01
+    t3multiplier = 0.005
+
+    amount = round((type1_usage * t1multiplier) + (type2_usage * t2multiplier) + (type3_usage * t3multiplier), 2)
+    set_app_money_made_amount_cache(app_id, amount)
+    return amount
+
+
 def get_app_usage_history(app_id: str) -> list:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
@@ -159,9 +236,6 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
         return cached_money
     usage = get_app_usage_history_db(app_id)
     usage = [UsageHistoryItem(**x) for x in usage]
-    for item in usage:
-        if item.timestamp.date() < datetime(2024, 11, 1, tzinfo=timezone.utc).date():
-            usage.remove(item)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
