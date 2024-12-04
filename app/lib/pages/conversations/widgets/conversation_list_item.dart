@@ -73,7 +73,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           String newTitle = context.read<ConversationDetailProvider>().memory.structured.title;
           if (startingTitle != newTitle) {
             widget.conversation.structured.title = newTitle;
-            provider.upsertMemory(widget.conversation);
+            provider.upsertConversation(widget.conversation);
           }
         },
         child: Padding(
@@ -99,17 +99,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 onDismissed: (direction) {
                   var memory = widget.conversation;
                   var memoryIdx = widget.memoryIdx;
-                  provider.deleteMemoryLocally(memory, memoryIdx, widget.date);
+                  provider.deleteConversationLocally(memory, memoryIdx, widget.date);
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
                         SnackBar(
-                          content: const Text('Memory deleted successfully 🗑️'),
+                          content: const Text('Conversation deleted successfully 🗑️'),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                           action: SnackBarAction(
                             label: 'Undo',
                             textColor: Colors.white,
                             onPressed: () {
-                              provider.undoDeleteMemory(memory.id, memoryIdx);
+                              provider.undoDeleteConversation(memory.id, memoryIdx);
                             },
                           ),
                         ),
@@ -118,7 +118,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       .then((reason) {
                     if (reason != SnackBarClosedReason.action) {
                       if (provider.memoriesToDelete.containsKey(memory.id)) {
-                        provider.deleteMemoryOnServer(memory.id);
+                        provider.deleteConversationOnServer(memory.id);
                       }
                     }
                   });

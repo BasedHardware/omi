@@ -12,7 +12,7 @@ import 'package:provider/provider.dart';
 
 Future updateMemoryDetailProvider(BuildContext context, ServerConversation memory) {
   return Future.microtask(() {
-    context.read<ConversationProvider>().addMemory(memory);
+    context.read<ConversationProvider>().addConversation(memory);
     var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
     context.read<ConversationDetailProvider>().updateConversation(0, date);
   });

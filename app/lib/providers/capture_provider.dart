@@ -547,7 +547,7 @@ class CaptureProvider extends ChangeNotifier
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      conversationProvider!.addProcessingMemory(event.conversation!);
+      conversationProvider!.addProcessingConversation(event.conversation!);
       _resetStateVariables();
       return;
     }
@@ -558,7 +558,7 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
       event.conversation!.isNew = true;
-      conversationProvider!.removeProcessingMemory(event.conversation!.id);
+      conversationProvider!.removeProcessingConversation(event.conversation!.id);
       _processConversationCreated(event.conversation, event.messages ?? []);
       return;
     }
@@ -566,17 +566,17 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
-    conversationProvider!.addProcessingMemory(
+    conversationProvider!.addProcessingConversation(
       ServerConversation(
           id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
     processInProgressConversation().then((result) {
       if (result == null || result.conversation == null) {
         _initiateWebsocket();
-        conversationProvider!.removeProcessingMemory('0');
+        conversationProvider!.removeProcessingConversation('0');
         return;
       }
-      conversationProvider!.removeProcessingMemory('0');
+      conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
       _processConversationCreated(result.conversation, result.messages);
       _initiateWebsocket();
@@ -587,7 +587,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
     if (conversation == null) return;
-    conversationProvider?.upsertMemory(conversation);
+    conversationProvider?.upsertConversation(conversation);
     MixpanelManager().memoryCreated(conversation);
   }
 
