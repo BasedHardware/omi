@@ -163,18 +163,18 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[475px] flex-grow">
-        <div className="px-6 py-8">
+      <main className="relative z-0 mt-[555px] flex-grow sm:mt-[475px]">
+        <div className="px-4 py-6 sm:px-6 sm:py-8">
           <div className="container mx-auto">
-            <div className="space-y-12">
+            <div className="space-y-6 sm:space-y-12">
               {/* New/Recent This Week Section */}
               <section>
-                <h3 className="mb-8 text-xl font-semibold text-white">
+                <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
                   {newOrRecentApps.some((p) => p.installs === 0)
                     ? 'New This Week'
                     : 'Recently Added'}
                 </h3>
-                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-6 sm:gap-4 lg:grid-cols-4 lg:gap-6">
                   {newOrRecentApps.map((plugin) => (
                     <FeaturedPluginCard
                       key={plugin.id}
@@ -188,8 +188,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               {/* Most Popular Section - Only show if we have enough apps */}
               {mostPopular.length > 0 && (
                 <section>
-                  <h3 className="mb-8 text-xl font-semibold text-white">Most Popular</h3>
-                  <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+                  <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
+                    Most Popular
+                  </h3>
+                  <div className="mt-3 grid grid-cols-1 gap-y-2 sm:mt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-4 lg:grid-cols-3 lg:gap-x-12">
                     {mostPopular.map((plugin, index) => (
                       <CompactPluginCard
                         key={plugin.id}
@@ -204,8 +206,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
               {/* All Apps Section */}
               <section>
-                <h3 className="mb-8 text-xl font-semibold text-white">All Apps</h3>
-                <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+                <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
+                  All Apps
+                </h3>
+                <div className="mt-3 grid grid-cols-1 gap-y-2 sm:mt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-4 lg:grid-cols-3 lg:gap-x-12">
                   {allApps.map((plugin, index) => (
                     <CompactPluginCard
                       key={plugin.id}
