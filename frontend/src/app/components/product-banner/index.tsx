@@ -121,7 +121,7 @@ export function ProductBanner({
             <div className="absolute inset-0 bg-gradient-to-r from-[#1A1F2E]/90 to-transparent" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="relative h-20 w-20 overflow-hidden rounded-lg">
+                <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg sm:h-20 sm:w-20">
                   <Image
                     src={
                       isHovered
@@ -134,10 +134,10 @@ export function ProductBanner({
                   />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">
+                  <h3 className="text-base font-bold text-white sm:text-lg">
                     Enhance your {category} experience
                   </h3>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-xs text-gray-400 sm:text-sm">
                     {PRODUCT_INFO.name} - {PRODUCT_INFO.price}
                   </p>
                 </div>
@@ -146,7 +146,7 @@ export function ProductBanner({
                 href={PRODUCT_INFO.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#6366F1] to-[#4F46E5] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] active:duration-75"
+                className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#6366F1] to-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] active:duration-75 sm:px-6 sm:py-3 sm:text-sm"
               >
                 Order Now
               </a>
