@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { PRODUCT_INFO } from './types';
 import { cn } from '@/src/lib/utils';
+import { useLocalStorage } from '@/src/hooks/useLocalStorage';
+import { X } from 'lucide-react';
 
 interface ProductBannerProps {
   variant?: 'detail' | 'floating' | 'category';
@@ -19,6 +21,29 @@ export function ProductBanner({
   category,
 }: ProductBannerProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isDismissed, setIsDismissed] = useLocalStorage(
+    'product-banner-dismissed',
+    false,
+  );
+  const [isExiting, setIsExiting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    setIsMounted(true);
+  }, []);
+
+  const handleDismiss = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      setIsDismissed(true);
+    }, 300);
+  };
+
+  if (!isClient || (isDismissed && variant === 'floating')) {
+    return null;
+  }
 
   const renderContent = () => {
     switch (variant) {
@@ -148,23 +173,28 @@ export function ProductBanner({
         return (
           <div
             className={cn(
-              'fixed bottom-6 right-6 z-50 overflow-hidden rounded-2xl bg-gradient-to-br from-[#1A1F2E] to-[#141824] p-1 shadow-lg transition-all duration-500',
-              isHovered ? 'w-80' : 'w-48',
+              'fixed bottom-6 right-6 z-50 mx-auto w-full max-w-[320px] overflow-hidden rounded-2xl bg-gradient-to-br from-[#1A1F2E] to-[#141824] p-1 shadow-xl transition-all duration-500',
+              isExiting && 'animate-slideOutBottom',
+              isMounted && !isExiting && 'animate-slideInBottom opacity-100',
+              !isMounted && 'opacity-0',
             )}
           >
             <div className="animate-gradient-x absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10" />
             <div className="relative backdrop-blur-sm backdrop-filter">
+              <button
+                onClick={handleDismiss}
+                className="absolute right-2 top-2 rounded-full p-1.5 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+                aria-label="Dismiss banner"
+              >
+                <X className="h-4 w-4" />
+              </button>
               <div className="p-4">
                 <div className="flex items-center gap-4">
                   <div className="group relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl">
                     <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-75 blur-sm transition-opacity duration-500 group-hover:opacity-100" />
                     <div className="relative h-full w-full overflow-hidden rounded-xl">
                       <Image
-                        src={
-                          isHovered
-                            ? PRODUCT_INFO.images.secondary
-                            : PRODUCT_INFO.images.primary
-                        }
+                        src={PRODUCT_INFO.images.primary}
                         alt={PRODUCT_INFO.name}
                         fill
                         className="object-cover transition-all duration-700 group-hover:scale-110"
@@ -183,36 +213,51 @@ export function ProductBanner({
                     </div>
                   </div>
                 </div>
-                <div
-                  className={cn(
-                    'mt-4 transition-all duration-500',
-                    isHovered ? 'opacity-100' : 'opacity-0',
-                  )}
-                >
-                  <a
-                    href={PRODUCT_INFO.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group relative inline-flex w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
-                  >
-                    <span className="relative inline-flex w-full items-center justify-center gap-2 rounded-[0.625rem] bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all duration-300 group-hover:bg-opacity-90">
-                      <span>Order Now</span>
-                      <svg
-                        className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M13 7l5 5m0 0l-5 5m5-5H6"
-                        />
-                      </svg>
-                    </span>
-                  </a>
+                {/* Feature Badges */}
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-300">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                      <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                    </svg>
+                    <span className="whitespace-nowrap">Second Brain</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-xs text-purple-300">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
+                    </svg>
+                    <span className="whitespace-nowrap">Voice AI</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 px-2 py-0.5 text-xs text-teal-300">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clipRule="evenodd" />
+                    </svg>
+                    <span className="whitespace-nowrap">Memory</span>
+                  </span>
                 </div>
+                <a
+                  href={PRODUCT_INFO.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative mt-3 inline-flex w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
+                >
+                  <span className="relative inline-flex w-full items-center justify-center gap-2 rounded-[0.625rem] bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all duration-300 group-hover:bg-opacity-90">
+                    <span>Order Now</span>
+                    <svg
+                      className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M13 7l5 5m0 0l-5 5m5-5H6"
+                      />
+                    </svg>
+                  </span>
+                </a>
               </div>
             </div>
           </div>

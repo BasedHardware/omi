@@ -1,4 +1,3 @@
-import envConfig from '@/src/constants/envConfig';
 import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
 import { CompactPluginCard } from '../components/plugin-card/compact';
@@ -9,6 +8,7 @@ import { AppActionButton } from '../components/app-action-button';
 import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
 import { Metadata, ResolvingMetadata } from 'next';
 import { ProductBanner } from '@/src/app/components/product-banner';
+import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 
 type Props = {
   params: { id: string };
@@ -18,11 +18,7 @@ export async function generateMetadata(
   { params }: Props,
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
-  const response = await fetch(
-    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
-  );
-  const plugins = (await response.json()) as Plugin[];
-  const plugin = plugins.find((p) => p.id === params.id);
+  const plugin = await getAppById(params.id);
 
   if (!plugin) {
     return {
@@ -170,12 +166,7 @@ function formatDate(dateString: string): string {
 }
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
-  const response = await fetch(
-    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
-  );
-  const plugins = (await response.json()) as Plugin[];
-  const { id } = params;
-  const plugin = plugins.find((p) => p.id === id);
+  const plugin = await getAppById(params.id);
 
   if (!plugin) {
     throw new Error('App not found');
@@ -185,14 +176,14 @@ export default async function PluginDetailView({ params }: { params: { id: strin
     'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
   );
   const stats = (await statsResponse.json()) as PluginStat[];
-  const stat = stats.find((p) => p.id === id);
+  const stat = stats.find((p) => p.id === params.id);
 
   const userAgent = headers().get('user-agent') || '';
   const link = getPlatformLink(userAgent);
 
   // Get related apps based on category
-  const relatedApps = plugins
-    .filter((p) => p.category === plugin.category && p.id !== plugin.id)
+  const relatedApps = (await getAppsByCategory(plugin.category))
+    .filter((p) => p.id !== plugin.id)
     .slice(0, 6);
 
   const categoryName = formatCategoryName(plugin.category);

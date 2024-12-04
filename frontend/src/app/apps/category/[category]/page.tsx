@@ -1,4 +1,3 @@
-import envConfig from '@/src/constants/envConfig';
 import { CompactPluginCard } from '../../components/plugin-card/compact';
 import { FeaturedPluginCard } from '../../components/plugin-card/featured';
 import { ScrollableCategoryNav } from '../../components/scrollable-category-nav';
@@ -15,6 +14,7 @@ import {
   generateAppListSchema,
 } from '../../utils/metadata';
 import { ProductBanner } from '@/src/app/components/product-banner';
+import { getAppsByCategory } from '@/src/lib/api/apps';
 
 interface CategoryPageProps {
   params: {
@@ -23,10 +23,8 @@ interface CategoryPageProps {
 }
 
 async function getCategoryData(category: string) {
-  const [pluginsResponse, statsResponse] = await Promise.all([
-    fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`, {
-      next: { revalidate: 3600 },
-    }),
+  const [categoryPlugins, statsResponse] = await Promise.all([
+    getAppsByCategory(category),
     fetch(
       'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
       {
@@ -35,17 +33,7 @@ async function getCategoryData(category: string) {
     ),
   ]);
 
-  const plugins = (await pluginsResponse.json()) as Plugin[];
   const stats = (await statsResponse.json()) as PluginStat[];
-
-  const categoryPlugins =
-    category === 'integration'
-      ? plugins.filter(
-          (plugin) =>
-            Array.isArray(plugin.capabilities) &&
-            plugin.capabilities.includes('external_integration'),
-        )
-      : plugins.filter((plugin) => plugin.category === category);
 
   return { categoryPlugins, stats };
 }
@@ -106,16 +94,16 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // Get new or recent apps
-function getNewOrRecentApps(apps: Plugin[]): Plugin[] {
+function getNewOrRecentApps(plugins: Plugin[]): Plugin[] {
   // First try zero downloads
-  const zeroDownloads = apps.filter((plugin) => plugin.installs === 0);
+  const zeroDownloads = plugins.filter((plugin) => plugin.installs === 0);
 
   if (zeroDownloads.length >= 4) {
     // If we have enough zero download apps, shuffle and take 4
     return shuffleArray(zeroDownloads).slice(0, 4);
   } else {
     // If not enough zero downloads, get the lowest download count apps
-    return shuffleArray([...apps].sort((a, b) => a.installs - b.installs).slice(0, 4));
+    return shuffleArray([...plugins].sort((a, b) => a.installs - b.installs).slice(0, 4));
   }
 }
 
