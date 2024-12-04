@@ -1,8 +1,20 @@
 import envConfig from '@/src/constants/envConfig';
 import { CompactPluginCard } from '../../components/plugin-card/compact';
-import { CategoryNav } from '../../components/category-nav';
+import { FeaturedPluginCard } from '../../components/plugin-card/featured';
+import { ScrollableCategoryNav } from '../../components/scrollable-category-nav';
+import { CategoryBreadcrumb } from '../../components/category-breadcrumb';
+import { CategoryHeader } from '../../components/category-header';
 import type { Plugin, PluginStat } from '../../components/types';
-import { getCategoryDisplay } from '../../utils/category';
+import { Metadata } from 'next';
+import {
+  categoryMetadata,
+  getBaseMetadata,
+  generateProductSchema,
+  generateCollectionPageSchema,
+  generateBreadcrumbSchema,
+  generateAppListSchema,
+} from '../../utils/metadata';
+import { ProductBanner } from '@/src/app/components/product-banner';
 
 interface CategoryPageProps {
   params: {
@@ -10,15 +22,15 @@ interface CategoryPageProps {
   };
 }
 
-async function getPluginsData() {
+async function getCategoryData(category: string) {
   const [pluginsResponse, statsResponse] = await Promise.all([
     fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`, {
-      cache: 'no-store',
+      next: { revalidate: 3600 },
     }),
     fetch(
       'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
       {
-        cache: 'no-store',
+        next: { revalidate: 3600 },
       },
     ),
   ]);
@@ -26,86 +38,158 @@ async function getPluginsData() {
   const plugins = (await pluginsResponse.json()) as Plugin[];
   const stats = (await statsResponse.json()) as PluginStat[];
 
-  return { plugins, stats };
+  const categoryPlugins =
+    category === 'integration'
+      ? plugins.filter(
+          (plugin) =>
+            Array.isArray(plugin.capabilities) &&
+            plugin.capabilities.includes('external_integration'),
+        )
+      : plugins.filter((plugin) => plugin.category === category);
+
+  return { categoryPlugins, stats };
+}
+
+export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+  const { category } = params;
+  const { categoryPlugins } = await getCategoryData(category);
+  const metadata = categoryMetadata[category];
+
+  if (!metadata) {
+    return {
+      title: 'Category Not Found - OMI Apps',
+      description: 'The requested category could not be found.',
+    };
+  }
+
+  const title = `${metadata.title} - OMI Apps Marketplace`;
+  const description = `${metadata.description} Browse ${categoryPlugins.length}+ ${category} apps for your OMI Necklace.`;
+
+  const baseMetadata = getBaseMetadata(title, description);
+  const canonicalUrl = `https://omi.me/apps/category/${category}`;
+
+  return {
+    ...baseMetadata,
+    keywords: metadata.keywords.join(', '),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    },
+    verification: {
+      other: {
+        'structured-data': JSON.stringify([
+          generateCollectionPageSchema(title, description, canonicalUrl),
+          generateProductSchema(),
+          generateBreadcrumbSchema(category),
+          generateAppListSchema(categoryPlugins),
+        ]),
+      },
+    },
+  };
+}
+
+// Helper for Fisher-Yates shuffle
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
+// Get new or recent apps
+function getNewOrRecentApps(apps: Plugin[]): Plugin[] {
+  // First try zero downloads
+  const zeroDownloads = apps.filter((plugin) => plugin.installs === 0);
+
+  if (zeroDownloads.length >= 4) {
+    // If we have enough zero download apps, shuffle and take 4
+    return shuffleArray(zeroDownloads).slice(0, 4);
+  } else {
+    // If not enough zero downloads, get the lowest download count apps
+    return shuffleArray([...apps].sort((a, b) => a.installs - b.installs).slice(0, 4));
+  }
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
-  const { plugins, stats } = await getPluginsData();
+  const { categoryPlugins, stats } = await getCategoryData(params.category);
 
-  // Filter plugins for this category
-  const categoryPlugins = plugins.filter((plugin) => plugin.category === params.category);
+  // Get new/recent apps
+  const newOrRecentApps = getNewOrRecentApps(categoryPlugins);
 
-  // Sort plugins by different criteria
-  const mostPopular = [...categoryPlugins]
-    .sort((a, b) => b.installs - a.installs)
-    .slice(0, 9);
+  // Get most popular apps (if we have enough)
+  const mostPopular =
+    categoryPlugins.length > 6
+      ? [...categoryPlugins].sort((a, b) => b.installs - a.installs).slice(0, 6)
+      : [];
 
-  const highestRated = [...categoryPlugins]
-    .sort((a, b) => (b.rating_avg || 0) - (a.rating_avg || 0))
-    .slice(0, 9);
-
-  // For now, use remaining plugins for "Most Recent" section
-  const mostRecent = [...categoryPlugins]
-    .filter((plugin) => !mostPopular.includes(plugin) && !highestRated.includes(plugin))
-    .slice(0, 9);
-
-  // Group remaining plugins by category for nav
-  const groupedPlugins = plugins.reduce((acc, plugin) => {
-    const category = plugin.category;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(plugin);
-    return acc;
-  }, {} as Record<string, Plugin[]>);
+  // Get all apps sorted by installs
+  const allApps = [...categoryPlugins].sort((a, b) => b.installs - a.installs);
 
   return (
-    <div className="relative bg-[#0B0F17]">
+    <div className="relative flex min-h-screen flex-col bg-[#0B0F17]">
       {/* Fixed Header and Navigation */}
       <div className="fixed inset-x-0 top-16 z-40 bg-[#0B0F17]">
         <div className="px-6 py-8">
           <div className="container mx-auto">
-            <h1 className="text-4xl font-bold text-[#6C8EEF]">Omi App Store</h1>
-            <p className="mt-3 text-gray-400">
-              Discover our most popular AI-powered applications
-            </p>
+            <CategoryBreadcrumb category={params.category} />
+            <div className="mt-8">
+              <CategoryHeader
+                category={params.category}
+                totalApps={categoryPlugins.length}
+              />
+            </div>
           </div>
         </div>
 
         <div className="border-b border-white/5 shadow-lg shadow-black/5">
           <div className="px-6">
-            <div className="container mx-auto py-5">
-              <CategoryNav
-                categories={Object.entries(groupedPlugins).map(([name, plugins]) => ({
-                  name,
-                  count: plugins.length,
-                }))}
-              />
+            <div className="container mx-auto">
+              <ProductBanner variant="category" category={params.category} />
+              <div className="py-5">
+                <ScrollableCategoryNav currentCategory={params.category} />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[280px]">
-        <div className="px-6 pt-8">
+      <main className="relative z-0 mt-[440px] flex-grow">
+        <div className="px-6 py-8">
           <div className="container mx-auto">
-            {/* Category Header */}
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-white">
-                {getCategoryDisplay(params.category)}
-                <span className="ml-2 text-base font-normal text-gray-400">
-                  ({categoryPlugins.length})
-                </span>
-              </h2>
-            </div>
+            <div className="space-y-12">
+              {/* New/Recent This Week Section */}
+              <section>
+                <h3 className="mb-8 text-xl font-semibold text-white">
+                  {newOrRecentApps.some((p) => p.installs === 0)
+                    ? 'New This Week'
+                    : 'Recently Added'}
+                </h3>
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+                  {newOrRecentApps.map((plugin) => (
+                    <FeaturedPluginCard
+                      key={plugin.id}
+                      plugin={plugin}
+                      stat={stats.find((s) => s.id === plugin.id)}
+                    />
+                  ))}
+                </div>
+              </section>
 
-            <div className="space-y-24">
-              {/* Most Popular Section */}
+              {/* Most Popular Section - Only show if we have enough apps */}
               {mostPopular.length > 0 && (
                 <section>
                   <h3 className="mb-8 text-xl font-semibold text-white">Most Popular</h3>
-                  <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+                  <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
                     {mostPopular.map((plugin, index) => (
                       <CompactPluginCard
                         key={plugin.id}
@@ -118,39 +202,20 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 </section>
               )}
 
-              {/* Highest Rated Section */}
-              {highestRated.length > 0 && (
-                <section>
-                  <h3 className="mb-8 text-xl font-semibold text-white">Highest Rated</h3>
-                  <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                    {highestRated.map((plugin, index) => (
-                      <CompactPluginCard
-                        key={plugin.id}
-                        plugin={plugin}
-                        stat={stats.find((s) => s.id === plugin.id)}
-                        index={index + 1}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Most Recent Section */}
-              {mostRecent.length > 0 && (
-                <section>
-                  <h3 className="mb-8 text-xl font-semibold text-white">Most Recent</h3>
-                  <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                    {mostRecent.map((plugin, index) => (
-                      <CompactPluginCard
-                        key={plugin.id}
-                        plugin={plugin}
-                        stat={stats.find((s) => s.id === plugin.id)}
-                        index={index + 1}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
+              {/* All Apps Section */}
+              <section>
+                <h3 className="mb-8 text-xl font-semibold text-white">All Apps</h3>
+                <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+                  {allApps.map((plugin, index) => (
+                    <CompactPluginCard
+                      key={plugin.id}
+                      plugin={plugin}
+                      stat={stats.find((s) => s.id === plugin.id)}
+                      index={index + 1}
+                    />
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
         </div>
