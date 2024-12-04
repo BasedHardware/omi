@@ -289,9 +289,9 @@ int main(void)
         set_led_blue(true);
         k_msleep(1000);
         set_led_blue(false);
-        printf("reset reas:%d\n",reset_reas);
 
     }
+
     printf("reset reas:%d\n",reset_reas);
 	while (1)
 	{
