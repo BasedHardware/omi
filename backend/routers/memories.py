@@ -269,8 +269,8 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
     return memories
 
 
-@router.get("/v1/conversation-categories", response_model=Memory, tags=['memories'])
-def get_memories_categories():
+@router.get("/v1/conversation-categories", response_model=List, tags=['memories'])
+def get_conversation_categories():
     return [
         'personal',
         'education',
