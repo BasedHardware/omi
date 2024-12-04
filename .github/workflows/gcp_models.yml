@@ -6,8 +6,8 @@ on:
   push:
     # branches: [ "main", "development" ]
     branches: "migrate-speed-models-to-gcp"
-    paths:
-      - 'backend/modal/**'
+    # paths:
+    #   - 'backend/modal/**'
 
 env:
   SERVICE: models
@@ -16,7 +16,7 @@ env:
 jobs:
   deploy:
     # environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
-    environment: 'development'
+    environment: 'prod'
     permissions:
       contents: 'read'
       id-token: 'write'
