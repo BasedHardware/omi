@@ -7,12 +7,15 @@ from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
-    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db
+    add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
+    get_personas_by_username_db, get_persona_by_id_db, delete_persona_db
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
-    get_available_app_by_id_with_reviews, set_app_review, get_app_reviews
+    get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
+    add_app_access_for_tester, remove_app_access_for_tester
+
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
@@ -261,7 +264,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.private is not None:
-        if app.private and app.uid != uid:
+        if app.private and app.uid != uid and not is_tester(uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
@@ -269,7 +272,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
     enable_app(uid, app_id)
-    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid):
+    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         increase_app_installs_count(app_id)
     return {'status': 'ok'}
 
@@ -281,10 +284,10 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.private is None:
-        if app.private and app.uid != uid:
+        if app.private and app.uid != uid and not is_tester(uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     disable_app(uid, app_id)
-    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid):
+    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         decrease_app_installs_count(app_id)
     return {'status': 'ok'}
 
@@ -292,6 +295,50 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************************************************
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
+
+@router.post('/v1/apps/tester', tags=['v1'])
+def add_new_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('apps'):
+        raise HTTPException(status_code=422, detail='apps is required')
+    data['added_at'] = datetime.now(timezone.utc).isoformat()
+    add_tester(data)
+    return {'status': 'ok'}
+
+
+@router.post('/v1/apps/tester/access', tags=['v1'])
+def add_app_access_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('app_id'):
+        raise HTTPException(status_code=422, detail='app_id is required')
+    add_app_access_for_tester(data['app_id'], data['uid'])
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/apps/tester/access', tags=['v1'])
+def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if not data.get('uid'):
+        raise HTTPException(status_code=422, detail='uid is required')
+    if not data.get('app_id'):
+        raise HTTPException(status_code=422, detail='app_id is required')
+    remove_app_access_for_tester(data['app_id'], data['uid'])
+    return {'status': 'ok'}
+
+
+@router.get('/v1/apps/tester/check', tags=['v1'])
+def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
+    if is_tester(uid):
+        return {'is_tester': True}
+    return {'is_tester': False}
+
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
@@ -328,3 +375,25 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
         send_notification(token, 'App Rejected 😔',
                           f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.')
     return {'status': 'ok'}
+
+
+@router.delete('/v1/personas/{persona_id}', tags=['v1'])
+def delete_persona(persona_id: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    personas = get_persona_by_id_db(persona_id)
+    if not personas:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    delete_persona_db(persona_id)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/personas/{persona_id}', tags=['v1'])
+def get_personas(persona_id: str, secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    persona = get_personas_by_username_db(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    print(persona)
+    return persona

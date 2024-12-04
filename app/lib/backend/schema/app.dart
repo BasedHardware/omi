@@ -182,6 +182,8 @@ class App {
   int installs;
   bool enabled;
   bool deleted;
+  int? usageCount;
+  double? moneyMade;
 
   App({
     required this.id,
@@ -207,6 +209,8 @@ class App {
     required this.deleted,
     this.private = false,
     this.proactiveNotification,
+    this.usageCount,
+    this.moneyMade,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -247,6 +251,8 @@ class App {
       proactiveNotification: json['proactive_notification'] != null
           ? ProactiveNotification.fromJson(json['proactive_notification'])
           : null,
+      usageCount: json['usage_count'] ?? 0,
+      moneyMade: json['money_made'] ?? 0.0,
     );
   }
 
@@ -311,6 +317,8 @@ class App {
       'uid': uid,
       'email': email,
       'proactive_notification': proactiveNotification?.toJson(),
+      'usage_count': usageCount,
+      'money_made': moneyMade,
     };
   }
 

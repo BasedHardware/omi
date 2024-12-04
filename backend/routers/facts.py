@@ -38,8 +38,10 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     #         fact['content'] = f'{user_name} {fact["content"]}'
     #     else:
     #         fact['content'] = str(fact["content"]).capitalize()
-    print(len(facts))
-    return list(sorted(facts, key=lambda x: x['category'], reverse=True))
+    # print(len(facts))
+    # return list(sorted(facts, key=lambda x: x['category'], reverse=True))
+    # print(list(map(lambda x: x['category'], facts)))
+    return list(filter(lambda x: x['category'] != 'learnings' and x['category'] != 'core', facts))
     # return facts
 
 
