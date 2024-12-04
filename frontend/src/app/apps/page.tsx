@@ -7,16 +7,11 @@ import {
   generateOrganizationSchema,
   generateBreadcrumbSchema,
 } from './utils/metadata';
-import envConfig from '@/src/constants/envConfig';
-import { Plugin } from './components/types';
 import { ProductBanner } from '../components/product-banner';
+import { getApprovedApps } from '@/src/lib/api/apps';
 
 async function getAppsCount() {
-  const response = await fetch(
-    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
-    { next: { revalidate: 3600 } },
-  );
-  const plugins = (await response.json()) as Plugin[];
+  const plugins = await getApprovedApps();
   return plugins.length;
 }
 
@@ -59,9 +54,7 @@ export default async function AppsPage() {
     <main className="min-h-screen bg-[#0B0F17]">
       <div className="relative">
         <AppList />
-        <div className="fixed bottom-[1.5rem] left-0 right-0 z-50">
-          <ProductBanner variant="floating" />
-        </div>
+        <ProductBanner variant="floating" />
       </div>
     </main>
   );
