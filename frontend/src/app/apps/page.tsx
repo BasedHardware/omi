@@ -57,8 +57,12 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function AppsPage() {
   return (
     <main className="min-h-screen bg-[#0B0F17]">
-      <AppList />
-      <ProductBanner variant="floating" />
+      <div className="relative">
+        <AppList />
+        <div className="fixed bottom-[1.5rem] left-0 right-0 z-50">
+          <ProductBanner variant="floating" />
+        </div>
+      </div>
     </main>
   );
 }

@@ -137,11 +137,11 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   return (
     <div className="relative flex min-h-screen flex-col bg-[#0B0F17]">
       {/* Fixed Header and Navigation */}
-      <div className="fixed inset-x-0 top-16 z-40 bg-[#0B0F17]">
-        <div className="px-6 py-8">
+      <div className="fixed inset-x-0 top-[4rem] z-40 bg-[#0B0F17]">
+        <div className="px-[1.5rem] py-[2rem]">
           <div className="container mx-auto">
             <CategoryBreadcrumb category={params.category} />
-            <div className="mt-8">
+            <div className="mt-[2rem]">
               <CategoryHeader
                 category={params.category}
                 totalApps={categoryPlugins.length}
@@ -151,10 +151,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         </div>
 
         <div className="border-b border-white/5 shadow-lg shadow-black/5">
-          <div className="px-6">
+          <div className="px-[1.5rem]">
             <div className="container mx-auto">
               <ProductBanner variant="category" category={params.category} />
-              <div className="py-5">
+              <div className="py-[1.25rem]">
                 <ScrollableCategoryNav currentCategory={params.category} />
               </div>
             </div>
@@ -163,10 +163,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[555px] flex-grow sm:mt-[475px]">
-        <div className="px-4 py-6 sm:px-6 sm:py-8">
+      <main className="relative z-0 mt-[34.75rem] flex-grow sm:mt-[29.75rem]">
+        <div className="px-[1rem] py-[1.5rem] sm:px-[1.5rem] sm:py-[2rem]">
           <div className="container mx-auto">
-            <div className="space-y-6 sm:space-y-12">
+            <div className="space-y-[1.5rem] sm:space-y-[3rem]">
               {/* New/Recent This Week Section */}
               <section>
                 <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
