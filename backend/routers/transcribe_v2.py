@@ -406,11 +406,15 @@ async def _websocket_util(
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
+
+    current_memory_id = None
+
     async def stream_transcript_process():
         nonlocal websocket_active
         nonlocal realtime_segment_buffers
         nonlocal websocket
         nonlocal seconds_to_trim
+        nonlocal current_memory_id
 
         while websocket_active or len(realtime_segment_buffers) > 0:
             try:
@@ -447,12 +451,12 @@ async def _websocket_util(
                 # Send to client
                 await websocket.send_json(segments)
 
-                memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
-
                 # Send to external trigger
                 if transcript_send:
-                    transcript_send(segments,memory.id)
+                    transcript_send(segments,current_memory_id)
 
+                memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
+                current_memory_id = memory.id
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
 

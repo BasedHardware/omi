@@ -325,7 +325,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     return message
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str) -> dict:
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str | None) -> dict:
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [
         app for app in apps if
