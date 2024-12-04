@@ -9,12 +9,12 @@ import { ScrollableCategoryNav } from './scrollable-category-nav';
 async function getPluginsData() {
   const [pluginsResponse, statsResponse] = await Promise.all([
     fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`, {
-      cache: 'no-store',
+      next: { revalidate: 3600 },
     }),
     fetch(
       'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
       {
-        cache: 'no-store',
+        next: { revalidate: 3600 },
       },
     ),
   ]);
