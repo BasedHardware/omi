@@ -17,6 +17,7 @@ export interface Plugin {
   rating_avg: number;
   rating_count: number;
   capabilities: Set<string>;
+  created_at: string;
 }
 
 export interface PluginStat {
