@@ -50,6 +50,31 @@ def get_memories(uid: str, limit: int = 100, offset: int = 0, include_discarded:
     return [doc.to_dict() for doc in memories_ref.stream()]
 
 
+def search_memories_by_query(uid: str, query: str, limit: int = 100, offset: int = 0):
+    memories_ref = (
+        db.collection('users').document(uid).collection('memories')
+        .where(filter=FieldFilter('deleted', '==', False))
+        .where(filter=FieldFilter('discarded', '==', False))
+        .where(filter=FieldFilter('structured.title', '>=', query))
+        .where(filter=FieldFilter('structured.title', '<=', query + '\uf8ff'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .offset(offset)
+    )
+    return [doc.to_dict() for doc in memories_ref.stream()]
+
+
+def get_memories_dates(uid: str):
+    memories_ref = (
+        db.collection('users').document(uid).collection('memories')
+        .where(filter=FieldFilter('deleted', '==', False))
+        .where(filter=FieldFilter('discarded', '==', False))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    unique_dates = {doc.to_dict()['created_at'].date() for doc in memories_ref.stream()}
+    return list(unique_dates)
+
+
 def update_memory(uid: str, memory_id: str, memoy_data: dict):
     user_ref = db.collection('users').document(uid)
     memory_ref = user_ref.collection('memories').document(memory_id)
