@@ -51,6 +51,18 @@ class AppProvider extends BaseProvider {
     return app;
   }
 
+  Future<App?> getAppDetails(String id) async {
+    var app = await getAppDetailsServer(id);
+    if (app != null) {
+      var oldApp = apps.where((element) => element.id == id).first;
+      var idx = apps.indexOf(oldApp);
+      apps[idx] = App.fromJson(app);
+      notifyListeners();
+      return apps[idx];
+    }
+    return null;
+  }
+
   void updateInstalledAppsOptionSelected(bool value) {
     installedAppsOptionSelected = value;
     notifyListeners();
