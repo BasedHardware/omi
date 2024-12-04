@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:friend_private/pages/conversations/widgets/empty_conversations.dart';
 import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
@@ -42,9 +40,9 @@ class ConversationsPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
+                        SizedBox(
                           height: 56,
-                          width: MediaQuery.of(context).size.width * 0.76,
+                          width: MediaQuery.of(context).size.width * 0.78,
                           child: TextFormField(
                             onChanged: (value) {
                               convoProvider.searchConversations(value);
@@ -72,18 +70,24 @@ class ConversationsPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         InkWell(
-                          onTap: () {},
+                          onTap: () {
+                            convoProvider.toggleDiscardConversations();
+                          },
                           child: Container(
                             height: 48,
                             padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(8),
+                            // decoration: BoxDecoration(
+                            //   color: Colors.grey[800],
+                            //   borderRadius: BorderRadius.circular(8),
+                            // ),
+                            child: Icon(
+                              convoProvider.showDiscardedConversations
+                                  ? Icons.filter_list_off_outlined
+                                  : Icons.filter_list_outlined,
+                              color: Colors.white,
                             ),
-                            child: SvgPicture.asset(Assets.images.icCalendarSearch, width: 32, height: 32),
                           ),
                         ),
-                        const SizedBox(width: 6),
                       ],
                     ),
                   )),
@@ -91,7 +95,7 @@ class ConversationsPage extends StatelessWidget {
                     child: Container(
                       height: 55,
                       margin: const EdgeInsets.only(bottom: 16),
-                      padding: EdgeInsets.only(left: 10),
+                      padding: const EdgeInsets.only(left: 10),
                       child: ListView(
                         shrinkWrap: true,
                         scrollDirection: Axis.horizontal,
