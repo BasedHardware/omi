@@ -28,6 +28,29 @@ export async function generateMetadata(): Promise<Metadata> {
     alternates: {
       canonical: 'https://omi.me/apps',
     },
+    openGraph: {
+      title,
+      description,
+      url: 'https://omi.me/apps',
+      siteName: 'OMI',
+      images: [
+        {
+          url: '/omi-app.png',
+          width: 1200,
+          height: 630,
+          alt: 'OMI Apps Marketplace',
+        }
+      ],
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: ['/omi-app.png'],
+      creator: '@omiHQ',
+    },
     robots: {
       index: true,
       follow: true,
