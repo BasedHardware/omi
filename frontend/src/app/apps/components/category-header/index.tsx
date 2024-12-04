@@ -12,7 +12,7 @@ export function CategoryHeader({ category, totalApps }: CategoryHeaderProps) {
   const Icon = metadata.icon;
 
   return (
-    <div className="mb-12">
+    <div>
       <div className="flex items-start space-x-4">
         <div className={`rounded-xl p-3 ${metadata.theme.accent}`}>
           <Icon className={`h-8 w-8 ${metadata.theme.primary}`} />
