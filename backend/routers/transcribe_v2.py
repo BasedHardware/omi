@@ -448,12 +448,14 @@ async def _websocket_util(
                 await websocket.send_json(segments)
 
                 memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
-                memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
-                memories_db.update_memory_finished_at(uid, memory.id, finished_at)
 
                 # Send to external trigger
                 if transcript_send:
                     transcript_send(segments,memory.id)
+
+                memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
+                memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+
 
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
