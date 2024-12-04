@@ -35,7 +35,7 @@ class ConversationsGroupWidget extends StatelessWidget {
               return const SizedBox.shrink();
             }
             return ConversationListItem(
-                conversation: conversation, memoryIdx: conversations.indexOf(conversation), date: date);
+                conversation: conversation, conversationIdx: conversations.indexOf(conversation), date: date);
           }),
           if (!showDiscardedMemories && hasDiscardedMemories && !hasNonDiscardedMemories)
             const SizedBox.shrink()

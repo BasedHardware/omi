@@ -37,12 +37,12 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
   Widget build(BuildContext context) {
     debugPrint('building conversations page');
     super.build(context);
-    return Consumer<ConversationProvider>(builder: (context, memoryProvider, child) {
+    return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
       return RefreshIndicator(
         backgroundColor: Colors.black,
         color: Colors.white,
         onRefresh: () async {
-          return await memoryProvider.getInitialConversations();
+          return await convoProvider.getInitialConversations();
         },
         child: CustomScrollView(
           slivers: [
@@ -50,9 +50,9 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: LocalSyncWidget()),
-            const SliverToBoxAdapter(child: MemoryCaptureWidget()),
-            getProcessingConversationsWidget(memoryProvider.processingConversations),
-            if (memoryProvider.groupedConversations.isEmpty && !memoryProvider.isLoadingConversations)
+            const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+            getProcessingConversationsWidget(convoProvider.processingConversations),
+            if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -61,7 +61,7 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
                   ),
                 ),
               )
-            else if (memoryProvider.groupedConversations.isEmpty && memoryProvider.isLoadingConversations)
+            else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -75,11 +75,11 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
             else
               SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  childCount: memoryProvider.groupedConversations.length + 1,
+                  childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
-                    if (index == memoryProvider.groupedConversations.length) {
+                    if (index == convoProvider.groupedConversations.length) {
                       print('loading more conversations');
-                      if (memoryProvider.isLoadingConversations) {
+                      if (convoProvider.isLoadingConversations) {
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.only(top: 32.0),
@@ -91,17 +91,17 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
                       return VisibilityDetector(
-                        key: const Key('old-key'),
+                        key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
-                          if (visibilityInfo.visibleFraction > 0 && !memoryProvider.isLoadingConversations) {
-                            memoryProvider.getMoreConversationsFromServer();
+                          if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                            convoProvider.getMoreConversationsFromServer();
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
                       );
                     } else {
-                      var date = memoryProvider.groupedConversations.keys.elementAt(index);
-                      List<ServerConversation> memoriesForDate = memoryProvider.groupedConversations[date]!;
+                      var date = convoProvider.groupedConversations.keys.elementAt(index);
+                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
                       bool hasDiscarded = memoriesForDate.any((element) => element.discarded);
                       bool hasNonDiscarded = memoriesForDate.any((element) => !element.discarded);
 
@@ -114,7 +114,7 @@ class _OldConversationsPageState extends State<OldConversationsPage> with Automa
                             conversations: memoriesForDate,
                             date: date,
                             hasNonDiscardedMemories: hasNonDiscarded,
-                            showDiscardedMemories: memoryProvider.showDiscardedConversations,
+                            showDiscardedMemories: convoProvider.showDiscardedConversations,
                             hasDiscardedMemories: hasDiscarded,
                           ),
                         ],

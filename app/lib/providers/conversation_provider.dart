@@ -12,31 +12,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   List<ServerConversation> conversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
-  List<String> convoCategories = [
-    'personal',
-    'education',
-    'health',
-    'finance',
-    'legal',
-    'philosophy',
-    'spiritual',
-    'science',
-    'entrepreneurship',
-    'parenting',
-    'romantic',
-    'travel',
-    'inspiration',
-    'technology',
-    'business',
-    'social',
-    'work',
-    'sports',
-    'politics',
-    'literature',
-    'history',
-    'architecture',
-    'other'
-  ];
+  List<String> convoCategories = [];
 
   String selectedCategory = '';
 
@@ -99,6 +75,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   Future getConversationCategories() async {
+    if (convoCategories.isNotEmpty) return;
     convoCategories = await getConversationCategoriesServer();
     notifyListeners();
   }
@@ -157,7 +134,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  void onMemoryTap(int idx) {
+  void onConversationTap(int idx) {
     if (idx < 0 || idx > conversations.length - 1) {
       return;
     }

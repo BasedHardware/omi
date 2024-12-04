@@ -17,7 +17,7 @@ import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart' as mp;
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -59,11 +59,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
       context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
-      await context.read<mp.ConversationProvider>().getInitialConversations();
+      await context.read<ConversationProvider>().getInitialConversations();
       if (mounted) {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
+    context.read<ConversationProvider>().getConversationCategories();
     _openAppFromNotification = widget.openAppFromNotification;
     super.initState();
   }
@@ -251,8 +252,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
-                    if (ctx.read<mp.ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<mp.ConversationProvider>().getInitialConversations();
+                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
+                      await ctx.read<ConversationProvider>().getInitialConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -292,7 +293,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   Consumer<HomeProvider>(
                     builder: (context, home, child) {
                       if (home.chatFieldFocusNode.hasFocus ||
-                          home.memoryFieldFocusNode.hasFocus ||
+                          home.conversationFieldFocusNode.hasFocus ||
                           home.appsSearchFieldFocusNode.hasFocus) {
                         return const SizedBox.shrink();
                       } else {

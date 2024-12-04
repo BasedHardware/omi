@@ -16,14 +16,14 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
-class MemoryCaptureWidget extends StatefulWidget {
-  const MemoryCaptureWidget({super.key});
+class ConversationCaptureWidget extends StatefulWidget {
+  const ConversationCaptureWidget({super.key});
 
   @override
-  State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
+  State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
 }
 
-class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
+class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isReady = false;
   Timer? _readyStateTimer;
 
@@ -66,7 +66,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty) return;
-          routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
+          routeToPage(context, ConversationCapturingPage(topConversationId: topMemoryId));
         },
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),

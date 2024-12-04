@@ -19,7 +19,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     body: jsonEncode({}),
   );
   if (response == null) return null;
-  debugPrint('createMemoryServer: ${response.body}');
+  debugPrint('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {

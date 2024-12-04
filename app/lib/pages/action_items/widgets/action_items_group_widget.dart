@@ -37,7 +37,7 @@ class _ActionItemsGroupWidgetState extends State<ActionItemsGroupWidget> {
               var convoIdx = widget.conversations.indexOf(conversation);
               // MixpanelManager().memoryListItemClicked(conversation, convoIdx);
               context.read<ConversationDetailProvider>().updateConversation(convoIdx, widget.date);
-              context.read<ConversationProvider>().onMemoryTap(convoIdx);
+              context.read<ConversationProvider>().onConversationTap(convoIdx);
               await routeToPage(
                 context,
                 ConversationDetailPage(conversation: conversation, isFromOnboarding: false),

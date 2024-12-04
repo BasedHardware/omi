@@ -11,19 +11,19 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 
-class MemoryCapturingPage extends StatefulWidget {
-  final String? topMemoryId;
+class ConversationCapturingPage extends StatefulWidget {
+  final String? topConversationId;
 
-  const MemoryCapturingPage({
+  const ConversationCapturingPage({
     super.key,
-    this.topMemoryId,
+    this.topConversationId,
   });
 
   @override
-  State<MemoryCapturingPage> createState() => _MemoryCapturingPageState();
+  State<ConversationCapturingPage> createState() => _ConversationCapturingPageState();
 }
 
-class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerProviderStateMixin {
+class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
@@ -74,11 +74,11 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
     });
   }
 
-  void _pushNewMemory(BuildContext context, memory) async {
+  void _pushNewConversation(BuildContext context, conversation) async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Navigator.of(context).pushReplacement(MaterialPageRoute(
         builder: (c) => ConversationDetailPage(
-          conversation: memory,
+          conversation: conversation,
         ),
       ));
     });
@@ -101,7 +101,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
         // }
 
         // Memory source
-        var memorySource = ConversationSource.friend;
+        var conversationSource = ConversationSource.friend;
         // var captureProvider = context.read<CaptureProvider>();
         // if (captureProvider.isGlasses) {
         //   memorySource = MemorySource.openglass;
@@ -153,9 +153,9 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                   tabs: [
                     Tab(
-                      text: memorySource == ConversationSource.openglass
+                      text: conversationSource == ConversationSource.openglass
                           ? 'Photos'
-                          : memorySource == ConversationSource.screenpipe
+                          : conversationSource == ConversationSource.screenpipe
                               ? 'Raw Data'
                               : 'Transcript',
                     ),
@@ -179,7 +179,7 @@ class _MemoryCapturingPageState extends State<MemoryCapturingPage> with TickerPr
                                       const SizedBox(height: 80),
                                       Center(
                                         child: Text(
-                                          memorySource == ConversationSource.friend ? "No transcript" : "Empty",
+                                          conversationSource == ConversationSource.friend ? "No transcript" : "Empty",
                                         ),
                                       ),
                                     ],

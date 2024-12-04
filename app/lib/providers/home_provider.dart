@@ -6,11 +6,11 @@ import 'package:friend_private/utils/analytics/analytics_manager.dart';
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
-  final FocusNode memoryFieldFocusNode = FocusNode();
+  final FocusNode conversationFieldFocusNode = FocusNode();
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
   bool isAppsSearchFieldFocused = false;
-  bool isMemoryFieldFocused = false;
+  bool isConversationFieldFocused = false;
   bool isChatFieldFocused = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
@@ -54,13 +54,13 @@ class HomeProvider extends ChangeNotifier {
   };
 
   HomeProvider() {
-    memoryFieldFocusNode.addListener(_onFocusChange);
+    conversationFieldFocusNode.addListener(_onFocusChange);
     chatFieldFocusNode.addListener(_onFocusChange);
     appsSearchFieldFocusNode.addListener(_onFocusChange);
   }
 
   void _onFocusChange() {
-    isMemoryFieldFocused = memoryFieldFocusNode.hasFocus;
+    isConversationFieldFocused = conversationFieldFocusNode.hasFocus;
     isChatFieldFocused = chatFieldFocusNode.hasFocus;
     isAppsSearchFieldFocused = appsSearchFieldFocusNode.hasFocus;
     notifyListeners();
@@ -109,10 +109,10 @@ class HomeProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    memoryFieldFocusNode.removeListener(_onFocusChange);
+    conversationFieldFocusNode.removeListener(_onFocusChange);
     chatFieldFocusNode.removeListener(_onFocusChange);
     appsSearchFieldFocusNode.removeListener(_onFocusChange);
-    memoryFieldFocusNode.dispose();
+    conversationFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();
     appsSearchFieldFocusNode.dispose();
     super.dispose();
