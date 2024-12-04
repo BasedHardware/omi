@@ -324,11 +324,13 @@ async def _websocket_util(
                 if transcript_ws and len(segment_buffers) > 0:
                     try:
                         # 100|data
+                        print(f"transcript consume")
                         data = bytearray()
                         data.extend(struct.pack("I", 100))
                         data.extend(bytes(json.dumps(segment_buffers), "utf-8"))
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
+                        print(f"transcript sent {len(data)}")
                     except websockets.exceptions.ConnectionClosed as e:
                         print(f"Pusher transcripts Connection closed: {e}", uid)
                         transcript_ws = None

@@ -47,6 +47,7 @@ async def _websocket_util_trigger(
                 # Transcript
                 if header_type == 100:
                     segments = json.loads(bytes(data[4:]).decode("utf-8"))
+                    print(f"transcript received {len(segments)}")
                     asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
                     continue
