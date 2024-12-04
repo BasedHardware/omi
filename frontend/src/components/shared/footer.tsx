@@ -71,6 +71,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/openglass'}
                 target="_blank"
+                rel="noreferrer"
               >
                 OpenGlass
               </a>
@@ -80,6 +81,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/'}
                 target="_blank"
+                rel="noreferrer"
               >
                 Friend
               </a>
@@ -89,6 +91,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/friend-dev'}
                 target="_blank"
+                rel="noreferrer"
               >
                 Friend DEV KIT
               </a>

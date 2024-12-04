@@ -116,7 +116,7 @@ export default async function AppList() {
       <main className="relative z-0 mt-[260px]">
         <div className="px-6 pt-8">
           <div className="container mx-auto">
-            <div className="space-y-12">
+            <div className="space-y-16">
               {/* New This Week Section */}
               <section>
                 <div className="flex items-center justify-between">
@@ -180,7 +180,7 @@ export default async function AppList() {
 
               {/* Category Sections */}
               {Object.entries(sortedCategories).map(([category, plugins]) => (
-                <section key={category} id={category}>
+                <section key={category} id={category} className="space-y-8">
                   <div className="flex items-center justify-between">
                     <CategoryHeader category={category} totalApps={plugins.length} />
                     {plugins.length >
