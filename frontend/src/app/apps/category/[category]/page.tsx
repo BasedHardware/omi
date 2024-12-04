@@ -163,7 +163,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[440px] flex-grow">
+      <main className="relative z-0 mt-[475px] flex-grow">
         <div className="px-6 py-8">
           <div className="container mx-auto">
             <div className="space-y-12">
