@@ -3,6 +3,7 @@
 import { Star, Download } from 'lucide-react';
 import Link from 'next/link';
 import type { Plugin, PluginStat } from '../types';
+import { NewBadge } from '../new-badge';
 
 export interface CompactPluginCardProps {
   plugin: Plugin;
@@ -34,8 +35,11 @@ export function CompactPluginCard({ plugin, index }: CompactPluginCardProps) {
 
       {/* Content */}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        {/* Title */}
-        <h3 className="truncate font-medium text-white">{plugin.name}</h3>
+        {/* Title and NEW badge */}
+        <div className="flex items-center gap-2">
+          <h3 className="flex-1 truncate font-medium text-white">{plugin.name}</h3>
+          <NewBadge plugin={plugin} />
+        </div>
 
         {/* Author and Stats Row */}
         <div className="flex items-center justify-between gap-2">
