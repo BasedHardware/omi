@@ -74,10 +74,6 @@ def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str
                                     statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
-def search_memories_by_query(query: str, uid: str):
-    return memories_db.search_memories_by_query(uid, query)
-
-
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
 def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return _get_memory_by_id(uid, memory_id)
