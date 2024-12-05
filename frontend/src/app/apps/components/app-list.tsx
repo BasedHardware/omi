@@ -5,6 +5,7 @@ import { CategoryHeader } from './category-header';
 import type { Plugin, PluginStat } from './types';
 import { ChevronRight } from 'lucide-react';
 import { ScrollableCategoryNav } from './scrollable-category-nav';
+import { SearchBar } from './search/search-bar';
 
 async function getPluginsData() {
   const [pluginsResponse, statsResponse] = await Promise.all([
@@ -100,6 +101,9 @@ export default async function AppList() {
             <p className="mt-3 text-gray-400">
               Discover our most popular AI-powered applications
             </p>
+            <div className="mt-6">
+              <SearchBar />
+            </div>
           </div>
         </div>
 
