@@ -223,7 +223,7 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_id: str):
+async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_id: str | None):
     """REALTIME STREAMING"""
     # TODO: don't retrieve token before knowing if to notify
     token = notification_db.get_token_only(uid)
