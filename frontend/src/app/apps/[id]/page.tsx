@@ -71,7 +71,7 @@ export async function generateMetadata(
 
 // Add a separate function to handle JSON-LD
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
-  const canonicalUrl = `https://omi.me/apps/${plugin.id}`;
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
   const productUrl = 'https://www.omi.me/products/friend-dev-kit-2';
