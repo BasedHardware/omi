@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import envConfig from '@/src/constants/envConfig';
 
 export interface CategoryMetadata {
   title: string;
@@ -94,13 +95,13 @@ export function generateBreadcrumbSchema(category?: string) {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://omi.me',
+        item: envConfig.WEB_URL,
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'Apps',
-        item: 'https://omi.me/apps',
+        item: `${envConfig.WEB_URL}/apps`,
       },
     ],
   };
@@ -110,7 +111,7 @@ export function generateBreadcrumbSchema(category?: string) {
       '@type': 'ListItem',
       position: 3,
       name: categoryMetadata[category]?.title || category,
-      item: `https://omi.me/apps/category/${category}`,
+      item: `${envConfig.WEB_URL}/apps/category/${category}`,
     });
   }
 
@@ -123,47 +124,36 @@ export function generateProductSchema() {
     '@type': 'Product',
     name: productInfo.name,
     description: productInfo.description,
-    brand: {
-      '@type': 'Brand',
-      name: 'OMI',
-    },
+    image: `${envConfig.WEB_URL}/omi-app.png`,
     offers: {
       '@type': 'Offer',
       price: productInfo.price,
       priceCurrency: productInfo.currency,
-      availability: 'https://schema.org/InStock',
       url: productInfo.url,
+      availability: 'https://schema.org/InStock',
     },
-    additionalProperty: [
-      {
-        '@type': 'PropertyValue',
-        name: 'App Store',
-        value: appStoreInfo.ios,
-      },
-      {
-        '@type': 'PropertyValue',
-        name: 'Play Store',
-        value: appStoreInfo.android,
-      },
-    ],
+    brand: {
+      '@type': 'Brand',
+      name: 'OMI',
+    },
   };
 }
 
 export function generateCollectionPageSchema(
   title: string,
   description: string,
-  url: string,
+  canonicalUrl: string,
 ) {
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: title,
-    description: description,
-    url: url,
+    name: 'OMI Apps Marketplace',
+    description: 'Discover and install AI-powered apps for your OMI Necklace.',
+    url: `${envConfig.WEB_URL}/apps`,
     isPartOf: {
       '@type': 'WebSite',
       name: 'OMI Apps Marketplace',
-      url: 'https://omi.me/apps',
+      url: envConfig.WEB_URL,
     },
   };
 }
@@ -173,8 +163,13 @@ export function generateOrganizationSchema() {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'OMI',
-    url: 'https://omi.me',
-    sameAs: [appStoreInfo.ios, appStoreInfo.android],
+    url: envConfig.WEB_URL,
+    logo: `${envConfig.WEB_URL}/omi-app.png`,
+    sameAs: [
+      'https://twitter.com/omiHQ',
+      'https://www.instagram.com/omi.me/',
+      'https://www.linkedin.com/company/omi-me/',
+    ],
   };
 }
 
@@ -205,23 +200,10 @@ export function getBaseMetadata(title: string, description: string): Metadata {
   return {
     title,
     description,
-    metadataBase: new URL('https://omi.me'),
-    openGraph: {
-      title,
-      description,
-      type: 'website',
-      siteName: 'OMI Apps Marketplace',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      creator: '@omi',
-      site: '@omi',
-    },
+    metadataBase: new URL(envConfig.WEB_URL),
     other: {
-      'apple-itunes-app': `app-id=6502156163`,
-      'google-play-app': `app-id=com.friend.ios`,
+      'apple-itunes-app': `app-id=${appStoreInfo.ios.split('/id')[1]}`,
+      'google-play-app': `app-id=${appStoreInfo.android.split('id=')[1]}`,
     },
   };
 }

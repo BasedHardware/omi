@@ -29,3 +29,7 @@
   animation: gradient-x 15s ease infinite;
   background-size: 400% 400%;
 }
+
+.search-hidden {
+  display: none !important;
+}
