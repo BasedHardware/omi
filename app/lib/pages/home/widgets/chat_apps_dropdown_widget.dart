@@ -66,7 +66,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       provider.setSelectedChatAppId(s);
                       await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
                       var app = provider.getSelectedApp();
-                      context.read<MessageProvider>().sendInitialAppMessage(app);
+                      if (context.read<MessageProvider>().messages.isEmpty) {
+                        context.read<MessageProvider>().sendInitialAppMessage(app);
+                      }
                     },
                     focusNode: focusNode,
                     // icon: Container(),
