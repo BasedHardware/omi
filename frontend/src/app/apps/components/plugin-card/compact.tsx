@@ -22,6 +22,10 @@ export function CompactPluginCard({ plugin, index }: CompactPluginCardProps) {
     <Link
       href={`/apps/${plugin.id}`}
       className="flex items-start gap-4 rounded-lg p-2 text-left transition-colors duration-300 hover:bg-[#1A1F2E]/50"
+      data-plugin-card
+      data-search-content={`${plugin.name} ${plugin.author} ${plugin.description}`}
+      data-categories={plugin.category}
+      data-capabilities={Array.from(plugin.capabilities).join(' ')}
     >
       {/* Index number */}
       <span className="w-6 text-sm font-medium text-gray-400">{index}</span>
