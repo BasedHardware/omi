@@ -263,7 +263,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                     {/* Store Buttons */}
                     <div className="mt-4 flex items-center gap-4">
                       <a
-                        href="https://apps.apple.com/app/id123456789"
+                        href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
@@ -275,7 +275,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                         />
                       </a>
                       <a
-                        href="https://play.google.com/store/apps/details?id=com.omi.app"
+                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
