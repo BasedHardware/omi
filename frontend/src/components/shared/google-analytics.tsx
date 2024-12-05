@@ -24,4 +24,4 @@ export function GoogleAnalytics() {
       </Script>
     </>
   );
-} 
+}
