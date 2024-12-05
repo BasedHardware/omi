@@ -45,6 +45,12 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     # return facts
 
 
+@router.get('/v2/facts', tags=['facts'], response_model=List[FactDB])
+def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    facts = facts_db.get_facts(uid, limit, offset)
+    return facts
+
+
 @router.delete('/v1/facts/{fact_id}', tags=['facts'])
 def delete_fact(fact_id: str, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.delete_fact(uid, fact_id)
