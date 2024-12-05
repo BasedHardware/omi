@@ -354,7 +354,7 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], m
                       response.text[:100])
                 return
 
-            if app.uid is None or app.uid != uid:
+            if (app.uid is None or app.uid != uid) and memory_id is not None:
                 record_app_usage(uid, app.id, UsageHistoryType.transcript_processed_external_integration, memory_id=memory_id)
 
             response_data = response.json()

@@ -216,8 +216,7 @@ def record_app_usage(
         timestamp: datetime = None
 ):
     if not memory_id and not message_id:
-        if usage_type != UsageHistoryType.transcript_processed_external_integration:
-            raise ValueError('memory_id or message_id must be provided')
+        raise ValueError('memory_id or message_id must be provided')
 
     data = {
         'uid': uid,
