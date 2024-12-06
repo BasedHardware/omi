@@ -22,7 +22,14 @@ class FactCategory(str, Enum):
     other = "other"
 
 
-CATEGORY_BOOSTS = [FactCategory.core, FactCategory.hobbies, FactCategory.lifestyle, FactCategory.interests, FactCategory.habits, FactCategory.work, FactCategory.skills, FactCategory.other]
+CATEGORY_BOOSTS = {FactCategory.core.value: 1,
+                   FactCategory.habits.value:10,
+                   FactCategory.work.value:20,
+                   FactCategory.skills.value:30,
+                   FactCategory.lifestyle.value: 40,
+                   FactCategory.hobbies.value: 40,
+                   FactCategory.interests.value:40,
+                   FactCategory.other.value: 50,}
 
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
@@ -63,7 +70,7 @@ class FactDB(Fact):
 
     @staticmethod
     def calculate_score(fact: 'FactDB') -> 'FactDB':
-        cat_boost = (999 - CATEGORY_BOOSTS.index(fact.category)) if fact.category in CATEGORY_BOOSTS else 0
+        cat_boost = (999 - CATEGORY_BOOSTS[fact.category.value]) if fact.category.value in CATEGORY_BOOSTS else 0
 
         user_manual_added_boost = 1
         if fact.manually_added is False:
