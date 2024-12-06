@@ -173,6 +173,11 @@ class NotificationService {
       // Plugin
       if (data.isNotEmpty) {
         late Map<String, String> payload = <String, String>{};
+        payload.addAll({
+          "navigate_to": data['navigate_to'] ?? "",
+        });
+
+        // plugin, daily summary
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
@@ -244,7 +249,6 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    debugPrint("onActionReceivedMethodImpl");
     if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
       return;
     }
@@ -265,8 +269,11 @@ class NotificationUtil {
 
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
-    if (payload.containsKey('navigateTo') || payload.containsKey('navigate_to')) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? payload['navigate_to'] ?? '';
+
+    if (payload.containsKey('navigateTo')) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? '';
+    } else if (payload.containsKey('navigate_to')) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigate_to'] ?? '';
     }
 
     // Notification page
@@ -281,7 +288,6 @@ class NotificationUtil {
 
     SharedPreferencesUtil().pageToShowFromNotification = pageIdx;
 
-    debugPrint("onActionReceivedMethodImpl ${SharedPreferencesUtil().pageToShowFromNotification}");
     MyApp.navigatorKey.currentState?.pushReplacement(
         MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
   }
