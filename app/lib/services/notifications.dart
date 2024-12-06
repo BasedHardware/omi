@@ -265,8 +265,8 @@ class NotificationUtil {
 
     // Always ensure that all plugins was initialized
     WidgetsFlutterBinding.ensureInitialized();
-    if (payload.containsKey('navigateTo')) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? '';
+    if (payload.containsKey('navigateTo') || payload.containsKey('navigate_to')) {
+      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? payload['navigate_to'] ?? '';
     }
 
     // Notification page

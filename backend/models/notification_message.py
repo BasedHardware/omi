@@ -14,6 +14,7 @@ class NotificationMessage(BaseModel):
     type: str
     notification_type: str
     text: Optional[str] = ""
+    navigate_to: Optional[str] = None
 
     @staticmethod
     def get_message_as_dict(
