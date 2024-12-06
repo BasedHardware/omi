@@ -97,6 +97,21 @@ There are 5 python files for testing. Please run them in the order shown here. T
 
 💡 **Tip:** Run files in this order. Expect playback of your recorded audio.
 
+### **Testing MCUboot Configuration**
+
+To test the new MCUboot configuration, follow these steps:
+
+1. **Build the Firmware with MCUboot Support**
+   - Follow the instructions in the `README.rst` file to build the firmware with MCUboot support.
+   - Ensure that the `build_xiao_ble_sense_devkitv2-mcuboot` configuration is selected.
+
+2. **Flash the Firmware with MCUboot Support**
+   - Follow the instructions in the `README.rst` file to flash the firmware with MCUboot support.
+
+3. **Verify MCUboot Functionality**
+   - After flashing the firmware, verify that the device boots correctly with MCUboot.
+   - Check that the device functions as expected, including storage and button behavior.
+
 ## **📱 SD Card Behavior (App Side)**
 
 Expected behavior

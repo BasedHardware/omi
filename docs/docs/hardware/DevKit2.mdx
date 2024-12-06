@@ -37,3 +37,33 @@ If you prefer to assemble the device yourself, here's the list of the parts you 
 ### Firmware
 
 The firmware for the DevKit 2 is under development. You can use the DevKit 1 firmware for now, but it will not take advantage of the new hardware features.
+
+### MCUboot Usage and OTA Update Instructions
+
+To enable secure and reliable OTA firmware updates on the Omi DevKit 2, follow these steps:
+
+1. **Build the Firmware with MCUboot Support**
+   - Follow the instructions in the `README.rst` file to build the firmware with MCUboot support.
+   - Ensure that the `build_xiao_ble_sense_devkitv2-mcuboot` configuration is selected.
+
+2. **Flash the Firmware with MCUboot Support**
+   - Follow the instructions in the `README.rst` file to flash the firmware with MCUboot support.
+
+3. **Verify MCUboot Functionality**
+   - After flashing the firmware, verify that the device boots correctly with MCUboot.
+   - Check that the device functions as expected, including storage and button behavior.
+
+### Switching Between Bootloader Options
+
+To switch between the Adafruit bootloader and MCUboot, follow these steps:
+
+1. **Build the Firmware with the Desired Bootloader Configuration**
+   - For Adafruit bootloader, select the `build_xiao_ble_sense_devkitv2-adafruit` configuration.
+   - For MCUboot, select the `build_xiao_ble_sense_devkitv2-mcuboot` configuration.
+
+2. **Flash the Firmware with the Selected Bootloader Configuration**
+   - Follow the instructions in the `README.rst` file to flash the firmware with the selected bootloader configuration.
+
+3. **Verify Bootloader Functionality**
+   - After flashing the firmware, verify that the device boots correctly with the selected bootloader.
+   - Check that the device functions as expected, including storage and button behavior.

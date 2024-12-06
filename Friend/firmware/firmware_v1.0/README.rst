@@ -30,7 +30,27 @@ The Friend firmware is built on the Zephyr RTOS and provides functionality for a
    - Select your project configuration.
    - Click on "Build" in the extension's toolbar.
 
+### Building with MCUboot Support
+
+To build the firmware with MCUboot support, follow these steps:
+
+1. Open the project in Visual Studio Code.
+2. Install the recommended VS Code extensions when prompted.
+3. Use the nRF Connect extension to build the firmware:
+   - Open the nRF Connect extension sidebar.
+   - Select the `build_xiao_ble_sense_devkitv2-mcuboot` configuration.
+   - Click on "Build" in the extension's toolbar.
+
 ## Flashing the Firmware
+
+1. Double-tap the reset button on your device to enter bootloader mode. This will open a USB drive on your computer which is used for flashing.
+2. Locate the `zephyr.uf2` file in your build output directory.
+3. Copy the `zephyr.uf2` file to the USB drive that appeared when you put the device in bootloader mode.
+4. The device will automatically flash and restart with the new firmware.
+
+### Flashing with MCUboot Support
+
+To flash the firmware with MCUboot support, follow these steps:
 
 1. Double-tap the reset button on your device to enter bootloader mode. This will open a USB drive on your computer which is used for flashing.
 2. Locate the `zephyr.uf2` file in your build output directory.
