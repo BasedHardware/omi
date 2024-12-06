@@ -22,6 +22,15 @@ class FactCategory(str, Enum):
     other = "other"
 
 
+CATEGORY_BOOSTS = {FactCategory.core.value: 1,
+                   FactCategory.habits.value:10,
+                   FactCategory.work.value:40,
+                   FactCategory.skills.value:40,
+                   FactCategory.lifestyle.value: 40,
+                   FactCategory.hobbies.value: 40,
+                   FactCategory.interests.value:40,
+                   FactCategory.other.value: 50,}
+
 class Fact(BaseModel):
     content: str = Field(description="The content of the fact")
     category: FactCategory = Field(description="The category of the fact", default=FactCategory.other)
@@ -57,10 +66,21 @@ class FactDB(Fact):
     manually_added: bool = False
     edited: bool = False
     deleted: bool = False
+    scoring: Optional[str] = None
+
+    @staticmethod
+    def calculate_score(fact: 'FactDB') -> 'FactDB':
+        cat_boost = (999 - CATEGORY_BOOSTS[fact.category.value]) if fact.category.value in CATEGORY_BOOSTS else 0
+
+        user_manual_added_boost = 1
+        if fact.manually_added is False:
+            user_manual_added_boost = 0
+
+        return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(fact.created_at.timestamp()))
 
     @staticmethod
     def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum) -> 'FactDB':
-        return FactDB(
+        fact_db = FactDB(
             id=document_id_from_seed(fact.content),
             uid=uid,
             content=fact.content,
@@ -70,3 +90,5 @@ class FactDB(Fact):
             memory_id=memory_id,
             memory_category=memory_category,
         )
+        fact_db.scoring = FactDB.calculate_score(fact_db)
+        return fact_db
