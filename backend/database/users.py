@@ -79,6 +79,20 @@ def delete_user_data(uid: str):
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 
+# ***********************************************
+# *************** CREATOR PROFILE ***************
+# ***********************************************
+def get_user_creator_profile_db(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict()
+    return user_data.get('creator_profile', {})
+
+
+def set_user_creator_profile_db(uid: str, data: dict):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'creator_profile': data})
+
+
 # **************************************
 # ************* Analytics **************
 # **************************************

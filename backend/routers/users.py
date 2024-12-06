@@ -39,6 +39,29 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 
 # ***********************************************
+# *************** CREATOR PROFILE ***************
+# ***********************************************
+
+@router.post('/v1/users/creator-profile', tags=['v1'])
+def set_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    set_user_creator_profile_db(uid, data)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/users/creator-profile', tags=['v1'])
+def get_creator_profile(uid: str = Depends(auth.get_current_user_uid)):
+    return get_user_creator_profile_db(uid)
+
+
+@router.patch('/v1/users/creator-profile', tags=['v1'])
+def update_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    current_data = get_user_creator_profile_db(uid)
+    current_data.update(data)
+    set_user_creator_profile_db(uid, current_data)
+    return {'status': 'ok'}
+
+
+# ***********************************************
 # ************* DEVELOPER WEBHOOKS **************
 # ***********************************************
 
