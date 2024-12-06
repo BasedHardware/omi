@@ -225,6 +225,7 @@ def record_app_usage(
         'timestamp': datetime.now(timezone.utc) if timestamp is None else timestamp,
         'type': usage_type,
     }
+
     db.collection('plugins').document(app_id).collection('usage_history').document(memory_id or message_id).set(data)
     return data
 

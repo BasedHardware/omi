@@ -9,6 +9,7 @@ import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
 import { Metadata, ResolvingMetadata } from 'next';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
+import envConfig from '@/src/constants/envConfig';
 
 type Props = {
   params: { id: string };
@@ -28,21 +29,26 @@ export async function generateMetadata(
   }
 
   const categoryName = formatCategoryName(plugin.category);
-  const canonicalUrl = `https://omi.me/apps/${plugin.id}`;
-  const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
 
   return {
     title: `${plugin.name} - ${categoryName} App | Omi`,
     description: `${plugin.description} Available on Omi, the AI-powered wearable platform.`,
-    metadataBase: new URL('https://omi.me'),
+    metadataBase: new URL(envConfig.WEB_URL),
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       title: `${plugin.name} - ${categoryName} App`,
       description: plugin.description,
-      images: [plugin.image],
+      images: [
+        {
+          url: plugin.image,
+          width: 1200,
+          height: 630,
+          alt: `${plugin.name} App for Omi`,
+        },
+      ],
       url: canonicalUrl,
       type: 'website',
       siteName: 'Omi',
@@ -52,8 +58,8 @@ export async function generateMetadata(
       title: `${plugin.name} - ${categoryName} App`,
       description: plugin.description,
       images: [plugin.image],
-      creator: '@omi',
-      site: '@omi',
+      creator: '@omiHQ',
+      site: '@omiHQ',
     },
     other: {
       'application-name': 'Omi',
@@ -65,7 +71,7 @@ export async function generateMetadata(
 
 // Add a separate function to handle JSON-LD
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
-  const canonicalUrl = `https://omi.me/apps/${plugin.id}`;
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
   const productUrl = 'https://www.omi.me/products/friend-dev-kit-2';
@@ -257,7 +263,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                     {/* Store Buttons */}
                     <div className="mt-4 flex items-center gap-4">
                       <a
-                        href="https://apps.apple.com/app/id123456789"
+                        href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
@@ -269,7 +275,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                         />
                       </a>
                       <a
-                        href="https://play.google.com/store/apps/details?id=com.omi.app"
+                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"

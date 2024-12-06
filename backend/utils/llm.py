@@ -511,7 +511,7 @@ def new_facts_extractor(
         user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
-    if not content or len(content) < 100:  # less than 20 words, probably nothing
+    if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?

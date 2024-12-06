@@ -22,6 +22,10 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
     <Link
       href={`/apps/${plugin.id}`}
       className="group relative block overflow-hidden rounded-xl bg-[#1A1F2E]"
+      data-plugin-card
+      data-search-content={`${plugin.name} ${plugin.author} ${plugin.description}`}
+      data-categories={plugin.category}
+      data-capabilities={Array.from(plugin.capabilities).join(' ')}
     >
       {/* Image */}
       <div className="aspect-[16/9] w-full overflow-hidden">
