@@ -1,3 +1,5 @@
+import database.facts as facts_db
+from utils.llm import new_facts_extractor, new_learnings_extractor
 import threading
 from typing import Tuple
 
@@ -8,8 +10,6 @@ from database.auth import get_user_name
 from models.facts import Fact, FactDB
 
 firebase_admin.initialize_app()
-from utils.llm import new_facts_extractor, new_learnings_extractor
-import database.facts as facts_db
 
 
 def get_facts_from_memories(
@@ -81,6 +81,35 @@ def script_migrate_users():
     chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
     for i, chunk in enumerate(chunks):
         # print('STARTING CHUNK', i + 1)
+        [t.start() for t in chunk]
+        [t.join() for t in chunk]
+
+
+# migrate scoring for facts
+def migration_fact_scoring_for_user(uid: str):
+    print('migration_fact_scoring_for_user', uid)
+    offset = 0
+    while True:
+        facts_data = facts_db.get_non_filtered_facts(uid, limit=400, offset=offset)
+        facts = [FactDB(**d) for d in facts_data]
+        if not facts or len(facts) == 0:
+            break
+
+        print('execute_for_user', uid, 'found facts', len(facts))
+        for fact in facts:
+            fact.scoring = FactDB.calculate_score(fact)
+        facts_db.save_facts(uid, [fact.dict() for fact in facts])
+        offset += len(facts)
+
+def script_migrate_fact_scoring_users(uids: [str]):
+    threads = []
+    for uid in uids:
+        t = threading.Thread(target=migration_fact_scoring_for_user, args=(uid,))
+        threads.append(t)
+
+    chunk_size = 1
+    chunks = [threads[i:i + chunk_size] for i in range(0, len(threads), chunk_size)]
+    for i, chunk in enumerate(chunks):
         [t.start() for t in chunk]
         [t.join() for t in chunk]
 
