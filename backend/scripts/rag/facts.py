@@ -5,8 +5,9 @@ from typing import Tuple
 
 import firebase_admin
 
-from _shared import *
+from scripts.rag._shared import *
 from database.auth import get_user_name
+from database._client import get_users_uid
 from models.facts import Fact, FactDB
 
 firebase_admin.initialize_app()
@@ -112,6 +113,14 @@ def script_migrate_fact_scoring_users(uids: [str]):
     for i, chunk in enumerate(chunks):
         [t.start() for t in chunk]
         [t.join() for t in chunk]
+
+def script_migrate_fact_scoring():
+    uids = get_users_uid()
+    print(f"script_migrate_fact_scoring {len(uids)} users")
+    chunk_size = 10
+    for i in range(0, len(uids), chunk_size):
+        script_migrate_fact_scoring_users(uids[i: i + chunk_size])
+        print(f"[progress] migrating {i+1}/{len(uids)}...")
 
 
 if __name__ == '__main__':
