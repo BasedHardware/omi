@@ -14,6 +14,7 @@ class NotificationMessage(BaseModel):
     type: str
     notification_type: str
     text: Optional[str] = ""
+    navigate_to: Optional[str] = None
 
     @staticmethod
     def get_message_as_dict(
@@ -25,5 +26,8 @@ class NotificationMessage(BaseModel):
         # Remove 'plugin_id' if it is None
         if message.plugin_id is None:
             del message_dict['plugin_id']
+
+        if message.navigate_to is None:
+            del message_dict['navigate_to']
 
         return message_dict
