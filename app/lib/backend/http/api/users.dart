@@ -251,7 +251,6 @@ Future<bool> setMemorySummaryRating(String memoryId, int value, {String? reason}
   return response.statusCode == 200;
 }
 
-
 Future<bool> setMessageResponseRating(String messageId, int value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value',
@@ -263,7 +262,6 @@ Future<bool> setMessageResponseRating(String messageId, int value) async {
   debugPrint('setMessageResponseRating response: ${response.body}');
   return response.statusCode == 200;
 }
-
 
 Future<bool> getHasMemorySummaryRating(String memoryId) async {
   var response = await makeApiCall(
@@ -279,6 +277,50 @@ Future<bool> getHasMemorySummaryRating(String memoryId) async {
     var jsonResponse = jsonDecode(response.body);
     return jsonResponse['has_rating'] as bool? ?? false;
   } catch (e) {
+    return false;
+  }
+}
+
+Future<bool> saveCreatorProfile(String name, String email, String paypalEmail, String? paypalLink) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'POST',
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'paypal_email': paypalEmail,
+        'paypal_link': paypalLink,
+      }),
+    );
+    if (response == null) return false;
+    debugPrint('saveCreatorProfile response: ${response.body}');
+    return response.statusCode == 200;
+  } catch (e) {
+    debugPrint('saveCreatorProfile error: $e');
+    return false;
+  }
+}
+
+Future<bool> updateCreatorProfile(String? name, String? email, String paypalEmail, String? paypalLink) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'paypal_email': paypalEmail,
+        'paypal_link': paypalLink,
+      }),
+    );
+    if (response == null) return false;
+    debugPrint('updateCreatorProfile response: ${response.body}');
+    return response.statusCode == 200;
+  } catch (e) {
+    debugPrint('updateCreatorProfile error: $e');
     return false;
   }
 }
