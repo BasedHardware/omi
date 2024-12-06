@@ -13,18 +13,19 @@ def get_facts(uid: str, limit: int = 100, offset: int = 0):
     facts_ref = (
         facts_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .where(filter=FieldFilter('user_review', '!=', False))
         .where(filter=FieldFilter('deleted', '==', False))
     )
     facts_ref = facts_ref.limit(limit).offset(offset)
-    return [doc.to_dict() for doc in facts_ref.stream()]
+    # TODO: put user review to firestore query
+    facts = [doc.to_dict() for doc in facts_ref.stream()]
+    result = [fact for fact in facts if fact['user_review'] is not False]
+    return result
 
 def get_non_filtered_facts(uid: str, limit: int = 100, offset: int = 0):
     print('get_non_filtered_facts', uid, limit, offset)
     facts_ref = db.collection('users').document(uid).collection('facts')
     facts_ref = (
-        facts_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        facts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
         .where(filter=FieldFilter('deleted', '==', False))
     )
     facts_ref = facts_ref.limit(limit).offset(offset)
