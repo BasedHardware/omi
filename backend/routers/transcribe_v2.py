@@ -327,9 +327,9 @@ async def _websocket_util(
                 await asyncio.sleep(1)
                 if transcript_ws and len(segment_buffers) > 0:
                     try:
-                        # 100|data
+                        # 102|data
                         data = bytearray()
-                        data.extend(struct.pack("I", 100))
+                        data.extend(struct.pack("I", 102))
                         data.extend(bytes(json.dumps({"segments":segment_buffers,"memory_id":in_progress_memory_id}), "utf-8"))
                         segment_buffers = []  # reset
                         await transcript_ws.send(data)
