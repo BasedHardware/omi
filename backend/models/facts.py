@@ -64,7 +64,12 @@ class FactDB(Fact):
     @staticmethod
     def calculate_score(fact: 'FactDB') -> 'FactDB':
         cat_boost = (999 - CATEGORY_BOOSTS.index(fact.category)) if fact.category in CATEGORY_BOOSTS else 0
-        return "{:02d}_{:010d}".format(cat_boost, int(fact.created_at.timestamp()))
+
+        user_manual_added_boost = 1
+        if fact.manually_added is False:
+            user_manual_added_boost = 0
+
+        return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(fact.created_at.timestamp()))
 
     @staticmethod
     def from_fact(fact: Fact, uid: str, memory_id: str, memory_category: CategoryEnum) -> 'FactDB':
