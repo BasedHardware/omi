@@ -143,9 +143,11 @@ def send_new_facts_notification(token: str, facts: [FactDB]):
     facts_str = ",".join([fact.content for fact in facts])
     message = f"New facts {facts_str}"
     ai_message = NotificationMessage(
-        text=message,
-        type='text',
         navigate_to="/facts",
+        text=message,
+        from_integration='false',
+        type='text',
+        notification_type='new_fact',
     )
 
     send_notification(token, "Omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

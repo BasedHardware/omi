@@ -27,4 +27,7 @@ class NotificationMessage(BaseModel):
         if message.plugin_id is None:
             del message_dict['plugin_id']
 
+        if message.navigate_to is None:
+            del message_dict['navigate_to']
+
         return message_dict
