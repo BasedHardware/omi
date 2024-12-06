@@ -78,20 +78,22 @@ class AuthStep {
 }
 
 class ExternalIntegration {
-  String triggersOn;
-  String webhookUrl;
-  String? setupCompletedUrl;
-  String setupInstructionsFilePath;
-  bool isInstructionsUrl;
-  List<AuthStep> authSteps;
+  final String? triggersOn;
+  final String webhookUrl;
+  final String? setupCompletedUrl;
+  final String setupInstructionsFilePath;
+  final bool isInstructionsUrl;
+  final List<AuthStep> authSteps;
+  final String? notificationsHistoryWebhook;
 
   ExternalIntegration({
-    required this.triggersOn,
+    this.triggersOn,
     required this.webhookUrl,
-    required this.setupCompletedUrl,
+    this.setupCompletedUrl,
     required this.setupInstructionsFilePath,
-    required this.isInstructionsUrl,
-    this.authSteps = const [],
+    this.isInstructionsUrl = false,
+    required this.authSteps,
+    this.notificationsHistoryWebhook,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -99,13 +101,22 @@ class ExternalIntegration {
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
-      isInstructionsUrl: json['is_instructions_url'] ?? false,
       setupInstructionsFilePath: json['setup_instructions_file_path'],
-      authSteps: json['auth_steps'] == null
-          ? []
-          : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
+      isInstructionsUrl: json['is_instructions_url'] ?? false,
+      authSteps: List<AuthStep>.from(json['auth_steps'].map((x) => AuthStep.fromJson(x))),
+      notificationsHistoryWebhook: json['notifications_history_webhook'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'triggers_on': triggersOn,
+    'webhook_url': webhookUrl,
+    'setup_completed_url': setupCompletedUrl,
+    'setup_instructions_file_path': setupInstructionsFilePath,
+    'is_instructions_url': isInstructionsUrl,
+    'auth_steps': authSteps.map((x) => x.toJson()).toList(),
+    'notifications_history_webhook': notificationsHistoryWebhook,
+  };
 
   String getTriggerOnString() {
     switch (triggersOn) {
@@ -116,17 +127,6 @@ class ExternalIntegration {
       default:
         return 'Unknown';
     }
-  }
-
-  toJson() {
-    return {
-      'triggers_on': triggersOn,
-      'webhook_url': webhookUrl,
-      'setup_completed_url': setupCompletedUrl,
-      'is_instructions_url': isInstructionsUrl,
-      'setup_instructions_file_path': setupInstructionsFilePath,
-      'auth_steps': authSteps.map((e) => e.toJson()).toList(),
-    };
   }
 }
 
