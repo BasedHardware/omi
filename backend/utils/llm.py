@@ -511,7 +511,7 @@ def new_facts_extractor(
         user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
-    if not content or len(content) < 100:  # less than 20 words, probably nothing
+    if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?
@@ -662,18 +662,22 @@ def followup_question_prompt(segments: List[TranscriptSegment]):
 class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
+        examples=[['John Doe', 'Jane Doe']],
         description='Identify all the people names who were mentioned during the conversation.'
     )
     topics: List[str] = Field(
         default=[],
+        examples=[['Artificial Intelligence', 'Machine Learning']],
         description='List all the main topics and subtopics that were discussed.',
     )
     entities: List[str] = Field(
         default=[],
+        examples=[['OpenAI', 'GPT-4']],
         description='List any products, technologies, places, or other entities that are relevant to the conversation.'
     )
     dates: List[str] = Field(
         default=[],
+        examples=[['2024-01-01', '2024-01-02']],
         description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.'
     )
 

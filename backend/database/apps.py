@@ -92,7 +92,8 @@ def get_apps_for_tester_db(uid: str) -> List:
         apps = doc.to_dict().get('apps', [])
         if not apps:
             return []
-        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps), FieldFilter('deleted', '==', False)]
+        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps),
+                   FieldFilter('deleted', '==', False)]
         public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
         return [doc.to_dict() for doc in public_apps]
     return []
@@ -205,7 +206,7 @@ def is_tester_db(uid: str) -> bool:
     app_ref = db.collection('testers').document(uid)
     return app_ref.get().exists
 
-  
+
 # ********************************
 # *********** APPS USAGE *********
 # ********************************
@@ -224,6 +225,31 @@ def record_app_usage(
         'timestamp': datetime.now(timezone.utc) if timestamp is None else timestamp,
         'type': usage_type,
     }
+
     db.collection('plugins').document(app_id).collection('usage_history').document(memory_id or message_id).set(data)
     return data
 
+
+# ********************************
+# *********** PERSONAS ***********
+# ********************************
+
+def delete_persona_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').document(persona_id)
+    persona_ref.update({'deleted': True})
+
+
+def get_personas_by_username_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').where('username', '==', persona_id)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    return [{**doc.to_dict(), 'doc_id': doc.id} for doc in docs]
+
+
+def get_persona_by_id_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').document(persona_id)
+    doc = persona_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None

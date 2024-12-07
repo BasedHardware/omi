@@ -253,7 +253,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 Column(
                   children: [
                     Text(
-                      '${(widget.app.installs / 10).floor() * 10}+',
+                      '${(widget.app.installs / 10).round() * 10}+',
                       style: const TextStyle(
                         fontSize: 16,
                       ),
