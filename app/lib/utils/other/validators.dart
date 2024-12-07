@@ -18,3 +18,8 @@ bool isValidEmail(String email) {
   const emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
   return RegExp(emailPattern).hasMatch(email);
 }
+
+bool isValidPayPalMeLink(String url) {
+  const payPalMePattern = r'^(?:https?:\/\/)?(?:www\.)?paypal\.me\/[a-zA-Z0-9]{1,100}$';
+  return RegExp(payPalMePattern).hasMatch(url);
+}
