@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/backend/schema/profile.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
@@ -281,18 +282,38 @@ Future<bool> getHasMemorySummaryRating(String memoryId) async {
   }
 }
 
-Future<bool> saveCreatorProfile(String name, String email, String paypalEmail, String? paypalLink) async {
+Future<CreatorProfile?> getCreatorProfile() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    print(response?.body);
+    if (response == null) return null;
+    debugPrint('getCreatorProfile response: ${response.body}');
+    if (response.statusCode == 200) {
+      Map<String, dynamic> json = jsonDecode(response.body);
+      if (json.isEmpty) {
+        return CreatorProfile.empty();
+      }
+      return CreatorProfile.fromJson(json);
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getCreatorProfile error: $e');
+    return null;
+  }
+}
+
+Future<bool> saveCreatorProfile(CreatorProfile profile) async {
   try {
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/users/creator-profile',
       headers: {},
       method: 'POST',
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'paypal_email': paypalEmail,
-        'paypal_link': paypalLink,
-      }),
+      body: jsonEncode(profile.toJson()),
     );
     if (response == null) return false;
     debugPrint('saveCreatorProfile response: ${response.body}');
@@ -303,17 +324,17 @@ Future<bool> saveCreatorProfile(String name, String email, String paypalEmail, S
   }
 }
 
-Future<bool> updateCreatorProfile(String? name, String? email, String paypalEmail, String? paypalLink) async {
+Future<bool> updateCreatorProfileServer(String? name, String? email, String? paypalEmail, String? paypalLink) async {
   try {
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/users/creator-profile',
       headers: {},
       method: 'PATCH',
       body: jsonEncode({
-        'name': name,
-        'email': email,
+        'creator_name': name,
+        'creator_email': email,
         'paypal_email': paypalEmail,
-        'paypal_link': paypalLink,
+        'paypal_me_link': paypalLink,
       }),
     );
     if (response == null) return false;
