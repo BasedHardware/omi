@@ -223,11 +223,11 @@ def trigger_external_integrations(uid: str, memory: Memory) -> list:
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict]):
+async def trigger_realtime_integrations(uid: str, segments: list[dict], memory_id: str | None):
     """REALTIME STREAMING"""
     # TODO: don't retrieve token before knowing if to notify
     token = notification_db.get_token_only(uid)
-    _trigger_realtime_integrations(uid, token, segments)
+    _trigger_realtime_integrations(uid, token, segments, memory_id)
 
 
 # proactive notification
@@ -325,7 +325,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     return message
 
 
-def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -> dict:
+def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict], memory_id: str | None) -> dict:
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [
         app for app in apps if
@@ -353,6 +353,9 @@ def _trigger_realtime_integrations(uid: str, token: str, segments: List[dict]) -
                 print('trigger_realtime_integrations', app.id, 'status: ', response.status_code, 'results:',
                       response.text[:100])
                 return
+
+            if (app.uid is None or app.uid != uid) and memory_id is not None:
+                record_app_usage(uid, app.id, UsageHistoryType.transcript_processed_external_integration, memory_id=memory_id)
 
             response_data = response.json()
             if not response_data:

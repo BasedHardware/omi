@@ -11,10 +11,11 @@
 #include "transport.h"
 #include "speaker.h"
 #include "led.h"
+#include "mic.h"
+#include "sdcard.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
-extern bool from_wakeup;
 static void button_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 static struct gpio_callback button_cb_data;
@@ -227,21 +228,10 @@ void check_button_level(struct k_work *work_item)
         btn_last_event = event;
         notify_tap();
 
-        //Fire the long mode notify and enter a grace period
-        //turn off herre
-        if(!from_wakeup)
-        {
-            is_off = !is_off;
-        }
-        else
-        {
-            from_wakeup = false;
-        }
-        if (is_off)
-        {
-            bt_off();
-            turnoff_all();
-        }
+        // Enter the low power mode
+        is_off = true;
+        bt_off();
+        turnoff_all();
     }
 
     // Double tap

@@ -54,8 +54,12 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
 }
 
 Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
+  var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v1/messages';
+  }
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$appId',
+    url: url,
     headers: {},
     method: 'POST',
     body: jsonEncode({'text': text}),

@@ -3,6 +3,7 @@
 import { Star, Download } from 'lucide-react';
 import Link from 'next/link';
 import type { Plugin, PluginStat } from '../types';
+import { NewBadge } from '../new-badge';
 
 export interface FeaturedPluginCardProps {
   plugin: Plugin;
@@ -21,6 +22,10 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
     <Link
       href={`/apps/${plugin.id}`}
       className="group relative block overflow-hidden rounded-xl bg-[#1A1F2E]"
+      data-plugin-card
+      data-search-content={`${plugin.name} ${plugin.author} ${plugin.description}`}
+      data-categories={plugin.category}
+      data-capabilities={Array.from(plugin.capabilities).join(' ')}
     >
       {/* Image */}
       <div className="aspect-[16/9] w-full overflow-hidden">
@@ -33,10 +38,13 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
 
       {/* Content */}
       <div className="flex flex-col gap-1.5 p-3 sm:gap-2 sm:p-4">
-        {/* Title */}
-        <h3 className="line-clamp-1 text-base font-medium text-white sm:text-lg">
-          {plugin.name}
-        </h3>
+        {/* Title and NEW badge */}
+        <div className="flex items-center gap-2">
+          <h3 className="line-clamp-1 flex-1 text-base font-medium text-white sm:text-lg">
+            {plugin.name}
+          </h3>
+          <NewBadge plugin={plugin} />
+        </div>
 
         {/* Author Row */}
         <div className="flex items-center justify-between gap-2">

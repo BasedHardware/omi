@@ -7,19 +7,22 @@ import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/home_sub_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/apps/page.dart';
+import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -116,7 +119,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   ///Screens with respect to subpage
-  final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
+  final Map<String, Widget> screensWithRespectToPath = {
+    '/settings': const SettingsPage(),
+    '/facts': const FactsPage(),
+  };
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
