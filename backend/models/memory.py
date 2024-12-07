@@ -266,3 +266,8 @@ class SetMemoryActionItemsStateRequest(BaseModel):
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool
+
+
+class UpdateActionItemRequest(BaseModel):
+    description: str  # Original Action Item description to find the item
+    new_description: str  # New Action Item description to update to
