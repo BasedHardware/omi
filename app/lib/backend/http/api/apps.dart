@@ -160,7 +160,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
 Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/apps'),
+    Uri.parse('${Env.apiBaseUrl}v2/apps'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});

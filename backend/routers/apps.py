@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from typing import List
 import requests
+from pydantic import ValidationError
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
@@ -18,7 +19,7 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App
+from models.app import App, SubmitAppRequest
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 
 router = APIRouter()
@@ -44,6 +45,38 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['approved'] = False
     data['deleted'] = False
     data['status'] = 'under-review'
+    data['name'] = data['name'].strip()
+    data['id'] = str(ULID())
+    if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None:
+            raise HTTPException(status_code=422, detail='Triggers on is required')
+        # check if setup_instructions_file_path is a single url or a just a string of text
+        if external_integration.get('setup_instructions_file_path'):
+            external_integration['setup_instructions_file_path'] = external_integration[
+                'setup_instructions_file_path'].strip()
+            if external_integration['setup_instructions_file_path'].startswith('http'):
+                external_integration['is_instructions_url'] = True
+            else:
+                external_integration['is_instructions_url'] = False
+    os.makedirs(f'_temp/plugins', exist_ok=True)
+    file_path = f"_temp/plugins/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    imgUrl = upload_plugin_logo(file_path, data['id'])
+    data['image'] = imgUrl
+    data['created_at'] = datetime.now(timezone.utc)
+    add_app_to_db(data)
+    return {'status': 'ok'}
+
+
+@router.post('/v2/apps', tags=['v2'])
+def submit_app_v2(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+    try:
+        parsed_data = json.loads(app_data)
+        validated_data = SubmitAppRequest(**parsed_data)
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    data = validated_data.dict()
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
     if external_integration := data.get('external_integration'):

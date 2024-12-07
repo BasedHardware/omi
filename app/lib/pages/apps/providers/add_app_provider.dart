@@ -22,8 +22,6 @@ class AddAppProvider extends ChangeNotifier {
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
-  TextEditingController creatorNameController = TextEditingController();
-  TextEditingController creatorEmailController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
   TextEditingController memoryPromptController = TextEditingController();
   String? appCategory;
@@ -65,8 +63,6 @@ class AddAppProvider extends ChangeNotifier {
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
-    creatorNameController.text = SharedPreferencesUtil().givenName;
-    creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
   }
 
@@ -99,8 +95,6 @@ class AddAppProvider extends ChangeNotifier {
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
-    creatorNameController.text = app.author.decodeString;
-    creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
@@ -130,8 +124,6 @@ class AddAppProvider extends ChangeNotifier {
   void clear() {
     appNameController.clear();
     appDescriptionController.clear();
-    creatorNameController.clear();
-    creatorEmailController.clear();
     chatPromptController.clear();
     memoryPromptController.clear();
     triggerEvent = null;
@@ -183,9 +175,6 @@ class AddAppProvider extends ChangeNotifier {
       return true;
     }
     if (appDescriptionController.text != app.description) {
-      return true;
-    }
-    if (creatorNameController.text != app.author) {
       return true;
     }
     if (makeAppPublic != !app.private) {
@@ -340,8 +329,6 @@ class AddAppProvider extends ChangeNotifier {
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
@@ -398,8 +385,6 @@ class AddAppProvider extends ChangeNotifier {
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,

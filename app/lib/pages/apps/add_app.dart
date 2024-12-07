@@ -101,8 +101,6 @@ class _AddAppPageState extends State<AddAppPage> {
                           },
                           appNameController: provider.appNameController,
                           appDescriptionController: provider.appDescriptionController,
-                          creatorNameController: provider.creatorNameController,
-                          creatorEmailController: provider.creatorEmailController,
                           categories: provider.categories,
                           setAppCategory: provider.setAppCategory,
                           imageFile: provider.imageFile,
