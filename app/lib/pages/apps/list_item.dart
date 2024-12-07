@@ -60,11 +60,14 @@ class AppListItem extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          app.name.decodeString,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                        SizedBox(
+                          width: MediaQuery.sizeOf(context).width * 0.62,
+                          child: Text(
+                            app.name.decodeString,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                          ),
                         ),
                         app.private && showPrivateIcon
                             ? const SizedBox(
