@@ -27,4 +27,12 @@ class AppSnackbar {
       duration: duration,
     );
   }
+
+  static void showSnackbarInfo(String message, {Duration? duration}) {
+    showSnackbar(
+      message,
+      color: Colors.grey.shade800,
+      duration: duration,
+    );
+  }
 }
