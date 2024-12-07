@@ -90,7 +90,7 @@ def get_user_creator_profile_db(uid: str):
 
 def set_user_creator_profile_db(uid: str, data: dict):
     user_ref = db.collection('users').document(uid)
-    user_ref.set({'creator_profile': data})
+    user_ref.update({'creator_profile': data})
 
 
 # **************************************

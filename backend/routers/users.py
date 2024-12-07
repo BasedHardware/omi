@@ -10,7 +10,7 @@ from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_u
 from database.users import *
 from models.memory import Geolocation, Memory
 from models.other import Person, CreatePerson
-from models.users import WebhookType
+from models.users import WebhookType, CreatorProfileRequest
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
@@ -43,7 +43,10 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 @router.post('/v1/users/creator-profile', tags=['v1'])
-def set_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def set_creator_profile(data: CreatorProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    data = data.dict()
+    data['created_at'] = datetime.now(timezone.utc)
+    data['is_verified'] = False
     set_user_creator_profile_db(uid, data)
     return {'status': 'ok'}
 
@@ -57,6 +60,7 @@ def get_creator_profile(uid: str = Depends(auth.get_current_user_uid)):
 def update_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     current_data = get_user_creator_profile_db(uid)
     current_data.update(data)
+    current_data['updated_at'] = datetime.now(timezone.utc)
     set_user_creator_profile_db(uid, current_data)
     return {'status': 'ok'}
 
