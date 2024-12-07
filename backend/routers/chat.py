@@ -36,9 +36,10 @@ def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
+    plugin_id = plugin_id if (plugin_id != 'null' and not None) else None
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        plugin_id=plugin_id,
+        plugin_id=plugin_id
     )
     chat_db.add_message(uid, message.dict())
 
