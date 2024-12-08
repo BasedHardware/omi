@@ -174,6 +174,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // Home controler
     _controller = PageController(initialPage: homePageIdx);
     context.read<HomeProvider>().selectedIndex = homePageIdx;
+    context.read<HomeProvider>().onSelectedIndexChanged = (index) {
+      _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+    };
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -540,6 +543,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
+    _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 }
