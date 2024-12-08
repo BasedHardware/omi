@@ -15,6 +15,11 @@ class CreatorProfileProvider extends ChangeNotifier {
   bool isLoading = false;
   bool profileExists = false;
 
+  int totalUsage = 0;
+  double totalEarnings = 0.0;
+  int publishedApps = 0;
+  int totalUsers = 0;
+
   void setIsLoading(bool value) {
     isLoading = value;
     notifyListeners();
@@ -32,7 +37,23 @@ class CreatorProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> getCreatorStats() async {
+    setIsLoading(true);
+    var res = await getCreatorStatsServer();
+    if (res != null) {
+      totalUsage = res.usageCount;
+      totalEarnings = res.moneyMade;
+      publishedApps = res.appsCount;
+      totalUsers = res.activeUsers;
+      setIsLoading(false);
+    } else {
+      AppSnackbar.showSnackbarError('Failed to fetch your Apps stats');
+    }
+    notifyListeners();
+  }
+
   Future<void> getCreatorProfileDetails() async {
+    setIsLoading(true);
     var res = await getCreatorProfile();
     if (res != null) {
       if (res.isEmpty()) {
@@ -41,13 +62,15 @@ class CreatorProfileProvider extends ChangeNotifier {
         profileExists = true;
         creatorNameController.text = res.creatorName;
         creatorEmailController.text = res.creatorEmail;
-        paypalEmailController.text = res.paypalEmail;
-        paypalMeLinkController.text = res.paypalMeLink ?? '';
+        paypalEmailController.text = res.paypalDetails.email;
+        paypalMeLinkController.text = res.paypalDetails.paypalMeLink ?? '';
       }
       showSubmitButton = false;
+      setIsLoading(false);
     } else {
       AppSnackbar.showSnackbarError('Failed to fetch your Creator Profile details');
     }
+    notifyListeners();
   }
 
   Future updateDetails() async {
@@ -77,8 +100,10 @@ class CreatorProfileProvider extends ChangeNotifier {
       var profile = CreatorProfile(
         creatorName: creatorNameController.text,
         creatorEmail: creatorEmailController.text,
-        paypalEmail: paypalEmailController.text,
-        paypalMeLink: paypalMeLinkController.text,
+        paypalDetails: PayPalDetails(
+          email: paypalEmailController.text,
+          paypalMeLink: paypalMeLinkController.text,
+        ),
         isVerified: false,
       );
       var res = await saveCreatorProfile(profile);

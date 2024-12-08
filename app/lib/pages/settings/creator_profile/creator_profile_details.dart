@@ -4,22 +4,8 @@ import 'package:friend_private/utils/other/text_formatters.dart';
 import 'package:friend_private/utils/other/validators.dart';
 import 'package:provider/provider.dart';
 
-class CreatorProfileWrapper extends StatelessWidget {
-  const CreatorProfileWrapper({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableProvider(
-      create: (_) => CreatorProfileProvider()..getCreatorProfileDetails(),
-      builder: (context, child) {
-        return const CreatorProfile();
-      },
-    );
-  }
-}
-
-class CreatorProfile extends StatelessWidget {
-  const CreatorProfile({super.key});
+class CreatorProfileDetails extends StatelessWidget {
+  const CreatorProfileDetails({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +15,7 @@ class CreatorProfile extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
           elevation: 0,
-          title: const Text('Creator Profile'),
+          title: const Text('Creator Profile Details'),
           centerTitle: false,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new),

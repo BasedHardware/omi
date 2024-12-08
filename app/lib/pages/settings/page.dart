@@ -3,7 +3,7 @@ import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/settings/about.dart';
-import 'package:friend_private/pages/settings/creator_profile/creator_profile.dart';
+import 'package:friend_private/pages/settings/creator_profile/creator_dashboard.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/pages/settings/profile.dart';
 import 'package:friend_private/pages/settings/widgets.dart';
@@ -83,8 +83,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 getItemAddOn2(
-                  'Creator Profile',
-                  () => routeToPage(context, const CreatorProfileWrapper()),
+                  'Creator Dashboard',
+                  () => routeToPage(context, const CreatorDashboard()),
                   icon: Icons.person,
                 ),
                 const SizedBox(height: 20),
