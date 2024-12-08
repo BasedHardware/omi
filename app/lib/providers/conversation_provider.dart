@@ -18,7 +18,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   String previousQuery = '';
 
-  Timer? _processingMemoryWatchTimer;
+  Timer? _processingConversationWatchTimer;
 
   List<ServerConversation> processingConversations = [];
 
@@ -95,9 +95,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
     if (conversations.isEmpty) {
-      conversations = SharedPreferencesUtil().cachedMemories;
+      conversations = SharedPreferencesUtil().cachedConversations;
     } else {
-      SharedPreferencesUtil().cachedMemories = conversations;
+      SharedPreferencesUtil().cachedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
@@ -337,7 +337,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   @override
   void dispose() {
-    _processingMemoryWatchTimer?.cancel();
+    _processingConversationWatchTimer?.cancel();
     _wal.unsubscribe(this);
     super.dispose();
   }

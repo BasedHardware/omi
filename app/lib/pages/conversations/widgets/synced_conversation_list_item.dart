@@ -50,7 +50,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
 
   @override
   Widget build(BuildContext context) {
-    // Is new memory
+    // Is new conversation
     DateTime memorizedAt = conversation.createdAt;
     if (conversation.finishedAt != null && conversation.finishedAt!.isAfter(memorizedAt)) {
       memorizedAt = conversation.finishedAt!;
@@ -83,7 +83,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _getMemoryHeader(),
+                      _getConversationHeader(),
                       const SizedBox(height: 16),
                       conversation.discarded
                           ? Text(
@@ -143,7 +143,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     );
   }
 
-  _getMemoryHeader() {
+  _getConversationHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(

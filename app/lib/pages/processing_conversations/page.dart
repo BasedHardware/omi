@@ -6,18 +6,18 @@ import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 class ProcessingConversationPage extends StatefulWidget {
-  final ServerConversation memory;
+  final ServerConversation conversation;
 
   const ProcessingConversationPage({
     super.key,
-    required this.memory,
+    required this.conversation,
   });
 
   @override
-  State<ProcessingConversationPage> createState() => _ProcessingMemoryPageState();
+  State<ProcessingConversationPage> createState() => _ProcessingConversationPageState();
 }
 
-class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with TickerProviderStateMixin {
+class _ProcessingConversationPageState extends State<ProcessingConversationPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
 
@@ -28,11 +28,11 @@ class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with 
     super.initState();
   }
 
-  void _pushNewMemory(BuildContext context, memory) async {
+  void _pushNewConversation(BuildContext context, conversation) async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Navigator.of(context).pushReplacement(MaterialPageRoute(
         builder: (c) => ConversationDetailPage(
-          conversation: memory,
+          conversation: conversation,
         ),
       ));
     });
@@ -48,7 +48,7 @@ class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with 
       // }
 
       // Memory source
-      var memorySource = ConversationSource.friend;
+      var convoSource = ConversationSource.friend;
       return PopScope(
         canPop: true,
         child: Scaffold(
@@ -87,9 +87,9 @@ class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with 
                 labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                 tabs: [
                   Tab(
-                    text: memorySource == ConversationSource.openglass
+                    text: convoSource == ConversationSource.openglass
                         ? 'Photos'
-                        : memorySource == ConversationSource.screenpipe
+                        : convoSource == ConversationSource.screenpipe
                             ? 'Raw Data'
                             : 'Transcript',
                   ),
@@ -107,14 +107,14 @@ class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with 
                       ListView(
                         shrinkWrap: true,
                         children: [
-                          widget.memory.transcriptSegments.isEmpty
+                          widget.conversation.transcriptSegments.isEmpty
                               ? const Column(
                                   children: [
                                     SizedBox(height: 80),
                                     Center(child: Text("No Transcript")),
                                   ],
                                 )
-                              : getTranscriptWidget(false, widget.memory.transcriptSegments, [], null)
+                              : getTranscriptWidget(false, widget.conversation.transcriptSegments, [], null)
                         ],
                       ),
                       ListView(
@@ -125,7 +125,7 @@ class _ProcessingMemoryPageState extends State<ProcessingConversationPage> with 
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
-                                widget.memory.transcriptSegments.isEmpty ? "No summary" : "Processing",
+                                widget.conversation.transcriptSegments.isEmpty ? "No summary" : "Processing",
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16),
                               ),

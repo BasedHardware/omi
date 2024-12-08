@@ -407,14 +407,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
                 Row(
                   children: [
-                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
+                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
                       if (home.selectedIndex != 0 ||
-                          !memoryProvider.hasNonDiscardedConversations ||
-                          memoryProvider.isLoadingConversations) {
+                          !convoProvider.hasNonDiscardedConversations ||
+                          convoProvider.isLoadingConversations) {
                         return const SizedBox.shrink();
                       }
                       return IconButton(
-                          onPressed: memoryProvider.toggleDiscardConversations,
+                          onPressed: convoProvider.toggleDiscardConversations,
                           icon: Icon(
                             SharedPreferencesUtil().showDiscardedMemories
                                 ? Icons.filter_list_off_sharp

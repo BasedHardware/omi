@@ -49,7 +49,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      var topMemoryId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
+      var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
           ? provider.conversationProvider!.conversations.first.id
           : null;
 
@@ -58,7 +58,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         return const SizedBox.shrink();
       }
 
-      var header = _getMemoryHeader(context);
+      var header = _getConversationHeader(context);
       if (header == null) {
         return const SizedBox.shrink();
       }
@@ -66,7 +66,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty) return;
-          routeToPage(context, ConversationCapturingPage(topConversationId: topMemoryId));
+          routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -126,7 +126,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     }
   }
 
-  Widget? _getMemoryHeader(BuildContext context) {
+  Widget? _getConversationHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
 
@@ -320,51 +320,51 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
   );
 }
 
-Widget getProcessingConversationsWidget(List<ServerConversation> memories) {
-  // FIXME, this has to be a single one always, and also a memory obj
-  if (memories.isEmpty) {
+Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
+  // FIXME, this has to be a single one always, and also a conversation obj
+  if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
   return SliverList(
     delegate: SliverChildBuilderDelegate(
       (context, index) {
-        var pm = memories[index];
+        var pm = conversations[index];
         return Padding(
           padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: ProcessingMemoryWidget(memory: pm),
+          child: ProcessingConversationWidget(conversation: pm),
         );
       },
-      childCount: memories.length,
+      childCount: conversations.length,
     ),
   );
 }
 
-// PROCESSING MEMORY
+// PROCESSING CONVERSATION
 
-class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerConversation memory;
+class ProcessingConversationWidget extends StatefulWidget {
+  final ServerConversation conversation;
 
-  const ProcessingMemoryWidget({
+  const ProcessingConversationWidget({
     super.key,
-    required this.memory,
+    required this.conversation,
   });
 
   @override
-  State<ProcessingMemoryWidget> createState() => _ProcessingMemoryWidgetState();
+  State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
 }
 
-class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
+class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       return GestureDetector(
           onTap: () async {
-            if (widget.memory.transcriptSegments.isEmpty) return;
+            if (widget.conversation.transcriptSegments.isEmpty) return;
             routeToPage(
                 context,
                 ProcessingConversationPage(
-                  memory: widget.memory,
+                  conversation: widget.conversation,
                 ));
           },
           child: Container(
@@ -380,13 +380,13 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _getMemoryHeader(context),
-                  widget.memory.transcriptSegments.isNotEmpty
+                  _getConversationHeader(context),
+                  widget.conversation.transcriptSegments.isNotEmpty
                       ? Column(
                           children: [
                             const SizedBox(height: 8),
                             getLiteTranscriptWidget(
-                              widget.memory.transcriptSegments,
+                              widget.conversation.transcriptSegments,
                               [],
                               null,
                             ),
@@ -401,7 +401,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
     });
   }
 
-  _getMemoryHeader(BuildContext context) {
+  _getConversationHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
