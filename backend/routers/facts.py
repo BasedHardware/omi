@@ -47,6 +47,10 @@ def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get
 
 @router.get('/v2/facts', tags=['facts'], response_model=List[FactDB])
 def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    # Use high limits for the first page
+    # Warn: should remove
+    if offset == 0:
+        limit = 5000
     facts = facts_db.get_facts(uid, limit, offset)
     return facts
 
