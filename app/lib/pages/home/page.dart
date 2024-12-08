@@ -195,7 +195,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "chat":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
-            SharedPreferencesUtil().selectedChatAppId = appId;
             if (mounted) {
               var appProvider = Provider.of<AppProvider>(context, listen: false);
               var messageProvider = Provider.of<MessageProvider>(context, listen: false);
