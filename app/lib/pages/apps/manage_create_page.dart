@@ -67,14 +67,14 @@ class ManageCreatePage extends StatelessWidget {
                         ),
                         Selector<AppProvider, List<App>>(
                           selector: (context, provider) => provider.apps.where((p) => p.enabled).toList(),
-                          builder: (context, memoryPromptApps, child) {
+                          builder: (context, apps, child) {
                             return ListView.builder(
-                              itemCount: memoryPromptApps.length,
+                              itemCount: apps.length,
                               physics: const NeverScrollableScrollPhysics(),
                               shrinkWrap: true,
                               itemBuilder: (context, index) {
                                 return AppListItem(
-                                  app: memoryPromptApps[index],
+                                  app: apps[index],
                                   index: index,
                                 );
                               },

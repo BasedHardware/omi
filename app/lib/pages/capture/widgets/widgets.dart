@@ -150,12 +150,12 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
 }
 
 getTranscriptWidget(
-  bool memoryCreating,
+  bool conversationCreating,
   List<TranscriptSegment> segments,
   List<Tuple2<String, String>> photos,
   BtDevice? btDevice,
 ) {
-  if (memoryCreating) {
+  if (conversationCreating) {
     return const Padding(
       padding: EdgeInsets.only(top: 80),
       child: Center(child: CircularProgressIndicator(color: Colors.white)),

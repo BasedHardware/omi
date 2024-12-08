@@ -30,7 +30,7 @@ Future<List<ServerMessage>> getMessagesServer({
     if (decodedBody.isEmpty) {
       return [];
     }
-    var messages = decodedBody.map((memory) => ServerMessage.fromJson(memory)).toList();
+    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
     debugPrint('getMessages length: ${messages.length}');
     return messages;
   }

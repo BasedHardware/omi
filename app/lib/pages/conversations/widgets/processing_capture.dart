@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/pages/memories/widgets/capture.dart';
-import 'package:friend_private/pages/memory_capturing/page.dart';
-import 'package:friend_private/pages/processing_memories/page.dart';
+import 'package:friend_private/pages/conversations/widgets/capture.dart';
+import 'package:friend_private/pages/conversation_capturing/page.dart';
+import 'package:friend_private/pages/processing_conversations/page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -16,14 +16,14 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
-class MemoryCaptureWidget extends StatefulWidget {
-  const MemoryCaptureWidget({super.key});
+class ConversationCaptureWidget extends StatefulWidget {
+  const ConversationCaptureWidget({super.key});
 
   @override
-  State<MemoryCaptureWidget> createState() => _MemoryCaptureWidgetState();
+  State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
 }
 
-class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
+class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isReady = false;
   Timer? _readyStateTimer;
 
@@ -49,15 +49,16 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
-      var topMemoryId =
-          (provider.memoryProvider?.memories ?? []).isNotEmpty ? provider.memoryProvider!.memories.first.id : null;
+      var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
+          ? provider.conversationProvider!.conversations.first.id
+          : null;
 
       // Waiting ready state, 3s for now
       if (!_isReady) {
         return const SizedBox.shrink();
       }
 
-      var header = _getMemoryHeader(context);
+      var header = _getConversationHeader(context);
       if (header == null) {
         return const SizedBox.shrink();
       }
@@ -65,7 +66,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty) return;
-          routeToPage(context, MemoryCapturingPage(topMemoryId: topMemoryId));
+          routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -125,7 +126,7 @@ class _MemoryCaptureWidgetState extends State<MemoryCaptureWidget> {
     }
   }
 
-  Widget? _getMemoryHeader(BuildContext context) {
+  Widget? _getConversationHeader(BuildContext context) {
     var captureProvider = context.read<CaptureProvider>();
     var connectivityProvider = context.read<ConnectivityProvider>();
 
@@ -319,51 +320,51 @@ getPhoneMicRecordingButton(BuildContext context, toggleRecording, RecordingState
   );
 }
 
-Widget getProcessingMemoriesWidget(List<ServerMemory> memories) {
-  // FIXME, this has to be a single one always, and also a memory obj
-  if (memories.isEmpty) {
+Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
+  // FIXME, this has to be a single one always, and also a conversation obj
+  if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
   return SliverList(
     delegate: SliverChildBuilderDelegate(
       (context, index) {
-        var pm = memories[index];
+        var pm = conversations[index];
         return Padding(
           padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: ProcessingMemoryWidget(memory: pm),
+          child: ProcessingConversationWidget(conversation: pm),
         );
       },
-      childCount: memories.length,
+      childCount: conversations.length,
     ),
   );
 }
 
-// PROCESSING MEMORY
+// PROCESSING CONVERSATION
 
-class ProcessingMemoryWidget extends StatefulWidget {
-  final ServerMemory memory;
+class ProcessingConversationWidget extends StatefulWidget {
+  final ServerConversation conversation;
 
-  const ProcessingMemoryWidget({
+  const ProcessingConversationWidget({
     super.key,
-    required this.memory,
+    required this.conversation,
   });
 
   @override
-  State<ProcessingMemoryWidget> createState() => _ProcessingMemoryWidgetState();
+  State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
 }
 
-class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
+class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
         builder: (context, provider, deviceProvider, connectivityProvider, child) {
       return GestureDetector(
           onTap: () async {
-            if (widget.memory.transcriptSegments.isEmpty) return;
+            if (widget.conversation.transcriptSegments.isEmpty) return;
             routeToPage(
                 context,
-                ProcessingMemoryPage(
-                  memory: widget.memory,
+                ProcessingConversationPage(
+                  conversation: widget.conversation,
                 ));
           },
           child: Container(
@@ -379,13 +380,13 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _getMemoryHeader(context),
-                  widget.memory.transcriptSegments.isNotEmpty
+                  _getConversationHeader(context),
+                  widget.conversation.transcriptSegments.isNotEmpty
                       ? Column(
                           children: [
                             const SizedBox(height: 8),
                             getLiteTranscriptWidget(
-                              widget.memory.transcriptSegments,
+                              widget.conversation.transcriptSegments,
                               [],
                               null,
                             ),
@@ -400,7 +401,7 @@ class _ProcessingMemoryWidgetState extends State<ProcessingMemoryWidget> {
     });
   }
 
-  _getMemoryHeader(BuildContext context) {
+  _getConversationHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(

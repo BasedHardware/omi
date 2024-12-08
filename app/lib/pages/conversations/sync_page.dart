@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:friend_private/pages/settings/widgets/appbar_with_banner.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/services/services.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -10,7 +10,7 @@ import 'package:friend_private/utils/other/time_utils.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-import 'synced_memories_page.dart';
+import 'synced_conversations_page.dart';
 
 class WalListItem extends StatefulWidget {
   final DateTime date;
@@ -97,8 +97,8 @@ class _WalListItemState extends State<WalListItem> {
                             )
                           : TextButton(
                               onPressed: () {
-                                context.read<MemoryProvider>().setSyncCompleted(false);
-                                context.read<MemoryProvider>().syncWal(widget.wal);
+                                context.read<ConversationProvider>().setSyncCompleted(false);
+                                context.read<ConversationProvider>().syncWal(widget.wal);
                               },
                               child: const Text('Sync', style: TextStyle(color: Colors.white))),
                     ),
@@ -227,27 +227,27 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        var provider = Provider.of<MemoryProvider>(context, listen: false);
+        var provider = Provider.of<ConversationProvider>(context, listen: false);
         if (!provider.isSyncing) {
           provider.clearSyncResult();
         }
       },
-      child: Consumer<MemoryProvider>(builder: (context, memoryProvider, child) {
+      child: Consumer<ConversationProvider>(builder: (context, conversationProvider, child) {
         return Scaffold(
           appBar: AppBarWithBanner(
             appBar: AppBar(
-              title: const Text('Sync Memories'),
+              title: const Text('Sync Conversations'),
               backgroundColor: Theme.of(context).colorScheme.primary,
             ),
-            showAppBar: memoryProvider.isSyncing || memoryProvider.syncCompleted,
+            showAppBar: conversationProvider.isSyncing || conversationProvider.syncCompleted,
             child: Container(
               color: Colors.green,
               child: Center(
                 child: Text(
-                  memoryProvider.isSyncing
-                      ? 'Syncing Memories'
-                      : memoryProvider.syncCompleted
-                          ? 'Memories Synced Successfully 🎉'
+                  conversationProvider.isSyncing
+                      ? 'Syncing Conversations'
+                      : conversationProvider.syncCompleted
+                          ? 'Conversations Synced Successfully 🎉'
                           : '',
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
@@ -256,7 +256,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          floatingActionButton: memoryProvider.isSyncing || memoryProvider.syncCompleted
+          floatingActionButton: conversationProvider.isSyncing || conversationProvider.syncCompleted
               ? const SizedBox()
               : ScaleTransition(
                   scale: _hideFabAnimation,
@@ -280,7 +280,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       onPressed: () async {
                         if (context.read<ConnectivityProvider>().isConnected) {
                           // _toggleAnimation();
-                          await memoryProvider.syncWals();
+                          await conversationProvider.syncWals();
                           // _toggleAnimation();
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -305,7 +305,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      memoryProvider.isSyncing
+                      conversationProvider.isSyncing
                           ? Container(
                               padding: const EdgeInsets.all(12.0),
                               margin: const EdgeInsets.only(left: 16.0, right: 16.0, top: 12),
@@ -324,14 +324,14 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                           : const SizedBox.shrink(),
                       const SizedBox(height: 30),
                       Text(
-                        secondsToHumanReadable(memoryProvider.missingWalsInSeconds),
+                        secondsToHumanReadable(conversationProvider.missingWalsInSeconds),
                         style: const TextStyle(color: Colors.white, fontSize: 30),
                       ),
                       const SizedBox(height: 12),
                       const Text('of conversations', style: TextStyle(color: Colors.white, fontSize: 18)),
                       const SizedBox(height: 20),
-                      memoryProvider.isSyncing
-                          ? memoryProvider.isFetchingMemories
+                      conversationProvider.isSyncing
+                          ? conversationProvider.isFetchingConversations
                               ? const Padding(
                                   padding: EdgeInsets.all(8.0),
                                   child: Row(
@@ -361,17 +361,18 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     textAlign: TextAlign.center,
                                   ),
                                 )
-                          : memoryProvider.syncCompleted && memoryProvider.syncedMemoriesPointers.isNotEmpty
+                          : conversationProvider.syncCompleted &&
+                                  conversationProvider.syncedConversationsPointers.isNotEmpty
                               ? Column(
                                   children: [
                                     const Text(
-                                      'Memories Synced Successfully 🎉',
+                                      'Conversations Synced Successfully 🎉',
                                       style: TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                     const SizedBox(
                                       height: 18,
                                     ),
-                                    (memoryProvider.syncedMemoriesPointers.isNotEmpty)
+                                    (conversationProvider.syncedConversationsPointers.isNotEmpty)
                                         ? Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                             decoration: BoxDecoration(
@@ -388,10 +389,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                             ),
                                             child: TextButton(
                                               onPressed: () {
-                                                routeToPage(context, const SyncedMemoriesPage());
+                                                routeToPage(context, const SyncedConversationsPage());
                                               },
                                               child: const Text(
-                                                'View Synced Memories',
+                                                'View Synced Conversations',
                                                 style: TextStyle(color: Colors.white, fontSize: 16),
                                               ),
                                             ),
@@ -404,7 +405,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
-                WalsListWidget(wals: memoryProvider.missingWals),
+                WalsListWidget(wals: conversationProvider.missingWals),
                 const SliverToBoxAdapter(child: SizedBox(height: 50)),
               ],
             ),

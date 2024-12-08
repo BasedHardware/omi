@@ -2,39 +2,39 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:tuple/tuple.dart';
 
-class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   AppProvider? appProvider;
-  MemoryProvider? memoryProvider;
+  ConversationProvider? conversationProvider;
 
-  // late ServerMemory memory;
+  // late ServerConversation memory;
 
-  int memoryIdx = 0;
+  int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
   int selectedTab = 0;
   bool isLoading = false;
-  bool loadingReprocessMemory = false;
-  String reprocessMemoryId = '';
+  bool loadingReprocessConversation = false;
+  String reprocessConversationId = '';
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   List<App> appsList = [];
 
-  Structured get structured => memoryProvider!.groupedMemories[selectedDate]![memoryIdx].structured;
+  Structured get structured => conversationProvider!.groupedConversations[selectedDate]![conversationIdx].structured;
 
-  ServerMemory get memory => memoryProvider!.groupedMemories[selectedDate]![memoryIdx];
+  ServerConversation get conversation => conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
   List<bool> appResponseExpanded = [];
 
   TextEditingController? titleController;
@@ -46,7 +46,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
 
   // bool hasAudioRecording = false;
 
-  List<MemoryPhoto> photos = [];
+  List<ConversationPhoto> photos = [];
   List<Tuple2<String, String>> photosData = [];
 
   bool displayDevToolsInSheet = false;
@@ -84,8 +84,8 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void setProviders(AppProvider provider, MemoryProvider memoryProvider) {
-    this.memoryProvider = memoryProvider;
+  void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
+    this.conversationProvider = conversationProvider;
     appProvider = provider;
     notifyListeners();
   }
@@ -100,49 +100,49 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  updateReprocessMemoryLoadingState(bool loading) {
-    loadingReprocessMemory = loading;
+  updateReprocessConversationLoadingState(bool loading) {
+    loadingReprocessConversation = loading;
     notifyListeners();
   }
 
-  void updateReprocessMemoryId(String id) {
-    reprocessMemoryId = id;
+  void updateReprocessConversationId(String id) {
+    reprocessConversationId = id;
     notifyListeners();
   }
 
-  void updateMemory(int memIdx, DateTime date) {
-    memoryIdx = memIdx;
+  void updateConversation(int memIdx, DateTime date) {
+    conversationIdx = memIdx;
     selectedDate = date;
-    appResponseExpanded = List.filled(memory.appResults.length, false);
+    appResponseExpanded = List.filled(conversation.appResults.length, false);
     notifyListeners();
   }
 
   void updateEventState(bool state, int i) {
-    memory.structured.events[i].created = state;
+    conversation.structured.events[i].created = state;
     notifyListeners();
   }
 
   void updateActionItemState(bool state, int i) {
-    memory.structured.actionItems[i].completed = state;
+    conversation.structured.actionItems[i].completed = state;
     notifyListeners();
   }
 
   List<ActionItem> deletedActionItems = [];
 
   void deleteActionItem(int i) {
-    deletedActionItems.add(memory.structured.actionItems[i]);
-    memory.structured.actionItems.removeAt(i);
+    deletedActionItems.add(conversation.structured.actionItems[i]);
+    conversation.structured.actionItems.removeAt(i);
     notifyListeners();
   }
 
   void undoDeleteActionItem(int idx) {
-    memory.structured.actionItems.insert(idx, deletedActionItems.removeLast());
+    conversation.structured.actionItems.insert(idx, deletedActionItems.removeLast());
     notifyListeners();
   }
 
   void deleteActionItemPermanently(ActionItem item, int itemIdx) {
     deletedActionItems.removeWhere((element) => element == item);
-    deleteMemoryActionItem(memory.id, item);
+    deleteConversationActionItem(conversation.id, item);
     notifyListeners();
   }
 
@@ -151,7 +151,7 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  bool hasMemorySummaryRatingSet = false;
+  bool hasConversationSummaryRatingSet = false;
   Timer? _ratingTimer;
   bool showRatingUI = false;
 
@@ -160,52 +160,52 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  void setMemoryRating(int value) {
-    setMemorySummaryRating(memory.id, value);
-    hasMemorySummaryRatingSet = true;
+  void setConversationRating(int value) {
+    setConversationSummaryRating(conversation.id, value);
+    hasConversationSummaryRatingSet = true;
     setShowRatingUi(false);
   }
 
-  Future initMemory() async {
+  Future initConversation() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
     _ratingTimer?.cancel();
     showRatingUI = false;
-    hasMemorySummaryRatingSet = false;
+    hasConversationSummaryRatingSet = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
 
-    titleController!.text = memory.structured.title;
+    titleController!.text = conversation.structured.title;
     titleFocusNode!.addListener(() {
       print('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
-        memory.structured.title = titleController!.text;
-        updateMemoryTitle(memory.id, titleController!.text);
+        conversation.structured.title = titleController!.text;
+        updateConversationTitle(conversation.id, titleController!.text);
       }
     });
 
     photos = [];
-    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(memory.transcriptSegments);
-    if (memory.source == MemorySource.openglass) {
-      await getMemoryPhotos(memory.id).then((value) async {
+    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
+    if (conversation.source == ConversationSource.openglass) {
+      await getConversationPhotos(conversation.id).then((value) async {
         photos = value;
         await populatePhotosData();
       });
-    } else if (memory.source == MemorySource.friend) {
+    } else if (conversation.source == ConversationSource.friend) {
       // await hasMemoryRecording(memory.id).then((value) {
       //   hasAudioRecording = value;
       // });
     }
     appsList = appProvider!.apps;
-    if (!memory.discarded) {
-      getHasMemorySummaryRating(memory.id).then((value) {
-        hasMemorySummaryRatingSet = value;
+    if (!conversation.discarded) {
+      getHasConversationSummaryRating(conversation.id).then((value) {
+        hasConversationSummaryRatingSet = value;
         notifyListeners();
-        if (!hasMemorySummaryRatingSet) {
+        if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            setMemorySummaryRating(memory.id, -1); // set -1 to indicate is was shown
+            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });
@@ -217,45 +217,45 @@ class MemoryDetailProvider extends ChangeNotifier with MessageNotifierMixin {
     notifyListeners();
   }
 
-  Future<bool> reprocessMemory() async {
-    debugPrint('_reProcessMemory');
-    updateReprocessMemoryLoadingState(true);
-    updateReprocessMemoryId(memory.id);
+  Future<bool> reprocessConversation() async {
+    debugPrint('_reProcessConversation');
+    updateReprocessConversationLoadingState(true);
+    updateReprocessConversationId(conversation.id);
     try {
-      var updatedMemory = await reProcessMemoryServer(memory.id);
-      MixpanelManager().reProcessMemory(memory);
-      updateReprocessMemoryLoadingState(false);
-      updateReprocessMemoryId('');
-      if (updatedMemory == null) {
+      var updatedConversation = await reProcessConversationServer(conversation.id);
+      MixpanelManager().reProcessConversation(conversation);
+      updateReprocessConversationLoadingState(false);
+      updateReprocessConversationId('');
+      if (updatedConversation == null) {
         notifyError('REPROCESS_FAILED');
         notifyListeners();
         return false;
       } else {
-        memoryProvider!.updateMemory(updatedMemory);
-        SharedPreferencesUtil().modifiedMemoryDetails = updatedMemory;
+        conversationProvider!.updateConversation(updatedConversation);
+        SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
         notifyInfo('REPROCESS_SUCCESS');
         notifyListeners();
         return true;
       }
     } catch (err, stacktrace) {
       print(err);
-      var memoryReporting = MixpanelManager().getMemoryEventProperties(memory);
+      var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
       CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
-        'memory_transcript_length': memoryReporting['transcript_length'].toString(),
-        'memory_transcript_word_count': memoryReporting['transcript_word_count'].toString(),
+        'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
+        'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
       });
       notifyError('REPROCESS_FAILED');
-      updateReprocessMemoryLoadingState(false);
-      updateReprocessMemoryId('');
+      updateReprocessConversationLoadingState(false);
+      updateReprocessConversationId('');
       notifyListeners();
       return false;
     }
   }
 
-  void unassignMemoryTranscriptSegment(String memoryId, int segmentIdx) {
-    memory.transcriptSegments[segmentIdx].isUser = false;
-    memory.transcriptSegments[segmentIdx].personId = null;
-    assignMemoryTranscriptSegment(memoryId, segmentIdx);
+  void unassignConversationTranscriptSegment(String conversationId, int segmentIdx) {
+    conversation.transcriptSegments[segmentIdx].isUser = false;
+    conversation.transcriptSegments[segmentIdx].personId = null;
+    assignConversationTranscriptSegment(conversationId, segmentIdx);
     notifyListeners();
   }
 }

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memories/sync_page.dart';
+import 'package:friend_private/pages/conversations/sync_page.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';

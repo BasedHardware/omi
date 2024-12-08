@@ -9,7 +9,7 @@ abstract class ISocketService {
 
   void stop();
 
-  Future<TranscriptSegmentSocketService?> memory(
+  Future<TranscriptSegmentSocketService?> conversation(
       {required BleAudioCodec codec, required int sampleRate, String language = defaultLanguage, bool force = false});
 
   Future<TranscriptSegmentSocketService?> speechProfile(
@@ -54,7 +54,7 @@ class SocketServicePool extends ISocketService {
       // new socket
       await _socket?.stop();
 
-      _socket = MemoryTranscriptSegmentSocketService.create(sampleRate, codec, language);
+      _socket = ConversationTranscriptSegmentSocketService.create(sampleRate, codec, language);
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
         return null;
@@ -69,12 +69,12 @@ class SocketServicePool extends ISocketService {
   }
 
   @override
-  Future<TranscriptSegmentSocketService?> memory(
+  Future<TranscriptSegmentSocketService?> conversation(
       {required BleAudioCodec codec,
       required int sampleRate,
       String language = defaultLanguage,
       bool force = false}) async {
-    debugPrint("socket memory > $codec $sampleRate $force");
+    debugPrint("socket conversation > $codec $sampleRate $force");
     return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force);
   }
 

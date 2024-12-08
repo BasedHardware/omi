@@ -1,6 +1,6 @@
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/fact.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
@@ -85,13 +85,13 @@ class MixpanelManager {
   void settingsSaved({
     bool hasGCPCredentials = false,
     bool hasGCPBucketName = false,
-    bool hasWebhookMemoryCreated = false,
+    bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
   }) =>
       track('Developer Settings Saved', properties: {
         'has_gcp_credentials': hasGCPCredentials,
         'has_gcp_bucket_name': hasGCPBucketName,
-        'has_webhook_memory_created': hasWebhookMemoryCreated,
+        'has_webhook_memory_created': hasWebhookConversationCreated,
         'has_webhook_transcript_received': hasWebhookTranscriptReceived,
       });
 
@@ -119,8 +119,8 @@ class MixpanelManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
-  void appResultExpanded(ServerMemory memory, String appId) {
-    track('App Result Expanded', properties: getMemoryEventProperties(memory)..['app_id'] = appId);
+  void appResultExpanded(ServerConversation conversation, String appId) {
+    track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
 
   void recordingLanguageChanged(String language) {
@@ -184,30 +184,31 @@ class MixpanelManager {
     };
   }
 
-  Map<String, dynamic> getMemoryEventProperties(ServerMemory memory) {
-    var properties = _getTranscriptProperties(memory.getTranscript());
-    int hoursAgo = DateTime.now().difference(memory.createdAt).inHours;
+  Map<String, dynamic> getConversationEventProperties(ServerConversation convo) {
+    var properties = _getTranscriptProperties(convo.getTranscript());
+    int hoursAgo = DateTime.now().difference(convo.createdAt).inHours;
     properties['memory_hours_since_creation'] = hoursAgo;
-    properties['memory_id'] = memory.id;
-    properties['memory_discarded'] = memory.discarded;
+    properties['memory_id'] = convo.id;
+    properties['memory_discarded'] = convo.discarded;
     return properties;
   }
 
-  void memoryCreated(ServerMemory memory) {
-    var properties = getMemoryEventProperties(memory);
-    properties['memory_result'] = memory.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = memory.structured.actionItems.length;
+  void conversationCreated(ServerConversation conversation) {
+    var properties = getConversationEventProperties(conversation);
+    properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
+    properties['action_items_count'] = conversation.structured.actionItems.length;
     properties['transcript_language'] = _preferences.recordingsLanguage;
     track('Memory Created', properties: properties);
   }
 
-  void memoryListItemClicked(ServerMemory memory, int idx) =>
-      track('Memory List Item Clicked', properties: getMemoryEventProperties(memory));
+  void conversationListItemClicked(ServerConversation conversation, int idx) =>
+      track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
 
-  void memoryShareButtonClick(ServerMemory memory) =>
-      track('Memory Share Button Clicked', properties: getMemoryEventProperties(memory));
+  void conversationShareButtonClick(ServerConversation conversation) =>
+      track('Memory Share Button Clicked', properties: getConversationEventProperties(conversation));
 
-  void memoryDeleted(ServerMemory memory) => track('Memory Deleted', properties: getMemoryEventProperties(memory));
+  void conversationDeleted(ServerConversation conversation) =>
+      track('Memory Deleted', properties: getConversationEventProperties(conversation));
 
   void chatMessageSent(String message) => track('Chat Message Sent',
       properties: {'message_length': message.length, 'message_word_count': message.split(' ').length});
@@ -217,13 +218,13 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
-  void chatMessageMemoryClicked(ServerMemory memory) =>
-      track('Chat Message Memory Clicked', properties: getMemoryEventProperties(memory));
+  void chatMessageConversationClicked(ServerConversation conversation) =>
+      track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
-  void addManualMemoryClicked() => track('Add Manual Memory Clicked');
+  void addManualConversationClicked() => track('Add Manual Memory Clicked');
 
-  void manualMemoryCreated(ServerMemory memory) =>
-      track('Manual Memory Created', properties: getMemoryEventProperties(memory));
+  void manualConversationCreated(ServerConversation conversation) =>
+      track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
@@ -231,7 +232,8 @@ class MixpanelManager {
     setUserProperty('Age Range', ageRange);
   }
 
-  void reProcessMemory(ServerMemory memory) => track('Re-process Memory', properties: getMemoryEventProperties(memory));
+  void reProcessConversation(ServerConversation conversation) =>
+      track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
     track('Developer Mode Enabled');
@@ -253,17 +255,17 @@ class MixpanelManager {
 
   void supportContacted() => track('Support Contacted');
 
-  void copiedMemoryDetails(ServerMemory memory, {String source = ''}) =>
-      track('Copied Memory Detail $source'.trim(), properties: getMemoryEventProperties(memory));
+  void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
+      track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
 
-  void checkedActionItem(ServerMemory memory, int idx) =>
-      track('Checked Action Item', properties: getMemoryEventProperties(memory));
+  void checkedActionItem(ServerConversation conversation, int idx) =>
+      track('Checked Action Item', properties: getConversationEventProperties(conversation));
 
-  void uncheckedActionItem(ServerMemory memory, int idx) =>
-      track('Unchecked Action Item', properties: getMemoryEventProperties(memory));
+  void uncheckedActionItem(ServerConversation conversation, int idx) =>
+      track('Unchecked Action Item', properties: getConversationEventProperties(conversation));
 
-  void deletedActionItem(ServerMemory memory) =>
-      track('Deleted Action Item', properties: getMemoryEventProperties(memory));
+  void deletedActionItem(ServerConversation conversation) =>
+      track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
   void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
 

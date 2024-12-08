@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
@@ -163,7 +163,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerMemory> memories = await getMemories(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories =
+                                await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/memories.json');
@@ -296,12 +297,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     height: 10,
                   ),
                   ToggleSectionWidget(
-                    isSectionEnabled: provider.memoryEventsToggled,
-                    sectionTitle: 'Memory Events',
-                    sectionDescription: 'Triggers when a new memory is created.',
+                    isSectionEnabled: provider.conversationEventsToggled,
+                    sectionTitle: 'Conversation Events',
+                    sectionDescription: 'Triggers when a new conversation is created.',
                     options: [
                       TextField(
-                        controller: provider.webhookOnMemoryCreated,
+                        controller: provider.webhookOnConversationCreated,
                         obscureText: false,
                         autocorrect: false,
                         enabled: true,
@@ -311,7 +312,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    onSectionEnabledChanged: provider.onMemoryEventsToggled,
+                    onSectionEnabledChanged: provider.onConversationEventsToggled,
                   ),
                   ToggleSectionWidget(
                       isSectionEnabled: provider.transcriptsToggled,

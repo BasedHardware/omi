@@ -25,7 +25,6 @@ dependencies:
   lottie: ^3.1.2
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
-  flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
@@ -97,6 +96,7 @@ dependencies:
   image_picker: ^1.1.2
   timeago: ^3.7.0
   app_links: ^6.3.2
+  flutter_svg: ^2.0.16
 
 
 dependency_overrides:

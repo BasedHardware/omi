@@ -17,14 +17,14 @@ enum MessageType {
   }
 }
 
-class MessageMemoryStructured {
+class MessageConversationStructured {
   String title;
   String emoji;
 
-  MessageMemoryStructured(this.title, this.emoji);
+  MessageConversationStructured(this.title, this.emoji);
 
-  static MessageMemoryStructured fromJson(Map<String, dynamic> json) {
-    return MessageMemoryStructured(json['title'], json['emoji']);
+  static MessageConversationStructured fromJson(Map<String, dynamic> json) {
+    return MessageConversationStructured(json['title'], json['emoji']);
   }
 
   Map<String, dynamic> toJson() {
@@ -35,18 +35,18 @@ class MessageMemoryStructured {
   }
 }
 
-class MessageMemory {
+class MessageConversation {
   String id;
   DateTime createdAt;
-  MessageMemoryStructured structured;
+  MessageConversationStructured structured;
 
-  MessageMemory(this.id, this.createdAt, this.structured);
+  MessageConversation(this.id, this.createdAt, this.structured);
 
-  static MessageMemory fromJson(Map<String, dynamic> json) {
-    return MessageMemory(
+  static MessageConversation fromJson(Map<String, dynamic> json) {
+    return MessageConversation(
       json['id'],
       DateTime.parse(json['created_at']).toLocal(),
-      MessageMemoryStructured.fromJson(json['structured']),
+      MessageConversationStructured.fromJson(json['structured']),
     );
   }
 
@@ -69,7 +69,7 @@ class ServerMessage {
   String? appId;
   bool fromIntegration;
 
-  List<MessageMemory> memories;
+  List<MessageConversation> memories;
   bool askForNps = false;
 
   ServerMessage(
@@ -93,7 +93,7 @@ class ServerMessage {
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
-      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageMemory.fromJson(m)).toList(),
+      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? false,
     );
   }

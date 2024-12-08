@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/widgets/transcript.dart';
 
 class CompareTranscriptsPage extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation conversation;
 
-  const CompareTranscriptsPage({super.key, required this.memory});
+  const CompareTranscriptsPage({super.key, required this.conversation});
 
   @override
   State<CompareTranscriptsPage> createState() => _CompareTranscriptsPageState();
@@ -18,7 +18,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
 
   @override
   void initState() {
-    getMemoryTranscripts(widget.memory.id).then((result) {
+    getConversationTranscripts(widget.conversation.id).then((result) {
       setState(() {
         transcripts = result;
       });
@@ -73,7 +73,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             horizontalMargin: false,
                             topMargin: false,
                             canDisplaySeconds: true,
-                            isMemoryDetail: true,
+                            isConversationDetail: true,
                           )
                         ],
                       ),
@@ -85,7 +85,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             horizontalMargin: false,
                             topMargin: false,
                             canDisplaySeconds: true,
-                            isMemoryDetail: true,
+                            isConversationDetail: true,
                           )
                         ],
                       ),
@@ -97,7 +97,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             horizontalMargin: false,
                             topMargin: false,
                             canDisplaySeconds: true,
-                            isMemoryDetail: true,
+                            isConversationDetail: true,
                           )
                         ],
                       ),
@@ -144,7 +144,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             horizontalMargin: false,
                             topMargin: false,
                             canDisplaySeconds: true,
-                            isMemoryDetail: true,
+                            isConversationDetail: true,
                           )
                         ],
                       )

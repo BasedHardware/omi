@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/pages/memory_detail/widgets.dart';
+import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -19,19 +19,19 @@ import 'package:friend_private/widgets/transcript.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
-import 'memory_detail_provider.dart';
+import 'conversation_detail_provider.dart';
 
-class MemoryDetailPage extends StatefulWidget {
-  final ServerMemory memory;
+class ConversationDetailPage extends StatefulWidget {
+  final ServerConversation conversation;
   final bool isFromOnboarding;
 
-  const MemoryDetailPage({super.key, this.isFromOnboarding = false, required this.memory});
+  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
 
   @override
-  State<MemoryDetailPage> createState() => _MemoryDetailPageState();
+  State<ConversationDetailPage> createState() => _ConversationDetailPageState();
 }
 
-class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProviderStateMixin {
+class _ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -43,8 +43,8 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      var provider = Provider.of<MemoryDetailProvider>(context, listen: false);
-      await provider.initMemory();
+      var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      await provider.initConversation();
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -70,17 +70,17 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
       child: DefaultTabController(
         length: 2,
         initialIndex: 1,
-        child: MessageListener<MemoryDetailProvider>(
+        child: MessageListener<ConversationDetailProvider>(
           showError: (error) {
             if (error == 'REPROCESS_FAILED') {
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error while processing memory. Please try again later.')));
+                  const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
             }
           },
           showInfo: (info) {
             if (info == 'REPROCESS_SUCCESS') {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Memory processed! 🚀', style: TextStyle(color: Colors.white))),
+                const SnackBar(content: Text('Conversation processed! 🚀', style: TextStyle(color: Colors.white))),
               );
             }
           },
@@ -90,7 +90,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
             appBar: AppBar(
               automaticallyImplyLeading: false,
               backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+              title: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
                 return Row(
                   mainAxisSize: MainAxisSize.max,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -135,7 +135,7 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                 );
               }),
             ),
-            floatingActionButton: Selector<MemoryDetailProvider, int>(
+            floatingActionButton: Selector<ConversationDetailProvider, int>(
                 selector: (context, provider) => provider.selectedTab,
                 builder: (context, selectedTab, child) {
                   return selectedTab == 0
@@ -146,13 +146,13 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                               borderRadius: BorderRadius.all(Radius.circular(32)),
                               side: BorderSide(color: Colors.grey, width: 1)),
                           onPressed: () {
-                            var provider = Provider.of<MemoryDetailProvider>(context, listen: false);
-                            Clipboard.setData(ClipboardData(text: provider.memory.getTranscript(generate: true)));
+                            var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                            Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                               content: Text('Transcript copied to clipboard'),
                               duration: Duration(seconds: 1),
                             ));
-                            MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Transcript');
+                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
                           },
                           child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                         )
@@ -164,19 +164,19 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                   indicatorSize: TabBarIndicatorSize.label,
                   isScrollable: false,
                   onTap: (value) {
-                    context.read<MemoryDetailProvider>().updateSelectedTab(value);
+                    context.read<ConversationDetailProvider>().updateSelectedTab(value);
                   },
                   padding: EdgeInsets.zero,
                   indicatorPadding: EdgeInsets.zero,
                   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                   tabs: [
-                    Selector<MemoryDetailProvider, MemorySource?>(
-                        selector: (context, provider) => provider.memory.source,
-                        builder: (context, memorySource, child) {
+                    Selector<ConversationDetailProvider, ConversationSource?>(
+                        selector: (context, provider) => provider.conversation.source,
+                        builder: (context, conversationSource, child) {
                           return Tab(
-                            text: memorySource == MemorySource.openglass
+                            text: conversationSource == ConversationSource.openglass
                                 ? 'Photos'
-                                : memorySource == MemorySource.screenpipe
+                                : conversationSource == ConversationSource.screenpipe
                                     ? 'Raw Data'
                                     : 'Transcript',
                           );
@@ -192,12 +192,12 @@ class _MemoryDetailPageState extends State<MemoryDetailPage> with TickerProvider
                       return TabBarView(
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
-                          Selector<MemoryDetailProvider, MemorySource?>(
-                            selector: (context, provider) => provider.memory.source,
+                          Selector<ConversationDetailProvider, ConversationSource?>(
+                            selector: (context, provider) => provider.conversation.source,
                             builder: (context, source, child) {
                               return ListView(
                                 shrinkWrap: true,
-                                children: source == MemorySource.openglass
+                                children: source == ConversationSource.openglass
                                     ? [const PhotosGridComponent(), const SizedBox(height: 32)]
                                     : [const TranscriptWidgets()],
                               );
@@ -225,9 +225,9 @@ class SummaryTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: Selector<MemoryDetailProvider, Tuple3<bool, bool, Function(int)>>(
+      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
         selector: (context, provider) =>
-            Tuple3(provider.memory.discarded, provider.showRatingUI, provider.setMemoryRating),
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
         builder: (context, data, child) {
           return Stack(
             children: [
@@ -301,13 +301,13 @@ class TranscriptWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
+    return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return ListView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
+            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
             // provider.memory.isPostprocessing()
             //     ? Container(
             //         padding: const EdgeInsets.all(16),
@@ -319,10 +319,10 @@ class TranscriptWidgets extends StatelessWidget {
             //             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3)),
             //       )
             //     : const SizedBox(height: 0),
-            SizedBox(height: provider.memory.transcriptSegments.isEmpty ? 16 : 0),
-            provider.memory.transcriptSegments.isEmpty
+            SizedBox(height: provider.conversation.transcriptSegments.isEmpty ? 16 : 0),
+            provider.conversation.transcriptSegments.isEmpty
                 ? ExpandableTextWidget(
-                    text: (provider.memory.externalIntegration?.text ?? '').decodeString,
+                    text: (provider.conversation.externalIntegration?.text ?? '').decodeString,
                     maxLines: 10000,
                     linkColor: Colors.grey.shade300,
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
@@ -332,11 +332,11 @@ class TranscriptWidgets extends StatelessWidget {
                     isExpanded: provider.isTranscriptExpanded,
                   )
                 : TranscriptWidget(
-                    segments: provider.memory.transcriptSegments,
+                    segments: provider.conversation.transcriptSegments,
                     horizontalMargin: false,
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
-                    isMemoryDetail: true,
+                    isConversationDetail: true,
                     editSegment: (_) {},
                     // editSegment: !provider.memory.isPostprocessing()
                     //     ? (i) {
@@ -384,7 +384,7 @@ class EditSegmentWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -407,7 +407,7 @@ class EditSegmentWidget extends StatelessWidget {
                         TextButton(
                           onPressed: () {
                             MixpanelManager().unassignedSegment();
-                            provider.unassignMemoryTranscriptSegment(provider.memory.id, segmentIdx);
+                            provider.unassignConversationTranscriptSegment(provider.conversation.id, segmentIdx);
                             // setModalState(() {
                             //   personId = null;
                             //   isUserSegment = false;
@@ -468,17 +468,17 @@ class EditSegmentWidget extends StatelessWidget {
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),
-                    value: provider.memory.transcriptSegments[segmentIdx].isUser,
+                    value: provider.conversation.transcriptSegments[segmentIdx].isUser,
                     checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                     onChanged: (bool? value) async {
                       if (provider.editSegmentLoading) return;
                       // setModalState(() => loading = true);
                       provider.toggleEditSegmentLoading(true);
                       MixpanelManager().assignedSegment('User');
-                      provider.memory.transcriptSegments[segmentIdx].isUser = true;
-                      provider.memory.transcriptSegments[segmentIdx].personId = null;
-                      bool result = await assignMemoryTranscriptSegment(
-                        provider.memory.id,
+                      provider.conversation.transcriptSegments[segmentIdx].isUser = true;
+                      provider.conversation.transcriptSegments[segmentIdx].personId = null;
+                      bool result = await assignConversationTranscriptSegment(
+                        provider.conversation.id,
                         segmentIdx,
                         isUser: true,
                         useForSpeechTraining: SharedPreferencesUtil().hasSpeakerProfile,
@@ -501,16 +501,16 @@ class EditSegmentWidget extends StatelessWidget {
                   for (var person in people)
                     CheckboxListTile(
                       title: Text('${person.name}\'s'),
-                      value: provider.memory.transcriptSegments[segmentIdx].personId == person.id,
+                      value: provider.conversation.transcriptSegments[segmentIdx].personId == person.id,
                       checkboxShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                       onChanged: (bool? value) async {
                         if (provider.editSegmentLoading) return;
                         provider.toggleEditSegmentLoading(true);
                         MixpanelManager().assignedSegment('User Person');
-                        provider.memory.transcriptSegments[segmentIdx].isUser = false;
-                        provider.memory.transcriptSegments[segmentIdx].personId = person.id;
-                        bool result =
-                            await assignMemoryTranscriptSegment(provider.memory.id, segmentIdx, personId: person.id);
+                        provider.conversation.transcriptSegments[segmentIdx].isUser = false;
+                        provider.conversation.transcriptSegments[segmentIdx].personId = person.id;
+                        bool result = await assignConversationTranscriptSegment(provider.conversation.id, segmentIdx,
+                            personId: person.id);
                         // TODO: make this un-closable or in a way that they receive the result
                         try {
                           provider.toggleEditSegmentLoading(false);

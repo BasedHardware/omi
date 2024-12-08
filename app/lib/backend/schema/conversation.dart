@@ -9,49 +9,52 @@ import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class CreateMemoryResponse {
+class CreateConversationResponse {
   final List<ServerMessage> messages;
-  final ServerMemory? memory;
+  final ServerConversation? conversation;
 
-  CreateMemoryResponse({required this.messages, required this.memory});
+  CreateConversationResponse({required this.messages, required this.conversation});
 
-  factory CreateMemoryResponse.fromJson(Map<String, dynamic> json) {
-    return CreateMemoryResponse(
+  factory CreateConversationResponse.fromJson(Map<String, dynamic> json) {
+    return CreateConversationResponse(
       messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
-      memory: json['memory'] != null ? ServerMemory.fromJson(json['memory']) : null,
+      conversation: json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null,
     );
   }
 }
 
-enum MemorySource { friend, workflow, openglass, screenpipe, sdcard }
+enum ConversationSource { friend, workflow, openglass, screenpipe, sdcard }
 
-class MemoryExternalData {
+class ConversationExternalData {
   final String text;
 
-  MemoryExternalData({required this.text});
+  ConversationExternalData({required this.text});
 
-  factory MemoryExternalData.fromJson(Map<String, dynamic> json) => MemoryExternalData(text: json['text'] ?? '');
+  factory ConversationExternalData.fromJson(Map<String, dynamic> json) =>
+      ConversationExternalData(text: json['text'] ?? '');
 
   Map<String, dynamic> toJson() => {'text': text};
 }
 
-enum MemoryPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
+enum ConversationPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
 
-enum MemoryPostProcessingModel { fal_whisperx, custom_whisperx }
+enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
 
-enum MemoryStatus { in_progress, processing, completed, failed }
+enum ConversationStatus { in_progress, processing, completed, failed }
 
-class MemoryPostProcessing {
-  final MemoryPostProcessingStatus status;
-  final MemoryPostProcessingModel? model;
+class ConversationPostProcessing {
+  final ConversationPostProcessingStatus status;
+  final ConversationPostProcessingModel? model;
   final String? failReason;
 
-  MemoryPostProcessing({required this.status, required this.model, this.failReason});
+  ConversationPostProcessing({required this.status, required this.model, this.failReason});
 
-  factory MemoryPostProcessing.fromJson(Map<String, dynamic> json) {
-    return MemoryPostProcessing(
-      status: MemoryPostProcessingStatus.values.asNameMap()[json['status']] ?? MemoryPostProcessingStatus.in_progress,
-      model: MemoryPostProcessingModel.values.asNameMap()[json['model']] ?? MemoryPostProcessingModel.fal_whisperx,
+  factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
+    return ConversationPostProcessing(
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+          ConversationPostProcessingStatus.in_progress,
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+          ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
   }
@@ -59,7 +62,7 @@ class MemoryPostProcessing {
   toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
 }
 
-enum ServerProcessingMemoryStatus {
+enum ServerProcessingConversationStatus {
   capturing('capturing'),
   processing('processing'),
   done('done'),
@@ -68,15 +71,15 @@ enum ServerProcessingMemoryStatus {
 
   final String value;
 
-  const ServerProcessingMemoryStatus(this.value);
+  const ServerProcessingConversationStatus(this.value);
 
-  static ServerProcessingMemoryStatus valuesFromString(String value) {
-    return ServerProcessingMemoryStatus.values.firstWhereOrNull((e) => e.value == value) ??
-        ServerProcessingMemoryStatus.unknown;
+  static ServerProcessingConversationStatus valuesFromString(String value) {
+    return ServerProcessingConversationStatus.values.firstWhereOrNull((e) => e.value == value) ??
+        ServerProcessingConversationStatus.unknown;
   }
 }
 
-class ServerMemory {
+class ServerConversation {
   final String id;
   final DateTime createdAt;
   final DateTime? startedAt;
@@ -85,22 +88,22 @@ class ServerMemory {
   final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
   final Geolocation? geolocation;
-  final List<MemoryPhoto> photos;
+  final List<ConversationPhoto> photos;
 
   final List<AppResponse> appResults;
-  final MemorySource? source;
+  final ConversationSource? source;
   final String? language; // applies to Friend only
 
-  final MemoryExternalData? externalIntegration;
+  final ConversationExternalData? externalIntegration;
 
-  MemoryStatus status;
+  ConversationStatus status;
   bool discarded;
   final bool deleted;
 
   // local label
   bool isNew = false;
 
-  ServerMemory({
+  ServerConversation({
     required this.id,
     required this.createdAt,
     required this.structured,
@@ -115,11 +118,11 @@ class ServerMemory {
     this.source,
     this.language,
     this.externalIntegration,
-    this.status = MemoryStatus.completed,
+    this.status = ConversationStatus.completed,
   });
 
-  factory ServerMemory.fromJson(Map<String, dynamic> json) {
-    return ServerMemory(
+  factory ServerConversation.fromJson(Map<String, dynamic> json) {
+    return ServerConversation(
       id: json['id'],
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       structured: Structured.fromJson(json['structured']),
@@ -131,15 +134,17 @@ class ServerMemory {
       appResults:
           ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
-      photos: (json['photos'] as List<dynamic>).map((photo) => MemoryPhoto.fromJson(photo)).toList(),
+      photos: (json['photos'] as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList(),
       discarded: json['discarded'] ?? false,
-      source: json['source'] != null ? MemorySource.values.asNameMap()[json['source']] : MemorySource.friend,
+      source:
+          json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.friend,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      externalIntegration: json['external_data'] != null ? MemoryExternalData.fromJson(json['external_data']) : null,
+      externalIntegration:
+          json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
       status: json['status'] != null
-          ? MemoryStatus.values.asNameMap()[json['status']] ?? MemoryStatus.completed
-          : MemoryStatus.completed,
+          ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
+          : ConversationStatus.completed,
     );
   }
 
@@ -164,25 +169,25 @@ class ServerMemory {
   }
 
   String getTag() {
-    if (source == MemorySource.screenpipe) return 'Screenpipe';
-    if (source == MemorySource.openglass) return 'Openglass';
-    if (source == MemorySource.sdcard) return 'SD Card';
+    if (source == ConversationSource.screenpipe) return 'Screenpipe';
+    if (source == ConversationSource.openglass) return 'Openglass';
+    if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 
   Color getTagTextColor() {
-    if (source == MemorySource.screenpipe) return Colors.deepPurple;
+    if (source == ConversationSource.screenpipe) return Colors.deepPurple;
     return Colors.white;
   }
 
   Color getTagColor() {
-    if (source == MemorySource.screenpipe) return Colors.white;
+    if (source == ConversationSource.screenpipe) return Colors.white;
     return Colors.grey.shade800;
   }
 
   VoidCallback? onTagPressed(BuildContext context) {
-    if (source == MemorySource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
+    if (source == ConversationSource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
     return null;
   }
 
@@ -198,47 +203,48 @@ class ServerMemory {
 }
 
 class SyncLocalFilesResponse {
-  List<String> newMemoryIds = [];
-  List<String> updatedMemoryIds = [];
+  List<String> newConversationIds = [];
+  List<String> updatedConversationIds = [];
 
   SyncLocalFilesResponse({
-    required this.newMemoryIds,
-    required this.updatedMemoryIds,
+    required this.newConversationIds,
+    required this.updatedConversationIds,
   });
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
     return SyncLocalFilesResponse(
-      newMemoryIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
-      updatedMemoryIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      newConversationIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      updatedConversationIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
     );
   }
 }
 
-enum SyncedMemoryType { newMemory, updatedMemory }
+enum SyncedConversationType { newConversation, updatedConversation }
 
-class SyncedMemoryPointer {
-  final SyncedMemoryType type;
+class SyncedConversationPointer {
+  final SyncedConversationType type;
   final int index;
   final DateTime key;
-  final ServerMemory memory;
+  final ServerConversation conversation;
 
-  SyncedMemoryPointer({required this.type, required this.index, required this.key, required this.memory});
+  SyncedConversationPointer({required this.type, required this.index, required this.key, required this.conversation});
 
-  factory SyncedMemoryPointer.fromJson(Map<String, dynamic> json) {
-    return SyncedMemoryPointer(
-      type: SyncedMemoryType.values.asNameMap()[json['type']] ?? SyncedMemoryType.newMemory,
+  factory SyncedConversationPointer.fromJson(Map<String, dynamic> json) {
+    return SyncedConversationPointer(
+      type: SyncedConversationType.values.asNameMap()[json['type']] ?? SyncedConversationType.newConversation,
       index: json['index'],
       key: DateTime.parse(json['key']).toLocal(),
-      memory: ServerMemory.fromJson(json['memory']),
+      conversation: ServerConversation.fromJson(json['memory']),
     );
   }
 
-  SyncedMemoryPointer copyWith({SyncedMemoryType? type, int? index, DateTime? key, ServerMemory? memory}) {
-    return SyncedMemoryPointer(
+  SyncedConversationPointer copyWith(
+      {SyncedConversationType? type, int? index, DateTime? key, ServerConversation? conversation}) {
+    return SyncedConversationPointer(
       type: type ?? this.type,
       index: index ?? this.index,
       key: key ?? this.key,
-      memory: memory ?? this.memory,
+      conversation: conversation ?? this.conversation,
     );
   }
 }

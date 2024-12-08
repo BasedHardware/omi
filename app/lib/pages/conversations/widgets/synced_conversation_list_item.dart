@@ -1,34 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
-class SyncedMemoryListItem extends StatefulWidget {
+class SyncedConversationListItem extends StatefulWidget {
   final DateTime date;
-  final int memoryIdx;
-  final ServerMemory memory;
+  final int conversationIdx;
+  final ServerConversation conversation;
   final bool showReprocess;
 
-  const SyncedMemoryListItem({
+  const SyncedConversationListItem({
     super.key,
-    required this.memory,
+    required this.conversation,
     required this.date,
-    required this.memoryIdx,
+    required this.conversationIdx,
     this.showReprocess = false,
   });
 
   @override
-  State<SyncedMemoryListItem> createState() => _SyncedMemoryListItemState();
+  State<SyncedConversationListItem> createState() => _SyncedConversationListItemState();
 }
 
-class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
+class _SyncedConversationListItemState extends State<SyncedConversationListItem> {
   bool isReprocessing = false;
-  late ServerMemory memory;
+  late ServerConversation conversation;
 
   void setReprocessing(bool value) {
     isReprocessing = value;
@@ -38,7 +38,7 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
   @override
   void initState() {
     setState(() {
-      memory = widget.memory;
+      conversation = widget.conversation;
     });
     super.initState();
   }
@@ -50,19 +50,19 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
 
   @override
   Widget build(BuildContext context) {
-    // Is new memory
-    DateTime memorizedAt = memory.createdAt;
-    if (memory.finishedAt != null && memory.finishedAt!.isAfter(memorizedAt)) {
-      memorizedAt = memory.finishedAt!;
+    // Is new conversation
+    DateTime memorizedAt = conversation.createdAt;
+    if (conversation.finishedAt != null && conversation.finishedAt!.isAfter(memorizedAt)) {
+      memorizedAt = conversation.finishedAt!;
     }
 
     return GestureDetector(
       onTap: () async {
-        context.read<MemoryDetailProvider>().updateMemory(widget.memoryIdx, widget.date);
-        Provider.of<MemoryProvider>(context, listen: false).onMemoryTap(widget.memoryIdx);
+        context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+        Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversationIdx);
         routeToPage(
           context,
-          MemoryDetailPage(memory: widget.memory, isFromOnboarding: false),
+          ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: false),
         );
       },
       child: Padding(
@@ -83,33 +83,33 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _getMemoryHeader(),
+                      _getConversationHeader(),
                       const SizedBox(height: 16),
-                      memory.discarded
+                      conversation.discarded
                           ? Text(
-                              memory.transcriptSegments.first.text.decodeString,
+                              conversation.transcriptSegments.first.text.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             )
                           : Text(
-                              memory.structured.title.decodeString,
+                              conversation.structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),
-                      memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+                      conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
                     ],
                   ),
                 ),
-                widget.showReprocess || memory.discarded
+                widget.showReprocess || conversation.discarded
                     ? GestureDetector(
                         onTap: () async {
                           setReprocessing(true);
-                          var mem = await reProcessMemoryServer(memory.id);
+                          var mem = await reProcessConversationServer(conversation.id);
                           if (mem != null) {
                             setState(() {
-                              memory = mem;
+                              conversation = mem;
                             });
-                            context.read<MemoryProvider>().updateSyncedMemory(mem);
+                            context.read<ConversationProvider>().updateSyncedConversation(mem);
                           }
                           setReprocessing(false);
                         },
@@ -143,29 +143,29 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
     );
   }
 
-  _getMemoryHeader() {
+  _getConversationHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          memory.discarded
+          conversation.discarded
               ? const SizedBox.shrink()
-              : Text(memory.structured.getEmoji(),
+              : Text(conversation.structured.getEmoji(),
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-          memory.structured.category.isNotEmpty && !memory.discarded
+          conversation.structured.category.isNotEmpty && !conversation.discarded
               ? const SizedBox(width: 12)
               : const SizedBox.shrink(),
-          memory.structured.category.isNotEmpty
+          conversation.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
-                    color: memory.getTagColor(),
+                    color: conversation.getTagColor(),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
-                    memory.getTag(),
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: memory.getTagTextColor()),
+                    conversation.getTag(),
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: conversation.getTagTextColor()),
                     maxLines: 1,
                   ),
                 )
@@ -175,7 +175,7 @@ class _SyncedMemoryListItemState extends State<SyncedMemoryListItem> {
           ),
           Expanded(
             child: Text(
-              dateTimeFormat('MMM d, h:mm a', memory.startedAt ?? memory.createdAt),
+              dateTimeFormat('MMM d, h:mm a', conversation.startedAt ?? conversation.createdAt),
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
               maxLines: 1,
               textAlign: TextAlign.end,

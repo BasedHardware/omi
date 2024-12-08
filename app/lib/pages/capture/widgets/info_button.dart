@@ -41,9 +41,9 @@ class _InfoButtonState extends State<InfoButton> {
                     ),
                     content: const Text(
                       "Ready to chat? Your transcripts will pop up here as you start talking. "
-                      "If Friend notices you’ve been quiet for 2 minutes, it’ll wrap up "
-                      "the conversation and start crafting your memory. You can find all your "
-                      "treasured moments in the Memories tab!",
+                      "If Omi notices you’ve been quiet for 2 minutes, it’ll wrap up "
+                      "the conversation and start crafting your conversation. You can find all your "
+                      "treasured moments in the Conversations tab!",
                       style: TextStyle(
                         color: Colors.white,
                         height: 1.5,

@@ -106,9 +106,9 @@ class PeopleProvider extends BaseProvider {
   void deletePersonSample(int personIdx, String url) {
     String name = _getFileNameFromUrl(url);
     var parts = name.split('_segment_');
-    String memoryId = parts[0];
+    String conversationId = parts[0];
     int segmentIdx = int.parse(parts[1]);
-    deleteProfileSample(memoryId, segmentIdx, personId: people[personIdx].id);
+    deleteProfileSample(conversationId, segmentIdx, personId: people[personIdx].id);
     people[personIdx].speechSamples!.remove(url);
     SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
     notifyListeners();

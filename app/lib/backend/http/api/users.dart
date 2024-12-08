@@ -221,9 +221,9 @@ Future<bool> deletePerson(String personId) async {
   return response.statusCode == 204;
 }
 
-Future<String> getFollowUpQuestion({String memoryId = '0'}) async {
+Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/joan/$memoryId/followup-question',
+    url: '${Env.apiBaseUrl}v1/joan/$conversationId/followup-question',
     headers: {},
     method: 'GET',
     body: '',
@@ -239,18 +239,17 @@ Future<String> getFollowUpQuestion({String memoryId = '0'}) async {
 
 /*Analytics*/
 
-Future<bool> setMemorySummaryRating(String memoryId, int value, {String? reason}) async {
+Future<bool> setConversationSummaryRating(String conversationId, int value, {String? reason}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$memoryId&value=$value&reason=$reason',
+    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value&reason=$reason',
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setMemorySummaryRating response: ${response.body}');
+  debugPrint('setConversationSummaryRating response: ${response.body}');
   return response.statusCode == 200;
 }
-
 
 Future<bool> setMessageResponseRating(String messageId, int value) async {
   var response = await makeApiCall(
@@ -264,16 +263,15 @@ Future<bool> setMessageResponseRating(String messageId, int value) async {
   return response.statusCode == 200;
 }
 
-
-Future<bool> getHasMemorySummaryRating(String memoryId) async {
+Future<bool> getHasConversationSummaryRating(String conversationId) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$memoryId',
+    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getHasMemorySummaryRating response: ${response.body}');
+  debugPrint('getHasConversationSummaryRating response: ${response.body}');
 
   try {
     var jsonResponse = jsonDecode(response.body);
