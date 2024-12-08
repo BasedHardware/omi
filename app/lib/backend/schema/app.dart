@@ -110,7 +110,7 @@ class ExternalIntegration {
   String getTriggerOnString() {
     switch (triggersOn) {
       case 'memory_creation':
-        return 'Memory Creation';
+        return 'Conversation Creation';
       case 'transcript_processed':
         return 'Transcript Segment Processed (every 30 seconds during conversation)';
       default:
