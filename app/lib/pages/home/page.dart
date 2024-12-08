@@ -9,12 +9,10 @@ import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:friend_private/pages/home/widgets/home_sub_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/apps/page.dart';
-import 'package:friend_private/pages/memories/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
@@ -289,8 +287,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
-                        // OldConversationsPage(),
-                        HomeSubPage(),
+                        ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
                       ],
@@ -411,22 +408,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
                 Row(
                   children: [
-                    // Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
-                    //   if (home.selectedIndex != 0 ||
-                    //       !memoryProvider.hasNonDiscardedConversations ||
-                    //       memoryProvider.isLoadingConversations) {
-                    //     return const SizedBox.shrink();
-                    //   }
-                    //   return IconButton(
-                    //       onPressed: memoryProvider.toggleDiscardConversations,
-                    //       icon: Icon(
-                    //         SharedPreferencesUtil().showDiscardedMemories
-                    //             ? Icons.filter_list_off_sharp
-                    //             : Icons.filter_list,
-                    //         color: Colors.white,
-                    //         size: 24,
-                    //       ));
-                    // }),
+                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
+                      if (home.selectedIndex != 0 ||
+                          !memoryProvider.hasNonDiscardedConversations ||
+                          memoryProvider.isLoadingConversations) {
+                        return const SizedBox.shrink();
+                      }
+                      return IconButton(
+                          onPressed: memoryProvider.toggleDiscardConversations,
+                          icon: Icon(
+                            SharedPreferencesUtil().showDiscardedMemories
+                                ? Icons.filter_list_off_sharp
+                                : Icons.filter_list,
+                            color: Colors.white,
+                            size: 24,
+                          ));
+                    }),
                     IconButton(
                       icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                       onPressed: () async {
