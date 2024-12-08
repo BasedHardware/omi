@@ -30,6 +30,12 @@ def migrate_reviews_from_redis_to_firestore():
             new_app_ref.set(review)
 
 
+def get_user_public_apps_db(uid: str) -> List:
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False), FieldFilter('private', '==', False)]
+    user_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in user_apps]
+
+
 def get_app_by_id_db(app_id: str):
     app_ref = db.collection('plugins_data').document(app_id)
     doc = app_ref.get()

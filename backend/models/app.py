@@ -117,3 +117,22 @@ class UsageHistoryItem(BaseModel):
     memory_id: Optional[str] = None
     timestamp: datetime
     type: UsageHistoryType
+
+
+# ******************************************************
+# ***************** APP REQUEST MODELS *****************
+# ******************************************************
+
+class SubmitAppRequest(BaseModel):
+    name: str
+    private: bool = False
+    approved: bool = False
+    status: str = 'under-review'
+    category: str
+    description: str
+    capabilities: Set[str]
+    memory_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    external_integration: Optional[ExternalIntegration] = None
+    deleted: bool = False
+    proactive_notification: Optional[ProactiveNotification] = None
