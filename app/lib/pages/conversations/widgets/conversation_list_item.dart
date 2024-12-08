@@ -61,7 +61,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
-          MixpanelManager().memoryListItemClicked(widget.conversation, widget.conversationIdx);
+          MixpanelManager().conversationListItemClicked(widget.conversation, widget.conversationIdx);
           context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);

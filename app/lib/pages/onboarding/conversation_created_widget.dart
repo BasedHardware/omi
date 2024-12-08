@@ -83,7 +83,7 @@ class _ConversationCreatedWidgetState extends State<ConversationCreatedWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 onPressed: () {
                   // updateMemoryDetailProvider(context, provider.memory!);
-                  MixpanelManager().memoryListItemClicked(provider.conversation!, 0);
+                  MixpanelManager().conversationListItemClicked(provider.conversation!, 0);
                   routeToPage(
                       context, ConversationDetailPage(conversation: provider.conversation!, isFromOnboarding: true));
                 },

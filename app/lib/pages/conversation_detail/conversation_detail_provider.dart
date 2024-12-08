@@ -223,7 +223,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     updateReprocessConversationId(conversation.id);
     try {
       var updatedConversation = await reProcessConversationServer(conversation.id);
-      MixpanelManager().reProcessMemory(conversation);
+      MixpanelManager().reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
@@ -239,7 +239,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
     } catch (err, stacktrace) {
       print(err);
-      var conversationReporting = MixpanelManager().getMemoryEventProperties(conversation);
+      var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
       CrashReporting.reportHandledCrash(err, stacktrace, level: NonFatalExceptionLevel.critical, userAttributes: {
         'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
         'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
