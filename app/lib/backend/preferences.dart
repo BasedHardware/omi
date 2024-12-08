@@ -218,10 +218,6 @@ class SharedPreferencesUtil {
     appsList = apps;
   }
 
-  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
-
-  set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
-
   List<ServerMemory> get cachedMemories {
     final List<String> memories = getStringList('cachedMemories') ?? [];
     return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();

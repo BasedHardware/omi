@@ -320,8 +320,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   _sendMessageUtil(String message) async {
     MixpanelManager().chatMessageSent(message);
     context.read<MessageProvider>().setSendingMessage(true);
-    String? appId =
-        SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
+    String? appId = context.read<MessageProvider>().appProvider?.selectedChatAppId;
+    if (appId == 'no_selected') {
+      appId = null;
+    }
     var newMessage = ServerMessage(
         const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);
