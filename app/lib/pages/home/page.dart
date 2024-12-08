@@ -65,7 +65,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
-    context.read<ConversationProvider>().getConversationCategories();
     _openAppFromNotification = widget.openAppFromNotification;
     super.initState();
   }
