@@ -47,7 +47,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
       // }
 
-      // Memory source
+      // Conversation source
       var convoSource = ConversationSource.friend;
       return PopScope(
         canPop: true,

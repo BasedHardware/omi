@@ -484,7 +484,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   if (idx != -1) {
                     context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     var m = memProvider.groupedConversations[date]![idx];
-                    MixpanelManager().chatMessageMemoryClicked(m);
+                    MixpanelManager().chatMessageConversationClicked(m);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => ConversationDetailPage(
@@ -498,7 +498,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
-                    MixpanelManager().chatMessageMemoryClicked(m);
+                    MixpanelManager().chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
                     context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(

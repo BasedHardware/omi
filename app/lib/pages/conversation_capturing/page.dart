@@ -100,7 +100,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         //   _pushNewMemory(context, provider.memoryProvider!.memories.first);
         // }
 
-        // Memory source
+        // Conversation source
         var conversationSource = ConversationSource.friend;
         // var captureProvider = context.read<CaptureProvider>();
         // if (captureProvider.isGlasses) {

@@ -350,7 +350,7 @@ class SpeechProfileProvider extends ChangeNotifier
     _validateSingleSpeaker();
     _handleCompletion();
     notifyInfo('SCROLL_DOWN');
-    debugPrint('Memory creation timer restarted');
+    debugPrint('Conversation creation timer restarted');
   }
 
   @override

@@ -152,7 +152,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               content: Text('Transcript copied to clipboard'),
                               duration: Duration(seconds: 1),
                             ));
-                            MixpanelManager().copiedMemoryDetails(provider.conversation, source: 'Transcript');
+                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
                           },
                           child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                         )

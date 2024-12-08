@@ -159,7 +159,7 @@ class CaptureProvider extends ChangeNotifier
         .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
-      debugPrint("Can not create new memory socket");
+      debugPrint("Can not create new conversation socket");
       return;
     }
     _socket?.subscribe(this, this);
@@ -588,7 +588,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
     if (conversation == null) return;
     conversationProvider?.upsertConversation(conversation);
-    MixpanelManager().memoryCreated(conversation);
+    MixpanelManager().conversationCreated(conversation);
   }
 
   @override

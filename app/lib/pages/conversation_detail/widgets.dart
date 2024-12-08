@@ -143,7 +143,7 @@ class ActionItemsListWidget extends StatelessWidget {
                           content: Text('Action items copied to clipboard'),
                           duration: Duration(seconds: 2),
                         ));
-                        MixpanelManager().copiedMemoryDetails(provider.conversation, source: 'Action Items');
+                        MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
                       },
                       icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                     )
@@ -524,8 +524,8 @@ class GetAppsWidgets extends StatelessWidget {
                                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                               content: Text('App response copied to clipboard'),
                                             ));
-                                            MixpanelManager()
-                                                .copiedMemoryDetails(provider.conversation, source: 'App Response');
+                                            MixpanelManager().copiedConversationDetails(provider.conversation,
+                                                source: 'App Response');
                                           },
                                         ),
                                       )
@@ -577,8 +577,8 @@ class GetAppsWidgets extends StatelessWidget {
                                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                               content: Text('App response copied to clipboard'),
                                             ));
-                                            MixpanelManager()
-                                                .copiedMemoryDetails(provider.conversation, source: 'App Response');
+                                            MixpanelManager().copiedConversationDetails(provider.conversation,
+                                                source: 'App Response');
                                           },
                                         ),
                                       ),
