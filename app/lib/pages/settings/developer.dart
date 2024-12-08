@@ -7,7 +7,6 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -73,72 +72,72 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  const SizedBox(height: 32),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Transcription Model',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Center(
-                    child: Container(
-                      height: 60,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                      child: DropdownButton<String>(
-                        menuMaxHeight: 350,
-                        value: SharedPreferencesUtil().transcriptionModel,
-                        onChanged: (newValue) {
-                          if (newValue == null) return;
-                          if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                          setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-
-                          if (newValue == 'soniox') {
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.of(context).pop(),
-                                () => {},
-                                'Model Limitations',
-                                'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                                    'If you use a different configuration, it will fallback to deepgram.',
-                                singleButton: true,
-                              ),
-                            );
-                          }
-                        },
-                        dropdownColor: Colors.black,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                        underline: Container(height: 0, color: Colors.white),
-                        isExpanded: true,
-                        itemHeight: 48,
-                        items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
-                          // 'speechmatics'
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(
-                              value == 'deepgram'
-                                  ? 'Deepgram (faster)'
-                                  : value == 'speechmatics'
-                                      ? 'Speechmatics (Experimental)'
-                                      : 'Soniox (better quality)',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
+                  //TODO: Model selection commented out because Soniox model is no longer being used
+                  // const SizedBox(height: 32),
+                  // const Padding(
+                  //   padding: EdgeInsets.symmetric(horizontal: 0),
+                  //   child: Align(
+                  //     alignment: Alignment.centerLeft,
+                  //     child: Text(
+                  //       'Transcription Model',
+                  //       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  //     ),
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 14),
+                  // Center(
+                  //   child: Container(
+                  //     height: 60,
+                  //     decoration: BoxDecoration(
+                  //       border: Border.all(color: Colors.white),
+                  //       borderRadius: BorderRadius.circular(14),
+                  //     ),
+                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
+                  //     child: DropdownButton<String>(
+                  //       menuMaxHeight: 350,
+                  //       value: SharedPreferencesUtil().transcriptionModel,
+                  //       onChanged: (newValue) {
+                  //         if (newValue == null) return;
+                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
+                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
+                  //         if (newValue == 'soniox') {
+                  //           showDialog(
+                  //             context: context,
+                  //             barrierDismissible: false,
+                  //             builder: (c) => getDialog(
+                  //               context,
+                  //               () => Navigator.of(context).pop(),
+                  //               () => {},
+                  //               'Model Limitations',
+                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
+                  //                   'If you use a different configuration, it will fallback to deepgram.',
+                  //               singleButton: true,
+                  //             ),
+                  //           );
+                  //         }
+                  //       },
+                  //       dropdownColor: Colors.black,
+                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
+                  //       underline: Container(height: 0, color: Colors.white),
+                  //       isExpanded: true,
+                  //       itemHeight: 48,
+                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
+                  //         // 'speechmatics'
+                  //         return DropdownMenuItem<String>(
+                  //           value: value,
+                  //           child: Text(
+                  //             value == 'deepgram'
+                  //                 ? 'Deepgram (faster)'
+                  //                 : value == 'speechmatics'
+                  //                     ? 'Speechmatics (Experimental)'
+                  //                     : 'Soniox (better quality)',
+                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                  //           ),
+                  //         );
+                  //       }).toList(),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(height: 32.0),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
