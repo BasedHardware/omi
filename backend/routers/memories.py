@@ -267,32 +267,3 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
     for memory in memories:
         memory['geolocation'] = None
     return memories
-
-
-@router.get("/v1/conversation-categories", response_model=List, tags=['memories'])
-def get_conversation_categories():
-    return [
-        'personal',
-        'education',
-        'health',
-        'finance',
-        'legal',
-        'philosophy',
-        'spiritual',
-        'science',
-        'entrepreneurship',
-        'parenting'
-        'romantic',
-        'travel',
-        'inspiration',
-        'technology',
-        'business',
-        'social',
-        'work',
-        'sports',
-        'politics',
-        'literature',
-        'history',
-        'architecture',
-        'other'
-    ]

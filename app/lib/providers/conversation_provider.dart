@@ -12,34 +12,11 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   List<ServerConversation> conversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
-  List<String> convoCategories = [];
-
-  String selectedCategory = '';
-
-  List<(DateTime, int, ServerConversation)> recentConversations = [];
-
-  void getRecentConversation() {
-    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    List<(DateTime, int, ServerConversation)> recentConvos = [];
-    for (var i = 0; i < conversations.length; i++) {
-      if (recentConvos.length >= 6) {
-        break;
-      }
-      if (conversations[i].discarded) {
-        continue;
-      }
-      recentConvos.add((conversations[i].createdAt, i, conversations[i]));
-    }
-    recentConversations = recentConvos;
-    notifyListeners();
-  }
-
   bool isLoadingConversations = false;
   bool hasNonDiscardedConversations = true;
   bool showDiscardedConversations = false;
 
   String previousQuery = '';
-  bool queryAlreadyFetched = false;
 
   Timer? _processingMemoryWatchTimer;
 
@@ -71,56 +48,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   _preload() async {
     _missingWals = await _wal.getSyncs().getMissingWals();
-    notifyListeners();
-  }
-
-  Future getConversationCategories() async {
-    if (convoCategories.isNotEmpty) return;
-    convoCategories = await getConversationCategoriesServer();
-    notifyListeners();
-  }
-
-  void setQueryAlreadyFetched(bool value) {
-    queryAlreadyFetched = value;
-    notifyListeners();
-  }
-
-  void clearQueryAndCategory() {
-    selectedCategory = '';
-    previousQuery = '';
-    queryAlreadyFetched = false;
-    _filterGroupedConversationsWithoutNotify('');
-  }
-
-  void searchConversations(String query) {
-    if (query == previousQuery) {
-      setQueryAlreadyFetched(true);
-      return;
-    }
-    setQueryAlreadyFetched(false);
-    previousQuery = query;
-    filterGroupedConversations(query);
-    notifyListeners();
-  }
-
-  bool isCategorySelected(String category) {
-    return selectedCategory == category;
-  }
-
-  void selectCategory(String category) {
-    selectedCategory = category;
-    setQueryAlreadyFetched(false);
-    filterConversationsByCategory(category);
-  }
-
-  void deselectCategory() {
-    selectedCategory = '';
-    setQueryAlreadyFetched(false);
-    filterGroupedConversations('');
-  }
-
-  void filterConversationsByCategory(String category) {
-    _filterGroupedConversationsByCategoryWithoutNotify(category);
     notifyListeners();
   }
 
@@ -172,7 +99,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     } else {
       SharedPreferencesUtil().cachedMemories = conversations;
     }
-    getRecentConversation();
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
@@ -204,63 +130,15 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       _groupConversationsByDateWithoutNotify();
     } else {
       groupedConversations = {};
-      if (selectedCategory.isNotEmpty) {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-                  .toLowerCase()
-                  .contains(query.toLowerCase()) &&
-              (conversation.structured.category).toLowerCase().contains(selectedCategory.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
+      for (var conversation in conversations) {
+        var date = conversation.createdAt;
+        if (!groupedConversations.containsKey(date)) {
+          groupedConversations[date] = [];
         }
-      } else {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-              .toLowerCase()
-              .contains(query.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      }
-    }
-  }
-
-  void _filterGroupedConversationsByCategoryWithoutNotify(String category) {
-    if (category.isEmpty) {
-      groupedConversations = {};
-      _groupConversationsByDateWithoutNotify();
-    } else {
-      groupedConversations = {};
-      if (previousQuery.isNotEmpty) {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-                  .toLowerCase()
-                  .contains(previousQuery.toLowerCase()) &&
-              (conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      } else {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
+        if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
+            .toLowerCase()
+            .contains(query.toLowerCase())) {
+          groupedConversations[date]?.add(conversation);
         }
       }
     }
@@ -307,12 +185,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     filterGroupedConversations(previousQuery);
-    if (selectedCategory.isNotEmpty) {
-      filterConversationsByCategory(selectedCategory);
-    }
-    if (previousQuery.isNotEmpty) {
-      setQueryAlreadyFetched(true);
-    }
     setLoadingConversations(false);
     notifyListeners();
   }
@@ -320,13 +192,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void addConversation(ServerConversation conversation) {
     conversations.insert(0, conversation);
     addConvoToGroupedConversations(conversation);
-    notifyListeners();
-  }
-
-  void addConvoToRecentConversations(DateTime date, int index, ServerConversation conversation) {
-    recentConversations.insert(0, (date, index, conversation));
-    recentConversations.sort((a, b) => b.$3.createdAt.compareTo(a.$3.createdAt));
-    recentConversations = recentConversations.take(6).toList();
     notifyListeners();
   }
 
@@ -360,10 +225,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       groupedConversations[date] = [conversation];
       groupedConversations =
           Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
-    }
-    if (conversation.createdAt.isAfter(DateTime.now().add(const Duration(days: -7)))) {
-      var idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
-      addConvoToRecentConversations(date, idx, conversation);
     }
     notifyListeners();
   }
