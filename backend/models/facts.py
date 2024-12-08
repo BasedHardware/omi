@@ -24,8 +24,8 @@ class FactCategory(str, Enum):
 
 CATEGORY_BOOSTS = {FactCategory.core.value: 1,
                    FactCategory.habits.value:10,
-                   FactCategory.work.value:20,
-                   FactCategory.skills.value:30,
+                   FactCategory.work.value:40,
+                   FactCategory.skills.value:40,
                    FactCategory.lifestyle.value: 40,
                    FactCategory.hobbies.value: 40,
                    FactCategory.interests.value:40,

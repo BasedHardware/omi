@@ -132,16 +132,6 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void checkSelectedApps() {
-    var selectedChatApp = SharedPreferencesUtil().selectedChatAppId;
-    debugPrint('_edgeCaseAppNotAvailable $selectedChatApp');
-    var app = appProvider!.apps.firstWhereOrNull((p) => selectedChatApp == p.id);
-    if (selectedChatApp != 'no_selected' && (app == null || !app.worksWithChat() || !app.enabled)) {
-      SharedPreferencesUtil().selectedChatAppId = 'no_selected';
-    }
-    notifyListeners();
-  }
-
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
   }

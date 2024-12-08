@@ -140,11 +140,13 @@ def _extract_facts(uid: str, memory: Memory):
         send_new_facts_notification(token, parsed_facts)
 
 def send_new_facts_notification(token: str, facts: [FactDB]):
-    facts_str = ",".join([fact.content for fact in facts])
+    facts_str = ", ".join([fact.content for fact in facts])
     message = f"New facts {facts_str}"
     ai_message = NotificationMessage(
         text=message,
+        from_integration='false',
         type='text',
+        notification_type='new_fact',
         navigate_to="/facts",
     )
 
