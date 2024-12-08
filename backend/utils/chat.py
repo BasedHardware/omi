@@ -80,7 +80,7 @@ def process_voice_message_segment(path: str, uid: str):
 
     # send notification
     token = notification_db.get_token_only(uid)
-    send_chat_message_notification(token, "Omi", None, ai_message.text)
+    send_chat_message_notification(token, "Omi", "omi", ai_message.text)
 
     return [message.dict(), ai_message_resp]
 
