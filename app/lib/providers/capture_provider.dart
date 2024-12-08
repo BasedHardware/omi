@@ -156,7 +156,7 @@ class CaptureProvider extends ChangeNotifier
     String language = SharedPreferencesUtil().recordingsLanguage;
     _socket = await ServiceManager.instance()
         .socket
-        .memory(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new memory socket");
@@ -554,7 +554,7 @@ class CaptureProvider extends ChangeNotifier
 
     if (event.type == MessageEventType.conversationCreated) {
       if (event.conversation == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
       event.conversation!.isNew = true;

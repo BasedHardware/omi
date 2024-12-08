@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/providers/developer_mode_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -298,12 +297,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     height: 10,
                   ),
                   ToggleSectionWidget(
-                    isSectionEnabled: provider.memoryEventsToggled,
-                    sectionTitle: 'Memory Events',
-                    sectionDescription: 'Triggers when a new memory is created.',
+                    isSectionEnabled: provider.conversationEventsToggled,
+                    sectionTitle: 'Conversation Events',
+                    sectionDescription: 'Triggers when a new conversation is created.',
                     options: [
                       TextField(
-                        controller: provider.webhookOnMemoryCreated,
+                        controller: provider.webhookOnConversationCreated,
                         obscureText: false,
                         autocorrect: false,
                         enabled: true,
@@ -313,7 +312,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    onSectionEnabledChanged: provider.onMemoryEventsToggled,
+                    onSectionEnabledChanged: provider.onConversationEventsToggled,
                   ),
                   ToggleSectionWidget(
                       isSectionEnabled: provider.transcriptsToggled,

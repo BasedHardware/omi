@@ -17,20 +17,20 @@ class SyncedConversationsPage extends StatelessWidget {
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: Consumer<ConversationProvider>(
-        builder: (context, memoryProvider, child) {
+        builder: (context, convoProvider, child) {
           return SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ConversationsListWidget(
-                  memories: memoryProvider.syncedConversationsPointers
+                  conversations: convoProvider.syncedConversationsPointers
                       .where((e) => e.type == SyncedConversationType.updatedConversation)
                       .toList(),
                   title: 'Updated Conversations',
                   showReprocess: true,
                 ),
                 ConversationsListWidget(
-                  memories: memoryProvider.syncedConversationsPointers
+                  conversations: convoProvider.syncedConversationsPointers
                       .where((e) => e.type == SyncedConversationType.newConversation)
                       .toList(),
                   title: 'New Conversations',
@@ -46,14 +46,15 @@ class SyncedConversationsPage extends StatelessWidget {
 }
 
 class ConversationsListWidget extends StatelessWidget {
-  final List<SyncedConversationPointer> memories;
+  final List<SyncedConversationPointer> conversations;
   final String title;
   final bool showReprocess;
-  const ConversationsListWidget({super.key, required this.memories, required this.title, required this.showReprocess});
+  const ConversationsListWidget(
+      {super.key, required this.conversations, required this.title, required this.showReprocess});
 
   @override
   Widget build(BuildContext context) {
-    if (memories.isEmpty) {
+    if (conversations.isEmpty) {
       return const SizedBox();
     }
     return Column(
@@ -73,11 +74,11 @@ class ConversationsListWidget extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (ctx, i) {
-            var mem = memories[i];
+            var convo = conversations[i];
             return SyncedConversationListItem(
-                conversation: mem.conversation,
-                date: mem.key,
-                conversationIdx: mem.index,
+                conversation: convo.conversation,
+                date: convo.key,
+                conversationIdx: convo.index,
                 showReprocess: showReprocess);
           },
           separatorBuilder: (ctx, i) {
@@ -85,7 +86,7 @@ class ConversationsListWidget extends StatelessWidget {
               height: 10,
             );
           },
-          itemCount: memories.length,
+          itemCount: conversations.length,
         ),
       ],
     );

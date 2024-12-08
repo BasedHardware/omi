@@ -57,7 +57,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
                   )
                 : GetEditTextField(
-                    memoryId: conversation.id,
+                    conversationId: conversation.id,
                     focusNode: data.item3,
                     controller: data.item2,
                     content: conversation.structured.title.decodeString,
@@ -322,7 +322,7 @@ String minutesConversion(int minutes) {
 }
 
 class GetEditTextField extends StatefulWidget {
-  final String memoryId;
+  final String conversationId;
   final String content;
   final TextStyle style;
   final TextEditingController? controller;
@@ -332,7 +332,7 @@ class GetEditTextField extends StatefulWidget {
     super.key,
     required this.content,
     required this.style,
-    required this.memoryId,
+    required this.conversationId,
     required this.controller,
     required this.focusNode,
   });
@@ -379,7 +379,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Text(
-                  '${provider.conversation.discarded ? 'Summarizing' : 'Re-summarizing'} memory...\nThis may take a few seconds',
+                  '${provider.conversation.discarded ? 'Summarizing' : 'Re-summarizing'} conversation...\nThis may take a few seconds',
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
@@ -614,7 +614,7 @@ class GetAppsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No apps were triggered\nfor this memory.',
+            'No apps were triggered\nfor this conversation.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -900,7 +900,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
   bool loadingShareTranscript = false;
   bool loadingShareSummary = false;
 
-  void changeLoadingShareMemoryViaURL(bool value) {
+  void changeLoadingShareConversationViaURL(bool value) {
     setState(() {
       loadingShareConversationViaURL = value;
     });
@@ -929,7 +929,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
             leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
               if (loadingShareConversationViaURL) return;
-              changeLoadingShareMemoryViaURL(true);
+              changeLoadingShareConversationViaURL(true);
               bool shared = await setConversationVisibility(widget.conversation.id);
               if (!shared) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -940,7 +940,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               String content = '''https://h.omi.me/memories/${widget.conversation.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
-              changeLoadingShareMemoryViaURL(false);
+              changeLoadingShareConversationViaURL(false);
             },
           ),
         ),
@@ -1104,7 +1104,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                   Navigator.pop(context, {'deleted': true});
                                 },
                                 'Delete Conversation?',
-                                'Are you sure you want to delete this memory? This action cannot be undone.',
+                                'Are you sure you want to delete this conversation? This action cannot be undone.',
                                 okButtonText: 'Confirm',
                               ),
                             );

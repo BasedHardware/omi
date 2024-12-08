@@ -51,7 +51,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
-  ServerConversation? memory;
+  ServerConversation? conversation;
 
   /////////////////////////////////
 
