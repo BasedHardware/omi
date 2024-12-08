@@ -401,6 +401,7 @@ def send_plugin_notification(token: str, app_name: str, app_id: str, message: st
         from_integration='true',
         type='text',
         notification_type='plugin',
+        navigate_to=f'/chat/{app_id}',
     )
 
     send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

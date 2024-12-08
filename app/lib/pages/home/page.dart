@@ -37,15 +37,15 @@ import 'package:upgrader/upgrader.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
-  final bool openAppFromNotification;
-  const HomePageWrapper({super.key, this.openAppFromNotification = false});
+  final String? navigateToRoute;
+  const HomePageWrapper({super.key, this.navigateToRoute});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
-  late bool _openAppFromNotification;
+  String? _navigateToRoute;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -66,19 +66,19 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
-    _openAppFromNotification = widget.openAppFromNotification;
+    _navigateToRoute = widget.navigateToRoute;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(openAppFromNotification: _openAppFromNotification);
+    return HomePage(navigateToRoute: _navigateToRoute);
   }
 }
 
 class HomePage extends StatefulWidget {
-  final bool openAppFromNotification;
-  const HomePage({super.key, this.openAppFromNotification = false});
+  final String? navigateToRoute;
+  const HomePage({super.key, this.navigateToRoute});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -141,51 +141,94 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
-    if (widget.openAppFromNotification) {
-      context.read<HomeProvider>().selectedIndex = SharedPreferencesUtil().pageToShowFromNotification;
-      _controller = PageController(initialPage: SharedPreferencesUtil().pageToShowFromNotification);
-      if (SharedPreferencesUtil().pageToShowFromNotification == 1) {
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await context.read<MessageProvider>().refreshMessages();
-        });
+
+    // Navigate uri
+    Uri? navigateToUri;
+    var pageAlias = "home";
+    var homePageIdx = 0;
+    String? detailPageId;
+    if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
+      navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
+      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      var segments = navigateToUri?.pathSegments ?? [];
+      if (segments.isNotEmpty) {
+        pageAlias = segments[0];
       }
-      SharedPreferencesUtil().pageToShowFromNotification = 0;
-    } else {
-      _controller = PageController();
+      if (segments.length > 1) {
+        detailPageId = segments[1];
+      }
+
+      switch (pageAlias) {
+        case "memories":
+          homePageIdx = 0;
+          break;
+        case "chat":
+          homePageIdx = 1;
+        case "apps":
+          homePageIdx = 2;
+          break;
+      }
     }
+
+    // Home controler
+    _controller = PageController(initialPage: homePageIdx);
+    context.read<HomeProvider>().selectedIndex = homePageIdx;
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
+
       // ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
-        await context.read<HomeProvider>().setUserPeople();
+        await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
+      }
+      if (mounted) {
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+      }
 
-        // Start stream recording
-        if (mounted) {
-          await Provider.of<CaptureProvider>(context, listen: false)
-              .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
-        }
+      // Navigate
+      switch (pageAlias) {
+        case "chat":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
+            SharedPreferencesUtil().selectedChatAppId = appId;
+            if (mounted) {
+              var appProvider = Provider.of<AppProvider>(context, listen: false);
+              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+              // TODO: get app by id
+              await appProvider.getApps();
+              appProvider.setSelectedChatAppId(detailPageId);
+              if (messageProvider.messages.isEmpty) {
+                messageProvider.sendInitialAppMessage(appProvider.getSelectedApp());
+              }
+            }
+          }
+          if (mounted) {
+            await context.read<MessageProvider>().refreshMessages();
+          }
+          break;
+        case "settings":
+          MyApp.navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => const SettingsPage(),
+            ),
+          );
+          break;
+        case "facts":
+          MyApp.navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => const FactsPage(),
+            ),
+          );
+          break;
+        default:
       }
     });
 
-    // _migrationScripts(); not for now, we don't have scripts
-    // authenticateGCP();
-
     _listenToMessagesFromNotification();
-    if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
-      final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        MyApp.navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (context) => screensWithRespectToPath[subPageRoute] as Widget,
-          ),
-        );
-      });
-      SharedPreferencesUtil().subPageToShowFromNotification = '';
-    }
     super.initState();
 
     // After init
