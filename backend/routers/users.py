@@ -4,6 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from database.apps import get_user_public_apps_db
 from database.memories import get_in_progress_memory, get_memory
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
@@ -11,6 +12,8 @@ from database.users import *
 from models.memory import Geolocation, Memory
 from models.other import Person, CreatePerson
 from models.users import WebhookType, CreatorProfileRequest
+from utils.apps import get_multiple_apps_usage_count, get_multiple_apps_money_made_amount, \
+    get_multiple_apps_enabled_count
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
@@ -63,6 +66,21 @@ def update_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_
     current_data['updated_at'] = datetime.now(timezone.utc)
     set_user_creator_profile_db(uid, current_data)
     return {'status': 'ok'}
+
+
+@router.get('/v1/users/creator-stats', tags=['v1'])
+def get_creator_stats(uid: str = Depends(auth.get_current_user_uid)):
+    apps = get_user_public_apps_db(uid)
+    app_ids = [app['id'] for app in apps]
+    usage_count = get_multiple_apps_usage_count(app_ids)
+    money_made = get_multiple_apps_money_made_amount(app_ids)
+    users_count = get_multiple_apps_enabled_count(app_ids)
+    return {
+        'usage_count': usage_count,
+        'money_made': money_made,
+        'apps_count': app_ids,
+        'active_users': users_count,
+    }
 
 
 # ***********************************************

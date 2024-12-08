@@ -11,7 +11,8 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache
+    set_app_usage_count_cache, get_multiple_apps_usage_count_cache, get_multiple_apps_money_made_amount_cache, \
+    get_multiple_apps_enabled_count_cache
 from models.app import App, UsageHistoryItem, UsageHistoryType
 
 
@@ -42,6 +43,7 @@ def add_app_access_for_tester(app_id: str, uid: str):
 def remove_app_access_for_tester(app_id: str, uid: str):
     remove_app_access_for_tester_db(app_id, uid)
 
+
 # ********************************
 
 def weighted_rating(plugin):
@@ -50,6 +52,18 @@ def weighted_rating(plugin):
     R = plugin.rating_avg or 0
     v = plugin.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
+
+
+def get_multiple_apps_usage_count(app_ids: List[str]) -> dict:
+    return get_multiple_apps_usage_count_cache(app_ids)
+
+
+def get_multiple_apps_money_made_amount(app_ids: List[str]) -> dict:
+    return get_multiple_apps_money_made_amount_cache(app_ids)
+
+
+def get_multiple_apps_enabled_count(app_ids: List[str]) -> dict:
+    return get_multiple_apps_enabled_count_cache(app_ids)
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
@@ -160,7 +174,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     apps = []
     for app in all_apps:
         app_dict = app
-        app_dict['installs'] = plugins_install.get(app['id'],0)
+        app_dict['installs'] = plugins_install.get(app['id'], 0)
         if include_reviews:
             reviews = plugins_review.get(app['id'], {})
             sorted_reviews = reviews.values()

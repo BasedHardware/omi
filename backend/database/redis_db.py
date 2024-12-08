@@ -85,6 +85,34 @@ def get_app_usage_count_cache(app_id: str) -> int | None:
     return eval(count)
 
 
+def get_multiple_apps_usage_count_cache(app_ids: list) -> dict:
+    if not app_ids:
+        return {}
+
+    keys = [f'apps:{app_id}:usage_count' for app_id in app_ids]
+    counts = r.mget(keys)
+    if counts is None:
+        return {}
+    return {
+        app_id: int(count) if count else 0
+        for app_id, count in zip(app_ids, counts)
+    }
+
+
+def get_multiple_apps_money_made_amount_cache(app_ids: list) -> dict:
+    if not app_ids:
+        return {}
+
+    keys = [f'apps:{app_id}:money_made' for app_id in app_ids]
+    amounts = r.mget(keys)
+    if amounts is None:
+        return {}
+    return {
+        app_id: eval(amount) if amount else 0
+        for app_id, amount in zip(app_ids, amounts)
+    }
+
+
 def set_app_money_made_amount_cache(app_id: str, amount: float):
     r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
 
@@ -157,6 +185,21 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
 
 def enable_app(uid: str, app_id: str):
     r.sadd(f'users:{uid}:enabled_plugins', app_id)
+
+
+def get_app_enabled_count(app_id: str) -> int:
+    count = r.scard(f'users:*:enabled_plugins')
+    return count
+
+
+def get_multiple_apps_enabled_count_cache(app_ids: list) -> dict:
+    if not app_ids:
+        return {}
+
+    counts = {}
+    for app_id in app_ids:
+        counts[app_id] = r.scard(f'users:*:enabled_plugins')
+    return counts
 
 
 def disable_app(uid: str, app_id: str):
