@@ -52,7 +52,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: DropdownButton<String>(
                     menuMaxHeight: 350,
-                    value: provider.selectedChatAppId,
+                    value: provider.getSelectedApp()?.id ?? "no_selected",
                     onChanged: (s) async {
                       if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
                         // routeToPage(context, const AppsPage(filterChatOnly: true));
