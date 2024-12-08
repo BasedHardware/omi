@@ -92,5 +92,6 @@ def send_chat_message_notification(token: str, plugin_name: str, plugin_id: str,
         from_integration='true',
         type='text',
         notification_type='plugin',
+        navigate_to=f'/chat/{plugin_id}',
     )
     send_notification(token, plugin_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

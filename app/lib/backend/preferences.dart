@@ -218,10 +218,6 @@ class SharedPreferencesUtil {
     appsList = apps;
   }
 
-  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
-
-  set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
-
   List<ServerMemory> get cachedMemories {
     final List<String> memories = getStringList('cachedMemories') ?? [];
     return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
@@ -310,14 +306,6 @@ class SharedPreferencesUtil {
   set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
 
   bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
-
-  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
-
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
-
-  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
-
-  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
 
   set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
 
