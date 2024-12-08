@@ -36,7 +36,8 @@ def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
-    plugin_id = plugin_id if (plugin_id != 'null' and not None) else None
+    if plugin_id in ['null', '']:
+        plugin_id = None
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id
@@ -139,7 +140,7 @@ def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get
 
 
 @router.get('/v1/messages', response_model=List[Message], tags=['chat'])
-def get_messages(uid: str = Depends(auth.get_current_user_uid)):
+def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
     messages = chat_db.get_messages(uid, limit=100, include_memories=True)
     if not messages:
         return [initial_message_util(uid)]
@@ -148,7 +149,7 @@ def get_messages(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    if plugin_id == 'null':
+    if plugin_id in ['null', '']:
         plugin_id = None
 
     messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)

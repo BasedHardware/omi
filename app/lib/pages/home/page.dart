@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/apps/page.dart';
@@ -198,16 +199,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             if (mounted) {
               var appProvider = Provider.of<AppProvider>(context, listen: false);
               var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-              // TODO: get app by id
-              await appProvider.getApps();
-              appProvider.setSelectedChatAppId(detailPageId);
+              App? selectedApp;
+              if (appId.isNotEmpty) {
+                selectedApp = await appProvider.getAppFromId(appId);
+              }
+              appProvider.setSelectedChatAppId(appId);
+              await messageProvider.refreshMessages();
               if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(appProvider.getSelectedApp());
+                messageProvider.sendInitialAppMessage(selectedApp);
               }
             }
-          }
-          if (mounted) {
-            await context.read<MessageProvider>().refreshMessages();
+          } else {
+            if (mounted) {
+              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
+            }
           }
           break;
         case "settings":
@@ -237,8 +242,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _listenToMessagesFromNotification() {
     NotificationService.instance.listenForServerMessages.listen((message) {
-      context.read<MessageProvider>().addMessage(message);
-      // chatPageKey.currentState?.scrollToBottom();
+      if (mounted) {
+        var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
+        if (selectedApp == null || message.appId == selectedApp.id) {
+          Provider.of<MessageProvider>(context, listen: false).addMessage(message);
+        }
+        // chatPageKey.currentState?.scrollToBottom();
+      }
     });
   }
 
@@ -316,7 +326,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: DefaultTabController(
             length: 3,
-            initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
+            initialIndex: _controller?.initialPage ?? 0,
             child: GestureDetector(
               onTap: () {
                 primaryFocus?.unfocus();
