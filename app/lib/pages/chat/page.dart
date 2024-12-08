@@ -264,7 +264,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       textAlign: TextAlign.start,
                       textAlignVertical: TextAlignVertical.center,
                       decoration: InputDecoration(
-                        hintText: 'message',
+                        hintText: 'Message',
                         hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
                         focusedBorder: InputBorder.none,
                         enabledBorder: InputBorder.none,
