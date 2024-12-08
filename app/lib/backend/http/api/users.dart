@@ -345,3 +345,23 @@ Future<bool> updateCreatorProfileServer(String? name, String? email, String? pay
     return false;
   }
 }
+
+Future<CreatorStats?> getCreatorStatsServer() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-stats',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null) return null;
+    debugPrint('getCreatorStatsServer response: ${response.body}');
+    if (response.statusCode == 200) {
+      return CreatorStats.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getCreatorStatsServer error: $e');
+    return null;
+  }
+}

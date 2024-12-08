@@ -86,11 +86,23 @@ class $AssetsImagesGen {
   AssetGenImage get herologo =>
       const AssetGenImage('assets/images/herologo.png');
 
+  /// File path: assets/images/ic_apps.svg
+  String get icApps => 'assets/images/ic_apps.svg';
+
   /// File path: assets/images/ic_chart.svg
   String get icChart => 'assets/images/ic_chart.svg';
 
+  /// File path: assets/images/ic_chart2.svg
+  String get icChart2 => 'assets/images/ic_chart2.svg';
+
   /// File path: assets/images/ic_dollar.svg
   String get icDollar => 'assets/images/ic_dollar.svg';
+
+  /// File path: assets/images/ic_money.svg
+  String get icMoney => 'assets/images/ic_money.svg';
+
+  /// File path: assets/images/ic_users.svg
+  String get icUsers => 'assets/images/ic_users.svg';
 
   /// File path: assets/images/instruction_1.png
   AssetGenImage get instruction1 =>
@@ -137,8 +149,12 @@ class $AssetsImagesGen {
         blob,
         emotionalFeedback1,
         herologo,
+        icApps,
         icChart,
+        icChart2,
         icDollar,
+        icMoney,
+        icUsers,
         instruction1,
         instruction2,
         instruction3,
