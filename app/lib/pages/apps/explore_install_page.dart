@@ -5,11 +5,15 @@ import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
+import 'package:friend_private/pages/settings/creator_profile/creator_profile_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
+
+import '../settings/creator_profile/creator_profile_details.dart';
 
 String filterValueToString(dynamic value) {
   if (value.runtimeType == String) {
@@ -191,7 +195,24 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
             child: GestureDetector(
               onTap: () {
                 MixpanelManager().pageOpened('Submit App');
-                routeToPage(context, const AddAppPage());
+                if (context.read<CreatorProfileProvider>().profileExists) {
+                  routeToPage(context, const AddAppPage());
+                } else {
+                  showDialog(
+                    context: context,
+                    builder: (c) => getDialog(
+                      context,
+                      () => Navigator.pop(context),
+                      () async {
+                        Navigator.pop(context);
+                        routeToPage(context, const CreatorProfileDetails());
+                      },
+                      'App Creator Program',
+                      "\nJoin Omi App Creator Program to submit apps and receive payments",
+                      okButtonText: 'Join Now',
+                    ),
+                  );
+                }
               },
               child: Container(
                 padding: const EdgeInsets.all(12.0),
