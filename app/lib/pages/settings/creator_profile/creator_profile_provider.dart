@@ -20,6 +20,15 @@ class CreatorProfileProvider extends ChangeNotifier {
   int publishedApps = 0;
   int totalUsers = 0;
 
+  List<PayoutTransaction> dummyPayoutHistory = List.generate(6, (index) => PayoutTransaction.empty());
+
+  List<PayoutTransaction> payoutHistory = [];
+
+  CreatorProfileProvider() {
+    payoutHistory = dummyPayoutHistory;
+    getCreatorProfile();
+  }
+
   void setIsLoading(bool value) {
     isLoading = value;
     notifyListeners();
@@ -52,12 +61,24 @@ class CreatorProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> getPayoutHistory() async {
+    setIsLoading(true);
+    var res = await getPayoutHistoryServer();
+    if (res != null) {
+      payoutHistory = res;
+      setIsLoading(false);
+    } else {
+      AppSnackbar.showSnackbarError('Failed to fetch your Payout History');
+    }
+    notifyListeners();
+  }
+
   Future<void> getCreatorProfileDetails() async {
     setIsLoading(true);
     var res = await getCreatorProfile();
     if (res != null) {
       if (res.isEmpty()) {
-        AppSnackbar.showSnackbarInfo('Looks like you have not created your Creator Profile yet');
+        AppSnackbar.showSnackbarInfo('Please complete your profile to receive payments.');
       } else {
         profileExists = true;
         creatorNameController.text = res.creatorName;
@@ -68,7 +89,7 @@ class CreatorProfileProvider extends ChangeNotifier {
       showSubmitButton = false;
       setIsLoading(false);
     } else {
-      AppSnackbar.showSnackbarError('Failed to fetch your Creator Profile details');
+      AppSnackbar.showSnackbarError('Failed to fetch your creator profile details');
     }
     notifyListeners();
   }
@@ -83,11 +104,12 @@ class CreatorProfileProvider extends ChangeNotifier {
         paypalMeLinkController.text,
       );
       if (res) {
-        AppSnackbar.showSnackbarSuccess('Creator Profile updated successfully');
+        AppSnackbar.showSnackbarSuccess('Creator profile details updated successfully');
       } else {
-        AppSnackbar.showSnackbarError('Failed to update Creator Profile');
+        AppSnackbar.showSnackbarError('Failed to update your creator profile details');
       }
       showSubmitButton = false;
+      profileExists = true;
       setIsLoading(false);
     } else {
       AppSnackbar.showSnackbarError('Please fill all the fields correctly');
@@ -109,9 +131,9 @@ class CreatorProfileProvider extends ChangeNotifier {
       var res = await saveCreatorProfile(profile);
       if (res) {
         profileExists = true;
-        AppSnackbar.showSnackbarSuccess('Creator Profile saved successfully');
+        AppSnackbar.showSnackbarSuccess('Creator profile details saved successfully');
       } else {
-        AppSnackbar.showSnackbarError('Failed to update Creator Profile');
+        AppSnackbar.showSnackbarError('Failed to update your creator profile details');
       }
       showSubmitButton = false;
       setIsLoading(false);

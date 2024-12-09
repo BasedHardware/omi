@@ -7,6 +7,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'payout_history.dart';
+
 class CreatorDashboard extends StatefulWidget {
   const CreatorDashboard({super.key});
 
@@ -168,20 +170,25 @@ class _CreatorDashboardState extends State<CreatorDashboard> {
                     ),
                   ),
                 ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16.0),
-                  margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text("Payout History", style: TextStyle(color: Colors.white, fontSize: 16)),
-                      const Spacer(),
-                      Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400),
-                    ],
+                InkWell(
+                  onTap: () {
+                    routeToPage(context, const PayoutHistory());
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16.0),
+                    margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text("Payout History", style: TextStyle(color: Colors.white, fontSize: 16)),
+                        const Spacer(),
+                        Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400),
+                      ],
+                    ),
                   ),
                 ),
               ],

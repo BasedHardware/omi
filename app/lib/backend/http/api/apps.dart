@@ -143,10 +143,8 @@ Future<bool> isAppSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data;
   try {
-    data = jsonDecode(response?.body ?? '{}');
-    print(data);
+    var data = jsonDecode(response?.body ?? '{}');
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
     debugPrint('Response not a valid json: $e');

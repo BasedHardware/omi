@@ -97,3 +97,72 @@ class CreatorStats {
     );
   }
 }
+
+class PayoutTransaction {
+  final String amount;
+  final String currency;
+  final DateTime date;
+  final String paymentStatus;
+  final String payoutMethod;
+
+  PayoutTransaction({
+    required this.amount,
+    required this.date,
+    required this.paymentStatus,
+    required this.payoutMethod,
+    required this.currency,
+  });
+
+  factory PayoutTransaction.fromJson(Map<String, dynamic> json) {
+    return PayoutTransaction(
+      amount: json['amount']['value'],
+      currency: json['amount']['currency_code'],
+      date: DateTime.parse(json['payment_date']).toLocal(),
+      paymentStatus: json['payment_status'],
+      payoutMethod: json['payee']['payment_method'],
+    );
+  }
+
+  PayoutTransaction.empty()
+      : amount = '',
+        currency = '',
+        date = DateTime.now(),
+        paymentStatus = '',
+        payoutMethod = '';
+
+  bool isPending() {
+    return paymentStatus == 'pending';
+  }
+
+  bool isSuccessful() {
+    return paymentStatus == 'successful';
+  }
+
+  bool isFailed() {
+    return paymentStatus == 'failed';
+  }
+
+  String paymentStatusText() {
+    if (isPending()) {
+      return 'Pending';
+    } else if (isSuccessful()) {
+      return 'Successful';
+    } else if (isFailed()) {
+      return 'Failed';
+    } else {
+      return 'Unknown';
+    }
+  }
+
+  String payoutMethodText() {
+    if (payoutMethod == 'paypal') {
+      return 'PayPal';
+    } else {
+      return 'Unknown';
+    }
+  }
+
+  static List<PayoutTransaction> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => PayoutTransaction.fromJson(e)).toList();
+  }
+}

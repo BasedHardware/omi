@@ -333,8 +333,10 @@ Future<bool> updateCreatorProfileServer(String? name, String? email, String? pay
       body: jsonEncode({
         'creator_name': name,
         'creator_email': email,
-        'paypal_email': paypalEmail,
-        'paypal_me_link': paypalLink,
+        'paypal_details': {
+          'paypal_email': paypalEmail,
+          'paypal_me_link': paypalLink,
+        },
       }),
     );
     if (response == null) return false;
@@ -362,6 +364,26 @@ Future<CreatorStats?> getCreatorStatsServer() async {
     return null;
   } catch (e) {
     debugPrint('getCreatorStatsServer error: $e');
+    return null;
+  }
+}
+
+Future getPayoutHistoryServer() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/payout-history',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null) return null;
+    debugPrint('getPayoutHistoryServer response: ${response.body}');
+    if (response.statusCode == 200) {
+      return PayoutTransaction.fromJsonList(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getPayoutHistoryServer error: $e');
     return null;
   }
 }
