@@ -94,7 +94,7 @@ def get_multiple_apps_usage_count_cache(app_ids: list) -> dict:
     if counts is None:
         return {}
     return {
-        app_id: int(count) if count else 0
+        app_id: eval(count) if count else 0
         for app_id, count in zip(app_ids, counts)
     }
 

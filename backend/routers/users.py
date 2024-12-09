@@ -1,23 +1,26 @@
+import os
 import threading
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 
-from database.apps import get_user_public_apps_db
+from database.apps import get_user_public_apps_db, batch_update_creator_profile_for_apps_db
 from database.memories import get_in_progress_memory, get_memory
 from database.redis_db import cache_user_geolocation, set_user_webhook_db, get_user_webhook_db, disable_user_webhook_db, \
     enable_user_webhook_db, user_webhook_status_db
 from database.users import *
 from models.memory import Geolocation, Memory
 from models.other import Person, CreatePerson
-from models.users import WebhookType, CreatorProfileRequest
+from models.users import WebhookType, CreatorProfileRequest, ManualPaymentRequest
 from utils.apps import get_multiple_apps_usage_count, get_multiple_apps_money_made_amount, \
     get_multiple_apps_enabled_count
 from utils.llm import followup_question_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_memory_recordings, get_user_person_speech_samples, \
     delete_user_person_speech_samples
+from utils.user import get_user_creator_profile, create_user_creator_profile, update_user_creator_profile, \
+    update_creator_details_for_user_apps
 from utils.webhooks import webhook_first_time_setup
 
 router = APIRouter()
@@ -50,21 +53,22 @@ def set_creator_profile(data: CreatorProfileRequest, uid: str = Depends(auth.get
     data = data.dict()
     data['created_at'] = datetime.now(timezone.utc)
     data['is_verified'] = False
-    set_user_creator_profile_db(uid, data)
+    create_user_creator_profile(uid, data)
     return {'status': 'ok'}
 
 
 @router.get('/v1/users/creator-profile', tags=['v1'])
 def get_creator_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return get_user_creator_profile_db(uid)
+    return get_user_creator_profile(uid)
 
 
 @router.patch('/v1/users/creator-profile', tags=['v1'])
 def update_creator_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    current_data = get_user_creator_profile_db(uid)
+    current_data = get_user_creator_profile(uid)
     current_data.update(data)
     current_data['updated_at'] = datetime.now(timezone.utc)
-    set_user_creator_profile_db(uid, current_data)
+    update_user_creator_profile(uid, current_data)
+    update_creator_details_for_user_apps(uid, current_data)
     return {'status': 'ok'}
 
 
@@ -81,6 +85,11 @@ def get_creator_stats(uid: str = Depends(auth.get_current_user_uid)):
         'apps_count': app_ids,
         'active_users': users_count,
     }
+
+
+@router.get('/v1/users/payout-history', tags=['v1'])
+def get_creator_stats(uid: str = Depends(auth.get_current_user_uid)):
+    return get_all_user_payouts_db(uid)
 
 
 # ***********************************************
@@ -270,4 +279,18 @@ def set_chat_message_analytics(
         uid: str = Depends(auth.get_current_user_uid),
 ):
     set_chat_message_rating_score(uid, message_id, value)
+    return {'status': 'ok'}
+
+
+# ****************************************
+# ************ TEAM ENDPOINTS ************
+# ****************************************
+
+@router.post('/v1/users/{uid}/manual-payment', tags=['v1'])
+def create_manual_payment(data: ManualPaymentRequest,  uid: str,secret_key: str = Header(...)):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    data = data.dict()
+    data['payment_date'] = datetime.now(timezone.utc)
+    create_manual_payment_db(uid, data)
     return {'status': 'ok'}

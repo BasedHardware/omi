@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
@@ -21,3 +22,24 @@ class CreatorProfileRequest(BaseModel):
     creator_name: str
     creator_email: str
     paypal_details: PayPalDetails
+
+
+class Amount(BaseModel):
+    value: str
+    currency_code: str
+
+
+class Payee(BaseModel):
+    email: str
+    uid: str
+    payment_method: str
+
+
+class ManualPaymentRequest(BaseModel):
+    amount: Amount
+    payment_method: str
+    payment_mode: str
+    payment_status: str
+    payee: Payee
+    description: Optional[str] = None
+    supplementary_data: Optional[dict] = None

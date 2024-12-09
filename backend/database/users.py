@@ -93,6 +93,18 @@ def set_user_creator_profile_db(uid: str, data: dict):
     user_ref.update({'creator_profile': data})
 
 
+def create_manual_payment_db(uid: str, data: dict):
+    manual_payment_ref = db.collection('users').document(uid).collection('payments')
+    manual_payment_ref.document().set(data)
+    return data
+
+
+def get_all_user_payouts_db(uid: str):
+    payments_ref = db.collection('users').document(uid).collection('payments')
+    payments = payments_ref.stream()
+    return [payment.to_dict() for payment in payments]
+
+
 # **************************************
 # ************* Analytics **************
 # **************************************

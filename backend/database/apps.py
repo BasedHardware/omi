@@ -36,6 +36,16 @@ def get_user_public_apps_db(uid: str) -> List:
     return [doc.to_dict() for doc in user_apps]
 
 
+def batch_update_creator_profile_for_apps_db(uid: str, author: str, email: str):
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('deleted', '==', False)]
+    user_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    batch = db.batch()
+    for doc in user_apps:
+        app_ref = db.collection('plugins_data').document(doc.id)
+        batch.update(app_ref, {'author': author, 'email': email})
+    batch.commit()
+
+
 def get_app_by_id_db(app_id: str):
     app_ref = db.collection('plugins_data').document(app_id)
     doc = app_ref.get()
