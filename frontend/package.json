@@ -27,6 +27,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.5.4",
+    "fuse.js": "^7.0.0",
     "gleap": "^13.9.2",
     "iconoir-react": "^7.8.0",
     "instantsearch.css": "^8.5.0",

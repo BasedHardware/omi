@@ -16,6 +16,20 @@ async function getAppsCount() {
   return plugins.length;
 }
 
+async function getPluginsData() {
+  const rawPlugins = await getApprovedApps();
+  const plugins = rawPlugins.map((plugin: any) => {
+    const { created_at, capabilities, ...rest } = plugin;
+    return {
+      ...rest,
+      created_at,
+      capabilities: new Set(capabilities),
+    };
+  });
+
+  return { plugins, stats: [] };
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const appsCount = await getAppsCount();
   const title = 'OMI Apps Marketplace - AI-Powered Apps for Your OMI Necklace';
@@ -63,7 +77,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     other: {
       'structured-data': JSON.stringify([
-        generateCollectionPageSchema(),
+        generateCollectionPageSchema(title, description, `${envConfig.WEB_URL}/apps`),
         generateProductSchema(),
         generateOrganizationSchema(),
         generateBreadcrumbSchema(),
@@ -73,10 +87,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function AppsPage() {
+  const { plugins, stats } = await getPluginsData();
+
   return (
     <main className="min-h-screen bg-[#0B0F17]">
       <div className="relative">
-        <AppList />
+        <AppList initialPlugins={plugins} initialStats={stats} />
         <ProductBanner variant="floating" />
       </div>
     </main>
