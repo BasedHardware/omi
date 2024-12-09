@@ -79,12 +79,13 @@ Future<List<String>> getExpandedProfileSamples() async {
 }
 
 Future<bool> deleteProfileSample(
-  String memoryId,
+  String conversationId,
   int segmentIdx, {
   String? personId,
 }) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$memoryId&segment_idx=$segmentIdx&person_id=$personId',
+    url:
+        '${Env.apiBaseUrl}v3/speech-profile/expand?memory_id=$conversationId&segment_idx=$segmentIdx&person_id=$personId',
     headers: {},
     method: 'DELETE',
     body: '',

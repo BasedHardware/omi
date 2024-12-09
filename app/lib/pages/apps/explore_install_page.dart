@@ -282,16 +282,16 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           !provider.isFilterActive() && !provider.isSearchActive()
               ? Selector<AppProvider, List<App>>(
                   selector: (context, provider) => provider.apps,
-                  builder: (context, memoryIntegrationApps, child) {
+                  builder: (context, apps, child) {
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           return AppListItem(
-                            app: memoryIntegrationApps[index],
+                            app: apps[index],
                             index: index,
                           );
                         },
-                        childCount: memoryIntegrationApps.length,
+                        childCount: apps.length,
                       ),
                     );
                   },

@@ -171,8 +171,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                           ),
                                         if (provider.isCapabilitySelectedById('memories'))
                                           PromptTextField(
-                                            controller: provider.memoryPromptController,
-                                            label: 'Memory Prompt',
+                                            controller: provider.conversationPromptController,
+                                            label: 'Conversation Prompt',
                                             hint:
                                                 'You are an awesome app, you will be given transcript and summary of a conversation...',
                                           ),

@@ -222,7 +222,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             () => Navigator.pop(context),
                             singleButton: true,
                             'How it works?',
-                            'Once a person is created, you can go to a memory transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
+                            'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
                             okButtonText: 'Got it',
                           ),
                         );
