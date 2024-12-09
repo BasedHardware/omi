@@ -34,6 +34,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController setupCompletedController = TextEditingController();
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
+  TextEditingController notificationsHistoryWebhookController = TextEditingController();
 
   bool termsAgreed = false;
 
@@ -108,6 +109,7 @@ class AddAppProvider extends ChangeNotifier {
       webhookUrlController.text = app.externalIntegration!.webhookUrl;
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath;
+      notificationsHistoryWebhookController.text = app.externalIntegration!.notificationsHistoryWebhook ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
@@ -139,6 +141,7 @@ class AddAppProvider extends ChangeNotifier {
     setupCompletedController.clear();
     instructionsController.clear();
     authUrlController.clear();
+    notificationsHistoryWebhookController.clear();
     termsAgreed = false;
     makeAppPublic = false;
     appCategory = null;
@@ -356,6 +359,7 @@ class AddAppProvider extends ChangeNotifier {
           'webhook_url': webhookUrlController.text,
           'setup_completed_url': setupCompletedController.text,
           'setup_instructions_file_path': instructionsController.text,
+          'notifications_history_webhook': notificationsHistoryWebhookController.text,
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -413,6 +417,7 @@ class AddAppProvider extends ChangeNotifier {
           'webhook_url': webhookUrlController.text,
           'setup_completed_url': setupCompletedController.text,
           'setup_instructions_file_path': instructionsController.text,
+          'notifications_history_webhook': notificationsHistoryWebhookController.text,
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {

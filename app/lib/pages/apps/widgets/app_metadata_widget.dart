@@ -17,6 +17,7 @@ class AppMetadataWidget extends StatelessWidget {
   final List<Category> categories;
   final Function(String?) setAppCategory;
   final String? category;
+  final bool imageRequired;
 
   const AppMetadataWidget({
     super.key,
@@ -30,6 +31,7 @@ class AppMetadataWidget extends StatelessWidget {
     required this.categories,
     required this.setAppCategory,
     this.category,
+    this.imageRequired = true,
   });
 
   @override

@@ -4,6 +4,7 @@ import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:friend_private/pages/apps/widgets/notifications_history_webhook_field.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
@@ -107,6 +108,7 @@ class _AddAppPageState extends State<AddAppPage> {
                           setAppCategory: provider.setAppCategory,
                           imageFile: provider.imageFile,
                           category: provider.mapCategoryIdToName(provider.appCategory),
+                          imageRequired: true,
                         ),
                         const SizedBox(
                           height: 12,
@@ -184,6 +186,7 @@ class _AddAppPageState extends State<AddAppPage> {
                             ],
                           ),
                         const ExternalTriggerFieldsWidget(),
+                        const NotificationsHistoryWebhookField(),
                         if (provider.isCapabilitySelectedById('proactive_notification'))
                           Column(
                             children: [
