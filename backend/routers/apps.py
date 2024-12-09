@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from typing import List
 import requests
+from pydantic import ValidationError
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
 
@@ -18,8 +19,9 @@ from utils.apps import get_available_apps, get_available_app_by_id, get_approved
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
-from models.app import App
+from models.app import App, SubmitAppRequest
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
+from utils.user import get_user_creator_profile
 
 router = APIRouter()
 
@@ -68,17 +70,55 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     return {'status': 'ok'}
 
 
+@router.post('/v2/apps', tags=['v2'])
+def submit_app_v2(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+    try:
+        parsed_data = json.loads(app_data)
+        validated_data = SubmitAppRequest(**parsed_data)
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    data = validated_data.dict()
+    data['name'] = data['name'].strip()
+    data['id'] = str(ULID())
+    data['uid'] = uid
+    creator_profile = get_user_creator_profile(uid)
+    if not creator_profile:
+        raise HTTPException(status_code=403, detail='You need to create a creator profile first')
+    data['author'] = creator_profile['creator_name']
+    data['email'] = creator_profile['creator_email']
+    if external_integration := data.get('external_integration'):
+        if external_integration.get('triggers_on') is None:
+            raise HTTPException(status_code=422, detail='Triggers on is required')
+        # check if setup_instructions_file_path is a single url or a just a string of text
+        if external_integration.get('setup_instructions_file_path'):
+            external_integration['setup_instructions_file_path'] = external_integration[
+                'setup_instructions_file_path'].strip()
+            if external_integration['setup_instructions_file_path'].startswith('http'):
+                external_integration['is_instructions_url'] = True
+            else:
+                external_integration['is_instructions_url'] = False
+    os.makedirs(f'_temp/apps', exist_ok=True)
+    file_path = f"_temp/apps/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
+    add_app_to_db(data)
+    return {'status': 'ok'}
+
+
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
 def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
-    plugin = get_available_app_by_id(app_id, uid)
-    if not plugin:
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
         raise HTTPException(status_code=404, detail='App not found')
-    if plugin['uid'] != uid:
+    if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if file:
-        delete_plugin_logo(plugin['image'])
+        delete_plugin_logo(app['image'])
         os.makedirs(f'_temp/plugins', exist_ok=True)
         file_path = f"_temp/plugins/{file.filename}"
         with open(file_path, 'wb') as f:
@@ -87,7 +127,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
     update_app_in_db(data)
-    if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
+    if app['approved'] and (app['private'] is None or app['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
