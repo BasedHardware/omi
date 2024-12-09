@@ -7,8 +7,8 @@ class Fact {
   FactCategory category;
   DateTime createdAt;
   DateTime updatedAt;
-  String? memoryId;
-  String? memoryCategory;
+  String? conversationId;
+  String? conversationCategory;
   bool reviewed;
   bool? userReview;
   bool manuallyAdded;
@@ -22,8 +22,8 @@ class Fact {
     required this.category,
     required this.createdAt,
     required this.updatedAt,
-    this.memoryId,
-    this.memoryCategory,
+    this.conversationId,
+    this.conversationCategory,
     this.reviewed = false,
     this.userReview,
     this.manuallyAdded = false,
@@ -39,8 +39,8 @@ class Fact {
       category: FactCategory.values.firstWhere((e) => e.toString() == 'FactCategory.${json['category']}'),
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
-      memoryId: json['memory_id'],
-      memoryCategory: json['memory_category'],
+      conversationId: json['memory_id'],
+      conversationCategory: json['memory_category'],
       reviewed: json['reviewed'],
       userReview: json['user_review'],
       manuallyAdded: json['manually_added'],
@@ -57,8 +57,8 @@ class Fact {
       'category': category.toString().split('.').last,
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
-      'memory_id': memoryId,
-      'memory_category': memoryCategory.toString().split('.').last,
+      'memory_id': conversationId,
+      'memory_category': conversationCategory.toString().split('.').last,
       'reviewed': reviewed,
       'user_review': userReview,
       'manually_added': manuallyAdded,
