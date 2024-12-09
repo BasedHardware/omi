@@ -135,19 +135,19 @@ def _extract_facts(uid: str, memory: Memory):
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
 
     # send notification
-    token = notification_db.get_token_only(uid)
-    if token and len(token) > 0:
-        send_new_facts_notification(token, parsed_facts)
+    # token = notification_db.get_token_only(uid)
+    # if token and len(token) > 0:
+    #    send_new_facts_notification(token, parsed_facts)
 
 def send_new_facts_notification(token: str, facts: [FactDB]):
     facts_str = ", ".join([fact.content for fact in facts])
     message = f"New facts {facts_str}"
     ai_message = NotificationMessage(
-        navigate_to="/facts",
         text=message,
         from_integration='false',
         type='text',
         notification_type='new_fact',
+        navigate_to="/facts",
     )
 
     send_notification(token, "Omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

@@ -319,14 +319,6 @@ class SharedPreferencesUtil {
 
   bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
 
-  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
-
-  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
-
-  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
-
-  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
-
   set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
 
   bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;

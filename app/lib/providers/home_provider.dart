@@ -7,6 +7,7 @@ import 'package:friend_private/utils/analytics/analytics_manager.dart';
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
   final FocusNode conversationFieldFocusNode = FocusNode();
+  Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
   bool isAppsSearchFieldFocused = false;
@@ -115,6 +116,7 @@ class HomeProvider extends ChangeNotifier {
     conversationFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();
     appsSearchFieldFocusNode.dispose();
+    onSelectedIndexChanged = null;
     super.dispose();
   }
 }
