@@ -157,6 +157,14 @@ class SharedPreferencesUtil {
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
 
+  set subPageToShowFromNotification(String value) => saveString('subPageToShowFromNotification', value);
+
+  String get subPageToShowFromNotification => getString('subPageToShowFromNotification') ?? '';
+
+  set pageToShowFromNotification(int value) => saveInt('pageToShowFromNotification', value);
+
+  int get pageToShowFromNotification => getInt('pageToShowFromNotification') ?? 0;
+
   bool get optInAnalytics => getBool('optInAnalytics') ?? true;
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
