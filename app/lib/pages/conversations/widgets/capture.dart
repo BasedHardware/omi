@@ -39,7 +39,7 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
       if (mounted) {
         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
         if (!connectivityProvider.isConnected) {
-          context.read<CaptureProvider>().cancelMemoryCreationTimer();
+          context.read<CaptureProvider>().cancelConversationCreationTimer();
         }
       }
     });

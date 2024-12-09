@@ -1,37 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/memory.dart';
-import 'package:friend_private/pages/memories/widgets/memory_list_item.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
+import 'package:friend_private/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-Future updateMemoryDetailProvider(BuildContext context, ServerMemory memory) {
+Future updateConvoDetailProvider(BuildContext context, ServerConversation conversation) {
   return Future.microtask(() {
-    context.read<MemoryProvider>().addMemory(memory);
-    var date = DateTime(memory.createdAt.year, memory.createdAt.month, memory.createdAt.day);
-    context.read<MemoryDetailProvider>().updateMemory(0, date);
+    context.read<ConversationProvider>().addConversation(conversation);
+    var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+    context.read<ConversationDetailProvider>().updateConversation(0, date);
   });
 }
 
-class MemoryCreatedWidget extends StatefulWidget {
+class ConversationCreatedWidget extends StatefulWidget {
   final VoidCallback goNext;
 
-  const MemoryCreatedWidget({super.key, required this.goNext});
+  const ConversationCreatedWidget({super.key, required this.goNext});
 
   @override
-  State<MemoryCreatedWidget> createState() => _MemoryCreatedWidgetState();
+  State<ConversationCreatedWidget> createState() => _ConversationCreatedWidgetState();
 }
 
-class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
+class _ConversationCreatedWidgetState extends State<ConversationCreatedWidget> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await updateMemoryDetailProvider(context, context.read<SpeechProfileProvider>().memory!);
+      await updateConvoDetailProvider(context, context.read<SpeechProfileProvider>().conversation!);
     });
     super.initState();
   }
@@ -44,24 +44,24 @@ class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            provider.memory == null
+            provider.conversation == null
                 ? const SizedBox()
                 : Text(
-                    'Your first memory is ready! 🎉',
+                    'Your first conversation is ready! 🎉',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 18),
                     textAlign: TextAlign.center,
                   ),
             const SizedBox(height: 24),
-            context.read<SpeechProfileProvider>().memory == null
+            context.read<SpeechProfileProvider>().conversation == null
                 ? const SizedBox()
-                : MemoryListItem(
-                    memory: context.read<SpeechProfileProvider>().memory!,
-                    memoryIdx: 0,
+                : ConversationListItem(
+                    conversation: context.read<SpeechProfileProvider>().conversation!,
+                    conversationIdx: 0,
                     isFromOnboarding: true,
                     date: DateTime(
-                      provider.memory!.createdAt.year,
-                      provider.memory!.createdAt.month,
-                      provider.memory!.createdAt.day,
+                      provider.conversation!.createdAt.year,
+                      provider.conversation!.createdAt.month,
+                      provider.conversation!.createdAt.day,
                     ),
                   ),
             const SizedBox(height: 24),
@@ -83,8 +83,9 @@ class _MemoryCreatedWidgetState extends State<MemoryCreatedWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 onPressed: () {
                   // updateMemoryDetailProvider(context, provider.memory!);
-                  MixpanelManager().memoryListItemClicked(provider.memory!, 0);
-                  routeToPage(context, MemoryDetailPage(memory: provider.memory!, isFromOnboarding: true));
+                  MixpanelManager().conversationListItemClicked(provider.conversation!, 0);
+                  routeToPage(
+                      context, ConversationDetailPage(conversation: provider.conversation!, isFromOnboarding: true));
                 },
                 child: const Text(
                   'Check it out',

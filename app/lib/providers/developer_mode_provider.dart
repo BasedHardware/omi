@@ -11,14 +11,14 @@ import 'package:friend_private/utils/other/validators.dart';
 class DeveloperModeProvider extends BaseProvider {
   final TextEditingController gcpCredentialsController = TextEditingController();
   final TextEditingController gcpBucketNameController = TextEditingController();
-  final TextEditingController webhookOnMemoryCreated = TextEditingController();
+  final TextEditingController webhookOnConversationCreated = TextEditingController();
   final TextEditingController webhookOnTranscriptReceived = TextEditingController();
   final TextEditingController webhookAudioBytes = TextEditingController();
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
 
-  bool memoryEventsToggled = false;
+  bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
   bool audioBytesToggled = false;
   bool daySummaryToggled = false;
@@ -31,8 +31,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool localSyncEnabled = false;
   bool followUpQuestionEnabled = false;
 
-  void onMemoryEventsToggled(bool value) {
-    memoryEventsToggled = value;
+  void onConversationEventsToggled(bool value) {
+    conversationEventsToggled = value;
     if (!value) {
       disableWebhook(type: 'memory_created');
     } else {
@@ -74,17 +74,17 @@ class DeveloperModeProvider extends BaseProvider {
   Future getWebhooksStatus() async {
     var res = await webhooksStatus();
     if (res == null) {
-      memoryEventsToggled = false;
+      conversationEventsToggled = false;
       transcriptsToggled = false;
       audioBytesToggled = false;
       daySummaryToggled = false;
     } else {
-      memoryEventsToggled = res['memory_created'];
+      conversationEventsToggled = res['memory_created'];
       transcriptsToggled = res['realtime_transcript'];
       audioBytesToggled = res['audio_bytes'];
       daySummaryToggled = res['day_summary'];
     }
-    SharedPreferencesUtil().memoryEventsToggled = memoryEventsToggled;
+    SharedPreferencesUtil().conversationEventsToggled = conversationEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
     SharedPreferencesUtil().daySummaryToggled = daySummaryToggled;
@@ -96,12 +96,12 @@ class DeveloperModeProvider extends BaseProvider {
     gcpCredentialsController.text = SharedPreferencesUtil().gcpCredentials;
     gcpBucketNameController.text = SharedPreferencesUtil().gcpBucketName;
     localSyncEnabled = SharedPreferencesUtil().localSyncEnabled;
-    webhookOnMemoryCreated.text = SharedPreferencesUtil().webhookOnMemoryCreated;
+    webhookOnConversationCreated.text = SharedPreferencesUtil().webhookOnConversationCreated;
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
-    memoryEventsToggled = SharedPreferencesUtil().memoryEventsToggled;
+    conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
     daySummaryToggled = SharedPreferencesUtil().daySummaryToggled;
@@ -125,8 +125,8 @@ class DeveloperModeProvider extends BaseProvider {
         SharedPreferencesUtil().webhookOnTranscriptReceived = url;
       }),
       getUserWebhookUrl(type: 'memory_created').then((url) {
-        webhookOnMemoryCreated.text = url;
-        SharedPreferencesUtil().webhookOnMemoryCreated = url;
+        webhookOnConversationCreated.text = url;
+        SharedPreferencesUtil().webhookOnConversationCreated = url;
       }),
       getUserWebhookUrl(type: 'day_summary').then((url) {
         webhookDaySummary.text = url;
@@ -174,7 +174,7 @@ class DeveloperModeProvider extends BaseProvider {
       setIsLoading(false);
       return;
     }
-    if (webhookOnMemoryCreated.text.isNotEmpty && !isValidUrl(webhookOnMemoryCreated.text)) {
+    if (webhookOnConversationCreated.text.isNotEmpty && !isValidUrl(webhookOnConversationCreated.text)) {
       AppSnackbar.showSnackbarError('Invalid memory created webhook URL');
       setIsLoading(false);
       return;
@@ -196,7 +196,7 @@ class DeveloperModeProvider extends BaseProvider {
       url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
     );
     var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
-    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnMemoryCreated.text.trim());
+    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     try {
@@ -204,7 +204,7 @@ class DeveloperModeProvider extends BaseProvider {
       prefs.webhookAudioBytes = webhookAudioBytes.text;
       prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
-      prefs.webhookOnMemoryCreated = webhookOnMemoryCreated.text;
+      prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
       prefs.webhookDaySummary = webhookDaySummary.text;
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');

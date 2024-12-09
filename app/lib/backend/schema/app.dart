@@ -110,7 +110,7 @@ class ExternalIntegration {
   String getTriggerOnString() {
     switch (triggersOn) {
       case 'memory_creation':
-        return 'Memory Creation';
+        return 'Conversation Creation';
       case 'transcript_processed':
         return 'Transcript Segment Processed (every 30 seconds during conversation)';
       default:
@@ -171,7 +171,7 @@ class App {
   Set<String> capabilities;
   bool private;
   bool approved;
-  String? memoryPrompt;
+  String? conversationPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
   ProactiveNotification? proactiveNotification;
@@ -197,7 +197,7 @@ class App {
     this.email,
     required this.category,
     required this.approved,
-    this.memoryPrompt,
+    this.conversationPrompt,
     this.chatPrompt,
     this.externalIntegration,
     this.reviews = const [],
@@ -236,7 +236,7 @@ class App {
       description: json['description'],
       image: json['image'],
       chatPrompt: json['chat_prompt'],
-      memoryPrompt: json['memory_prompt'],
+      conversationPrompt: json['memory_prompt'],
       externalIntegration:
           json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
       reviews: AppReview.fromJsonList(json['reviews'] ?? []),
@@ -300,7 +300,7 @@ class App {
       'description': description,
       'image': image,
       'capabilities': capabilities.toList(),
-      'memory_prompt': memoryPrompt,
+      'memory_prompt': conversationPrompt,
       'chat_prompt': chatPrompt,
       'external_integration': externalIntegration?.toJson(),
       'reviews': reviews.map((e) => e.toJson()).toList(),

@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/memories/sync_page.dart';
+import 'package:friend_private/pages/conversations/sync_page.dart';
 import 'package:friend_private/pages/sdcard/sdcard_transfer_progress.dart';
 import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -49,7 +49,7 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<MemoryProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
+    return Consumer2<ConversationProvider, CaptureProvider>(builder: (context, provider, captureProvider, child) {
       var previousStatus = _status;
       if (provider.missingWalsInSeconds >= 120) {
         _status = LocalSyncStatus.flush;
