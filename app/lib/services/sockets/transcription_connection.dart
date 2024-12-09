@@ -27,8 +27,8 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
       : super.create(includeSpeechProfile: false);
 }
 
-class MemoryTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  MemoryTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
+class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
+  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language)
       : super.create(includeSpeechProfile: true);
 }
 
@@ -78,6 +78,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       debugPrint("Can not connect to websocket");
     }
   }
+
   Future stop({String? reason}) async {
     await _socket.stop();
     _listeners.clear();

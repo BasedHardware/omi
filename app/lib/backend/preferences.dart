@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/services/wals.dart';
@@ -81,9 +81,9 @@ class SharedPreferencesUtil {
 
   set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
-  String get webhookOnMemoryCreated => getString('webhookOnMemoryCreated') ?? '';
+  String get webhookOnConversationCreated => getString('webhookOnConversationCreated') ?? '';
 
-  set webhookOnMemoryCreated(String value) => saveString('webhookOnMemoryCreated', value);
+  set webhookOnConversationCreated(String value) => saveString('webhookOnConversationCreated', value);
 
   String get webhookOnTranscriptReceived => getString('webhookOnTranscriptReceived') ?? '';
 
@@ -105,9 +105,9 @@ class SharedPreferencesUtil {
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled') ?? false;
 
-  set memoryEventsToggled(bool value) => saveBool('memoryEventsToggled', value);
+  set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
-  bool get memoryEventsToggled => getBool('memoryEventsToggled') ?? false;
+  bool get conversationEventsToggled => getBool('conversationEventsToggled') ?? false;
 
   set transcriptsToggled(bool value) => saveBool('transcriptsToggled', value);
 
@@ -218,14 +218,26 @@ class SharedPreferencesUtil {
     appsList = apps;
   }
 
-  List<ServerMemory> get cachedMemories {
-    final List<String> memories = getStringList('cachedMemories') ?? [];
-    return memories.map((e) => ServerMemory.fromJson(jsonDecode(e))).toList();
+  String get selectedChatAppId => getString('selectedChatAppId2') ?? 'no_selected';
+
+  set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
+
+  List<ServerConversation> get cachedConversations {
+    if (getBool('migratedMemories') ?? false) {
+      if (getStringList('cachedMemories') != null || getStringList('cachedMemories')!.isNotEmpty) {
+        final List<ServerConversation> cachedMemories =
+            getStringList('cachedMemories')!.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
+        cachedConversations = cachedMemories;
+        saveBool('migratedMemories', true);
+      }
+    }
+    final List<String> conversations = getStringList('cachedConversations') ?? [];
+    return conversations.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
   }
 
-  set cachedMemories(List<ServerMemory> value) {
-    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('cachedMemories', memories);
+  set cachedConversations(List<ServerConversation> value) {
+    final List<String> conversations = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('cachedConversations', conversations);
   }
 
   List<ServerMessage> get cachedMessages {
@@ -277,14 +289,14 @@ class SharedPreferencesUtil {
     }
   }
 
-  ServerMemory? get modifiedMemoryDetails {
-    final String memory = getString('modifiedMemoryDetails') ?? '';
-    if (memory.isEmpty) return null;
-    return ServerMemory.fromJson(jsonDecode(memory));
+  ServerConversation? get modifiedConversationDetails {
+    final String conversation = getString('modifiedConversationDetails') ?? '';
+    if (conversation.isEmpty) return null;
+    return ServerConversation.fromJson(jsonDecode(conversation));
   }
 
-  set modifiedMemoryDetails(ServerMemory? value) {
-    saveString('modifiedMemoryDetails', value == null ? '' : jsonEncode(value.toJson()));
+  set modifiedConversationDetails(ServerConversation? value) {
+    saveString('modifiedConversationDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 
   bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
@@ -299,9 +311,9 @@ class SharedPreferencesUtil {
 
   bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
 
-  set scriptMemoryVectorsExecuted(bool value) => saveBool('scriptMemoryVectorsExecuted2', value);
+  set scriptConversationVectorsExecuted(bool value) => saveBool('scriptConversationVectorsExecuted2', value);
 
-  bool get scriptMemoryVectorsExecuted => getBool('scriptMemoryVectorsExecuted2') ?? false;
+  bool get scriptConversationVectorsExecuted => getBool('scriptConversationVectorsExecuted2') ?? false;
 
   set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
 

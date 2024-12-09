@@ -5,16 +5,16 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -27,7 +27,7 @@ class AIMessage extends StatefulWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final App? appSender;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final Function(int) setMessageNps;
 
   const AIMessage({
@@ -35,7 +35,7 @@ class AIMessage extends StatefulWidget {
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.setMessageNps,
     this.appSender,
     this.showTypingIndicator = false,
@@ -46,11 +46,11 @@ class AIMessage extends StatefulWidget {
 }
 
 class _AIMessageState extends State<AIMessage> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.message.memories.length, false);
+    conversationDetailLoading = List.filled(widget.message.memories.length, false);
     super.initState();
   }
 
@@ -105,7 +105,7 @@ class _AIMessageState extends State<AIMessage> {
                 widget.showTypingIndicator,
                 widget.displayOptions,
                 widget.appSender,
-                widget.updateMemory,
+                widget.updateConversation,
                 widget.setMessageNps,
               ),
             ],
@@ -122,7 +122,7 @@ Widget buildMessageWidget(
   bool showTypingIndicator,
   bool displayOptions,
   App? appSender,
-  Function(ServerMemory) updateMemory,
+  Function(ServerConversation) updateConversation,
   Function(int) sendMessageNps,
 ) {
   if (message.memories.isNotEmpty) {
@@ -130,7 +130,7 @@ Widget buildMessageWidget(
         showTypingIndicator: showTypingIndicator,
         messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
         messageText: message.isEmpty ? '...' : message.text.decodeString,
-        updateMemory: updateMemory,
+        updateConversation: updateConversation,
         message: message,
         setMessageNps: sendMessageNps,
         date: message.createdAt);
@@ -403,9 +403,9 @@ class NormalMessageWidget extends StatelessWidget {
 
 class MemoriesMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
-  final List<MessageMemory> messageMemories;
+  final List<MessageConversation> messageMemories;
   final String messageText;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime date;
@@ -415,7 +415,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.showTypingIndicator,
     required this.messageMemories,
     required this.messageText,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.message,
     required this.setMessageNps,
     required this.date,
@@ -426,11 +426,11 @@ class MemoriesMessageWidget extends StatefulWidget {
 }
 
 class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.messageMemories.length, false);
+    conversationDetailLoading = List.filled(widget.messageMemories.length, false);
     super.initState();
   }
 
@@ -476,52 +476,52 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
               onTap: () async {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
-                  var memProvider = Provider.of<MemoryProvider>(context, listen: false);
+                  var memProvider = Provider.of<ConversationProvider>(context, listen: false);
                   var idx = -1;
                   var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedMemories[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
 
                   if (idx != -1) {
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
-                    var m = memProvider.groupedMemories[date]![idx];
-                    MixpanelManager().chatMessageMemoryClicked(m);
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
+                    var m = memProvider.groupedConversations[date]![idx];
+                    MixpanelManager().chatMessageConversationClicked(m);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );
                   } else {
-                    if (memoryDetailLoading[data.$1]) return;
-                    setState(() => memoryDetailLoading[data.$1] = true);
-                    ServerMemory? m = await getMemoryById(data.$2.id);
+                    if (conversationDetailLoading[data.$1]) return;
+                    setState(() => conversationDetailLoading[data.$1] = true);
+                    ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
-                    (idx, date) = memProvider.addMemoryWithDateGrouped(m);
-                    MixpanelManager().chatMessageMemoryClicked(m);
-                    setState(() => memoryDetailLoading[data.$1] = false);
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
+                    (idx, date) = memProvider.addConversationWithDateGrouped(m);
+                    MixpanelManager().chatMessageConversationClicked(m);
+                    setState(() => conversationDetailLoading[data.$1] = false);
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );
-                    if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                      ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                      widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                      var copy = List<MessageMemory>.from(widget.messageMemories);
-                      copy[data.$1] = MessageMemory(
+                    if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
+                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
+                      widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
+                      var copy = List<MessageConversation>.from(widget.messageMemories);
+                      copy[data.$1] = MessageConversation(
                           modifiedDetails.id,
                           modifiedDetails.createdAt,
-                          MessageMemoryStructured(
+                          MessageConversationStructured(
                             modifiedDetails.structured.title,
                             modifiedDetails.structured.emoji,
                           ));
                       widget.messageMemories.clear();
                       widget.messageMemories.addAll(copy);
-                      SharedPreferencesUtil().modifiedMemoryDetails = null;
+                      SharedPreferencesUtil().modifiedConversationDetails = null;
                       setState(() {});
                     }
                   }
@@ -552,7 +552,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    memoryDetailLoading[data.$1]
+                    conversationDetailLoading[data.$1]
                         ? const SizedBox(
                             height: 24,
                             width: 24,
