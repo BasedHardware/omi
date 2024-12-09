@@ -66,6 +66,7 @@ def _send_summary_notification(user_data: tuple):
         from_integration='false',
         type='day_summary',
         notification_type='daily_summary',
+        navigate_to="/chat/omi",  # omi ~ no select
     )
     chat_db.add_summary_message(summary, uid)
     threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
@@ -89,7 +90,6 @@ async def send_daily_notification():
         morning_target_time = "08:00"
 
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
-
 
     except Exception as e:
         print(e)

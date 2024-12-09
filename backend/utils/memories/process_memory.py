@@ -19,6 +19,7 @@ from models.facts import FactDB
 from models.memory import *
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
+from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
@@ -128,7 +129,28 @@ def _extract_facts(uid: str, memory: Memory):
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
+    if len(parsed_facts) == 0:
+        return
+
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+
+    # send notification
+    # token = notification_db.get_token_only(uid)
+    # if token and len(token) > 0:
+    #    send_new_facts_notification(token, parsed_facts)
+
+def send_new_facts_notification(token: str, facts: [FactDB]):
+    facts_str = ", ".join([fact.content for fact in facts])
+    message = f"New facts {facts_str}"
+    ai_message = NotificationMessage(
+        text=message,
+        from_integration='false',
+        type='text',
+        notification_type='new_fact',
+        navigate_to="/facts",
+    )
+
+    send_notification(token, "Omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
 def _extract_trends(memory: Memory):

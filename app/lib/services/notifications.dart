@@ -173,10 +173,14 @@ class NotificationService {
       // Plugin
       if (data.isNotEmpty) {
         late Map<String, String> payload = <String, String>{};
+        payload.addAll({
+          "navigate_to": data['navigate_to'] ?? "",
+        });
+
+        // plugin, daily summary
         final notificationType = data['notification_type'];
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
-          payload.addAll({'path': '/chat'});
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
         if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
@@ -244,7 +248,6 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    debugPrint("onActionReceivedMethodImpl");
     if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
       return;
     }
@@ -252,37 +255,20 @@ class NotificationUtil {
   }
 
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
-    final Map<String, int> screensWithRespectToPath = {
-      '/apps': 2,
-      '/chat': 1,
-      '/memories': 0,
-    };
-
-    final Map<String, int> screensWithRespectToNotiType = {
-      'daily_summary': 1,
-      'plugin': 1,
-    };
-
     // Always ensure that all plugins was initialized
+    // TODO: for what?
     WidgetsFlutterBinding.ensureInitialized();
-    if (payload.containsKey('navigateTo')) {
-      SharedPreferencesUtil().subPageToShowFromNotification = payload['navigateTo'] ?? '';
+
+    String? navigateTo;
+    if (payload.containsKey('navigate_to')) {
+      navigateTo = payload['navigate_to'];
+    }
+    if (navigateTo == null) {
+      debugPrint("Navigate To is null");
+      return;
     }
 
-    // Notification page
-    var pageIdx = 0;
-    var path = payload['path'] ?? "";
-    var notificationType = payload['notification_type'] ?? "";
-    if (path.isNotEmpty) {
-      pageIdx = screensWithRespectToPath[path] ?? 0;
-    } else if (notificationType.isNotEmpty) {
-      pageIdx = screensWithRespectToNotiType[notificationType] ?? 0;
-    }
-
-    SharedPreferencesUtil().pageToShowFromNotification = pageIdx;
-
-    debugPrint("onActionReceivedMethodImpl ${SharedPreferencesUtil().pageToShowFromNotification}");
-    MyApp.navigatorKey.currentState?.pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePageWrapper(openAppFromNotification: true)));
+    MyApp.navigatorKey.currentState
+        ?.pushReplacement(MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)));
   }
 }

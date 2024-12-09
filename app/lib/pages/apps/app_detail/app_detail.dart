@@ -11,6 +11,8 @@ import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.d
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
@@ -105,6 +107,35 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
+          widget.app.enabled && widget.app.worksWithChat()
+              ? GestureDetector(
+                  child: const Icon(Icons.question_answer),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    context.read<HomeProvider>().setIndex(1);
+                    if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
+                      context.read<HomeProvider>().onSelectedIndexChanged!(1);
+                    }
+                    var appId = widget.app.id;
+                    var appProvider = Provider.of<AppProvider>(context, listen: false);
+                    var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                    App? selectedApp;
+                    if (appId.isNotEmpty) {
+                      selectedApp = await appProvider.getAppFromId(appId);
+                    }
+                    appProvider.setSelectedChatAppId(appId);
+                    await messageProvider.refreshMessages();
+                    if (messageProvider.messages.isEmpty) {
+                      messageProvider.sendInitialAppMessage(selectedApp);
+                    }
+                  },
+                )
+              : const SizedBox.shrink(),
+          widget.app.enabled && widget.app.worksWithChat()
+              ? const SizedBox(
+                  width: 24,
+                )
+              : const SizedBox.shrink(),
           GestureDetector(
             child: const Icon(Icons.share),
             onTap: () {
@@ -481,16 +512,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   .toList(),
             ),
 
-            widget.app.memoryPrompt != null
+            widget.app.conversationPrompt != null
                 ? InfoCardWidget(
                     onTap: () {
-                      if (widget.app.memoryPrompt!.decodeString.characters.length > 200) {
-                        routeToPage(context,
-                            MarkdownViewer(title: 'Memory Prompt', markdown: widget.app.memoryPrompt!.decodeString));
+                      if (widget.app.conversationPrompt!.decodeString.characters.length > 200) {
+                        routeToPage(
+                            context,
+                            MarkdownViewer(
+                                title: 'Conversation Prompt', markdown: widget.app.conversationPrompt!.decodeString));
                       }
                     },
-                    title: 'Memory Prompt',
-                    description: widget.app.memoryPrompt!,
+                    title: 'Conversation Prompt',
+                    description: widget.app.conversationPrompt!,
                     showChips: false,
                   )
                 : const SizedBox.shrink(),

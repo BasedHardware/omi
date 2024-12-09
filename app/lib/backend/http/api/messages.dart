@@ -17,7 +17,7 @@ Future<List<ServerMessage>> getMessagesServer({
   if (pluginId == 'no_selected') pluginId = null;
   // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?plugin_id=$pluginId&dropdown_selected=$dropdownSelected',
+    url: '${Env.apiBaseUrl}v2/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected',
     headers: {},
     method: 'GET',
     body: '',
@@ -30,7 +30,7 @@ Future<List<ServerMessage>> getMessagesServer({
     if (decodedBody.isEmpty) {
       return [];
     }
-    var messages = decodedBody.map((memory) => ServerMessage.fromJson(memory)).toList();
+    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
     debugPrint('getMessages length: ${messages.length}');
     return messages;
   }
@@ -54,8 +54,12 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
 }
 
 Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
+  var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v1/messages';
+  }
   return makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$appId',
+    url: url,
     headers: {},
     method: 'POST',
     body: jsonEncode({'text': text}),

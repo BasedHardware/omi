@@ -6,14 +6,14 @@ import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -221,8 +221,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             sendMessage: _sendMessageUtil,
                                             displayOptions: provider.messages.length <= 1,
                                             appSender: provider.messageSenderApp(message.appId),
-                                            updateMemory: (ServerMemory memory) {
-                                              context.read<MemoryProvider>().updateMemory(memory);
+                                            updateConversation: (ServerConversation conversation) {
+                                              context.read<ConversationProvider>().updateConversation(conversation);
                                             },
                                             setMessageNps: (int value) {
                                               provider.setMessageNps(message, value);
@@ -264,7 +264,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       textAlign: TextAlign.start,
                       textAlignVertical: TextAlignVertical.center,
                       decoration: InputDecoration(
-                        hintText: 'message',
+                        hintText: 'Message',
                         hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
                         focusedBorder: InputBorder.none,
                         enabledBorder: InputBorder.none,
@@ -320,8 +320,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   _sendMessageUtil(String message) async {
     MixpanelManager().chatMessageSent(message);
     context.read<MessageProvider>().setSendingMessage(true);
-    String? appId =
-        SharedPreferencesUtil().selectedChatAppId == 'no_selected' ? null : SharedPreferencesUtil().selectedChatAppId;
+    String? appId = context.read<MessageProvider>().appProvider?.selectedChatAppId;
+    if (appId == 'no_selected') {
+      appId = null;
+    }
     var newMessage = ServerMessage(
         const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
     context.read<MessageProvider>().addMessage(newMessage);

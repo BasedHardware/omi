@@ -2,18 +2,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/http/webhooks.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/apps/page.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/test_prompts.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/test_prompts.dart';
 import 'package:friend_private/pages/settings/developer.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -42,45 +42,46 @@ class GetSummaryWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, Tuple3<ServerMemory, TextEditingController?, FocusNode?>>(
-      selector: (context, provider) => Tuple3(provider.memory, provider.titleController, provider.titleFocusNode),
+    return Selector<ConversationDetailProvider, Tuple3<ServerConversation, TextEditingController?, FocusNode?>>(
+      selector: (context, provider) => Tuple3(provider.conversation, provider.titleController, provider.titleFocusNode),
       builder: (context, data, child) {
-        ServerMemory memory = data.item1;
+        ServerConversation conversation = data.item1;
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-            memory.discarded
+            conversation.discarded
                 ? Text(
-                    'Discarded Memory',
+                    'Discarded Conversation',
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
                   )
                 : GetEditTextField(
-                    memoryId: memory.id,
+                    conversationId: conversation.id,
                     focusNode: data.item3,
                     controller: data.item2,
-                    content: memory.structured.title.decodeString,
+                    content: conversation.structured.title.decodeString,
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
             const SizedBox(height: 16),
             Text(
-              memory.source == MemorySource.sdcard
-                  ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', memory.createdAt)}, ${setTimeSDCard(memory.startedAt, memory.createdAt)}'
-                  : '${dateTimeFormat('MMM d,  yyyy', memory.createdAt)} ${memory.startedAt == null ? 'at' : 'from'} ${setTime(memory.startedAt, memory.createdAt, memory.finishedAt)}',
+              conversation.source == ConversationSource.sdcard
+                  ? 'Imported at ${dateTimeFormat('MMM d,  yyyy', conversation.createdAt)}, ${setTimeSDCard(conversation.startedAt, conversation.createdAt)}'
+                  : '${dateTimeFormat('MMM d,  yyyy', conversation.createdAt)} ${conversation.startedAt == null ? 'at' : 'from'} ${setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt)}',
               style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 GestureDetector(
-                  onTap: memory.onTagPressed(context),
+                  onTap: conversation.onTagPressed(context),
                   child: Container(
-                    decoration: BoxDecoration(color: memory.getTagColor(), borderRadius: BorderRadius.circular(16)),
+                    decoration:
+                        BoxDecoration(color: conversation.getTagColor(), borderRadius: BorderRadius.circular(16)),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     child: Text(
-                      memory.getTag(),
-                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: memory.getTagTextColor()),
+                      conversation.getTag(),
+                      style: Theme.of(context).textTheme.titleLarge!.copyWith(color: conversation.getTagTextColor()),
                       maxLines: 1,
                     ),
                   ),
@@ -88,26 +89,26 @@ class GetSummaryWidgets extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 40),
-            memory.discarded
+            conversation.discarded
                 ? const SizedBox.shrink()
                 : Text('Overview', style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26)),
-            memory.discarded
+            conversation.discarded
                 ? const SizedBox.shrink()
-                : ((memory.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
-            memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
-            memory.discarded
+                : ((conversation.geolocation != null) ? const SizedBox(height: 8) : const SizedBox.shrink()),
+            conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+            conversation.discarded
                 ? const SizedBox.shrink()
                 : SelectionArea(
                     child: Text(
-                      memory.structured.overview.decodeString,
+                      conversation.structured.overview.decodeString,
                       style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3),
                     ),
                   ),
-            memory.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
+            conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 40),
             const ActionItemsListWidget(),
-            memory.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+            conversation.structured.actionItems.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
             const EventsListWidget(),
-            memory.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
+            conversation.structured.events.isNotEmpty ? const SizedBox(height: 40) : const SizedBox.shrink(),
           ],
         );
       },
@@ -120,10 +121,10 @@ class ActionItemsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
-          provider.memory.structured.actionItems.isNotEmpty
+          provider.conversation.structured.actionItems.isNotEmpty
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -136,13 +137,13 @@ class ActionItemsListWidget extends StatelessWidget {
                       onPressed: () {
                         Clipboard.setData(ClipboardData(
                           text:
-                              '- ${provider.memory.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
+                              '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
                         ));
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Action items copied to clipboard'),
                           duration: Duration(seconds: 2),
                         ));
-                        MixpanelManager().copiedMemoryDetails(provider.memory, source: 'Action Items');
+                        MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
                       },
                       icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                     )
@@ -150,11 +151,11 @@ class ActionItemsListWidget extends StatelessWidget {
                 )
               : const SizedBox.shrink(),
           ListView.builder(
-            itemCount: provider.memory.structured.actionItems.where((e) => !e.deleted).length,
+            itemCount: provider.conversation.structured.actionItems.where((e) => !e.deleted).length,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, idx) {
-              var item = provider.memory.structured.actionItems.where((e) => !e.deleted).toList()[idx];
+              var item = provider.conversation.structured.actionItems.where((e) => !e.deleted).toList()[idx];
               return Dismissible(
                 key: Key(item.description),
                 direction: DismissDirection.endToStart,
@@ -165,7 +166,7 @@ class ActionItemsListWidget extends StatelessWidget {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (direction) {
-                  var tempItem = provider.memory.structured.actionItems[idx];
+                  var tempItem = provider.conversation.structured.actionItems[idx];
                   var tempIdx = idx;
                   provider.deleteActionItem(idx);
                   ScaffoldMessenger.of(context)
@@ -186,7 +187,7 @@ class ActionItemsListWidget extends StatelessWidget {
                       .then((reason) {
                     if (reason != SnackBarClosedReason.action) {
                       provider.deleteActionItemPermanently(tempItem, tempIdx);
-                      MixpanelManager().deletedActionItem(provider.memory);
+                      MixpanelManager().deletedActionItem(provider.conversation);
                     }
                   });
                 },
@@ -205,12 +206,12 @@ class ActionItemsListWidget extends StatelessWidget {
                             value: item.completed,
                             onChanged: (value) {
                               if (value != null) {
-                                context.read<MemoryDetailProvider>().updateActionItemState(value, idx);
-                                setMemoryActionItemState(provider.memory.id, [idx], [value]);
+                                context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
+                                setConversationActionItemState(provider.conversation.id, [idx], [value]);
                                 if (value) {
-                                  MixpanelManager().checkedActionItem(provider.memory, idx);
+                                  MixpanelManager().checkedActionItem(provider.conversation, idx);
                                 } else {
-                                  MixpanelManager().uncheckedActionItem(provider.memory, idx);
+                                  MixpanelManager().uncheckedActionItem(provider.conversation, idx);
                                 }
                               }
                             },
@@ -243,16 +244,16 @@ class EventsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
+    return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            provider.memory.structured.events.isNotEmpty &&
-                    !(provider.memory.structured.events
+            provider.conversation.structured.events.isNotEmpty &&
+                    !(provider.conversation.structured.events
                         .where((e) =>
-                            e.startsAt.isBefore(provider.memory.startedAt!.add(const Duration(hours: 6))) &&
-                            e.startsAt.add(Duration(minutes: e.duration)).isBefore(provider.memory.startedAt!))
+                            e.startsAt.isBefore(provider.conversation.startedAt!.add(const Duration(hours: 6))) &&
+                            e.startsAt.add(Duration(minutes: e.duration)).isBefore(provider.conversation.startedAt!))
                         .isNotEmpty)
                 ? Row(
                     children: [
@@ -266,12 +267,12 @@ class EventsListWidget extends StatelessWidget {
                   )
                 : const SizedBox.shrink(),
             ListView.builder(
-              itemCount: provider.memory.structured.events.length,
+              itemCount: provider.conversation.structured.events.length,
               shrinkWrap: true,
               itemBuilder: (context, idx) {
-                var event = provider.memory.structured.events[idx];
-                if (event.startsAt.isBefore(provider.memory.startedAt!.add(const Duration(hours: 6))) &&
-                    event.startsAt.add(Duration(minutes: event.duration)).isBefore(provider.memory.startedAt!)) {
+                var event = provider.conversation.structured.events[idx];
+                if (event.startsAt.isBefore(provider.conversation.startedAt!.add(const Duration(hours: 6))) &&
+                    event.startsAt.add(Duration(minutes: event.duration)).isBefore(provider.conversation.startedAt!)) {
                   return const SizedBox.shrink();
                 }
                 return ListTile(
@@ -321,7 +322,7 @@ String minutesConversion(int minutes) {
 }
 
 class GetEditTextField extends StatefulWidget {
-  final String memoryId;
+  final String conversationId;
   final String content;
   final TextStyle style;
   final TextEditingController? controller;
@@ -331,7 +332,7 @@ class GetEditTextField extends StatefulWidget {
     super.key,
     required this.content,
     required this.style,
-    required this.memoryId,
+    required this.conversationId,
     required this.controller,
     required this.focusNode,
   });
@@ -364,8 +365,8 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
-      if (provider.loadingReprocessMemory && provider.reprocessMemoryId == provider.memory.id) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
+      if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
         return Center(
           child: Padding(
             padding: const EdgeInsets.only(top: 18.0),
@@ -378,7 +379,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Text(
-                  '${provider.memory.discarded ? 'Summarizing' : 'Re-summarizing'} memory...\nThis may take a few seconds',
+                  '${provider.conversation.discarded ? 'Summarizing' : 'Re-summarizing'} conversation...\nThis may take a few seconds',
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
@@ -414,7 +415,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 child: MaterialButton(
                   onPressed: () async {
-                    await provider.reprocessMemory();
+                    await provider.reprocessConversation();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   child: const Padding(
@@ -436,20 +437,21 @@ class GetAppsWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(
+    return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: provider.memory.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: provider.memory.appResults.isEmpty
+          crossAxisAlignment:
+              provider.conversation.appResults.isEmpty ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: provider.conversation.appResults.isEmpty
               ? [child!]
               : [
                   // TODO: include a way to trigger specific apps
-                  if (provider.memory.appResults.isNotEmpty &&
-                      !provider.memory.discarded &&
+                  if (provider.conversation.appResults.isNotEmpty &&
+                      !provider.conversation.discarded &&
                       provider.appResponseExpanded.isNotEmpty) ...[
-                    provider.memory.structured.actionItems.isEmpty
+                    provider.conversation.structured.actionItems.isEmpty
                         ? const SizedBox(height: 40)
                         : const SizedBox.shrink(),
                     Text(
@@ -458,8 +460,8 @@ class GetAppsWidgets extends StatelessWidget {
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 24),
-                    if (provider.memory.appResults.isNotEmpty)
-                      ...provider.memory.appResults.mapIndexed(
+                    if (provider.conversation.appResults.isNotEmpty)
+                      ...provider.conversation.appResults.mapIndexed(
                         (i, appResponse) {
                           if (appResponse.content.length < 5) return const SizedBox.shrink();
                           App? app = provider.appsList.firstWhereOrNull((element) => element.id == appResponse.appId);
@@ -522,8 +524,8 @@ class GetAppsWidgets extends StatelessWidget {
                                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                               content: Text('App response copied to clipboard'),
                                             ));
-                                            MixpanelManager()
-                                                .copiedMemoryDetails(provider.memory, source: 'App Response');
+                                            MixpanelManager().copiedConversationDetails(provider.conversation,
+                                                source: 'App Response');
                                           },
                                         ),
                                       )
@@ -575,8 +577,8 @@ class GetAppsWidgets extends StatelessWidget {
                                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                               content: Text('App response copied to clipboard'),
                                             ));
-                                            MixpanelManager()
-                                                .copiedMemoryDetails(provider.memory, source: 'App Response');
+                                            MixpanelManager().copiedConversationDetails(provider.conversation,
+                                                source: 'App Response');
                                           },
                                         ),
                                       ),
@@ -586,7 +588,8 @@ class GetAppsWidgets extends StatelessWidget {
                                   toggleExpand: () {
                                     debugPrint('appResponseExpanded: ${provider.appResponseExpanded}');
                                     if (!provider.appResponseExpanded[i]) {
-                                      MixpanelManager().appResultExpanded(provider.memory, appResponse.appId ?? '');
+                                      MixpanelManager()
+                                          .appResultExpanded(provider.conversation, appResponse.appId ?? '');
                                     }
                                     provider.updateAppResponseExpanded(i);
                                   },
@@ -611,7 +614,7 @@ class GetAppsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No apps were triggered\nfor this memory.',
+            'No apps were triggered\nfor this conversation.',
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -657,9 +660,9 @@ class GetGeolocationWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<MemoryDetailProvider, Geolocation?>(selector: (context, provider) {
-      if (provider.memory.discarded) return null;
-      return provider.memory.geolocation;
+    return Selector<ConversationDetailProvider, Geolocation?>(selector: (context, provider) {
+      if (provider.conversation.discarded) return null;
+      return provider.conversation.geolocation;
     }, builder: (context, geolocation, child) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -732,12 +735,12 @@ class GetSheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
           ListTile(
             title: Text(
-              provider.memory.discarded ? 'Discarded Memory' : provider.memory.structured.title,
+              provider.conversation.discarded ? 'Discarded Conversation' : provider.conversation.structured.title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             leading: const Icon(Icons.description),
@@ -756,11 +759,11 @@ class GetSheetTitle extends StatelessWidget {
 }
 
 class GetDevToolsOptions extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation conversation;
 
   const GetDevToolsOptions({
     super.key,
-    required this.memory,
+    required this.conversation,
   });
 
   @override
@@ -782,7 +785,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Trigger Memory Created Integration'),
+          title: const Text('Trigger Conversation Created Integration'),
           leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
@@ -794,7 +797,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
               : const Icon(Icons.send_to_mobile_outlined),
           onTap: () {
             changeLoadingAppIntegrationTest(true);
-            if (SharedPreferencesUtil().webhookOnMemoryCreated.isEmpty) {
+            if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
               showDialog(
                 context: context,
                 builder: (c) => getDialog(
@@ -814,7 +817,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
               changeLoadingAppIntegrationTest(false);
               return;
             } else {
-              webhookOnMemoryCreatedCall(widget.memory, returnRawBody: true).then((response) {
+              webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(
@@ -836,11 +839,11 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Test a Memory Prompt'),
+          title: const Text('Test a Conversation Prompt'),
           leading: const Icon(Icons.chat),
           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
           onTap: () {
-            routeToPage(context, TestPromptsPage(memory: widget.memory));
+            routeToPage(context, TestPromptsPage(conversation: widget.conversation));
           },
         ),
       ),
@@ -881,11 +884,11 @@ _getLoadingIndicator() {
 }
 
 class GetShareOptions extends StatefulWidget {
-  final ServerMemory memory;
+  final ServerConversation conversation;
 
   const GetShareOptions({
     super.key,
-    required this.memory,
+    required this.conversation,
   });
 
   @override
@@ -893,13 +896,13 @@ class GetShareOptions extends StatefulWidget {
 }
 
 class _GetShareOptionsState extends State<GetShareOptions> {
-  bool loadingShareMemoryViaURL = false;
+  bool loadingShareConversationViaURL = false;
   bool loadingShareTranscript = false;
   bool loadingShareSummary = false;
 
-  void changeLoadingShareMemoryViaURL(bool value) {
+  void changeLoadingShareConversationViaURL(bool value) {
     setState(() {
-      loadingShareMemoryViaURL = value;
+      loadingShareConversationViaURL = value;
     });
   }
 
@@ -923,21 +926,21 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
           child: ListTile(
             title: const Text('Send web url'),
-            leading: loadingShareMemoryViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
+            leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
-              if (loadingShareMemoryViaURL) return;
-              changeLoadingShareMemoryViaURL(true);
-              bool shared = await setMemoryVisibility(widget.memory.id);
+              if (loadingShareConversationViaURL) return;
+              changeLoadingShareConversationViaURL(true);
+              bool shared = await setConversationVisibility(widget.conversation.id);
               if (!shared) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Memory URL could not be shared.')),
+                  const SnackBar(content: Text('Conversation URL could not be shared.')),
                 );
                 return;
               }
-              String content = '''https://h.omi.me/memories/${widget.memory.id}'''.replaceAll('  ', '').trim();
+              String content = '''https://h.omi.me/memories/${widget.conversation.id}'''.replaceAll('  ', '').trim();
               print(content);
               await Share.share(content);
-              changeLoadingShareMemoryViaURL(false);
+              changeLoadingShareConversationViaURL(false);
             },
           ),
         ),
@@ -953,9 +956,9 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   if (loadingShareTranscript) return;
                   changeLoadingShareTranscript(true);
                   String content = '''
-              ${widget.memory.structured.title}
+              ${widget.conversation.structured.title}
               
-              ${widget.memory.getTranscript(generate: true)}
+              ${widget.conversation.getTranscript(generate: true)}
               '''
                       .replaceAll('  ', '')
                       .trim();
@@ -964,7 +967,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   changeLoadingShareTranscript(false);
                 },
               ),
-              widget.memory.discarded
+              widget.conversation.discarded
                   ? const SizedBox()
                   : ListTile(
                       title: const Text('Send Summary'),
@@ -972,7 +975,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
-                        String content = widget.memory.structured.toString().replaceAll('  ', '').trim();
+                        String content = widget.conversation.structured.toString().replaceAll('  ', '').trim();
                         await Share.share(content);
                         changeLoadingShareSummary(false);
                       },
@@ -988,16 +991,16 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               ListTile(
                 title: const Text('Copy Transcript'),
                 leading: const Icon(Icons.copy),
-                onTap: () => _copyContent(context, widget.memory.getTranscript(generate: true)),
+                onTap: () => _copyContent(context, widget.conversation.getTranscript(generate: true)),
               ),
-              widget.memory.discarded
+              widget.conversation.discarded
                   ? const SizedBox()
                   : ListTile(
                       title: const Text('Copy Summary'),
                       leading: const Icon(Icons.file_copy),
                       onTap: () => _copyContent(
                         context,
-                        widget.memory.structured.toString(),
+                        widget.conversation.structured.toString(),
                       ),
                     )
             ],
@@ -1015,7 +1018,7 @@ class GetSheetMainOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+    return Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
       return Column(
         children: [
           Card(
@@ -1042,8 +1045,8 @@ class GetSheetMainOptions extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: Text(provider.memory.discarded ? 'Summarize' : 'Re-summarize'),
-                  leading: provider.loadingReprocessMemory
+                  title: Text(provider.conversation.discarded ? 'Summarize' : 'Re-summarize'),
+                  leading: provider.loadingReprocessConversation
                       ? const SizedBox(
                           width: 24,
                           height: 24,
@@ -1052,12 +1055,12 @@ class GetSheetMainOptions extends StatelessWidget {
                           ),
                         )
                       : const Icon(Icons.refresh),
-                  onTap: provider.loadingReprocessMemory
+                  onTap: provider.loadingReprocessConversation
                       ? null
                       : () async {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                           if (connectivityProvider.isConnected) {
-                            await provider.reprocessMemory();
+                            await provider.reprocessConversation();
                             if (context.mounted) {
                               Navigator.pop(context);
                             }
@@ -1067,7 +1070,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
-                                'Unable to Re-summarize Memory',
+                                'Unable to Re-summarize Conversation',
                                 'Please check your internet connection and try again.',
                                 singleButton: true,
                                 okButtonText: 'OK',
@@ -1082,7 +1085,7 @@ class GetSheetMainOptions extends StatelessWidget {
                   leading: const Icon(
                     Icons.delete,
                   ),
-                  onTap: provider.loadingReprocessMemory
+                  onTap: provider.loadingReprocessConversation
                       ? null
                       : () {
                           final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
@@ -1093,13 +1096,15 @@ class GetSheetMainOptions extends StatelessWidget {
                                 context,
                                 () => Navigator.pop(context),
                                 () {
-                                  context.read<MemoryProvider>().deleteMemory(provider.memory, provider.memoryIdx);
+                                  context
+                                      .read<ConversationProvider>()
+                                      .deleteConversation(provider.conversation, provider.conversationIdx);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, true);
                                   Navigator.pop(context, {'deleted': true});
                                 },
-                                'Delete Memory?',
-                                'Are you sure you want to delete this memory? This action cannot be undone.',
+                                'Delete Conversation?',
+                                'Are you sure you want to delete this conversation? This action cannot be undone.',
                                 okButtonText: 'Confirm',
                               ),
                             );
@@ -1109,7 +1114,7 @@ class GetSheetMainOptions extends StatelessWidget {
                                   context,
                                   () => Navigator.pop(context),
                                   () => Navigator.pop(context),
-                                  'Unable to Delete Memory',
+                                  'Unable to Delete Conversation',
                                   'Please check your internet connection and try again.',
                                   singleButton: true,
                                   okButtonText: 'OK'),
@@ -1157,18 +1162,18 @@ class ShowOptionsBottomSheet extends StatelessWidget {
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Consumer<MemoryDetailProvider>(builder: (context, provider, child) {
+      child: Consumer<ConversationDetailProvider>(builder: (context, provider, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const GetSheetTitle(),
             (provider.displayDevToolsInSheet
                 ? GetDevToolsOptions(
-                    memory: provider.memory,
+                    conversation: provider.conversation,
                   )
                 : provider.displayShareOptionsInSheet
                     ? GetShareOptions(
-                        memory: provider.memory,
+                        conversation: provider.conversation,
                       )
                     : const GetSheetMainOptions()),
             const SizedBox(height: 40),

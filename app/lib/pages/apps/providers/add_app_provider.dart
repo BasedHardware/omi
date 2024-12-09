@@ -23,7 +23,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
-  TextEditingController memoryPromptController = TextEditingController();
+  TextEditingController conversationPromptController = TextEditingController();
   String? appCategory;
 
 // Trigger Event
@@ -109,8 +109,8 @@ class AddAppProvider extends ChangeNotifier {
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
     }
-    if (app.memoryPrompt != null) {
-      memoryPromptController.text = app.memoryPrompt!.decodeString;
+    if (app.conversationPrompt != null) {
+      conversationPromptController.text = app.conversationPrompt!.decodeString;
     }
     if (app.proactiveNotification != null) {
       selectedScopes = app.getNotificationScopesFromIds(
@@ -125,7 +125,7 @@ class AddAppProvider extends ChangeNotifier {
     appNameController.clear();
     appDescriptionController.clear();
     chatPromptController.clear();
-    memoryPromptController.clear();
+    conversationPromptController.clear();
     triggerEvent = null;
     webhookUrlController.clear();
     setupCompletedController.clear();
@@ -203,7 +203,7 @@ class AddAppProvider extends ChangeNotifier {
     if (chatPromptController.text != app.chatPrompt) {
       return true;
     }
-    if (memoryPromptController.text != app.memoryPrompt) {
+    if (conversationPromptController.text != app.conversationPrompt) {
       return true;
     }
     return false;
@@ -235,7 +235,7 @@ class AddAppProvider extends ChangeNotifier {
             isValid = chatPromptController.text.isNotEmpty;
           }
           if (capability.id == 'memories') {
-            isValid = memoryPromptController.text.isNotEmpty;
+            isValid = conversationPromptController.text.isNotEmpty;
           }
           if (capability.id == 'proactive_notification') {
             isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
@@ -293,7 +293,7 @@ class AddAppProvider extends ChangeNotifier {
           }
         }
         if (capability.title == 'memories') {
-          if (memoryPromptController.text.isEmpty) {
+          if (conversationPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
             return false;
           }
@@ -357,7 +357,7 @@ class AddAppProvider extends ChangeNotifier {
         data['chat_prompt'] = chatPromptController.text;
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = memoryPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text;
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
@@ -412,7 +412,7 @@ class AddAppProvider extends ChangeNotifier {
         data['chat_prompt'] = chatPromptController.text;
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = memoryPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text;
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {

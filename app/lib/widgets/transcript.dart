@@ -14,7 +14,7 @@ class TranscriptWidget extends StatefulWidget {
   final bool topMargin;
   final bool separator;
   final bool canDisplaySeconds;
-  final bool isMemoryDetail;
+  final bool isConversationDetail;
   final Function(int)? editSegment;
 
   const TranscriptWidget({
@@ -24,7 +24,7 @@ class TranscriptWidget extends StatefulWidget {
     this.topMargin = true,
     this.separator = true,
     this.canDisplaySeconds = true,
-    this.isMemoryDetail = false,
+    this.isConversationDetail = false,
     this.editSegment,
   });
 
