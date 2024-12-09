@@ -35,6 +35,7 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
+struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -691,7 +692,12 @@ void pusher(void)
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES)
             {
-            result = write_to_storage();
+                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+                if(is_sd_on()) 
+                {
+                    result = write_to_storage();
+                }
+                k_mutex_unlock(&write_sdcard_mutex);
             }
             if (result)
             {
@@ -736,7 +742,9 @@ int bt_off()
    {
        printk("Failed to stop Bluetooth %d\n",err);
    }
+   k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
    sd_off();
+   k_mutex_unlock(&write_sdcard_mutex);
    mic_off();
    //everything else off
 
@@ -757,6 +765,7 @@ int bt_on()
 //periodic advertising
 int transport_start()
 {
+    k_mutex_init(&write_sdcard_mutex);
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
