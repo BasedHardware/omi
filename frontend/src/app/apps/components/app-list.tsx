@@ -1,4 +1,5 @@
-import envConfig from '@/src/constants/envConfig';
+'use client';
+
 import { FeaturedPluginCard } from './plugin-card/featured';
 import { CompactPluginCard } from './plugin-card/compact';
 import { CategoryHeader } from './category-header';
@@ -6,90 +7,79 @@ import type { Plugin, PluginStat } from './types';
 import { ChevronRight } from 'lucide-react';
 import { ScrollableCategoryNav } from './scrollable-category-nav';
 import { SearchBar } from './search/search-bar';
+import { useState, useMemo } from 'react';
 
-async function getPluginsData() {
-  const [pluginsResponse, statsResponse] = await Promise.all([
-    fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`, {
-      next: { revalidate: 3600 },
-    }),
-    fetch(
-      'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
-      {
-        next: { revalidate: 3600 },
-      },
-    ),
-  ]);
-
-  const rawPlugins = await pluginsResponse.json();
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Sample raw plugin data:', {
-      name: rawPlugins[0]?.name,
-      created_at: rawPlugins[0]?.created_at,
-    });
-  }
-
-  const plugins = rawPlugins.map((plugin: any) => {
-    const { created_at, capabilities, ...rest } = plugin;
-    return {
-      ...rest,
-      created_at,
-      capabilities: new Set(capabilities),
-    };
-  }) as Plugin[];
-
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Sample transformed plugin:', {
-      name: plugins[0]?.name,
-      created_at: plugins[0]?.created_at,
-    });
-  }
-
-  const stats = (await statsResponse.json()) as PluginStat[];
-  return { plugins, stats };
+interface AppListProps {
+  initialPlugins: Plugin[];
+  initialStats: PluginStat[];
 }
 
-export default async function AppList() {
-  const { plugins, stats } = await getPluginsData();
+// Stable shuffle function using a seed
+function seededShuffle<T>(array: T[], seed: number): T[] {
+  const shuffled = [...array];
+  const random = (i: number) => {
+    const x = Math.sin(i + seed) * 10000;
+    return x - Math.floor(x);
+  };
 
-  // Get new plugins (zero downloads) and randomize them
-  const newPlugins = [...plugins].filter((plugin) => plugin.installs === 0);
-  // Shuffle array using Fisher-Yates algorithm
-  for (let i = newPlugins.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newPlugins[i], newPlugins[j]] = [newPlugins[j], newPlugins[i]];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random(i) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  const newThisWeek = newPlugins.slice(0, 4);
+  return shuffled;
+}
 
-  // Sort plugins by different criteria
-  const mostPopular = [...plugins].sort((a, b) => b.installs - a.installs).slice(0, 9);
+export default function AppList({ initialPlugins, initialStats }: AppListProps) {
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Get integration apps
-  const integrationApps = [...plugins]
-    .filter((plugin) => plugin.capabilities.has('external_integration'))
-    .sort((a, b) => b.installs - a.installs)
-    .slice(0, 9);
+  // Use useMemo to ensure consistent results between renders
+  const { newThisWeek, mostPopular, integrationApps, sortedCategories } = useMemo(() => {
+    // Get new plugins (zero downloads) and shuffle them with a stable seed
+    const newPlugins = seededShuffle(
+      initialPlugins.filter((plugin) => plugin.installs === 0),
+      1, // Fixed seed for consistent shuffling
+    ).slice(0, 4);
 
-  const totalIntegrationApps = plugins.filter((plugin) =>
-    plugin.capabilities.has('external_integration'),
-  ).length;
+    // Sort plugins by different criteria
+    const mostPopular = [...initialPlugins]
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, 9);
 
-  // Group plugins by category and sort by installs
-  const groupedPlugins = plugins.reduce((acc, plugin) => {
-    const category = plugin.category;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(plugin);
-    return acc;
-  }, {} as Record<string, Plugin[]>);
+    // Get integration apps
+    const integrationApps = [...initialPlugins]
+      .filter((plugin) => plugin.capabilities.has('external_integration'))
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, 9);
 
-  // Sort categories by number of plugins
-  const sortedCategories = Object.entries(groupedPlugins)
-    .sort(([, a], [, b]) => b.length - a.length)
-    .reduce((acc, [category, plugins]) => {
-      acc[category] = plugins.sort((a, b) => b.installs - a.installs);
+    // Group plugins by category and sort by installs
+    const groupedPlugins = initialPlugins.reduce((acc, plugin) => {
+      const category = plugin.category;
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(plugin);
       return acc;
     }, {} as Record<string, Plugin[]>);
+
+    // Sort categories by number of plugins
+    const sortedCategories = Object.entries(groupedPlugins)
+      .sort(([, a], [, b]) => b.length - a.length)
+      .reduce((acc, [category, plugins]) => {
+        acc[category] = plugins.sort((a, b) => b.installs - a.installs);
+        return acc;
+      }, {} as Record<string, Plugin[]>);
+
+    return {
+      newThisWeek: newPlugins,
+      mostPopular,
+      integrationApps,
+      sortedCategories,
+    };
+  }, [initialPlugins]);
+
+  const totalIntegrationApps = initialPlugins.filter((plugin) =>
+    plugin.capabilities.has('external_integration'),
+  ).length;
 
   return (
     <div className="relative">
@@ -102,7 +92,10 @@ export default async function AppList() {
               Discover our most popular AI-powered applications
             </p>
             <div className="mt-6">
-              <SearchBar />
+              <SearchBar
+                allApps={initialPlugins}
+                onSearching={(searching) => setIsSearching(searching)}
+              />
             </div>
           </div>
         </div>
@@ -117,118 +110,122 @@ export default async function AppList() {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-0 mt-[260px]">
-        <div className="px-6 pt-8">
-          <div className="container mx-auto">
-            <div className="space-y-16">
-              {/* New This Week Section */}
-              <section>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-white">New This Week</h2>
-                </div>
-                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-                  {newThisWeek.map((plugin) => (
-                    <FeaturedPluginCard
-                      key={plugin.id}
-                      plugin={plugin}
-                      hideStats={true}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              {/* Most Popular Section */}
-              <section>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-white">Most Popular</h2>
-                </div>
-                <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                  {mostPopular.map((plugin, index) => (
-                    <CompactPluginCard
-                      key={plugin.id}
-                      plugin={plugin}
-                      stat={stats.find((s) => s.id === plugin.id)}
-                      index={index + 1}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              {/* Integration Apps Section */}
-              {integrationApps.length > 0 && (
+      {!isSearching && (
+        <main className="relative z-0 mt-[260px]">
+          <div className="px-6 pt-8">
+            <div className="container mx-auto">
+              <div className="space-y-16">
+                {/* New This Week Section */}
                 <section>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-semibold text-white">Integration Apps</h3>
-                    {totalIntegrationApps > 9 && (
-                      <a
-                        href="/apps/category/integration"
-                        className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
-                      >
-                        See all
-                        <ChevronRight className="h-4 w-4" />
-                      </a>
-                    )}
+                    <h2 className="text-2xl font-bold text-white">New This Week</h2>
+                  </div>
+                  <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+                    {newThisWeek.map((plugin) => (
+                      <FeaturedPluginCard
+                        key={plugin.id}
+                        plugin={plugin}
+                        hideStats={true}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                {/* Most Popular Section */}
+                <section>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-white">Most Popular</h2>
                   </div>
                   <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                    {integrationApps.map((plugin, index) => (
+                    {mostPopular.map((plugin, index) => (
                       <CompactPluginCard
                         key={plugin.id}
                         plugin={plugin}
-                        stat={stats.find((s) => s.id === plugin.id)}
+                        stat={initialStats.find((s) => s.id === plugin.id)}
                         index={index + 1}
                       />
                     ))}
                   </div>
                 </section>
-              )}
 
-              {/* Category Sections */}
-              {Object.entries(sortedCategories).map(([category, plugins]) => (
-                <section key={category} id={category} className="space-y-8">
-                  <div className="flex items-center justify-between">
-                    <CategoryHeader category={category} totalApps={plugins.length} />
-                    {plugins.length >
-                      (category === 'productivity-and-organization' ? 4 : 9) && (
-                      <a
-                        href={`/apps/category/${category}`}
-                        className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
-                      >
-                        See all
-                        <ChevronRight className="h-4 w-4" />
-                      </a>
-                    )}
-                  </div>
-
-                  {category === 'productivity-and-organization' ? (
-                    // Productivity section with featured tiles
-                    <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-                      {plugins.slice(0, 4).map((plugin) => (
-                        <FeaturedPluginCard
-                          key={plugin.id}
-                          plugin={plugin}
-                          stat={stats.find((s) => s.id === plugin.id)}
-                        />
-                      ))}
+                {/* Integration Apps Section */}
+                {integrationApps.length > 0 && (
+                  <section>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-semibold text-white">
+                        Integration Apps
+                      </h3>
+                      {totalIntegrationApps > 9 && (
+                        <a
+                          href="/apps/category/integration"
+                          className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
+                        >
+                          See all
+                          <ChevronRight className="h-4 w-4" />
+                        </a>
+                      )}
                     </div>
-                  ) : (
-                    // Other categories with compact tiles
                     <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                      {plugins.slice(0, 9).map((plugin, index) => (
+                      {integrationApps.map((plugin, index) => (
                         <CompactPluginCard
                           key={plugin.id}
                           plugin={plugin}
-                          stat={stats.find((s) => s.id === plugin.id)}
+                          stat={initialStats.find((s) => s.id === plugin.id)}
                           index={index + 1}
                         />
                       ))}
                     </div>
-                  )}
-                </section>
-              ))}
+                  </section>
+                )}
+
+                {/* Category Sections */}
+                {Object.entries(sortedCategories).map(([category, plugins]) => (
+                  <section key={category} id={category} className="space-y-8">
+                    <div className="flex items-center justify-between">
+                      <CategoryHeader category={category} totalApps={plugins.length} />
+                      {plugins.length >
+                        (category === 'productivity-and-organization' ? 4 : 9) && (
+                        <a
+                          href={`/apps/category/${category}`}
+                          className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
+                        >
+                          See all
+                          <ChevronRight className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+
+                    {category === 'productivity-and-organization' ? (
+                      // Productivity section with featured tiles
+                      <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+                        {plugins.slice(0, 4).map((plugin) => (
+                          <FeaturedPluginCard
+                            key={plugin.id}
+                            plugin={plugin}
+                            stat={initialStats.find((s) => s.id === plugin.id)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      // Other categories with compact tiles
+                      <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
+                        {plugins.slice(0, 9).map((plugin, index) => (
+                          <CompactPluginCard
+                            key={plugin.id}
+                            plugin={plugin}
+                            stat={initialStats.find((s) => s.id === plugin.id)}
+                            index={index + 1}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
     </div>
   );
 }
