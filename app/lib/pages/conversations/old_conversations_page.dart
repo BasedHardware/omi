@@ -10,14 +10,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 
-class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key});
+class OldConversationsPage extends StatefulWidget {
+  const OldConversationsPage({super.key});
 
   @override
-  State<ConversationsPage> createState() => _ConversationsPageState();
+  State<OldConversationsPage> createState() => _OldConversationsPageState();
 }
 
-class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
+class _OldConversationsPageState extends State<OldConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
 
   @override
