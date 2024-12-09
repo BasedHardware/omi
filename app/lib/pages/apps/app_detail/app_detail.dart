@@ -67,13 +67,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (!widget.app.private) {
         setAnalyticsLoading(true);
         var app = await context.read<AppProvider>().getAppDetails(widget.app.id);
-        setState(() {
-          if (app != null) {
-            moneyMade = app.moneyMade ?? 0.0;
-            usageCount = app.usageCount ?? 0;
-          }
-        });
-        setAnalyticsLoading(false);
+        if (mounted) {
+          setState(() {
+            if (app != null) {
+              moneyMade = app.moneyMade ?? 0.0;
+              usageCount = app.usageCount ?? 0;
+            }
+          });
+          setAnalyticsLoading(false);
+        }
       }
       context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
