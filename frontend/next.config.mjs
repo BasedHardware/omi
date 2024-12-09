@@ -11,7 +11,7 @@ const nextConfig = {
   },
   output: 'standalone',
   experimental: {
-    serverActions: {}
+    serverActions: {},
   },
   images: {
     remotePatterns: [
@@ -19,7 +19,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'raw.githubusercontent.com',
       },
-    ]
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+    ],
   },
   async headers() {
     return [
@@ -33,9 +37,9 @@ const nextConfig = {
         ],
       },
       {
-        source: "/.well-known/apple-app-site-association",
-        headers: [{ key: "content-type", value: "application/json" }]
-      }
+        source: '/.well-known/apple-app-site-association',
+        headers: [{ key: 'content-type', value: 'application/json' }],
+      },
     ];
   },
 };
