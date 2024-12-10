@@ -373,7 +373,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               shape: BoxShape.rectangle,
                             ),
                             child: TabBar(
-                              padding: const EdgeInsets.only(top: 4, bottom: 4),
+                              padding: const EdgeInsets.only(top: 4, bottom: 4, left: 8, right: 8),
+                              labelPadding: EdgeInsets.zero,
                               onTap: (index) {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
