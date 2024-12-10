@@ -361,46 +361,63 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ],
               ),
               const SizedBox(height: 24),
-              app.enabled
+              isLoading
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: AnimatedLoadingButton(
-                          text: 'Uninstall App',
+                          text: '',
                           width: MediaQuery.of(context).size.width * 0.9,
-                          onPressed: () => _toggleApp(app.id, false),
-                          color: Colors.red,
+                          onPressed: () async {},
+                          color: Colors.grey.shade800,
                         ),
                       ),
                     )
-                  : (app.isPaid && !app.isUserPaid
+                  : app.enabled
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: AnimatedLoadingButton(
+                              text: 'Uninstall App',
                               width: MediaQuery.of(context).size.width * 0.9,
-                              text: app.getFormattedPrice(),
-                              onPressed: () async {
-                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                  _checkPaymentStatus(app.id);
-                                  await launchUrl(Uri.parse(app.paymentLink!));
-                                }
-                              },
-                              color: Colors.green,
+                              onPressed: () => _toggleApp(app.id, false),
+                              color: Colors.red,
                             ),
                           ),
                         )
-                      : Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: AnimatedLoadingButton(
-                              width: MediaQuery.of(context).size.width * 0.9,
-                              text: 'Install App',
-                              onPressed: () => _toggleApp(app.id, true),
-                              color: Colors.green,
-                            ),
-                          ),
-                        )),
+                      : (app.isPaid && !app.isUserPaid
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: AnimatedLoadingButton(
+                                  width: MediaQuery.of(context).size.width * 0.9,
+                                  text: app.getFormattedPrice(),
+                                  onPressed: () async {
+                                    if (app.paymentLink != null &&
+                                        app.paymentLink!.isNotEmpty &&
+                                        !app.isOwner(SharedPreferencesUtil().uid)) {
+                                      _checkPaymentStatus(app.id);
+                                      await launchUrl(Uri.parse(app.paymentLink!));
+                                    } else {
+                                      await _toggleApp(app.id, true);
+                                    }
+                                  },
+                                  color: Colors.green,
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: AnimatedLoadingButton(
+                                  width: MediaQuery.of(context).size.width * 0.9,
+                                  text: 'Install App',
+                                  onPressed: () => _toggleApp(app.id, true),
+                                  color: Colors.green,
+                                ),
+                              ),
+                            )),
+
               (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
                   ? Column(
                       children: [
@@ -637,19 +654,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           const Spacer(),
                           Column(
                             children: [
-                              RatingBar.builder(
-                                initialRating: app.ratingAvg ?? 0,
-                                minRating: 1,
-                                ignoreGestures: true,
-                                direction: Axis.horizontal,
-                                allowHalfRating: true,
-                                itemCount: 5,
-                                itemSize: 20,
-                                tapOnlyMode: false,
-                                itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                                maxRating: 5.0,
-                                onRatingUpdate: (rating) {},
+                              Skeleton.ignore(
+                                child: RatingBar.builder(
+                                  initialRating: app.ratingAvg ?? 0,
+                                  minRating: 1,
+                                  ignoreGestures: true,
+                                  direction: Axis.horizontal,
+                                  allowHalfRating: true,
+                                  itemCount: 5,
+                                  itemSize: 20,
+                                  tapOnlyMode: false,
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  maxRating: 5.0,
+                                  onRatingUpdate: (rating) {},
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings"),
