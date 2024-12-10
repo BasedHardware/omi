@@ -112,7 +112,7 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
+    if app['private'] and app['uid'] != uid and not is_tester(uid):
         return None
     set_app_cache_by_id(app_id, app)
     return app
