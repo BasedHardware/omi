@@ -12,7 +12,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache
+    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils import stripe
 
@@ -260,12 +260,12 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
 
     return money
 
-def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_type: str):
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str):
     if not is_paid_app:
         print(f"App is not a paid app, app_id: {app_id}")
         return None
 
-    if payment_type not in ['recurring']:
+    if payment_plan not in ['monthly_recurring']:
         print(f"App payment type is invalid, app_id: {app_id}")
         return None
 
@@ -285,7 +285,7 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
         return app
 
     # create recurring payment link
-    if payment_type == 'recurring':
+    if payment_plan == 'monthly_recurring':
         # product
         if not app.payment_product_id:
             payment_product = stripe.create_product(f"{app.name} Monthly Subscription", app.description)
@@ -302,3 +302,6 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
     # updates
     update_app_in_db(app.dict())
     return app
+
+def get_is_user_paid_app(app_id: str, uid: str):
+    return get_user_paid_app(app_id, uid) is not None
