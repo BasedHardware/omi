@@ -77,7 +77,7 @@ class App(BaseModel):
     is_paid: Optional[bool] = False
     is_user_paid: Optional[bool] = False
     price: Optional[float] = 0.0
-    payment_type: Optional[str] = None
+    payment_plan: Optional[str] = None
     payment_product_id: Optional[str] = None
     payment_price_id: Optional[str] = None
     payment_link: Optional[str] = None
