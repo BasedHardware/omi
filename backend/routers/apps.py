@@ -310,7 +310,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and get_is_user_paid_app(app.id, uid) == False and app.uid != uid:
+    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
     enable_app(uid, app_id)
