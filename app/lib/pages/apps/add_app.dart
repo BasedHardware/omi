@@ -324,12 +324,14 @@ class _AddAppPageState extends State<AddAppPage> {
                                         'app_name': provider.appNameController.text,
                                         'app_category': provider.appCategory,
                                         'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                        'is_paid': provider.isPaid,
                                       });
                                     } else {
                                       MixpanelManager().privateAppSubmitted({
                                         'app_name': provider.appNameController.text,
                                         'app_category': provider.appCategory,
                                         'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                        'is_paid': provider.isPaid,
                                       });
                                     }
                                     SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
