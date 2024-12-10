@@ -16,11 +16,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    print(event)
-
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']  # Contains session details
-        print(session)
         print(f"Payment completed for session: {session['id']}")
 
         app_id = session['metadata']['app_id']
