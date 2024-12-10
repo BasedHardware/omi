@@ -75,12 +75,12 @@ class App(BaseModel):
     money_made: Optional[float] = None
     usage_count: Optional[int] = None
     is_paid: Optional[bool] = False
-    is_user_paid: Optional[bool] = False
     price: Optional[float] = 0.0
     payment_plan: Optional[str] = None
     payment_product_id: Optional[str] = None
     payment_price_id: Optional[str] = None
     payment_link: Optional[str] = None
+    is_user_paid: Optional[bool] = False
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
