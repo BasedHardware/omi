@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
@@ -45,6 +46,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool analyticsLoading = false;
   double moneyMade = 0.0;
   int usageCount = 0;
+  Timer? _paymentCheckTimer;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -92,6 +94,19 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _paymentCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startApiCallTimer() {
+    _paymentCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      print('Check for payment status');
+      // cancel timer if payment is successful
+    });
   }
 
   @override
@@ -332,7 +347,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     ),
                   )
-                : (widget.app.isPaid
+                : (widget.app.isPaid && !widget.app.isUserPaid
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
@@ -341,6 +356,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             text: widget.app.getFormattedPrice(),
                             onPressed: () async {
                               // TODO: Payment link
+                              // if (widget.app.paymentLink != null && widget.app.paymentLink!.isNotEmpty) {
+                              //   _startApiCallTimer();
+                              //   // await launchUrl(Uri.parse(widget.app.paymentLink!));
+                              // }
+                              // test below
+                              _startApiCallTimer();
+                              await launchUrl(Uri.parse('https://h.omi.me/apps/${widget.app.id}'));
                             },
                             color: Colors.green,
                           ),

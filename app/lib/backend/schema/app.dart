@@ -187,6 +187,8 @@ class App {
   bool isPaid;
   String? paymentPlan;
   double? price;
+  bool isUserPaid;
+  String? paymentLink;
 
   App({
     required this.id,
@@ -217,6 +219,8 @@ class App {
     required this.isPaid,
     this.paymentPlan,
     this.price,
+    required this.isUserPaid,
+    this.paymentLink,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -262,6 +266,8 @@ class App {
       isPaid: json['is_paid'] ?? false,
       paymentPlan: json['payment_plan'],
       price: json['price'] ?? 0.0,
+      isUserPaid: json['is_user_paid'] ?? false,
+      paymentLink: json['payment_link'],
     );
   }
 
@@ -339,6 +345,11 @@ class App {
       'proactive_notification': proactiveNotification?.toJson(),
       'usage_count': usageCount,
       'money_made': moneyMade,
+      'is_paid': isPaid,
+      'payment_plan': paymentPlan,
+      'price': price,
+      'is_user_paid': isUserPaid,
+      'payment_link': paymentLink,
     };
   }
 
