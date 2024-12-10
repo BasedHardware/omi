@@ -6,13 +6,15 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
-    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db
+    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
+    update_app_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
     set_app_usage_count_cache
 from models.app import App, UsageHistoryItem, UsageHistoryType
+from utils import stripe
 
 
 # ********************************
@@ -257,3 +259,46 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     set_app_money_made_cache(app_id, money)
 
     return money
+
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_type: str):
+    if not is_paid_app:
+        print(f"App is not a paid app, app_id: {app_id}")
+        return None
+
+    if payment_type not in ['recurring']:
+        print(f"App payment type is invalid, app_id: {app_id}")
+        return None
+
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        print(f"App is not found, app_id: {app_id}")
+        return None
+
+    app = App(**app_data)
+
+    if price == app.price:
+        print(f"App price is existing, app_id: {app_id}")
+        return app
+
+    if price == 0:
+        print(f"App price is not invalid, app_id: {app_id}")
+        return app
+
+    # create recurring payment link
+    if payment_type == 'recurring':
+        # product
+        if not app.payment_product_id:
+            payment_product = stripe.create_product(f"{app.name} Monthly Subscription", app.description)
+            app.payment_product_id = payment_product.id
+
+        # price
+        payment_price = stripe.create_app_price(app.payment_product_id, price)
+        app.payment_price_id = payment_price.id
+
+        # payment link
+        payment_price = stripe.create_app_payment_link(app.payment_product_id, price)
+        app.payment_link = app.payment_price_id
+
+    # updates
+    update_app_in_db(app.dict())
+    return app

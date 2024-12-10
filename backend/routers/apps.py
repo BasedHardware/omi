@@ -14,7 +14,7 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
-    add_app_access_for_tester, remove_app_access_for_tester
+    add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -39,7 +39,7 @@ def get_approved_apps(include_reviews: bool = False):
 
 
 @router.post('/v1/apps', tags=['v1'])
-def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
     data['deleted'] = False
@@ -74,7 +74,13 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
     data['created_at'] = datetime.now(timezone.utc)
+
     add_app_to_db(data)
+
+    # payment link
+    app = App(**data)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_type)
+
     return {'status': 'ok'}
 
 
@@ -96,7 +102,13 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         img_url = upload_plugin_logo(file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
+    # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)
+
+    # payment link
+    app = App(**data)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_type)
+
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
