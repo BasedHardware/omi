@@ -38,6 +38,7 @@ class AddAppProvider extends ChangeNotifier {
   // Pricing
   TextEditingController priceController = TextEditingController();
   String? selectePaymentPlan;
+  bool isPaid = false;
 
   List<PaymentPlan> paymentPlans = [];
 
@@ -84,6 +85,15 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setIsPaid(bool paid) {
+    if (!paid) {
+      priceController.clear();
+      selectePaymentPlan = null;
+    }
+    isPaid = paid;
+    notifyListeners();
+  }
+
   void setIsUpdating(bool updating) {
     isUpdating = updating;
     notifyListeners();
@@ -107,6 +117,7 @@ class AddAppProvider extends ChangeNotifier {
     }
     setAppCategory(app.category);
     setPaymentPlan(app.paymentPlan);
+    isPaid = app.isPaid;
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
@@ -136,7 +147,7 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
-    checkValidity();
+    isValid = false;
     setIsLoading(false);
     notifyListeners();
   }
@@ -149,6 +160,8 @@ class AddAppProvider extends ChangeNotifier {
     chatPromptController.clear();
     conversationPromptController.clear();
     triggerEvent = null;
+    isPaid = false;
+    selectePaymentPlan = null;
     webhookUrlController.clear();
     setupCompletedController.clear();
     instructionsController.clear();
@@ -175,7 +188,6 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getPaymentPlans() async {
     paymentPlans = await getPaymentPlansServer();
-    print(paymentPlans);
     notifyListeners();
   }
 
@@ -289,8 +301,8 @@ class AddAppProvider extends ChangeNotifier {
             isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
           }
         }
-        if (priceController.text.isNotEmpty) {
-          isValid = selectePaymentPlan != null;
+        if (isPaid) {
+          isValid = priceController.text.isNotEmpty && selectePaymentPlan != null;
         }
         return isValid;
       } else {
@@ -324,8 +336,8 @@ class AddAppProvider extends ChangeNotifier {
           return false;
         }
       }
-      if (priceController.text.isNotEmpty && selectePaymentPlan == null) {
-        AppSnackbar.showSnackbarError('Please select a payment plan for your app');
+      if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
+        AppSnackbar.showSnackbarError('Please select a payment plan and enter a price for your app');
         return false;
       }
       if (!termsAgreed) {
@@ -392,8 +404,8 @@ class AddAppProvider extends ChangeNotifier {
       'category': appCategory,
       'private': !makeAppPublic,
       'id': updateAppId,
-      'is_paid': priceController.text.isNotEmpty,
-      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
@@ -452,8 +464,8 @@ class AddAppProvider extends ChangeNotifier {
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
-      'is_paid': priceController.text.isNotEmpty,
-      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {

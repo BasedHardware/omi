@@ -14,11 +14,10 @@ class AppMetadataWidget extends StatelessWidget {
   final TextEditingController appDescriptionController;
   final TextEditingController creatorNameController;
   final TextEditingController creatorEmailController;
-  final TextEditingController appPricingController;
   final List<Category> categories;
   final Function(String?) setAppCategory;
   final String? category;
-  final String? paymentPlan;
+  final String? appPricing;
 
   const AppMetadataWidget({
     super.key,
@@ -31,9 +30,8 @@ class AppMetadataWidget extends StatelessWidget {
     required this.creatorEmailController,
     required this.categories,
     required this.setAppCategory,
-    required this.appPricingController,
     this.category,
-    this.paymentPlan,
+    this.appPricing,
   });
 
   @override
@@ -272,59 +270,6 @@ class AppMetadataWidget extends StatelessWidget {
                       style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    width: double.infinity,
-                    child: TextFormField(
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value != null && value.isNotEmpty) {
-                          if (double.tryParse(value) == null) {
-                            return 'Please enter a valid amount';
-                          }
-                          if (double.parse(value) < 1) {
-                            return 'Please enter an amount greater than 0';
-                          }
-                          return null;
-                        } else {
-                          return null;
-                        }
-                      },
-                      controller: appPricingController,
-                      decoration: InputDecoration(
-                        prefixIconConstraints: const BoxConstraints(
-                          maxHeight: 28,
-                          maxWidth: 28,
-                        ),
-                        prefixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 4.0),
-                          child: Text(
-                            '\$',
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 17),
-                          ),
-                        ),
-                        errorText: null,
-                        isDense: true,
-                        border: InputBorder.none,
-                        hintText: '20',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'Payment Plan',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
-                  ),
                   GestureDetector(
                     onTap: () {
                       showModalBottomSheet(
@@ -337,7 +282,7 @@ class AppMetadataWidget extends StatelessWidget {
                           return Consumer<AddAppProvider>(builder: (context, provider, child) {
                             return Container(
                               padding: const EdgeInsets.all(16.0),
-                              height: MediaQuery.of(context).size.height * 0.4,
+                              height: MediaQuery.of(context).size.height * 0.36,
                               child: SingleChildScrollView(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -347,26 +292,18 @@ class AppMetadataWidget extends StatelessWidget {
                                       height: 12,
                                     ),
                                     const Text(
-                                      'Payment Plan',
+                                      'App Pricing',
                                       style: TextStyle(color: Colors.white, fontSize: 18),
                                     ),
                                     const SizedBox(
                                       height: 18,
                                     ),
-                                    ListView.separated(
-                                      separatorBuilder: (context, index) {
-                                        return Divider(
-                                          color: Colors.grey.shade600,
-                                          height: 1,
-                                        );
-                                      },
+                                    ListView(
                                       shrinkWrap: true,
-                                      itemCount: provider.paymentPlans.length,
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      itemBuilder: (context, index) {
+                                      children: ['Free', 'Paid'].map((e) {
                                         return InkWell(
                                           onTap: () {
-                                            provider.setPaymentPlan(provider.paymentPlans[index].id);
+                                            provider.setIsPaid(e == 'Paid');
                                             Navigator.pop(context);
                                           },
                                           child: Container(
@@ -378,14 +315,14 @@ class AppMetadataWidget extends StatelessWidget {
                                                   width: 6,
                                                 ),
                                                 Text(
-                                                  provider.paymentPlans[index].title,
+                                                  e,
                                                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                                 ),
                                                 const Spacer(),
                                                 Checkbox(
-                                                  value: provider.selectePaymentPlan == provider.paymentPlans[index].id,
+                                                  value: provider.isPaid == (e == 'Paid'),
                                                   onChanged: (value) {
-                                                    provider.setPaymentPlan(provider.paymentPlans[index].id);
+                                                    provider.setIsPaid(e == 'Paid');
                                                     Navigator.pop(context);
                                                   },
                                                   side: BorderSide(color: Colors.grey.shade300),
@@ -395,7 +332,7 @@ class AppMetadataWidget extends StatelessWidget {
                                             ),
                                           ),
                                         );
-                                      },
+                                      }).toList(),
                                     ),
                                   ],
                                 ),
@@ -419,9 +356,9 @@ class AppMetadataWidget extends StatelessWidget {
                             width: 12,
                           ),
                           Text(
-                            (paymentPlan?.isNotEmpty == true ? paymentPlan : 'None Selected') ?? 'None Selected',
+                            (appPricing?.isNotEmpty == true ? appPricing : 'None Selected') ?? 'None Selected',
                             style: TextStyle(
-                                color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                                color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                           ),
                           const Spacer(),
                           Icon(
