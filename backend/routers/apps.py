@@ -106,7 +106,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), previous_price=plugin.get("price", 0))
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+                            previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
@@ -309,7 +310,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
+    if app.is_paid and get_is_user_paid_app(app.id, uid) == False and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
     enable_app(uid, app_id)
