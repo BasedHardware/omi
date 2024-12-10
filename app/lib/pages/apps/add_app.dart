@@ -99,6 +99,8 @@ class _AddAppPageState extends State<AddAppPage> {
                           pickImage: () async {
                             await provider.pickImage();
                           },
+                          paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
+                          appPricingController: provider.priceController,
                           appNameController: provider.appNameController,
                           appDescriptionController: provider.appDescriptionController,
                           creatorNameController: provider.creatorNameController,
