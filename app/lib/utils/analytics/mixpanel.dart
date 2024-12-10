@@ -102,6 +102,10 @@ class MixpanelManager {
     setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
 
+  void appPurchaseStarted(String appId) => track('App Purchase Started', properties: {'app_id': appId});
+
+  void appPurchaseCompleted(String appId) => track('App Purchase Completed', properties: {'app_id': appId});
+
   void privateAppSubmitted(Map<String, dynamic> properties) => track('Private App Submitted', properties: properties);
 
   void publicAppSubmitted(Map<String, dynamic> properties) => track('Public App Submitted', properties: properties);

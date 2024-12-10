@@ -106,6 +106,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future _checkPaymentStatus(String appId) async {
+    MixpanelManager().appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
       setState(() => appLoading = true);
@@ -113,6 +114,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);
         if (enabled) {
+          MixpanelManager().appPurchaseCompleted(appId);
           prefs.enableApp(appId);
           MixpanelManager().appEnabled(appId);
           context.read<AppProvider>().setApps();
