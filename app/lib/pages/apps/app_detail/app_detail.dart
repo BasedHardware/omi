@@ -393,7 +393,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 padding: const EdgeInsets.all(8.0),
                                 child: AnimatedLoadingButton(
                                   width: MediaQuery.of(context).size.width * 0.9,
-                                  text: app.getFormattedPrice(),
+                                  text: "Subscribe",
                                   onPressed: () async {
                                     if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
                                       _checkPaymentStatus(app.id);
