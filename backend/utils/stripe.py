@@ -2,6 +2,7 @@ import os
 import stripe
 
 stripe.api_key = os.getenv('STRIPE_API_KEY')
+endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
 def create_product(name, description):
     """Create a new product in Stripe."""
@@ -32,3 +33,9 @@ def create_app_payment_link(price_id, app_id):
         },
     )
     return payment_link
+
+
+def parse_event(payload, sig_header):
+    return stripe.Webhook.construct_event(
+        payload, sig_header, endpoint_secret
+    )

@@ -308,6 +308,11 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
         print('enable_app_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
+
+    # Check payment status
+    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
     enable_app(uid, app_id)
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         increase_app_installs_count(app_id)

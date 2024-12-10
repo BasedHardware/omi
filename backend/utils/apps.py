@@ -305,3 +305,6 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
 
 def get_is_user_paid_app(app_id: str, uid: str):
     return get_user_paid_app(app_id, uid) is not None
+
+def paid_app(app_id: str, uid: str):
+    set_user_paid_app(app_id, uid)
