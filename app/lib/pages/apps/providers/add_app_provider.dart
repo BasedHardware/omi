@@ -153,6 +153,8 @@ class AddAppProvider extends ChangeNotifier {
     setupCompletedController.clear();
     instructionsController.clear();
     authUrlController.clear();
+    priceController.clear();
+    selectePaymentPlan = null;
     termsAgreed = false;
     makeAppPublic = false;
     appCategory = null;
