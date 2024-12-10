@@ -75,10 +75,11 @@ class App(BaseModel):
     money_made: Optional[float] = None
     usage_count: Optional[int] = None
     is_paid: Optional[bool] = False
-    price: Optional[float] = 0.0
+    price: Optional[float] = 0.0  # cents/100
     payment_plan: Optional[str] = None
     payment_product_id: Optional[str] = None
     payment_price_id: Optional[str] = None
+    payment_link_id: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
 

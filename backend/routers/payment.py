@@ -23,7 +23,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         print(session)
         print(f"Payment completed for session: {session['id']}")
 
-        app_id = session['app_id']
+        app_id = session['metadata']['app_id']
         uid = session['client_reference_id'][4:]
         paid_app(app_id, uid)
 

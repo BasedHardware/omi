@@ -260,13 +260,13 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
 
     return money
 
-def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str):
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str, previous_price: float | None = None):
     if not is_paid_app:
         print(f"App is not a paid app, app_id: {app_id}")
         return None
 
     if payment_plan not in ['monthly_recurring']:
-        print(f"App payment type is invalid, app_id: {app_id}")
+        print(f"App payment plan is invalid, app_id: {app_id}")
         return None
 
     app_data = get_app_by_id_db(app_id)
@@ -276,7 +276,7 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
 
     app = App(**app_data)
 
-    if price == app.price:
+    if previous_price and previous_price == price:
         print(f"App price is existing, app_id: {app_id}")
         return app
 
@@ -288,16 +288,17 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
     if payment_plan == 'monthly_recurring':
         # product
         if not app.payment_product_id:
-            payment_product = stripe.create_product(f"{app.name} Monthly Subscription", app.description)
+            payment_product = stripe.create_product(f"{app.name} Monthly Plan", app.description, app.image)
             app.payment_product_id = payment_product.id
 
         # price
-        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, price)
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price*100))
         app.payment_price_id = payment_price.id
 
         # payment link
-        payment_price = stripe.create_app_payment_link(app.payment_product_id, price)
-        app.payment_link = app.payment_price_id
+        payment_link = stripe.create_app_payment_link(app.payment_price_id, app.id)
+        app.payment_link_id = payment_link.id
+        app.payment_link = payment_link.url
 
     # updates
     update_app_in_db(app.dict())
