@@ -133,6 +133,10 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
 
+    # enabled
+    user_enabled = set(get_enabled_plugins(uid))
+    app['enabled'] = app['id'] in user_enabled
+
     # install
     plugins_install = get_plugins_installs_count([app['id']])
     app['installs'] = plugins_install.get(app['id'],0)
