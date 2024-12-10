@@ -307,4 +307,5 @@ def get_is_user_paid_app(app_id: str, uid: str):
     return get_user_paid_app(app_id, uid) is not None
 
 def paid_app(app_id: str, uid: str):
-    set_user_paid_app(app_id, uid)
+    expired_seconds = 60*60*24*30  # 30 days
+    set_user_paid_app(app_id, uid, expired_seconds)
