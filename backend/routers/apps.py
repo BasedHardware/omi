@@ -106,8 +106,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
 
     # payment link
-    app = App(**data)
-    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, previous_price=plugin.get("price", 0))
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
