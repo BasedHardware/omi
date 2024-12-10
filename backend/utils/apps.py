@@ -6,13 +6,15 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_public_approved_apps_db, get_app_by_id_db, get_app_usage_history_db, set_app_review_in_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
-    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db
+    is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
+    update_app_in_db
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
-    set_app_usage_count_cache
+    set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
 from models.app import App, UsageHistoryItem, UsageHistoryType
+from utils import stripe
 
 
 # ********************************
@@ -257,3 +259,54 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     set_app_money_made_cache(app_id, money)
 
     return money
+
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str, previous_price: float | None = None):
+    if not is_paid_app:
+        print(f"App is not a paid app, app_id: {app_id}")
+        return None
+
+    if payment_plan not in ['monthly_recurring']:
+        print(f"App payment plan is invalid, app_id: {app_id}")
+        return None
+
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        print(f"App is not found, app_id: {app_id}")
+        return None
+
+    app = App(**app_data)
+
+    if previous_price and previous_price == price:
+        print(f"App price is existing, app_id: {app_id}")
+        return app
+
+    if price == 0:
+        print(f"App price is not invalid, app_id: {app_id}")
+        return app
+
+    # create recurring payment link
+    if payment_plan == 'monthly_recurring':
+        # product
+        if not app.payment_product_id:
+            payment_product = stripe.create_product(f"{app.name} Monthly Plan", app.description, app.image)
+            app.payment_product_id = payment_product.id
+
+        # price
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price*100))
+        app.payment_price_id = payment_price.id
+
+        # payment link
+        payment_link = stripe.create_app_payment_link(app.payment_price_id, app.id)
+        app.payment_link_id = payment_link.id
+        app.payment_link = payment_link.url
+
+    # updates
+    update_app_in_db(app.dict())
+    return app
+
+def get_is_user_paid_app(app_id: str, uid: str):
+    return get_user_paid_app(app_id, uid) is not None
+
+def paid_app(app_id: str, uid: str):
+    expired_seconds = 60*60*24*30  # 30 days
+    set_user_paid_app(app_id, uid, expired_seconds)
