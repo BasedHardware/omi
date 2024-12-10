@@ -54,8 +54,8 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 raise HTTPException(status_code=422, detail='App price is required')
             if data.get('price') < 0.0:
                 raise HTTPException(status_code=422, detail='Price cannot be a negative value')
-            if data.get('payment_type') is None:
-                raise HTTPException(status_code=422, detail='Payment type is required')
+            if data.get('payment_plan') is None:
+                raise HTTPException(status_code=422, detail='Payment plan is required')
     if external_integration := data.get('external_integration'):
         if external_integration.get('triggers_on') is None:
             raise HTTPException(status_code=422, detail='Triggers on is required')
@@ -267,7 +267,6 @@ def get_plugin_capabilities():
 def get_payment_plans():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
-        {'title': 'One Time Payment', 'id': 'one_time'},
     ]
 
 
