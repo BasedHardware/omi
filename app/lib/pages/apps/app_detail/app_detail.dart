@@ -395,9 +395,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   width: MediaQuery.of(context).size.width * 0.9,
                                   text: app.getFormattedPrice(),
                                   onPressed: () async {
-                                    if (app.paymentLink != null &&
-                                        app.paymentLink!.isNotEmpty &&
-                                        !app.isOwner(SharedPreferencesUtil().uid)) {
+                                    if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
                                       _checkPaymentStatus(app.id);
                                       await launchUrl(Uri.parse(app.paymentLink!));
                                     } else {
