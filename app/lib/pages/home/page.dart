@@ -386,7 +386,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               tabs: [
                                 Tab(
                                   child: Text(
-                                    'Convos.',
+                                    'Home',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,

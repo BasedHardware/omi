@@ -79,7 +79,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # payment link
     app = App(**data)
-    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_type)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan)
 
     return {'status': 'ok'}
 
@@ -107,7 +107,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
 
     # payment link
     app = App(**data)
-    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
