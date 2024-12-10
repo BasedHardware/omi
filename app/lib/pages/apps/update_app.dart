@@ -100,6 +100,8 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         pickImage: () async {
                           await provider.updateImage();
                         },
+                        paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
+                        appPricingController: provider.priceController,
                         imageFile: provider.imageFile,
                         appNameController: provider.appNameController,
                         appDescriptionController: provider.appDescriptionController,

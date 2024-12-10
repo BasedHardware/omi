@@ -35,6 +35,12 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
 
+  // Pricing
+  TextEditingController priceController = TextEditingController();
+  String? selectePaymentPlan;
+
+  List<PaymentPlan> paymentPlans = [];
+
   bool termsAgreed = false;
 
   bool makeAppPublic = false;
@@ -65,6 +71,9 @@ class AddAppProvider extends ChangeNotifier {
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
@@ -93,13 +102,18 @@ class AddAppProvider extends ChangeNotifier {
     if (categories.isEmpty) {
       await getCategories();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     setAppCategory(app.category);
+    setPaymentPlan(app.paymentPlan);
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
     creatorNameController.text = app.author.decodeString;
+    priceController.text = app.price.toString();
     creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
@@ -149,6 +163,20 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities.clear();
   }
 
+  void setPaymentPlan(String? plan) {
+    if (plan == null) {
+      return;
+    }
+    selectePaymentPlan = plan;
+    notifyListeners();
+  }
+
+  Future<void> getPaymentPlans() async {
+    paymentPlans = await getPaymentPlansServer();
+    print(paymentPlans);
+    notifyListeners();
+  }
+
   Future<void> getCategories() async {
     categories = await getAppCategories();
     appProvider!.categories = categories;
@@ -167,6 +195,13 @@ class AddAppProvider extends ChangeNotifier {
       return null;
     }
     return getTriggerEvents().firstWhere((element) => element.id == id).title;
+  }
+
+  String? mapPaymentPlanIdToName(String? id) {
+    if (id == null) {
+      return null;
+    }
+    return paymentPlans.firstWhere((element) => element.id == id).title;
   }
 
   Future<void> getAppCapabilities() async {
@@ -252,6 +287,9 @@ class AddAppProvider extends ChangeNotifier {
             isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
           }
         }
+        if (priceController.text.isNotEmpty) {
+          isValid = selectePaymentPlan != null;
+        }
         return isValid;
       } else {
         return false;
@@ -283,6 +321,10 @@ class AddAppProvider extends ChangeNotifier {
           AppSnackbar.showSnackbarError('Please select one more core capability for your app to proceed');
           return false;
         }
+      }
+      if (priceController.text.isNotEmpty && selectePaymentPlan == null) {
+        AppSnackbar.showSnackbarError('Please select a payment plan for your app');
+        return false;
       }
       if (!termsAgreed) {
         AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
@@ -348,6 +390,9 @@ class AddAppProvider extends ChangeNotifier {
       'category': appCategory,
       'private': !makeAppPublic,
       'id': updateAppId,
+      'is_paid': priceController.text.isNotEmpty,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -405,6 +450,9 @@ class AddAppProvider extends ChangeNotifier {
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
+      'is_paid': priceController.text.isNotEmpty,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {

@@ -332,17 +332,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     ),
                   )
-                : Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: AnimatedLoadingButton(
-                        width: MediaQuery.of(context).size.width * 0.9,
-                        text: 'Install App',
-                        onPressed: () => _toggleApp(widget.app.id, true),
-                        color: Colors.green,
-                      ),
-                    ),
-                  ),
+                : (widget.app.isPaid
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: AnimatedLoadingButton(
+                            width: MediaQuery.of(context).size.width * 0.9,
+                            text: widget.app.getFormattedPrice(),
+                            onPressed: () async {
+                              // TODO: Payment link
+                            },
+                            color: Colors.green,
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: AnimatedLoadingButton(
+                            width: MediaQuery.of(context).size.width * 0.9,
+                            text: 'Install App',
+                            onPressed: () => _toggleApp(widget.app.id, true),
+                            color: Colors.green,
+                          ),
+                        ),
+                      )),
             (widget.app.isUnderReview() || widget.app.private) && !widget.app.isOwner(SharedPreferencesUtil().uid)
                 ? Column(
                     children: [
