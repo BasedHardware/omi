@@ -1,0 +1,62 @@
+---
+title: Compiling the Device Firmware
+description: 'Step-by-step guide to compile and install firmware for your OMI device.'
+---
+
+# Compile Firmware  
+
+
+### Prefer a Pre-Built Firmware?  
+Navigate to [Flash Device](https://docs.omi.me/get_started/Flash_device/) to install a pre-built firmware version.
+
+---
+
+## Build Your Own Firmware  
+
+### Step 1: Set Up nRF Connect  
+
+Follow the tutorial in this video:  
+[How to Set Up nRF Connect](https://youtu.be/EAJdOqsL9m8)
+
+---
+
+### Step 2: Open the Firmware Application  
+
+1. Open **nRF Connect Extension** inside VS Code.
+2. Click "Open an existing application" and navigate to the `firmware` folder in the root of this repository.  
+
+   <img src="/images/install_firmware_screenshot_1.png" alt="install_firmware_screenshot_1" width="100%"/>
+
+---
+
+### Step 3: Add a Build Configuration  
+
+1. In the application panel of the extension, click the **Add Build Configuration** icon.  
+
+   <img src="/images/addbuild.png" alt="Add Build Configuration" width="200"/>
+
+2. Choose:
+   - **Board:** `xiao_ble_sense`
+   - **Configuration:** `prj.conf`
+
+3. Click "Build Configuration."  
+
+   <img src="/images/build_settings.png" alt="Build Settings" width="400"/>
+
+---
+
+### Step 4: Locate the Compiled Firmware  
+
+Once the build succeeds, you will find the `zephyr.uf2` file in the `firmware/build/zephyr` directory.
+
+---
+
+### Step 5: Flash the Firmware  
+
+Follow the steps as described [here](https://docs.omi.me/get_started/Flash_device#flashing-the-firmware) using the generated file
+
+---
+
+## Congratulations!  
+
+You have successfully compiled and installed the firmware on your OMI device.  
