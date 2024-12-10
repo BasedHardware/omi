@@ -12,12 +12,13 @@ def create_product(name, description):
     )
     return product
 
-def create_app_price(product_id, amount, currency='usd'):
+def create_app_monthly_recurring_price(product_id, amount, currency='usd'):
     """Create a price for the given product."""
     price = stripe.Price.create(
         unit_amount=amount,
         currency=currency,
         product=product_id,
+        recurring={'interval': 'month'},
     )
     return price
 
