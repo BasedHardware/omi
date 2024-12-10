@@ -19,6 +19,7 @@ class AddAppProvider extends ChangeNotifier {
   GlobalKey<FormState> metadataKey = GlobalKey<FormState>();
   GlobalKey<FormState> externalIntegrationKey = GlobalKey<FormState>();
   GlobalKey<FormState> promptKey = GlobalKey<FormState>();
+  GlobalKey<FormState> pricingKey = GlobalKey<FormState>();
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
@@ -302,7 +303,7 @@ class AddAppProvider extends ChangeNotifier {
           }
         }
         if (isPaid) {
-          isValid = priceController.text.isNotEmpty && selectePaymentPlan != null;
+          isValid = formKey.currentState!.validate() && selectePaymentPlan != null;
         }
         return isValid;
       } else {
@@ -327,6 +328,11 @@ class AddAppProvider extends ChangeNotifier {
       }
       if (externalIntegrationKey.currentState != null) {
         if (!externalIntegrationKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (pricingKey.currentState != null) {
+        if (!pricingKey.currentState!.validate()) {
           return false;
         }
       }
