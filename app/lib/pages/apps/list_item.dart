@@ -108,6 +108,15 @@ class AppListItem extends StatelessWidget {
                                 ),
                               )
                             : Container(),
+                        app.isPaid
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Text(
+                                  app.getFormattedPrice(),
+                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                ),
+                              )
+                            : const SizedBox(),
                       ],
                     ),
                   ],

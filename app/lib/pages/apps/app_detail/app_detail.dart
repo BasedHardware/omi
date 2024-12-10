@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
@@ -42,48 +43,52 @@ class _AppDetailPageState extends State<AppDetailPage> {
   String? instructionsMarkdown;
   bool setupCompleted = false;
   bool appLoading = false;
-  bool analyticsLoading = false;
+  bool isLoading = false;
   double moneyMade = 0.0;
   int usageCount = 0;
+  Timer? _paymentCheckTimer;
+  late App app;
 
   checkSetupCompleted() {
     // TODO: move check to backend
-    isAppSetupCompleted(widget.app.externalIntegration!.setupCompletedUrl).then((value) {
+    isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
       }
     });
   }
 
-  void setAnalyticsLoading(bool value) {
-    if (mounted && analyticsLoading != value) {
-      setState(() => analyticsLoading = value);
+  void setIsLoading(bool value) {
+    if (mounted && isLoading != value) {
+      setState(() => isLoading = value);
     }
   }
 
   @override
   void initState() {
+    app = widget.app;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!widget.app.private) {
-        setAnalyticsLoading(true);
-        var app = await context.read<AppProvider>().getAppDetails(widget.app.id);
+      if (!app.private) {
+        setIsLoading(true);
+        var res = await context.read<AppProvider>().getAppDetails(app.id);
         setState(() {
-          if (app != null) {
-            moneyMade = app.moneyMade ?? 0.0;
-            usageCount = app.usageCount ?? 0;
+          if (res != null) {
+            app = res;
+            moneyMade = res.moneyMade ?? 0.0;
+            usageCount = res.usageCount ?? 0;
           }
         });
-        setAnalyticsLoading(false);
+        setIsLoading(false);
       }
-      context.read<AppProvider>().checkIsAppOwner(widget.app.uid);
-      context.read<AppProvider>().setIsAppPublicToggled(!widget.app.private);
+      context.read<AppProvider>().checkIsAppOwner(app.uid);
+      context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
-    if (widget.app.worksExternally()) {
-      if (widget.app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
-        getAppMarkdown(widget.app.externalIntegration!.setupInstructionsFilePath).then((value) {
+    if (app.worksExternally()) {
+      if (app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
+        getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
           value = value.replaceAll(
             '](assets/',
-            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${widget.app.id}/assets/',
+            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
           );
           setState(() => instructionsMarkdown = value);
         });
@@ -95,19 +100,49 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   @override
+  void dispose() {
+    _paymentCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  Future _checkPaymentStatus(String appId) async {
+    _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      var prefs = SharedPreferencesUtil();
+      setState(() => appLoading = true);
+      var details = await getAppDetailsServer(appId);
+      if (details != null && details['is_user_paid']) {
+        var enabled = await enableAppServer(appId);
+        if (enabled) {
+          prefs.enableApp(appId);
+          MixpanelManager().appEnabled(appId);
+          context.read<AppProvider>().setApps();
+          setState(() {
+            app.isUserPaid = true;
+            app.enabled = true;
+            appLoading = false;
+          });
+          timer.cancel();
+          _paymentCheckTimer?.cancel();
+        } else {
+          debugPrint('Payment not made yet');
+        }
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    bool isIntegration = widget.app.worksExternally();
-    bool hasSetupInstructions =
-        isIntegration && widget.app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
-    bool hasAuthSteps = isIntegration && widget.app.externalIntegration?.authSteps.isNotEmpty == true;
-    int stepsCount = widget.app.externalIntegration?.authSteps.length ?? 0;
+    bool isIntegration = app.worksExternally();
+    bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
+    bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
+    int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
-          widget.app.enabled && widget.app.worksWithChat()
+          app.enabled && app.worksWithChat()
               ? GestureDetector(
                   child: const Icon(Icons.question_answer),
                   onTap: () async {
@@ -116,7 +151,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
                       context.read<HomeProvider>().onSelectedIndexChanged!(1);
                     }
-                    var appId = widget.app.id;
+                    var appId = app.id;
                     var appProvider = Provider.of<AppProvider>(context, listen: false);
                     var messageProvider = Provider.of<MessageProvider>(context, listen: false);
                     App? selectedApp;
@@ -131,21 +166,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   },
                 )
               : const SizedBox.shrink(),
-          widget.app.enabled && widget.app.worksWithChat()
+          app.enabled && app.worksWithChat()
               ? const SizedBox(
                   width: 24,
                 )
               : const SizedBox.shrink(),
-          GestureDetector(
-            child: const Icon(Icons.share),
-            onTap: () {
-              MixpanelManager().track('App Shared', properties: {'appId': widget.app.id});
-              Share.share(
-                'Check out this app on Omi AI: ${widget.app.name} by ${widget.app.author} \n\n${widget.app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${widget.app.id}',
-                subject: widget.app.name,
-              );
-            },
-          ),
+          isLoading
+              ? const SizedBox.shrink()
+              : GestureDetector(
+                  child: const Icon(Icons.share),
+                  onTap: () {
+                    MixpanelManager().track('App Shared', properties: {'appId': app.id});
+                    Share.share(
+                      'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                      subject: app.name,
+                    );
+                  },
+                ),
           !context.watch<AppProvider>().isAppOwner
               ? const SizedBox(
                   width: 24,
@@ -154,109 +191,459 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   width: 12,
                 ),
           context.watch<AppProvider>().isAppOwner
-              ? IconButton(
-                  icon: const Icon(Icons.settings),
-                  padding: const EdgeInsets.only(right: 12),
-                  onPressed: () async {
-                    await showModalBottomSheet(
-                      context: context,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                      ),
-                      builder: (context) {
-                        return ShowAppOptionsSheet(
-                          app: widget.app,
+              ? (isLoading
+                  ? const SizedBox.shrink()
+                  : IconButton(
+                      icon: const Icon(Icons.settings),
+                      padding: const EdgeInsets.only(right: 12),
+                      onPressed: () async {
+                        await showModalBottomSheet(
+                          context: context,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
+                            ),
+                          ),
+                          builder: (context) {
+                            return ShowAppOptionsSheet(
+                              app: app,
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                )
+                    ))
               : const SizedBox.shrink(),
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const SizedBox(width: 20),
-                CachedNetworkImage(
-                  imageUrl: widget.app.getImageUrl(),
-                  imageBuilder: (context, imageProvider) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.rectangle,
-                      borderRadius: BorderRadius.circular(8),
-                      image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                    ),
-                  ),
-                  placeholder: (context, url) => const CircularProgressIndicator(),
-                  errorWidget: (context, url, error) => const Icon(Icons.error),
-                ),
-                const SizedBox(width: 20),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.6,
-                      child: Text(
-                        widget.app.name.decodeString,
-                        style: const TextStyle(color: Colors.white, fontSize: 20),
+        child: Skeletonizer(
+          enabled: isLoading,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const SizedBox(width: 20),
+                  CachedNetworkImage(
+                    imageUrl: app.getImageUrl(),
+                    imageBuilder: (context, imageProvider) => Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.rectangle,
+                        borderRadius: BorderRadius.circular(8),
+                        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.app.author,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    placeholder: (context, url) => const CircularProgressIndicator(),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                  ),
+                  const SizedBox(width: 20),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.6,
+                        child: Text(
+                          app.name.decodeString,
+                          style: const TextStyle(color: Colors.white, fontSize: 20),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        app.author,
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(),
+                  app.ratingCount == 0
+                      ? const Column(
+                          children: [
+                            Text(
+                              '0.0',
+                              style: TextStyle(
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text("no reviews"),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  app.getRatingAvg() ?? '0.0',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                RatingBar.builder(
+                                  initialRating: app.ratingAvg ?? 0,
+                                  minRating: 1,
+                                  ignoreGestures: true,
+                                  direction: Axis.horizontal,
+                                  allowHalfRating: true,
+                                  itemCount: 1,
+                                  itemSize: 20,
+                                  tapOnlyMode: false,
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                                  maxRating: 5.0,
+                                  onRatingUpdate: (rating) {},
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text('${app.ratingCount}+ reviews'),
+                          ],
+                        ),
+                  const Spacer(),
+                  const SizedBox(
+                    height: 36,
+                    child: VerticalDivider(
+                      color: Colors.white,
+                      endIndent: 2,
+                      indent: 2,
+                      width: 4,
                     ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Spacer(),
-                widget.app.ratingCount == 0
-                    ? const Column(
-                        children: [
-                          Text(
-                            '0.0',
-                            style: TextStyle(
-                              fontSize: 16,
+                  ),
+                  const Spacer(),
+                  Column(
+                    children: [
+                      Text(
+                        '${(app.installs / 10).round() * 10}+',
+                        style: const TextStyle(
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text("installs"),
+                    ],
+                  ),
+                  const Spacer(),
+                  const SizedBox(
+                    height: 36,
+                    child: VerticalDivider(
+                      color: Colors.white,
+                      endIndent: 2,
+                      indent: 2,
+                      width: 4,
+                    ),
+                  ),
+                  const Spacer(),
+                  Column(
+                    children: [
+                      Text(
+                        app.private ? 'Private' : 'Public',
+                        style: const TextStyle(
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text("app"),
+                    ],
+                  ),
+                  const Spacer(),
+                ],
+              ),
+              const SizedBox(height: 24),
+              app.enabled
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: AnimatedLoadingButton(
+                          text: 'Uninstall App',
+                          width: MediaQuery.of(context).size.width * 0.9,
+                          onPressed: () => _toggleApp(app.id, false),
+                          color: Colors.red,
+                        ),
+                      ),
+                    )
+                  : (app.isPaid && !app.isUserPaid
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: AnimatedLoadingButton(
+                              width: MediaQuery.of(context).size.width * 0.9,
+                              text: app.getFormattedPrice(),
+                              onPressed: () async {
+                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                  _checkPaymentStatus(app.id);
+                                  await launchUrl(Uri.parse(app.paymentLink!));
+                                }
+                              },
+                              color: Colors.green,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text("no reviews"),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                widget.app.getRatingAvg() ?? '0.0',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                ),
+                        )
+                      : Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: AnimatedLoadingButton(
+                              width: MediaQuery.of(context).size.width * 0.9,
+                              text: 'Install App',
+                              onPressed: () => _toggleApp(app.id, true),
+                              color: Colors.green,
+                            ),
+                          ),
+                        )),
+              (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
+                  ? Column(
+                      children: [
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.78,
+                              child: const Text(
+                                  'You are a beta tester for this app. It is not public yet. It will be public once approved.',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              app.isUnderReview() && !app.private && app.isOwner(SharedPreferencesUtil().uid)
+                  ? Column(
+                      children: [
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.78,
+                              child: const Text(
+                                  'Your app is under review and visible only to you. It will be public once approved.',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              app.isRejected()
+                  ? Column(
+                      children: [
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width * 0.78,
+                              child: const Text(
+                                'Your app has been rejected. Please update the app details and resubmit for review.',
+                                style: TextStyle(color: Colors.grey),
                               ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              const SizedBox(height: 16),
+              (hasAuthSteps && stepsCount > 0)
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Setup Steps',
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          ),
+                          setupCompleted
+                              ? const Padding(
+                                  padding: EdgeInsets.only(right: 12.0),
+                                  child: Text(
+                                    '✅',
+                                    style: TextStyle(color: Colors.grey, fontSize: 18),
+                                  ),
+                                )
+                              : const SizedBox(),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              ...(hasAuthSteps
+                  ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
+                      String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
+                      // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
+                      return ListTile(
+                          title: Text(
+                            title,
+                            style: const TextStyle(fontSize: 17),
+                          ),
+                          onTap: () async {
+                            await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                            checkSetupCompleted();
+                          },
+                          trailing: const Padding(
+                            padding: EdgeInsets.only(right: 12.0),
+                            child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                          ));
+                    }).toList()
+                  : <Widget>[const SizedBox.shrink()]),
+              !hasAuthSteps && hasSetupInstructions
+                  ? ListTile(
+                      onTap: () async {
+                        if (app.externalIntegration != null) {
+                          if (app.externalIntegration!.setupInstructionsFilePath
+                              .contains('raw.githubusercontent.com')) {
+                            await routeToPage(
+                              context,
+                              MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+                            );
+                          } else {
+                            if (app.externalIntegration!.isInstructionsUrl) {
+                              await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath));
+                            } else {
+                              var m = app.externalIntegration!.setupInstructionsFilePath;
+                              routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
+                            }
+                          }
+                        }
+                        checkSetupCompleted();
+                      },
+                      trailing: const Padding(
+                        padding: EdgeInsets.only(right: 12.0),
+                        child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
+                      ),
+                      title: const Text(
+                        'Integration Instructions',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              InfoCardWidget(
+                onTap: () {
+                  if (app.description.decodeString.characters.length > 200) {
+                    routeToPage(
+                        context, MarkdownViewer(title: 'About the App', markdown: app.description.decodeString));
+                  }
+                },
+                title: 'About the App',
+                description: app.description,
+                showChips: true,
+                chips: app
+                    .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
+                    .map((e) => e.title)
+                    .toList(),
+              ),
+
+              app.conversationPrompt != null
+                  ? InfoCardWidget(
+                      onTap: () {
+                        if (app.conversationPrompt!.decodeString.characters.length > 200) {
+                          routeToPage(
+                              context,
+                              MarkdownViewer(
+                                  title: 'Conversation Prompt', markdown: app.conversationPrompt!.decodeString));
+                        }
+                      },
+                      title: 'Conversation Prompt',
+                      description: app.conversationPrompt!,
+                      showChips: false,
+                    )
+                  : const SizedBox.shrink(),
+
+              app.chatPrompt != null
+                  ? InfoCardWidget(
+                      onTap: () {
+                        if (app.chatPrompt!.decodeString.characters.length > 200) {
+                          routeToPage(context,
+                              MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
+                        }
+                      },
+                      title: 'Chat Personality',
+                      description: app.chatPrompt!,
+                      showChips: false,
+                    )
+                  : const SizedBox.shrink(),
+              GestureDetector(
+                onTap: () {
+                  if (app.reviews.isNotEmpty) {
+                    routeToPage(context, ReviewsListPage(app: app));
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18.0),
+                  margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
+                          const Spacer(),
+                          app.reviews.isNotEmpty
+                              ? const Icon(
+                                  Icons.arrow_forward,
+                                  size: 20,
+                                )
+                              : const SizedBox.shrink(),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Text(app.getRatingAvg() ?? '0.0',
+                              style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          Column(
+                            children: [
                               RatingBar.builder(
-                                initialRating: widget.app.ratingAvg ?? 0,
+                                initialRating: app.ratingAvg ?? 0,
                                 minRating: 1,
                                 ignoreGestures: true,
                                 direction: Axis.horizontal,
                                 allowHalfRating: true,
-                                itemCount: 1,
+                                itemCount: 5,
                                 itemSize: 20,
                                 tapOnlyMode: false,
                                 itemPadding: const EdgeInsets.symmetric(horizontal: 0),
@@ -264,373 +651,42 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 maxRating: 5.0,
                                 onRatingUpdate: (rating) {},
                               ),
+                              const SizedBox(height: 4),
+                              Text(app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings"),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Text('${widget.app.ratingCount}+ reviews'),
                         ],
                       ),
-                const Spacer(),
-                const SizedBox(
-                  height: 36,
-                  child: VerticalDivider(
-                    color: Colors.white,
-                    endIndent: 2,
-                    indent: 2,
-                    width: 4,
-                  ),
-                ),
-                const Spacer(),
-                Column(
-                  children: [
-                    Text(
-                      '${(widget.app.installs / 10).round() * 10}+',
-                      style: const TextStyle(
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text("installs"),
-                  ],
-                ),
-                const Spacer(),
-                const SizedBox(
-                  height: 36,
-                  child: VerticalDivider(
-                    color: Colors.white,
-                    endIndent: 2,
-                    indent: 2,
-                    width: 4,
-                  ),
-                ),
-                const Spacer(),
-                Column(
-                  children: [
-                    Text(
-                      widget.app.private ? 'Private' : 'Public',
-                      style: const TextStyle(
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text("app"),
-                  ],
-                ),
-                const Spacer(),
-              ],
-            ),
-            const SizedBox(height: 24),
-            widget.app.enabled
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: AnimatedLoadingButton(
-                        text: 'Uninstall App',
-                        width: MediaQuery.of(context).size.width * 0.9,
-                        onPressed: () => _toggleApp(widget.app.id, false),
-                        color: Colors.red,
-                      ),
-                    ),
-                  )
-                : Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: AnimatedLoadingButton(
-                        width: MediaQuery.of(context).size.width * 0.9,
-                        text: 'Install App',
-                        onPressed: () => _toggleApp(widget.app.id, true),
-                        color: Colors.green,
-                      ),
-                    ),
-                  ),
-            (widget.app.isUnderReview() || widget.app.private) && !widget.app.isOwner(SharedPreferencesUtil().uid)
-                ? Column(
-                    children: [
-                      const SizedBox(
-                        height: 10,
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: Colors.grey,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.78,
-                            child: const Text(
-                                'You are a beta tester for this app. It is not public yet. It will be public once approved.',
-                                style: TextStyle(color: Colors.grey)),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: 16),
+                      RecentReviewsSection(
+                        reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                        appAuthor: app.author,
+                      )
                     ],
-                  )
-                : const SizedBox.shrink(),
-            widget.app.isUnderReview() && !widget.app.private && widget.app.isOwner(SharedPreferencesUtil().uid)
-                ? Column(
-                    children: [
-                      const SizedBox(
-                        height: 10,
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: Colors.grey,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.78,
-                            child: const Text(
-                                'Your app is under review and visible only to you. It will be public once approved.',
-                                style: TextStyle(color: Colors.grey)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            widget.app.isRejected()
-                ? Column(
-                    children: [
-                      const SizedBox(
-                        height: 10,
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: Colors.grey,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.78,
-                            child: const Text(
-                              'Your app has been rejected. Please update the app details and resubmit for review.',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            const SizedBox(height: 16),
-            (hasAuthSteps && stepsCount > 0)
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Setup Steps',
-                          style: TextStyle(color: Colors.white, fontSize: 18),
-                        ),
-                        setupCompleted
-                            ? const Padding(
-                                padding: EdgeInsets.only(right: 12.0),
-                                child: Text(
-                                  '✅',
-                                  style: TextStyle(color: Colors.grey, fontSize: 18),
-                                ),
-                              )
-                            : const SizedBox(),
-                      ],
-                    ),
-                  )
-                : const SizedBox.shrink(),
-            ...(hasAuthSteps
-                ? widget.app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                    String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
-                    // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
-                    return ListTile(
-                        title: Text(
-                          title,
-                          style: const TextStyle(fontSize: 17),
-                        ),
-                        onTap: () async {
-                          await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
-                          checkSetupCompleted();
-                        },
-                        trailing: const Padding(
-                          padding: EdgeInsets.only(right: 12.0),
-                          child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
-                        ));
-                  }).toList()
-                : <Widget>[const SizedBox.shrink()]),
-            !hasAuthSteps && hasSetupInstructions
-                ? ListTile(
-                    onTap: () async {
-                      if (widget.app.externalIntegration != null) {
-                        if (widget.app.externalIntegration!.setupInstructionsFilePath
-                            .contains('raw.githubusercontent.com')) {
-                          await routeToPage(
-                            context,
-                            MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
-                          );
-                        } else {
-                          if (widget.app.externalIntegration!.isInstructionsUrl) {
-                            await launchUrl(Uri.parse(widget.app.externalIntegration!.setupInstructionsFilePath));
-                          } else {
-                            var m = widget.app.externalIntegration!.setupInstructionsFilePath;
-                            routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m));
-                          }
-                        }
-                      }
-                      checkSetupCompleted();
-                    },
-                    trailing: const Padding(
-                      padding: EdgeInsets.only(right: 12.0),
-                      child: Icon(Icons.arrow_forward_ios, size: 20, color: Colors.grey),
-                    ),
-                    title: const Text(
-                      'Integration Instructions',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-            InfoCardWidget(
-              onTap: () {
-                if (widget.app.description.decodeString.characters.length > 200) {
-                  routeToPage(
-                      context, MarkdownViewer(title: 'About the App', markdown: widget.app.description.decodeString));
-                }
-              },
-              title: 'About the App',
-              description: widget.app.description,
-              showChips: true,
-              chips: widget.app
-                  .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
-                  .map((e) => e.title)
-                  .toList(),
-            ),
-
-            widget.app.conversationPrompt != null
-                ? InfoCardWidget(
-                    onTap: () {
-                      if (widget.app.conversationPrompt!.decodeString.characters.length > 200) {
-                        routeToPage(
-                            context,
-                            MarkdownViewer(
-                                title: 'Conversation Prompt', markdown: widget.app.conversationPrompt!.decodeString));
-                      }
-                    },
-                    title: 'Conversation Prompt',
-                    description: widget.app.conversationPrompt!,
-                    showChips: false,
-                  )
-                : const SizedBox.shrink(),
-
-            widget.app.chatPrompt != null
-                ? InfoCardWidget(
-                    onTap: () {
-                      if (widget.app.chatPrompt!.decodeString.characters.length > 200) {
-                        routeToPage(context,
-                            MarkdownViewer(title: 'Chat Personality', markdown: widget.app.chatPrompt!.decodeString));
-                      }
-                    },
-                    title: 'Chat Personality',
-                    description: widget.app.chatPrompt!,
-                    showChips: false,
-                  )
-                : const SizedBox.shrink(),
-            GestureDetector(
-              onTap: () {
-                if (widget.app.reviews.isNotEmpty) {
-                  routeToPage(context, ReviewsListPage(app: widget.app));
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18.0),
-                margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade900,
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
-                        const Spacer(),
-                        widget.app.reviews.isNotEmpty
-                            ? const Icon(
-                                Icons.arrow_forward,
-                                size: 20,
-                              )
-                            : const SizedBox.shrink(),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Text(widget.app.getRatingAvg() ?? '0.0',
-                            style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
-                        const Spacer(),
-                        Column(
-                          children: [
-                            RatingBar.builder(
-                              initialRating: widget.app.ratingAvg ?? 0,
-                              minRating: 1,
-                              ignoreGestures: true,
-                              direction: Axis.horizontal,
-                              allowHalfRating: true,
-                              itemCount: 5,
-                              itemSize: 20,
-                              tapOnlyMode: false,
-                              itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
-                              maxRating: 5.0,
-                              onRatingUpdate: (rating) {},
-                            ),
-                            const SizedBox(height: 4),
-                            Text(widget.app.ratingCount <= 0 ? "no ratings" : "${widget.app.ratingCount}+ ratings"),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    RecentReviewsSection(
-                      reviews: widget.app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
-                      appAuthor: widget.app.author,
-                    )
-                  ],
+                  ),
                 ),
               ),
-            ),
-            !widget.app.isOwner(SharedPreferencesUtil().uid) && (widget.app.enabled || widget.app.userReview != null)
-                ? AddReviewWidget(app: widget.app)
-                : const SizedBox.shrink(),
-            // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-            widget.app.private
-                ? const SizedBox.shrink()
-                : Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16.0),
-                    margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade900,
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
-                        const SizedBox(height: 16),
-                        Skeletonizer(
-                          enabled: analyticsLoading,
-                          child: Row(
+              !app.isOwner(SharedPreferencesUtil().uid) && (app.enabled || app.userReview != null)
+                  ? AddReviewWidget(app: app)
+                  : const SizedBox.shrink(),
+              // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
+              // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
+              app.private
+                  ? const SizedBox.shrink()
+                  : Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16.0),
+                      margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade900,
+                        borderRadius: BorderRadius.circular(16.0),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+                          const SizedBox(height: 16),
+                          Row(
                             children: [
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,12 +726,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               const Spacer(flex: 2),
                             ],
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-            const SizedBox(height: 60),
-          ],
+              const SizedBox(height: 60),
+            ],
+          ),
         ),
       ),
     );
@@ -709,11 +765,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
       MixpanelManager().appEnabled(appId);
     } else {
       prefs.disableApp(appId);
-      await disableAppServer(appId);
+      var res = await disableAppServer(appId);
+      print(res);
       MixpanelManager().appDisabled(appId);
     }
     context.read<AppProvider>().setApps();
-    setState(() => widget.app.enabled = isEnabled);
+    setState(() => app.enabled = isEnabled);
     setState(() => appLoading = false);
   }
 }

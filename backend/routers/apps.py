@@ -46,6 +46,16 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('is_paid'):
+        data['is_paid'] = False
+    else:
+        if data['is_paid'] is True:
+            if data.get('price') is None:
+                raise HTTPException(status_code=422, detail='App price is required')
+            if data.get('price') < 0.0:
+                raise HTTPException(status_code=422, detail='Price cannot be a negative value')
+            if data.get('payment_plan') is None:
+                raise HTTPException(status_code=422, detail='Payment plan is required')
     if external_integration := data.get('external_integration'):
         if external_integration.get('triggers_on') is None:
             raise HTTPException(status_code=422, detail='Triggers on is required')
@@ -250,6 +260,13 @@ def get_plugin_capabilities():
             {'title': 'User Memories', 'id': 'user_context'},
             {'title': 'User Chat', 'id': 'user_chat'}
         ]}
+    ]
+
+
+@router.get('/v1/app/payment-plans', tags=['v1'])
+def get_payment_plans():
+    return [
+        {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
 
 
