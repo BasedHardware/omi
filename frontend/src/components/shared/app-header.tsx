@@ -145,80 +145,25 @@ export default function AppHeader({
 
         <nav className="flex items-center">
           {/* Mobile Menu Toggle */}
-          <label htmlFor={mobileMenuId} className="md:hidden">
-            <input
-              type="checkbox"
-              id={mobileMenuId}
-              className="peer hidden"
-              checked={isMobileMenuOpen}
-              onChange={(e) => setIsMobileMenuOpen(e.target.checked)}
-            />
-            <div className="cursor-pointer rounded-md p-2 text-white hover:bg-white/10">
-              <svg
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth="1.5"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-                />
-              </svg>
-            </div>
-
-            {/* Mobile Menu Panel */}
-            <div className="fixed inset-0 z-50 translate-x-full bg-[#0B0F17] transition-transform peer-checked:translate-x-0 md:hidden">
-              <div className="flex h-20 items-center justify-between px-6">
-                <Link href="/" className="text-2xl font-bold text-white">
-                  <Image
-                    src={customLogo.src}
-                    alt={customLogo.alt}
-                    width={146}
-                    height={64}
-                    className="h-auto w-[50px]"
-                  />
-                </Link>
-                <button
-                  className="rounded-md p-2 text-white hover:bg-white/10"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <svg
-                    className="h-6 w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.5"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-6 py-4">
-                <ul className="flex flex-col gap-4">
-                  {navItems.map((item, index) => (
-                    <li key={index}>
-                      <Link
-                        href={item.href}
-                        target={item.target}
-                        className={item.className}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
-                        <span>{item.label}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </label>
+          <button
+            className="rounded-md p-2 text-white hover:bg-white/10 md:hidden"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle mobile menu"
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="1.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+              />
+            </svg>
+          </button>
 
           {/* Desktop Navigation */}
           <ul className="hidden gap-3 text-sm md:flex md:gap-4 md:text-base">
@@ -239,6 +184,62 @@ export default function AppHeader({
         </nav>
       </header>
       <div className="h-px w-full bg-white/5"></div>
+
+      {/* Mobile Menu Panel - Moved outside header */}
+      <div
+        className={`
+          fixed inset-0 z-[100] bg-[#0B0F17] transition-transform duration-300
+          ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
+          md:hidden
+        `}
+      >
+        <div className="flex h-20 items-center justify-between border-b border-white/10 px-6">
+          <Link href="/" className="text-2xl font-bold text-white">
+            <Image
+              src={customLogo.src}
+              alt={customLogo.alt}
+              width={146}
+              height={64}
+              className="h-auto w-[50px]"
+            />
+          </Link>
+          <button
+            className="rounded-md p-2 text-white hover:bg-white/10"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="1.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <ul className="flex flex-col gap-4">
+            {navItems.map((item, index) => (
+              <li key={index}>
+                <Link
+                  href={item.href}
+                  target={item.target}
+                  className={item.className}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </>
   ) : null;
 }
