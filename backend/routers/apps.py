@@ -15,7 +15,7 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
-    add_app_access_for_tester, remove_app_access_for_tester
+    add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -41,13 +41,23 @@ def get_approved_apps(include_reviews: bool = False):
 
 
 @router.post('/v1/apps', tags=['v1'])
-def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
     data['deleted'] = False
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('is_paid'):
+        data['is_paid'] = False
+    else:
+        if data['is_paid'] is True:
+            if data.get('price') is None:
+                raise HTTPException(status_code=422, detail='App price is required')
+            if data.get('price') < 0.0:
+                raise HTTPException(status_code=422, detail='Price cannot be a negative value')
+            if data.get('payment_plan') is None:
+                raise HTTPException(status_code=422, detail='Payment plan is required')
     if external_integration := data.get('external_integration'):
         if external_integration.get('triggers_on') is None:
             raise HTTPException(status_code=422, detail='Triggers on is required')
@@ -66,7 +76,13 @@ def submit_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     imgUrl = upload_plugin_logo(file_path, data['id'])
     data['image'] = imgUrl
     data['created_at'] = datetime.now(timezone.utc)
+
     add_app_to_db(data)
+
+    # payment link
+    app = App(**data)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan)
+
     return {'status': 'ok'}
 
 
@@ -126,8 +142,14 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         img_url = upload_plugin_logo(file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
+    # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)
-    if app['approved'] and (app['private'] is None or app['private'] is False):
+
+    # payment link
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+                            previous_price=plugin.get("price", 0))
+
+    if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
@@ -158,6 +180,14 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.private is not None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to view this app')
+
+    # is user paid
+    app.is_user_paid = get_is_user_paid_app(app.id, uid)
+
+    # payment link
+    if app.payment_link:
+        app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+
     return app
 
 
@@ -293,6 +323,13 @@ def get_plugin_capabilities():
     ]
 
 
+@router.get('/v1/app/payment-plans', tags=['v1'])
+def get_payment_plans():
+    return [
+        {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
+    ]
+
+
 # ******************************************************
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
@@ -311,6 +348,11 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
         print('enable_app_endpoint', res.status_code, res.content)
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
+
+    # Check payment status
+    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
     enable_app(uid, app_id)
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
         increase_app_installs_count(app_id)

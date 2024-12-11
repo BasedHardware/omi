@@ -183,6 +183,16 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
             r.set(f'plugins:{plugin_id}:reviews', str(reviews))
 
 
+def set_user_paid_app(app_id: str, uid: str, ttl: int):
+    r.set(f'users:{uid}:paid_apps:{app_id}', app_id, ex=ttl)
+
+def get_user_paid_app(app_id: str, uid: str) -> str:
+    val = r.get(f'users:{uid}:paid_apps:{app_id}')
+    if not val:
+        return None
+    return val.decode()
+
+
 def enable_app(uid: str, app_id: str):
     r.sadd(f'users:{uid}:enabled_plugins', app_id)
 
