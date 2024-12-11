@@ -107,8 +107,6 @@ class _AddAppPageState extends State<AddAppPage> {
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
                             appDescriptionController: provider.appDescriptionController,
-                            creatorNameController: provider.creatorNameController,
-                            creatorEmailController: provider.creatorEmailController,
                             categories: provider.categories,
                             setAppCategory: provider.setAppCategory,
                             imageFile: provider.imageFile,

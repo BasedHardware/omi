@@ -121,7 +121,6 @@ class AddAppProvider extends ChangeNotifier {
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
     priceController.text = app.price.toString();
-    creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
