@@ -68,18 +68,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
   void initState() {
     app = widget.app;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!app.private) {
-        setIsLoading(true);
-        var res = await context.read<AppProvider>().getAppDetails(app.id);
-        setState(() {
-          if (res != null) {
-            app = res;
-            moneyMade = res.moneyMade ?? 0.0;
-            usageCount = res.usageCount ?? 0;
-          }
-        });
-        setIsLoading(false);
-      }
+      setIsLoading(true);
+      var res = await context.read<AppProvider>().getAppDetails(app.id);
+      setState(() {
+        if (res != null) {
+          app = res;
+          moneyMade = res.moneyMade ?? 0.0;
+          usageCount = res.usageCount ?? 0;
+        }
+      });
+      setIsLoading(false);
+
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
