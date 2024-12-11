@@ -159,3 +159,4 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/pretrained_models
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
+/docs/.docusaurus
