@@ -144,3 +144,6 @@ class SubmitAppRequest(BaseModel):
     external_integration: Optional[ExternalIntegration] = None
     deleted: bool = False
     proactive_notification: Optional[ProactiveNotification] = None
+    is_paid: bool = False
+    price: float = 0.0  # cents/100
+    payment_plan: Optional[str] = None

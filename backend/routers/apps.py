@@ -99,7 +99,7 @@ def submit_app_v2(app_data: str = Form(...), file: UploadFile = File(...), uid=D
     data['uid'] = uid
     creator_profile = get_user_creator_profile(uid)
     if not creator_profile:
-        raise HTTPException(status_code=403, detail='You need to create a creator profile first')
+        raise HTTPException(status_code=403, detail='Your creator profile is not set up')
     data['author'] = creator_profile['creator_name']
     data['email'] = creator_profile['creator_email']
     if external_integration := data.get('external_integration'):
@@ -121,6 +121,11 @@ def submit_app_v2(app_data: str = Form(...), file: UploadFile = File(...), uid=D
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     add_app_to_db(data)
+
+    # payment link
+    app = App(**data)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan)
+
     return {'status': 'ok'}
 
 
@@ -147,9 +152,9 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
 
     # payment link
     upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
-                            previous_price=plugin.get("price", 0))
+                            previous_price=app.get("price", 0))
 
-    if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
+    if app['approved'] and (app['private'] is None or app['private'] is False):
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
