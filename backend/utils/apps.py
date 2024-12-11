@@ -129,9 +129,10 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     reviews = get_plugin_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-    app['reviews'] = []
+    app['reviews'] = [details for details in reviews.values() if details['review']]
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
+    app['user_review'] = reviews.get(uid)
 
     # enabled
     user_enabled = set(get_enabled_plugins(uid))
