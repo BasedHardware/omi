@@ -710,7 +710,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 
 
 def retrieve_metadata_fields_from_transcript(
-        uid: str, created_at: datetime, transcript_segment: List[dict], summary: str
+        uid: str, created_at: datetime, transcript_segment: List[dict]
 ) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
@@ -719,14 +719,10 @@ def retrieve_metadata_fields_from_transcript(
     # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given the raw transcript of a conversation, this transcript has about 20% word error rate, 
-    and diarization is also made very poorly. But that is not a problem for you as you are an expert transcriptionist who has been doing this for years with 99% accuracy.
+    and diarization is also made very poorly.
 
     Your task is to extract the most accurate information from the conversation in the output object indicated below.
-    
-    A lot of words might be misspelled, and some might be missing, but you can infer the correct word based on the context and your knowledge.
-    
-    You have the summary of the conversation as well, which can help you to understand the context of the conversation.
-    
+
     Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
 
     For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
@@ -739,11 +735,6 @@ def retrieve_metadata_fields_from_transcript(
     Conversation Transcript:
     ```
     {transcript}
-    ```
-    
-    Conversation Summary:
-    ```
-    {summary}
     ```
     '''.replace('    ', '')
     try:
