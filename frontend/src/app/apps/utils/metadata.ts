@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import envConfig from '@/src/constants/envConfig';
+import { getCategoryMetadata as getUICategoryMetadata } from './category';
 
 export interface CategoryMetadata {
   title: string;
@@ -69,6 +70,30 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       'automation',
       'device control',
       'service integration',
+    ],
+  },
+  utility: {
+    title: 'Utility Apps for OMI Necklace',
+    description:
+      'Essential utility apps for your OMI Necklace. Access practical tools and helpful functions through voice commands and AI assistance.',
+    keywords: [
+      'utility apps',
+      'tools',
+      'practical apps',
+      'voice commands',
+      'AI assistance',
+    ],
+  },
+  lifestyle: {
+    title: 'Lifestyle Apps for OMI Necklace',
+    description:
+      'Enhance your daily life with OMI lifestyle apps. From personal organization to habit tracking, make everyday tasks more intuitive with AI assistance.',
+    keywords: [
+      'lifestyle apps',
+      'personal organization',
+      'habit tracking',
+      'daily assistance',
+      'AI companion',
     ],
   },
 };
@@ -205,5 +230,22 @@ export function getBaseMetadata(title: string, description: string): Metadata {
       'apple-itunes-app': `app-id=${appStoreInfo.ios.split('/id')[1]}`,
       'google-play-app': `app-id=${appStoreInfo.android.split('id=')[1]}`,
     },
+  };
+}
+
+export function getCategoryMetadata(category: string): CategoryMetadata {
+  const uiMetadata = getUICategoryMetadata(category);
+
+  return {
+    title: `${uiMetadata.displayName} Apps for OMI Necklace`,
+    description: `${uiMetadata.description}. Browse and discover apps designed for voice control and ambient computing.`,
+    keywords: [
+      `${category.toLowerCase()} apps`,
+      'OMI apps',
+      'voice control',
+      'AI assistant',
+      'wearable apps',
+      ...uiMetadata.displayName.toLowerCase().split(' '),
+    ],
   };
 }
