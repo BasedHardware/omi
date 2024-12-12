@@ -269,14 +269,14 @@ export function ProductBanner({
 
       case 'category':
         return (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1A1F2E] to-[#141824] p-1">
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1A1F2E] to-[#141824] p-0.5">
             <div className="animate-gradient-x absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10" />
             <div className="relative backdrop-blur-sm backdrop-filter">
-              <div className="relative z-10 flex flex-wrap items-center justify-between gap-4 p-4 sm:flex-nowrap sm:gap-6 sm:p-6">
-                <div className="flex items-center gap-4">
-                  <div className="group relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl sm:h-20 sm:w-20">
-                    <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-75 blur-sm transition-opacity duration-500 group-hover:opacity-100" />
-                    <div className="relative h-full w-full overflow-hidden rounded-xl">
+              <div className="relative z-10 flex items-center justify-between gap-2 p-2 sm:flex-nowrap sm:gap-4 sm:p-4 md:gap-6 md:p-6">
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <div className="group relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg sm:h-16 sm:w-16 md:h-20 md:w-20">
+                    <div className="absolute -inset-0.5 rounded-lg bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-75 blur-sm transition-opacity duration-500 group-hover:opacity-100" />
+                    <div className="relative h-full w-full overflow-hidden rounded-lg">
                       <Image
                         src={
                           isHovered
@@ -290,14 +290,14 @@ export function ProductBanner({
                     </div>
                   </div>
                   <div>
-                    <h3 className="bg-gradient-to-r from-white via-white to-white/75 bg-clip-text text-lg font-bold text-transparent sm:text-xl">
+                    <h3 className="bg-gradient-to-r from-white via-white to-white/75 bg-clip-text text-sm font-bold text-transparent sm:text-lg md:text-xl">
                       Enhance your {category} experience
                     </h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <p className="text-sm text-gray-400 sm:text-base">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 sm:mt-1 sm:gap-2">
+                      <p className="text-xs text-gray-400 sm:text-sm md:text-base">
                         {PRODUCT_INFO.name} - {PRODUCT_INFO.price}
                       </p>
-                      <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs text-green-300 sm:text-sm">
+                      <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-xs text-green-300 sm:px-2 sm:text-sm">
                         Shipping Now
                       </span>
                     </div>
@@ -307,12 +307,12 @@ export function ProductBanner({
                   href={PRODUCT_INFO.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
+                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-lg bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
                 >
-                  <span className="relative inline-flex items-center gap-2 rounded-[0.625rem] bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all duration-300 group-hover:bg-opacity-90 sm:px-6 sm:py-3">
+                  <span className="relative inline-flex items-center gap-1 rounded-[0.375rem] bg-[#1A1F2E] px-2 py-1 text-xs font-medium text-white transition-all duration-300 group-hover:bg-opacity-90 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm md:px-6 md:py-3">
                     <span>Order Now</span>
                     <svg
-                      className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 sm:h-5 sm:w-5"
+                      className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4 md:h-5 md:w-5"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
