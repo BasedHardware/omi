@@ -144,12 +144,12 @@ export function ProductBanner({
                     href={PRODUCT_INFO.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
+                    className="group relative inline-flex w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] sm:w-auto"
                   >
-                    <span className="relative inline-flex items-center gap-2 rounded-[0.625rem] bg-[#1A1F2E] px-6 py-3 text-base font-medium text-white transition-all duration-300 group-hover:bg-opacity-90 sm:text-lg">
+                    <span className="relative inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold text-white transition-all duration-300 sm:px-8 sm:py-4 sm:text-lg">
                       <span>Order Now</span>
                       <svg
-                        className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1"
+                        className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 sm:h-5 sm:w-5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -243,12 +243,12 @@ export function ProductBanner({
                   href={PRODUCT_INFO.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="relative mt-3 inline-flex w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
+                  className="group relative mt-4 inline-flex w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98]"
                 >
-                  <span className="relative inline-flex w-full items-center justify-center gap-2 rounded-[0.625rem] bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all duration-300 group-hover:bg-opacity-90">
+                  <span className="relative inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-white transition-all duration-300 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm md:px-6 md:py-3 md:text-base">
                     <span>Order Now</span>
                     <svg
-                      className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
+                      className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4 md:h-5 md:w-5"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -307,9 +307,9 @@ export function ProductBanner({
                   href={PRODUCT_INFO.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-lg bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-0.5 transition-all duration-300 ease-out hover:bg-gradient-to-br hover:shadow-lg hover:shadow-indigo-500/25"
+                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98]"
                 >
-                  <span className="relative inline-flex items-center gap-1 rounded-[0.375rem] bg-[#1A1F2E] px-2 py-1 text-xs font-medium text-white transition-all duration-300 group-hover:bg-opacity-90 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm md:px-6 md:py-3">
+                  <span className="relative inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-white transition-all duration-300 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm md:px-6 md:py-3 md:text-base">
                     <span>Order Now</span>
                     <svg
                       className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4 md:h-5 md:w-5"

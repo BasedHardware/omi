@@ -12,6 +12,7 @@ import {
   generateCollectionPageSchema,
   generateBreadcrumbSchema,
   generateAppListSchema,
+  getCategoryMetadata,
 } from '../../utils/metadata';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppsByCategory } from '@/src/lib/api/apps';
@@ -41,14 +42,7 @@ async function getCategoryData(category: string) {
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { category } = params;
   const { categoryPlugins } = await getCategoryData(category);
-  const metadata = categoryMetadata[category];
-
-  if (!metadata) {
-    return {
-      title: 'Category Not Found - OMI Apps',
-      description: 'The requested category could not be found.',
-    };
-  }
+  const metadata = getCategoryMetadata(category);
 
   const title = `${metadata.title} - OMI Apps Marketplace`;
   const description = `${metadata.description} Browse ${categoryPlugins.length}+ ${category} apps for your OMI Necklace.`;
