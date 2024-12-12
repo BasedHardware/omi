@@ -84,14 +84,16 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
   return (
     <div className="relative">
       {/* Fixed Header and Navigation */}
-      <div className="fixed inset-x-0 top-[50px] z-40 bg-[#0B0F17]">
-        <div className="px-6 py-8">
-          <div className="container mx-auto">
-            <h1 className="text-4xl font-bold text-[#6C8EEF]">Omi App Store</h1>
-            <p className="mt-3 text-gray-400">
+      <div className="fixed inset-x-0 top-12 z-40 transform-gpu bg-[#0B0F17] transition-all duration-300 ease-in-out">
+        <div className="border-b border-white/5">
+          <div className="container mx-auto px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8">
+            <h1 className="text-2xl font-bold text-[#6C8EEF] sm:text-3xl md:text-4xl">
+              Omi App Store
+            </h1>
+            <p className="mt-2 text-sm text-gray-400 sm:mt-3 sm:text-base">
               Discover our most popular AI-powered applications
             </p>
-            <div className="mt-6">
+            <div className="mt-4 sm:mt-6">
               <SearchBar
                 allApps={initialPlugins}
                 onSearching={(searching) => setIsSearching(searching)}
@@ -100,9 +102,9 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
           </div>
         </div>
 
-        <div className="border-b border-white/5 shadow-lg shadow-black/5">
-          <div className="px-6">
-            <div className="container mx-auto py-5">
+        <div className="border-b border-white/5 bg-[#0B0F17]/80 backdrop-blur-sm">
+          <div className="container mx-auto px-3 sm:px-6 md:px-8">
+            <div className="py-2 sm:py-2.5 md:py-3">
               <ScrollableCategoryNav currentCategory="" />
             </div>
           </div>
@@ -111,33 +113,65 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
 
       {/* Main Content */}
       {!isSearching && (
-        <main className="relative z-0 mt-[260px]">
-          <div className="px-6 pt-8">
-            <div className="container mx-auto">
-              <div className="space-y-16">
-                {/* New This Week Section */}
-                <section>
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-white">New This Week</h2>
-                  </div>
-                  <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-                    {newThisWeek.map((plugin) => (
-                      <FeaturedPluginCard
-                        key={plugin.id}
-                        plugin={plugin}
-                        hideStats={true}
-                      />
-                    ))}
-                  </div>
-                </section>
+        <main className="relative z-0 mt-[16rem] sm:mt-[18rem] md:mt-[20rem]">
+          <div className="container mx-auto px-3 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6">
+            <div className="space-y-8 sm:space-y-12 md:space-y-16">
+              {/* New This Week Section */}
+              <section className="pt-6 sm:pt-8 md:pt-10">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-white sm:text-2xl">
+                    New This Week
+                  </h2>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-6 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+                  {newThisWeek.map((plugin) => (
+                    <FeaturedPluginCard
+                      key={plugin.id}
+                      plugin={plugin}
+                      hideStats={true}
+                    />
+                  ))}
+                </div>
+              </section>
 
-                {/* Most Popular Section */}
+              {/* Most Popular Section */}
+              <section>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-white sm:text-2xl">
+                    Most Popular
+                  </h2>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-y-1 sm:mt-6 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
+                  {mostPopular.map((plugin, index) => (
+                    <CompactPluginCard
+                      key={plugin.id}
+                      plugin={plugin}
+                      stat={initialStats.find((s) => s.id === plugin.id)}
+                      index={index + 1}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              {/* Integration Apps Section */}
+              {integrationApps.length > 0 && (
                 <section>
                   <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-white">Most Popular</h2>
+                    <h3 className="text-lg font-semibold text-white sm:text-xl">
+                      Integration Apps
+                    </h3>
+                    {totalIntegrationApps > 9 && (
+                      <a
+                        href="/apps/category/integration"
+                        className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
+                      >
+                        See all
+                        <ChevronRight className="h-4 w-4" />
+                      </a>
+                    )}
                   </div>
-                  <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                    {mostPopular.map((plugin, index) => (
+                  <div className="mt-4 grid grid-cols-1 gap-y-1 sm:mt-6 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
+                    {integrationApps.map((plugin, index) => (
                       <CompactPluginCard
                         key={plugin.id}
                         plugin={plugin}
@@ -147,26 +181,40 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
                     ))}
                   </div>
                 </section>
+              )}
 
-                {/* Integration Apps Section */}
-                {integrationApps.length > 0 && (
-                  <section>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-semibold text-white">
-                        Integration Apps
-                      </h3>
-                      {totalIntegrationApps > 9 && (
-                        <a
-                          href="/apps/category/integration"
-                          className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
-                        >
-                          See all
-                          <ChevronRight className="h-4 w-4" />
-                        </a>
-                      )}
+              {/* Category Sections */}
+              {Object.entries(sortedCategories).map(([category, plugins]) => (
+                <section key={category} id={category}>
+                  <div className="flex items-center justify-between">
+                    <CategoryHeader category={category} totalApps={plugins.length} />
+                    {plugins.length >
+                      (category === 'productivity-and-organization' ? 4 : 9) && (
+                      <a
+                        href={`/apps/category/${category}`}
+                        className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
+                      >
+                        See all
+                        <ChevronRight className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+
+                  {category === 'productivity-and-organization' ? (
+                    // Productivity section with featured tiles
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-6 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+                      {plugins.slice(0, 4).map((plugin) => (
+                        <FeaturedPluginCard
+                          key={plugin.id}
+                          plugin={plugin}
+                          stat={initialStats.find((s) => s.id === plugin.id)}
+                        />
+                      ))}
                     </div>
-                    <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                      {integrationApps.map((plugin, index) => (
+                  ) : (
+                    // Other categories with compact tiles
+                    <div className="mt-4 grid grid-cols-1 gap-y-1 sm:mt-6 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
+                      {plugins.slice(0, 9).map((plugin, index) => (
                         <CompactPluginCard
                           key={plugin.id}
                           plugin={plugin}
@@ -175,53 +223,9 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
                         />
                       ))}
                     </div>
-                  </section>
-                )}
-
-                {/* Category Sections */}
-                {Object.entries(sortedCategories).map(([category, plugins]) => (
-                  <section key={category} id={category} className="space-y-8">
-                    <div className="flex items-center justify-between">
-                      <CategoryHeader category={category} totalApps={plugins.length} />
-                      {plugins.length >
-                        (category === 'productivity-and-organization' ? 4 : 9) && (
-                        <a
-                          href={`/apps/category/${category}`}
-                          className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
-                        >
-                          See all
-                          <ChevronRight className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-
-                    {category === 'productivity-and-organization' ? (
-                      // Productivity section with featured tiles
-                      <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-                        {plugins.slice(0, 4).map((plugin) => (
-                          <FeaturedPluginCard
-                            key={plugin.id}
-                            plugin={plugin}
-                            stat={initialStats.find((s) => s.id === plugin.id)}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      // Other categories with compact tiles
-                      <div className="mt-6 grid grid-cols-1 gap-y-4 sm:mt-8 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-3 lg:gap-x-12">
-                        {plugins.slice(0, 9).map((plugin, index) => (
-                          <CompactPluginCard
-                            key={plugin.id}
-                            plugin={plugin}
-                            stat={initialStats.find((s) => s.id === plugin.id)}
-                            index={index + 1}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                ))}
-              </div>
+                  )}
+                </section>
+              ))}
             </div>
           </div>
         </main>
