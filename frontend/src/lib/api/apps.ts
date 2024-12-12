@@ -2,9 +2,13 @@ import { cache } from 'react';
 import envConfig from '@/src/constants/envConfig';
 import { Plugin, PluginStat } from '@/src/app/apps/components/types';
 
+// Store last successful response in memory
+let lastSuccessfulResponse: Plugin[] | null = null;
+
 /**
  * Cached fetch utility for approved apps
  * Uses React's cache() for route segment caching
+ * Includes runtime caching for rate limit handling
  */
 export const getApprovedApps = cache(async () => {
   try {
@@ -16,13 +20,24 @@ export const getApprovedApps = cache(async () => {
     );
 
     if (!response.ok) {
+      if (response.status === 429 && lastSuccessfulResponse) {
+        console.log('Rate limit hit, using cached data');
+        return lastSuccessfulResponse;
+      }
       throw new Error(`Failed to fetch apps: ${response.statusText}`);
     }
 
     const plugins = (await response.json()) as Plugin[];
+    // Store successful response in memory
+    lastSuccessfulResponse = plugins;
     return plugins;
   } catch (error) {
     console.error('Error fetching approved apps:', error);
+    // Return cached data for any network errors if available
+    if (lastSuccessfulResponse) {
+      console.log('Error occurred, using cached data');
+      return lastSuccessfulResponse;
+    }
     throw error;
   }
 });
