@@ -225,7 +225,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
-        title: 'Friend Device Disconnected',
+        title: 'Your Friend Device Disconnected',
         body: 'Please reconnect to continue using your Friend.',
       );
     });
