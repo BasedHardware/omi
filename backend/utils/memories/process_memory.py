@@ -163,7 +163,8 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
     vector = generate_embedding(str(memory.structured)) if not update_only else None
 
     segments = [t.dict() for t in memory.transcript_segments]
-    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments)
+    tz = notification_db.get_user_time_zone(uid)
+    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments, tz)
     metadata['created_at'] = int(memory.created_at.timestamp())
     if not update_only:
         print('save_structured_vector creating vector')
