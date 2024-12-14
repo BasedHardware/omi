@@ -1,7 +1,7 @@
 import json
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List
 
 from pinecone import Pinecone
@@ -88,7 +88,7 @@ def query_vectors_by_metadata(
     if dates_filter and len(dates_filter) == 2 and dates_filter[0] and dates_filter[1]:
         print('dates_filter', dates_filter)
         filter_data['$and'].append(
-            {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
+            {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int((dates_filter[1]+timedelta(days=1)).timestamp())-1}}
         )
 
     print('query_vectors_by_metadata:', json.dumps(filter_data))
