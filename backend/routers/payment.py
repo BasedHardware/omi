@@ -16,12 +16,19 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
+    print("stripe_webhook event", event['type'])
+
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']  # Contains session details
         print(f"Payment completed for session: {session['id']}")
 
         app_id = session['metadata']['app_id']
-        uid = session['client_reference_id'][4:]
+        client_reference_id = session['client_reference_id']
+        if not client_reference_id or len(client_reference_id) < 4:
+            raise HTTPException(status_code=400, detail="Invalid client")
+        uid = client_reference_id[4:]
+
+        # paid
         paid_app(app_id, uid)
 
     return {"status": "success"}
