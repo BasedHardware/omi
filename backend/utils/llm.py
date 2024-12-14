@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import tiktoken
@@ -713,7 +713,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 
 
 def retrieve_metadata_fields_from_transcript(
-        uid: str, created_at: datetime, transcript_segment: List[dict]
+    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
@@ -728,7 +728,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
 
-    For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
+    For context when extracting dates, today is {created_at.astimezone(tz).strftime('%Y-%m-%d')}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
