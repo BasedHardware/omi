@@ -304,21 +304,37 @@ def retrieve_context_topics(messages: List[Message]) -> List[str]:
     return topics
 
 
-def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
+def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
+
     Your task is to to find the dates range in which the current conversation needs context about, in order to answer the most recent user request.
-    
-    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
+
+    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided.
     Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
-    
-    For context, today is {datetime.now().isoformat()}.
-    Year: {datetime.now().year}, Month: {datetime.now().month}, Day: {datetime.now().day}
-    
+
+    For context, today is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
     Conversation:
     {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
+    prompt = f'''
+    Based on a question asked by the user to an AI, for the AI to answer the user question, it needs context outside the question.
+
+    Your task is to to find the dates range in which the question needs context about, in order to answer the most recent user question.
+
+    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided.
+    Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
+
+    For context, today is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+
+    Question:
+    {question}
     '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
@@ -728,7 +744,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
 
-    For context when extracting dates, today is {created_at.astimezone(tz).strftime('%Y-%m-%d')}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.

@@ -12,6 +12,7 @@ from typing_extensions import TypedDict, Literal
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
+import database.notifications as notification_db
 from models.chat import Message
 from models.memory import Memory
 from models.plugin import Plugin
@@ -20,6 +21,7 @@ from utils.llm import (
     requires_context,
     answer_simple_message,
     retrieve_context_dates,
+    retrieve_context_dates_by_question,
     qa_rag,
     retrieve_is_an_omi_question,
     select_structured_filters,
@@ -48,6 +50,7 @@ class GraphState(TypedDict):
     uid: str
     messages: List[Message]
     plugin_selected: Optional[Plugin]
+    tz: str
 
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
@@ -119,11 +122,14 @@ def retrieve_topics_filters(state: GraphState):
 def retrieve_date_filters(state: GraphState):
     print('retrieve_date_filters')
     # TODO: if this makes vector search fail further, query firestore instead
-    dates_range = retrieve_context_dates(state.get("messages", []))
-    if dates_range and len(dates_range) == 2:
-        print('retrieve_date_filters dates_range:', dates_range)
-        return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
-    return {"date_filters": {}}
+    dates_range = retrieve_context_dates_by_question(state.get("parsed_question", ""), state.get("tz", "UTC"))
+    print('retrieve_date_filters dates_range:', dates_range)
+    if not dates_range or len(dates_range) == 0:
+        return {"date_filters": {}}
+    if len(dates_range) == 1:
+        return {"date_filters": {"start": dates_range[0], "end": dates_range[0]}}
+    # >=2
+    return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
 
 
 def query_vectors(state: GraphState):
@@ -200,8 +206,9 @@ def execute_graph_chat(
         uid: str, messages: List[Message], plugin: Optional[Plugin] = None
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin)
+    tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "messages": messages, "plugin_selected": plugin},
+        {"uid": uid, "tz": tz, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
