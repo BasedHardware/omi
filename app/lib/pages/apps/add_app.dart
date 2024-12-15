@@ -104,6 +104,7 @@ class _AddAppPageState extends State<AddAppPage> {
                             pickImage: () async {
                               await provider.pickImage();
                             },
+                            allowPaidApps: provider.allowPaidApps,
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
                             appDescriptionController: provider.appDescriptionController,
