@@ -20,6 +20,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   @override
   void initState() {
     filteredReviews = widget.app.reviews;
+    filteredReviews.sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
     replyController = TextEditingController();
     super.initState();
   }
@@ -39,6 +40,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             .toList();
       });
     }
+    filteredReviews.sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
   }
 
   @override
