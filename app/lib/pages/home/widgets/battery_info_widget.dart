@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/capture/connect.dart';
 import 'package:friend_private/pages/home/device.dart';
 import 'package:friend_private/providers/device_provider.dart';
@@ -92,7 +93,7 @@ class BatteryInfoWidget extends StatelessWidget {
                   child: Row(
                     children: [
                       Image.asset(
-                        'assets/images/logo_transparent.png',
+                        Assets.images.logoTransparent.path,
                         width: MediaQuery.sizeOf(context).width * 0.05,
                         height: MediaQuery.sizeOf(context).width * 0.05,
                       ),
