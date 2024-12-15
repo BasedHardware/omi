@@ -69,14 +69,6 @@ class SharedPreferencesUtil {
 
   //---------------------- Developer Settings ---------------------------------//
 
-  String get gcpCredentials => getString('gcpCredentials') ?? '';
-
-  set gcpCredentials(String value) => saveString('gcpCredentials', value);
-
-  String get gcpBucketName => getString('gcpBucketName') ?? '';
-
-  set gcpBucketName(String value) => saveString('gcpBucketName', value);
-
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated') ?? '';
 
   set webhookOnConversationCreated(String value) => saveString('webhookOnConversationCreated', value);
