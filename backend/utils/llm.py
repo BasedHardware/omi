@@ -261,18 +261,27 @@ class IsAnOmiQuestion(BaseModel):
 
 def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
     prompt = f'''
-    The user is using the chat functionality of an app known as Omi or Friend.
-    Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
-    
-    Questions like, 
+    Task: Analyze the conversation to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+
+    Examples of User Questions:
+
     - "How does it work?"
     - "What can you do?"
-    - "How can I buy it"
-    - "Where do I get it"
-    - "How the chat works?"
-    - ...
-    
-    Conversation History:    
+    - "How can I buy it?"
+    - "Where do I get it?"
+    - "How does the chat function?"
+
+    Instructions:
+
+    1. Review the conversation history carefully.
+    2. Determine if the user is asking about:
+     - The operational aspects of the app.
+     - How to utilize the app effectively.
+     - Any specific features or purchasing options.
+
+    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+
+    Conversation Context:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
@@ -324,18 +333,20 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
-    Based on a question asked by the user to an AI, for the AI to answer the user question, it needs context outside the question.
+    Task: Identify the relevant date range needed to provide context for answering the user's recent question.
 
-    Your task is to to find the dates range in which the question needs context about, in order to answer the most recent user question.
+    Instructions:
 
-    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided.
-    Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
+    1. Use the current date for reference, which is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. Convert the user's timezone, {tz}, to UTC and respond accordingly.
 
-    For context, today is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    2. Ignore requests related to historical or future events. For these, return an empty list.
 
-    Question:
+    3. Provide the date range in UTC
+
+    User's Question:
     {question}
     '''.replace('    ', '').strip()
+
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -410,6 +421,43 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     Answer:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+def qa_rag2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    prompt = f"""
+    As a personalized question-answering assistant, please respond in a friendly and conversational tone.
+
+    - Always provide answers, especially for advice or recommendations, even in the absence of context.
+    - Avoid indicating insufficient information unless the query explicitly involves past events without provided context.
+    - Limit your response to a maximum of three concise sentences.
+
+    {plugin_info}
+
+    Question:
+    {question}
+
+    Context:
+    ```
+    **User Facts:**
+    {facts_str.strip()}
+
+    **Related Conversations:**
+    {context}
+    ```
+    Answer:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    print('qa_rag prompt', prompt)
+    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
+
 
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:

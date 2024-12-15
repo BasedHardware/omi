@@ -23,6 +23,7 @@ from utils.llm import (
     retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
+    qa_rag2,
     retrieve_is_an_omi_question,
     select_structured_filters,
     extract_question_from_conversation,
@@ -124,12 +125,9 @@ def retrieve_date_filters(state: GraphState):
     # TODO: if this makes vector search fail further, query firestore instead
     dates_range = retrieve_context_dates_by_question(state.get("parsed_question", ""), state.get("tz", "UTC"))
     print('retrieve_date_filters dates_range:', dates_range)
-    if not dates_range or len(dates_range) == 0:
-        return {"date_filters": {}}
-    if len(dates_range) == 1:
-        return {"date_filters": {"start": dates_range[0], "end": dates_range[0]}}
-    # >=2
-    return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
+    if dates_range and len(dates_range) >= 2:
+        return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
+    return {"date_filters": {}}
 
 
 def query_vectors(state: GraphState):
@@ -158,7 +156,7 @@ def query_vectors(state: GraphState):
 def qa_handler(state: GraphState):
     uid = state.get("uid")
     memories = state.get("memories_found", [])
-    response: str = qa_rag(
+    response: str = qa_rag2(
         uid,
         state.get("parsed_question"),
         Memory.memories_to_string(memories, True),
