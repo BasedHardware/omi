@@ -10,6 +10,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/conversation_detail/page.dart';
@@ -72,12 +73,12 @@ class _AIMessageState extends State<AIMessage> {
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               )
             : Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   image: DecorationImage(
-                    image: AssetImage("assets/images/background.png"),
+                    image: AssetImage(Assets.images.background.path),
                     fit: BoxFit.cover,
                   ),
-                  borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                  borderRadius: const BorderRadius.all(Radius.circular(16.0)),
                 ),
                 height: 32,
                 width: 32,
@@ -85,7 +86,7 @@ class _AIMessageState extends State<AIMessage> {
                   alignment: Alignment.center,
                   children: [
                     Image.asset(
-                      "assets/images/herologo.png",
+                      Assets.images.herologo.path,
                       height: 24,
                       width: 24,
                     ),
