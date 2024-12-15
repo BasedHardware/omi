@@ -140,8 +140,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32.0),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Memories'),
-                    subtitle: const Text('Export all your memories to a JSON file.'),
+                    title: const Text('Export Conversations'),
+                    subtitle: const Text('Export all your conversations to a JSON file.'),
                     trailing: provider.loadingExportMemories
                         ? const SizedBox(
                             height: 16,
@@ -159,7 +159,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Memories Export Started. This may take a few seconds, please wait.'),
+                                content:
+                                    Text('Conversations Export Started. This may take a few seconds, please wait.'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
@@ -167,11 +168,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/memories.json');
+                            final file = File('${directory.path}/conversations.json');
                             await file.writeAsString(json);
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
