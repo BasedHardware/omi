@@ -11,6 +11,9 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+  pull_request:
+    branches:
+      - main
 
 env:
   SERVICE: persona
