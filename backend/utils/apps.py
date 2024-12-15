@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List
@@ -15,6 +16,9 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils import stripe
+
+
+MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
 
 
 # ********************************
@@ -314,6 +318,8 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
     return app
 
 def get_is_user_paid_app(app_id: str, uid: str):
+    if uid in MarketplaceAppReviewUIDs:
+        return True
     return get_user_paid_app(app_id, uid) is not None
 
 def paid_app(app_id: str, uid: str):
