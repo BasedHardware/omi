@@ -48,8 +48,8 @@ You'll need to obtain the following API keys and credentials:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/BasedHardware/personas-open-source.git
-   cd personas-open-source
+   git clone https://github.com/BasedHardware/omi.git
+   cd omi/personas-open-source
    ```
 
 2. Install dependencies:
