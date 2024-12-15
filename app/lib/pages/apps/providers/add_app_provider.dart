@@ -61,6 +61,8 @@ class AddAppProvider extends ChangeNotifier {
   bool isSubmitting = false;
   bool isValid = false;
 
+  bool allowPaidApps = false;
+
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
   }
@@ -189,6 +191,11 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getPaymentPlans() async {
     paymentPlans = await getPaymentPlansServer();
+    if (paymentPlans.isNotEmpty) {
+      allowPaidApps = true;
+    } else {
+      allowPaidApps = false;
+    }
     notifyListeners();
   }
 
