@@ -1,23 +1,12 @@
 FROM node:18-alpine AS base
-
-# Install dependencies only when needed
-FROM base AS deps
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy all files
+COPY personas-open-source .
 
 # Install dependencies and types
 RUN npm ci --legacy-peer-deps && \
     npm install --save-dev @types/mixpanel-browser --legacy-peer-deps
-
-# Production image, copy all the files and run next
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy all files
-COPY personas-open-source .
 
 # Environment variables should be passed at build time
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
