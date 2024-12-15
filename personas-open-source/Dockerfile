@@ -13,6 +13,8 @@ RUN npm install --legacy-peer-deps  && \
 # && \
     # npm install --save-dev @types/mixpanel-browser --legacy-peer-deps
 
+COPY --from=deps /app/node_modules ./node_modules
+
 # Copy all files
 COPY personas-open-source .
 
