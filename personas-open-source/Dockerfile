@@ -14,7 +14,7 @@ RUN npm install --legacy-peer-deps  && \
     # npm install --save-dev @types/mixpanel-browser --legacy-peer-deps
 
 # Copy all files
-COPY . .
+COPY personas-open-source .
 
 # Environment variables should be passed at build time
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
