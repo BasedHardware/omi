@@ -239,7 +239,7 @@ class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
 
-def requires_context(messages: List[Message]) -> bool:
+def requires_context_v1(messages: List[Message]) -> bool:
     prompt = f'''
     Based on the current conversation your task is to determine whether the user is asking a question or a follow up question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
@@ -254,12 +254,50 @@ def requires_context(messages: List[Message]) -> bool:
     except ValidationError:
         return False
 
+def requires_context(question: str) -> bool:
+    prompt = f'''
+    Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+
+    User's Question:
+    {question}
+    '''
+    with_parser = llm_mini.with_structured_output(RequiresContext)
+    response: RequiresContext = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
 
 class IsAnOmiQuestion(BaseModel):
     value: bool = Field(description="If the message is an Omi/Friend related question")
 
 
-def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
+def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
+    prompt = f'''
+    The user is using the chat functionality of an app known as Omi or Friend.
+    Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
+
+    Questions like,
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it"
+    - "Where do I get it"
+    - "How the chat works?"
+    - ...
+
+    Conversation History:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
+def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
     prompt = f'''
     Task: Analyze the conversation to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
 
@@ -292,14 +330,47 @@ def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
         return False
 
 
+def retrieve_is_an_omi_question(question: str) -> bool:
+    prompt = f'''
+    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+
+    Examples of User Questions:
+
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it?"
+    - "Where do I get it?"
+    - "How does the chat function?"
+
+    Instructions:
+
+    1. Review the question carefully.
+    2. Determine if the user is asking about:
+     - The operational aspects of the app.
+     - How to utilize the app effectively.
+     - Any specific features or purchasing options.
+
+    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+
+    User's Question:
+    {question}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
+
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
+
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
     Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
-    
-    It is possible that the data needed is not related to a topic, in that case, output an empty list. 
+
+    It is possible that the data needed is not related to a topic, in that case, output an empty list.
 
     Conversation:
     {Message.get_messages_as_string(messages)}
@@ -409,7 +480,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = f"""
     You are an assistant for answering questions about the app Omi, also known as Friend.
     Continue the conversation, answering the question based on the context provided.
-    
+
     Context:
     ```
     {context}
@@ -422,7 +493,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -457,10 +528,7 @@ def qa_rag2(uid: str, question: str, context: str, plugin: Optional[Plugin] = No
     print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
-
-
-
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
+def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 

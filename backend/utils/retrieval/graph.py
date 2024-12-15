@@ -23,7 +23,6 @@ from utils.llm import (
     retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
-    qa_rag2,
     retrieve_is_an_omi_question,
     select_structured_filters,
     extract_question_from_conversation,
@@ -63,21 +62,27 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
 
+def determine_conversation(state: GraphState):
+    question = extract_question_from_conversation(state.get("messages", []))
+    print("determine_conversation parsed question:", question)
+    return {"parsed_question": question}
+
+
 def determine_conversation_type(
-        s: GraphState,
+        state: GraphState,
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
-    is_omi_question = retrieve_is_an_omi_question(s.get("messages", []))
-    # TODO: after asked many questions this is causing issues.
-    # TODO: an option to be considered, single prompt outputs response needed type (omi,no context, context, suggestion)
+    question = state.get("parsed_question", "")
+    if not question or len(question) == 0:
+        return "no_context_conversation"
+
+    is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
         return "omi_question"
 
-    requires = requires_context(s.get("messages", []))
-
+    requires = requires_context(question)
     if requires:
         return "context_dependent_conversation"
     return "no_context_conversation"
-
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
@@ -92,11 +97,14 @@ def omi_question(state: GraphState):
     return {'answer': answer, 'ask_for_nps': True}
 
 
-def context_dependent_conversation(state: GraphState):
+def context_dependent_conversation_v1(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
     print("context_dependent_conversation parsed question:", question)
     return {"parsed_question": question}
 
+
+def context_dependent_conversation(state: GraphState):
+    return state
 
 # !! include a question extractor? node?
 
@@ -156,7 +164,7 @@ def query_vectors(state: GraphState):
 def qa_handler(state: GraphState):
     uid = state.get("uid")
     memories = state.get("memories_found", [])
-    response: str = qa_rag2(
+    response: str = qa_rag(
         uid,
         state.get("parsed_question"),
         Memory.memories_to_string(memories, True),
@@ -167,10 +175,12 @@ def qa_handler(state: GraphState):
 
 workflow = StateGraph(GraphState)
 
-workflow.add_conditional_edges(
-    START,
-    determine_conversation_type,
-)
+
+workflow.add_edge(START, "determine_conversation")
+
+workflow.add_node("determine_conversation", determine_conversation)
+
+workflow.add_conditional_edges("determine_conversation", determine_conversation_type,)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
