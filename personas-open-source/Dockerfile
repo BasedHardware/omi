@@ -8,24 +8,11 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies and types
-RUN npm install --legacy-peer-deps  && \
+RUN npm ci --legacy-peer-deps && \
     npm install --save-dev @types/mixpanel-browser --legacy-peer-deps
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-#COPY frontend/. .
-COPY frontend .
-ENV API_URL=https://backend-hhibjajaja-uc.a.run.app
-RUN npm run build
-
-RUN echo "base files"
-RUN ls -la
-
-
 # Production image, copy all the files and run next
-FROM base AS runner
+FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
@@ -69,5 +56,3 @@ EXPOSE 3000
 
 # Start the application
 CMD ["npm", "start"]
-
-
