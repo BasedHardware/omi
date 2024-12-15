@@ -1,8 +1,9 @@
-import { NextConfig } from "next";
+import next from 'next';
+const NextConfig = next.default;
 
 const nextConfig = {
   output: 'standalone',
-  // Add other config options here
+  /* other config options */
 };
 
 export default nextConfig;
