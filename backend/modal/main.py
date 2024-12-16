@@ -15,7 +15,7 @@ def speaker_identification(
     return speaker_identification_endpoint(uid, audio_file, segments)
 
 @app.post('/v1/vad')
-def vad(audio_file: UploadFile = File):
+def vad(file: UploadFile = File):
     print('vad')
     print(vad_endpoint)
-    return vad_endpoint(audio_file)
+    return vad_endpoint(file)
