@@ -37,7 +37,23 @@ jobs:
       - run: gcloud auth configure-docker
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f personas-open-source/Dockerfile .
+          docker build \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
+            --build-arg NEXT_PUBLIC_RAPIDAPI_KEY=${{ secrets.NEXT_PUBLIC_RAPIDAPI_KEY }} \
+            --build-arg NEXT_PUBLIC_RAPIDAPI_HOST=${{ secrets.NEXT_PUBLIC_RAPIDAPI_HOST }} \
+            --build-arg CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }} \
+            --build-arg NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_VAPID_KEY }} \
+            --build-arg OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} \
+            --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN=${{ secrets.NEXT_PUBLIC_MIXPANEL_TOKEN }} \
+            --build-arg NEXT_PUBLIC_EXTRA_PROMPT_RULES=${{ secrets.NEXT_PUBLIC_EXTRA_PROMPT_RULES }} \
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            -f personas-open-source/Dockerfile .
+
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
         id: deploy
