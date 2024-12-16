@@ -54,17 +54,17 @@ jobs:
             --build-arg OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} \
             --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN=${{ secrets.NEXT_PUBLIC_MIXPANEL_TOKEN }} \
             --build-arg NEXT_PUBLIC_EXTRA_PROMPT_RULES=${{ secrets.NEXT_PUBLIC_EXTRA_PROMPT_RULES }} \
-            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
             -f personas-open-source/Dockerfile .
 
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v0
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
