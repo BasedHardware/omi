@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -30,9 +31,15 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 4, 16),
         child: ListView(
           children: <Widget>[
-            // getItemAddOn('Identifying Others', () {
-            //   routeToPage(context, const UserPeoplePage());
-            // }, icon: Icons.people),
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              title: const Text('Identifying Others', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Tell Omi who said it 🗣️'),
+              trailing: const Icon(Icons.people, size: 20),
+              onTap: () {
+                routeToPage(context, const UserPeoplePage());
+              },
+            ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
               title: Text(
@@ -165,7 +172,8 @@ class _ProfilePageState extends State<ProfilePage> {
               trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
             ListTile(
