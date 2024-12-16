@@ -2,7 +2,7 @@ name: Deploy Personas to Cloud RUN
 
 on:
   push:
-    branches: [ "main", "development", "persona-action" ]
+    branches: [ "main", "development" ]
     paths:
       - 'personas-open-source/**'
   workflow_dispatch:
@@ -11,6 +11,9 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+  pull_request:
+    branches:
+      - main
 
 
 env:
