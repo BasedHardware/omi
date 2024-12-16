@@ -44,7 +44,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool canDisplaySeconds = true;
 
-  // bool hasAudioRecording = false;
+  bool hasAudioRecording = false;
 
   List<ConversationPhoto> photos = [];
   List<Tuple2<String, String>> photosData = [];
@@ -194,9 +194,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         await populatePhotosData();
       });
     } else if (conversation.source == ConversationSource.friend) {
-      // await hasMemoryRecording(memory.id).then((value) {
-      //   hasAudioRecording = value;
-      // });
+      await hasConversationRecording(conversation.id).then((value) {
+        hasAudioRecording = value;
+      });
     }
     appsList = appProvider!.apps;
     if (!conversation.discarded) {
