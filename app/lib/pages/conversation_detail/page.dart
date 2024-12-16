@@ -9,9 +9,12 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -337,37 +340,28 @@ class TranscriptWidgets extends StatelessWidget {
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
-                    editSegment: (_) {},
-                    // editSegment: !provider.memory.isPostprocessing()
-                    //     ? (i) {
-                    //         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                    //         if (!connectivityProvider.isConnected) {
-                    //           ConnectivityProvider.showNoInternetDialog(context);
-                    //           return;
-                    //         }
-                    //         showModalBottomSheet(
-                    //           context: context,
-                    //           isScrollControlled: true,
-                    //           isDismissible: provider.editSegmentLoading ? false : true,
-                    //           shape: const RoundedRectangleBorder(
-                    //             borderRadius:
-                    //                 BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-                    //           ),
-                    //           builder: (context) {
-                    //             return EditSegmentWidget(
-                    //               segmentIdx: i,
-                    //               people: SharedPreferencesUtil().cachedPeople,
-                    //             );
-                    //           },
-                    //         );
-                    //       }
-                    //     : (_) {
-                    //         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    //           content: Text('Memory still processing. Please wait...'),
-                    //           duration: Duration(seconds: 1),
-                    //         ));
-                    //       },
-                  ),
+                    // editSegment: (_) {},
+                    editSegment: (i) {
+                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (!connectivityProvider.isConnected) {
+                        ConnectivityProvider.showNoInternetDialog(context);
+                        return;
+                      }
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        isDismissible: provider.editSegmentLoading ? false : true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                        ),
+                        builder: (context) {
+                          return EditSegmentWidget(
+                            segmentIdx: i,
+                            people: SharedPreferencesUtil().cachedPeople,
+                          );
+                        },
+                      );
+                    }),
             const SizedBox(height: 32)
           ],
         );
@@ -426,45 +420,45 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  // !provider.hasAudioRecording
-                  //     ? GestureDetector(
-                  //         onTap: () {
-                  //           showDialog(
-                  //             context: context,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.pop(context),
-                  //               () {
-                  //                 Navigator.pop(context);
-                  //                 routeToPage(context, const RecordingsStoragePermission());
-                  //               },
-                  //               'Can\'t be used for speech training',
-                  //               'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                  //               okButtonText: 'View',
-                  //             ),
-                  //           );
-                  //         },
-                  //         child: Padding(
-                  //           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  //           child: Row(
-                  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //             crossAxisAlignment: CrossAxisAlignment.center,
-                  //             children: [
-                  //               Text('Can\'t be used for speech training',
-                  //                   style: Theme.of(context)
-                  //                       .textTheme
-                  //                       .bodyMedium!
-                  //                       .copyWith(decoration: TextDecoration.underline)),
-                  //               const Padding(
-                  //                 padding: EdgeInsets.only(right: 12),
-                  //                 child: Icon(Icons.info, color: Colors.grey, size: 20),
-                  //               ),
-                  //             ],
-                  //           ),
-                  //         ),
-                  //       )
-                  //     : const SizedBox(),
+                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  !provider.hasAudioRecording
+                      ? GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  routeToPage(context, const RecordingsStoragePermission());
+                                },
+                                'Can\'t be used for speech training',
+                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                okButtonText: 'View',
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text('Can\'t be used for speech training',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(decoration: TextDecoration.underline)),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),
