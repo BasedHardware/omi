@@ -11,18 +11,15 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
-  pull_request:
-    branches:
-      - main
 
 
 env:
-  SERVICE: persona
+  SERVICE: omi-web
   REGION: us-central1
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/persona-action' && 'development') }}
+    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
     permissions:
       contents: 'read'
       id-token: 'write'
