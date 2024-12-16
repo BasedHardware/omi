@@ -504,41 +504,6 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
     prompt = f"""
-    As a personalized question-answering assistant, please respond in a friendly and conversational tone.
-
-    - Always provide answers, especially for advice or recommendations, even in the absence of context.
-    - Avoid indicating insufficient information unless the query explicitly involves past events without provided context.
-    - Limit your response to a maximum of three concise sentences.
-
-    {plugin_info}
-
-    Question:
-    {question}
-
-    Context:
-    ```
-    **User Facts:**
-    {facts_str.strip()}
-
-    **Related Conversations:**
-    {context}
-    ```
-    Answer:
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
-
-def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
-
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
-    context = context.replace('\n\n', '\n').strip()
-    plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
-
-    prompt = f"""
     You are an assistant for question-answering tasks. 
     You answer question in the most personalized way possible, using the context provided.
 
@@ -830,7 +795,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     prompt = f'''
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the last few messages, and identify the single question or follow-up question the user is asking. \
+    your task is to understand THE LAST FEW MESSAGES, and identify the single question or follow-up question the user is asking. \
 
     If the user is not asking a question or does not want to follow up, respond with an empty message.
 
@@ -842,7 +807,6 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     ```
     '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-
 
 def retrieve_metadata_fields_from_transcript(
     uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
