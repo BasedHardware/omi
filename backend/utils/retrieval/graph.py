@@ -180,7 +180,7 @@ workflow.add_edge(START, "determine_conversation")
 
 workflow.add_node("determine_conversation", determine_conversation)
 
-workflow.add_conditional_edges("determine_conversation", determine_conversation_type,)
+workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
