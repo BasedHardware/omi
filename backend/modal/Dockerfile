@@ -9,7 +9,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 FROM python:3.11-slim
 
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
+ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
 
 RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget software-properties-common && \ 
 wget https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda-repo-debian11-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
