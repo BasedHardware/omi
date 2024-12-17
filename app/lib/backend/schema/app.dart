@@ -121,7 +121,7 @@ class ExternalIntegration {
   String getTriggerOnString() {
     switch (triggersOn) {
       case 'memory_creation':
-        return 'Memory Creation';
+        return 'Conversation Creation';
       case 'transcript_processed':
         return 'Transcript Segment Processed (every 30 seconds during conversation)';
       default:
@@ -171,7 +171,7 @@ class App {
   Set<String> capabilities;
   bool private;
   bool approved;
-  String? memoryPrompt;
+  String? conversationPrompt;
   String? chatPrompt;
   ExternalIntegration? externalIntegration;
   ProactiveNotification? proactiveNotification;
@@ -182,6 +182,13 @@ class App {
   int installs;
   bool enabled;
   bool deleted;
+  int? usageCount;
+  double? moneyMade;
+  bool isPaid;
+  String? paymentPlan;
+  double? price;
+  bool isUserPaid;
+  String? paymentLink;
 
   App({
     required this.id,
@@ -195,7 +202,7 @@ class App {
     this.email,
     required this.category,
     required this.approved,
-    this.memoryPrompt,
+    this.conversationPrompt,
     this.chatPrompt,
     this.externalIntegration,
     this.reviews = const [],
@@ -207,6 +214,13 @@ class App {
     required this.deleted,
     this.private = false,
     this.proactiveNotification,
+    this.usageCount,
+    this.moneyMade,
+    required this.isPaid,
+    this.paymentPlan,
+    this.price,
+    required this.isUserPaid,
+    this.paymentLink,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -232,7 +246,7 @@ class App {
       description: json['description'],
       image: json['image'],
       chatPrompt: json['chat_prompt'],
-      memoryPrompt: json['memory_prompt'],
+      conversationPrompt: json['memory_prompt'],
       externalIntegration:
           json['external_integration'] != null ? ExternalIntegration.fromJson(json['external_integration']) : null,
       reviews: AppReview.fromJsonList(json['reviews'] ?? []),
@@ -247,7 +261,25 @@ class App {
       proactiveNotification: json['proactive_notification'] != null
           ? ProactiveNotification.fromJson(json['proactive_notification'])
           : null,
+      usageCount: json['usage_count'] ?? 0,
+      moneyMade: json['money_made'] ?? 0.0,
+      isPaid: json['is_paid'] ?? false,
+      paymentPlan: json['payment_plan'],
+      price: json['price'] ?? 0.0,
+      isUserPaid: json['is_user_paid'] ?? false,
+      paymentLink: json['payment_link'],
     );
+  }
+
+  String getFormattedPrice() {
+    if (price == null) {
+      return 'Free';
+    }
+    if (paymentPlan == 'monthly_recurring') {
+      return '\$${price!} per month';
+    } else {
+      return '\$${price!}';
+    }
   }
 
   String getImageUrl() {
@@ -294,7 +326,7 @@ class App {
       'description': description,
       'image': image,
       'capabilities': capabilities.toList(),
-      'memory_prompt': memoryPrompt,
+      'memory_prompt': conversationPrompt,
       'chat_prompt': chatPrompt,
       'external_integration': externalIntegration?.toJson(),
       'reviews': reviews.map((e) => e.toJson()).toList(),
@@ -311,6 +343,13 @@ class App {
       'uid': uid,
       'email': email,
       'proactive_notification': proactiveNotification?.toJson(),
+      'usage_count': usageCount,
+      'money_made': moneyMade,
+      'is_paid': isPaid,
+      'payment_plan': paymentPlan,
+      'price': price,
+      'is_user_paid': isUserPaid,
+      'payment_link': paymentLink,
     };
   }
 
@@ -460,5 +499,33 @@ class ProactiveNotification {
     return {
       'scopes': scopes,
     };
+  }
+}
+
+class PaymentPlan {
+  final String title;
+  final String id;
+
+  PaymentPlan({
+    required this.title,
+    required this.id,
+  });
+
+  factory PaymentPlan.fromJson(Map<String, dynamic> json) {
+    return PaymentPlan(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<PaymentPlan> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => PaymentPlan.fromJson(e)).toList();
   }
 }

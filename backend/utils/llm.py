@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import tiktoken
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from database.redis_db import add_filter_category_item
 from models.app import App
-from models.chat import Message
+from models.chat import Message, MessageSender
 from models.facts import Fact, FactCategory
 from models.memory import Structured, MemoryPhoto, CategoryEnum, Memory
 from models.plugin import Plugin
@@ -239,7 +239,7 @@ class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
 
 
-def requires_context(messages: List[Message]) -> bool:
+def requires_context_v1(messages: List[Message]) -> bool:
     prompt = f'''
     Based on the current conversation your task is to determine whether the user is asking a question or a follow up question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
@@ -254,26 +254,106 @@ def requires_context(messages: List[Message]) -> bool:
     except ValidationError:
         return False
 
+def requires_context(question: str) -> bool:
+    prompt = f'''
+    Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+
+    User's Question:
+    {question}
+    '''
+    with_parser = llm_mini.with_structured_output(RequiresContext)
+    response: RequiresContext = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
 
 class IsAnOmiQuestion(BaseModel):
     value: bool = Field(description="If the message is an Omi/Friend related question")
 
 
-def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
+def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
     prompt = f'''
     The user is using the chat functionality of an app known as Omi or Friend.
     Based on the current conversation your task is to determine if the user is asking a question about the way you work, or how to use you or the app.
-    
-    Questions like, 
+
+    Questions like,
     - "How does it work?"
     - "What can you do?"
     - "How can I buy it"
     - "Where do I get it"
     - "How the chat works?"
     - ...
-    
-    Conversation History:    
+
+    Conversation History:
     {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
+def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
+    prompt = f'''
+    Task: Analyze the conversation to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+
+    Examples of User Questions:
+
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it?"
+    - "Where do I get it?"
+    - "How does the chat function?"
+
+    Instructions:
+
+    1. Review the conversation history carefully.
+    2. Determine if the user is asking about:
+     - The operational aspects of the app.
+     - How to utilize the app effectively.
+     - Any specific features or purchasing options.
+
+    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+
+    Conversation Context:
+    {Message.get_messages_as_string(messages)}
+    '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    try:
+        return response.value
+    except ValidationError:
+        return False
+
+
+def retrieve_is_an_omi_question(question: str) -> bool:
+    prompt = f'''
+    Task: Analyze the question to identify if the user is inquiring about the functionalities or usage of the app, Omi or Friend. Focus on detecting questions related to the app's operations or capabilities.
+
+    Examples of User Questions:
+
+    - "How does it work?"
+    - "What can you do?"
+    - "How can I buy it?"
+    - "Where do I get it?"
+    - "How does the chat function?"
+
+    Instructions:
+
+    1. Review the question carefully.
+    2. Determine if the user is asking about:
+     - The operational aspects of the app.
+     - How to utilize the app effectively.
+     - Any specific features or purchasing options.
+
+    Output: Clearly state if the user is asking a question related to the app's functionality or usage. If yes, specify the nature of the inquiry.
+
+    User's Question:
+    {question}
     '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
@@ -286,11 +366,11 @@ def retrieve_is_an_omi_question(messages: List[Message]) -> bool:
 def retrieve_context_topics(messages: List[Message]) -> List[str]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
+
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
     Provide a list of topics in which the current conversation needs context about, in order to answer the most recent user request.
-    
-    It is possible that the data needed is not related to a topic, in that case, output an empty list. 
+
+    It is possible that the data needed is not related to a topic, in that case, output an empty list.
 
     Conversation:
     {Message.get_messages_as_string(messages)}
@@ -304,22 +384,40 @@ def retrieve_context_topics(messages: List[Message]) -> List[str]:
     return topics
 
 
-def retrieve_context_dates(messages: List[Message]) -> List[datetime]:
+def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
     prompt = f'''
     Based on the current conversation an AI and a User are having, for the AI to answer the latest user messages, it needs context outside the conversation.
-    
+
     Your task is to to find the dates range in which the current conversation needs context about, in order to answer the most recent user request.
-    
-    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided. 
+
+    For example, if the user request relates to "What did I do last week?", or "What did I learn yesterday", or "Who did I meet today?", the dates range should be provided.
     Other type of dates, like historical events, or future events, should be ignored and an empty list should be returned.
-    
-    For context, today is {datetime.now().isoformat()}.
-    Year: {datetime.now().year}, Month: {datetime.now().month}, Day: {datetime.now().day}
-    
+
+    For context, today is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
 
     Conversation:
     {Message.get_messages_as_string(messages)}
     '''.replace('    ', '').strip()
+    with_parser = llm_mini.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
+    prompt = f'''
+    Task: Identify the relevant date range needed to provide context for answering the user's recent question.
+
+    Instructions:
+
+    1. Use the current date for reference, which is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. Convert the user's timezone, {tz}, to UTC and respond accordingly.
+
+    2. Ignore requests related to historical or future events. For these, return an empty list.
+
+    3. Provide the date range in UTC
+
+    User's Question:
+    {question}
+    '''.replace('    ', '').strip()
+
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
@@ -382,7 +480,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = f"""
     You are an assistant for answering questions about the app Omi, also known as Friend.
     Continue the conversation, answering the question based on the context provided.
-    
+
     Context:
     ```
     {context}
@@ -394,7 +492,6 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     Answer:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
-
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
@@ -511,7 +608,7 @@ def new_facts_extractor(
         user_name, facts_str = get_prompt_facts(uid)
 
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name)
-    if not content or len(content) < 100:  # less than 20 words, probably nothing
+    if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     # TODO: include negative facts too? Things the user doesn't like?
@@ -662,18 +759,22 @@ def followup_question_prompt(segments: List[TranscriptSegment]):
 class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
+        examples=[['John Doe', 'Jane Doe']],
         description='Identify all the people names who were mentioned during the conversation.'
     )
     topics: List[str] = Field(
         default=[],
+        examples=[['Artificial Intelligence', 'Machine Learning']],
         description='List all the main topics and subtopics that were discussed.',
     )
     entities: List[str] = Field(
         default=[],
+        examples=[['OpenAI', 'GPT-4']],
         description='List any products, technologies, places, or other entities that are relevant to the conversation.'
     )
     dates: List[str] = Field(
         default=[],
+        examples=[['2024-01-01', '2024-01-02']],
         description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.'
     )
 
@@ -691,10 +792,46 @@ class OutputQuestion(BaseModel):
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages)-1, -1,-1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
     prompt = f'''
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
-    your task is to understand the last few messages, and identify the single question or follow-up question the user is asking. \
+    your task is to understand the user last messages, and identify the single question or follow-up question the user is asking. \
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
+
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    The user last messages:
+    ```
+    {Message.get_messages_as_string(user_last_messages)}
+    ```
+
+    Conversation:
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+
+    '''.replace('    ', '').strip()
+    # print(prompt)
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
+def extract_question_from_conversation_v1(messages: List[Message]) -> str:
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand THE LAST FEW MESSAGES, and identify the single question or follow-up question the user is asking. \
 
     If the user is not asking a question or does not want to follow up, respond with an empty message.
 
@@ -707,9 +844,8 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
-
 def retrieve_metadata_fields_from_transcript(
-        uid: str, created_at: datetime, transcript_segment: List[dict]
+    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
@@ -724,7 +860,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix the raw transcript errors and then proceed to extract the information.
 
-    For context when extracting dates, today is {created_at.strftime('%Y-%m-%d')}.
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.

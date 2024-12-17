@@ -52,7 +52,7 @@ class AppListItem extends StatelessWidget {
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
@@ -60,20 +60,15 @@ class AppListItem extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          app.name.decodeString,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
+                          child: Text(
+                            app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                          ),
                         ),
-                        app.private && showPrivateIcon
-                            ? const SizedBox(
-                                width: 6,
-                              )
-                            : const SizedBox(),
-                        app.private && showPrivateIcon
-                            ? const Icon(Icons.lock, color: Colors.grey, size: 16)
-                            : const SizedBox(),
                       ],
                     ),
                     SizedBox(height: app.ratingAvg != null ? 4 : 0),
@@ -111,12 +106,21 @@ class AppListItem extends StatelessWidget {
                                 ),
                               )
                             : Container(),
+                        //app.isPaid
+                        //    ? Padding(
+                        //        padding: const EdgeInsets.only(top: 8),
+                        //        child: Text(
+                        //          app.getFormattedPrice(),
+                        //          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        //        ),
+                        //      )
+                        //    : const SizedBox(),
                       ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: MediaQuery.sizeOf(context).width * 0.02),
               provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),

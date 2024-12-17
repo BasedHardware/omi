@@ -152,44 +152,8 @@ Future<bool> isAppSetupCompleted(String? url) async {
     debugPrint('Response not a valid json: $e');
     return false;
   } catch (e) {
-    debugPrint('Error triggering memory request at endpoint: $e');
+    debugPrint('Error triggering request at endpoint: $e');
     return false;
-  }
-}
-
-Future<List<AppUsageHistory>> retrieveAppUsageHistory(String pluginId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/usage',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return [];
-    log('retrieveAppUsageHistory: ${response.body}');
-    return AppUsageHistory.fromJsonList(jsonDecode(response.body));
-  } catch (e, stackTrace) {
-    debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    return [];
-  }
-}
-
-Future<double> getAppMoneyMade(String pluginId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/plugins/$pluginId/money',
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200) return 0;
-    log('retrieveAppUsageHistory: ${response.body}');
-    return jsonDecode(response.body)['money'];
-  } catch (e, stackTrace) {
-    debugPrint(e.toString());
-    CrashReporting.reportHandledCrash(e, stackTrace);
-    return 0;
   }
 }
 
@@ -374,5 +338,23 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return null;
+  }
+}
+
+Future<List<PaymentPlan>> getPaymentPlansServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/plans',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    log('getPaymentPlansServer: ${response.body}');
+    return PaymentPlan.fromJsonList(jsonDecode(response.body));
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return [];
   }
 }

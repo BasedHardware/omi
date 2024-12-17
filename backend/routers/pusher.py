@@ -47,7 +47,14 @@ async def _websocket_util_trigger(
                 # Transcript
                 if header_type == 100:
                     segments = json.loads(bytes(data[4:]).decode("utf-8"))
-                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments), loop)
+                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, None), loop)
+                    asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+                    continue
+                if header_type == 102:
+                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    segments = res.get('segments')
+                    memory_id = res.get('memory_id')
+                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
                     asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
                     continue
 

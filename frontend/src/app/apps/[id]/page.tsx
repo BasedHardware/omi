@@ -1,54 +1,146 @@
-import envConfig from '@/src/constants/envConfig';
-import {
-  Star,
-  Download,
-  ArrowLeft,
-  Brain,
-  Cpu,
-  Bell,
-  Plug2,
-  MessageSquare,
-  Info,
-} from 'lucide-react';
-import { Card, CardContent } from '@/src/components/ui/card';
-import { Button } from '@/src/components/ui/button';
 import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
-import Link from 'next/link';
-import { cn } from '@/src/lib/utils';
+import { CompactPluginCard } from '../components/plugin-card/compact';
+import { ScrollableCategoryNav } from '../components/scrollable-category-nav';
+import { CategoryBreadcrumb } from '../components/category-breadcrumb';
+import { AppStats } from '../components/app-stats';
+import { AppActionButton } from '../components/app-action-button';
+import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
+import { Metadata, ResolvingMetadata } from 'next';
+import { ProductBanner } from '@/src/app/components/product-banner';
+import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
+import envConfig from '@/src/constants/envConfig';
 
-// Helper functions from PluginCard
-const getCapabilityColor = (capability: string): string => {
-  const colors: Record<string, string> = {
-    'ai-powered': 'bg-indigo-500/15 text-indigo-300',
-    memories: 'bg-rose-500/15 text-rose-300',
-    notification: 'bg-emerald-500/15 text-emerald-300',
-    integration: 'bg-sky-500/15 text-sky-300',
-    chat: 'bg-violet-500/15 text-violet-300',
-  };
-  return colors[capability.toLowerCase()] ?? 'bg-gray-700/20 text-gray-300';
+type Props = {
+  params: { id: string };
 };
 
-const formatCapabilityName = (capability: string): string => {
-  const nameMap: Record<string, string> = {
-    memories: 'memories',
-    external_integration: 'integration',
-    proactive_notification: 'notification',
-    chat: 'chat',
-  };
-  return nameMap[capability.toLowerCase()] ?? capability;
-};
+export async function generateMetadata(
+  { params }: Props,
+  parent: ResolvingMetadata,
+): Promise<Metadata> {
+  const plugin = await getAppById(params.id);
 
-const getCapabilityIcon = (capability: string) => {
-  const icons: Record<string, React.ElementType> = {
-    'ai-powered': Brain,
-    memories: Cpu,
-    notification: Bell,
-    integration: Plug2,
-    chat: MessageSquare,
+  if (!plugin) {
+    return {
+      title: 'App Not Found | Omi',
+      description: 'The requested app could not be found.',
+    };
+  }
+
+  const categoryName = formatCategoryName(plugin.category);
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
+
+  return {
+    title: `${plugin.name} - ${categoryName} App | Omi`,
+    description: `${plugin.description} Available on Omi, the AI-powered wearable platform.`,
+    metadataBase: new URL(envConfig.WEB_URL),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: `${plugin.name} - ${categoryName} App`,
+      description: plugin.description,
+      images: [
+        {
+          url: plugin.image,
+          width: 1200,
+          height: 630,
+          alt: `${plugin.name} App for Omi`,
+        },
+      ],
+      url: canonicalUrl,
+      type: 'website',
+      siteName: 'Omi',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${plugin.name} - ${categoryName} App`,
+      description: plugin.description,
+      images: [plugin.image],
+      creator: '@omiHQ',
+      site: '@omiHQ',
+    },
+    other: {
+      'application-name': 'Omi',
+      'apple-itunes-app': `app-id=6502156163`,
+      'google-play-app': `app-id=com.friend.ios`,
+    },
   };
-  return icons[capability.toLowerCase()] ?? Info;
-};
+}
+
+// Add a separate function to handle JSON-LD
+export function generateStructuredData(plugin: Plugin, categoryName: string) {
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
+  const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  const productUrl = 'https://www.omi.me/products/friend-dev-kit-2';
+
+  return {
+    __html: JSON.stringify([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: plugin.name,
+        description: plugin.description,
+        applicationCategory: categoryName,
+        operatingSystem: 'iOS, Android',
+        author: {
+          '@type': 'Person',
+          name: plugin.author,
+        },
+        datePublished: plugin.created_at,
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: plugin.rating_avg?.toFixed(1) || '0',
+          ratingCount: plugin.rating_count || 0,
+          bestRating: '5',
+          worstRating: '1',
+        },
+        applicationSuite: 'Omi',
+        requiresSubscription: false,
+        installUrl: canonicalUrl,
+        interactionStatistic: {
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/InstallAction',
+          userInteractionCount: plugin.installs,
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: 'OMI Necklace',
+        description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
+        brand: {
+          '@type': 'Brand',
+          name: 'OMI',
+        },
+        offers: {
+          '@type': 'Offer',
+          price: '69.99',
+          priceCurrency: 'USD',
+          availability: 'https://schema.org/InStock',
+          url: productUrl,
+          priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0], // Valid for 1 year
+        },
+        additionalProperty: [
+          {
+            '@type': 'PropertyValue',
+            name: 'App Store',
+            value: appStoreUrl,
+          },
+          {
+            '@type': 'PropertyValue',
+            name: 'Play Store',
+            value: playStoreUrl,
+          },
+        ],
+      },
+    ]),
+  };
+}
 
 // Helper function to format category name
 const formatCategoryName = (category: string): string => {
@@ -70,13 +162,17 @@ function getPlatformLink(userAgent: string) {
     : 'https://omi.me';
 }
 
+// Helper function to format date
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
-  const response = await fetch(
-    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
-  );
-  const plugins = (await response.json()) as Plugin[];
-  const { id } = params;
-  const plugin = plugins.find((p) => p.id === id);
+  const plugin = await getAppById(params.id);
 
   if (!plugin) {
     throw new Error('App not found');
@@ -86,148 +182,200 @@ export default async function PluginDetailView({ params }: { params: { id: strin
     'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
   );
   const stats = (await statsResponse.json()) as PluginStat[];
-  const stat = stats.find((p) => p.id === id);
+  const stat = stats.find((p) => p.id === params.id);
 
   const userAgent = headers().get('user-agent') || '';
   const link = getPlatformLink(userAgent);
 
   // Get related apps based on category
-  const relatedApps = plugins
-    .filter((p) => p.category === plugin.category && p.id !== plugin.id)
+  const relatedApps = (await getAppsByCategory(plugin.category))
+    .filter((p) => p.id !== plugin.id)
     .slice(0, 6);
 
   const categoryName = formatCategoryName(plugin.category);
 
   return (
-    <div className="min-h-screen bg-[#0B0F17]">
-
-
-      {/* Main Content */}
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        {/* Navigation */}
-        <nav className="mb-4 flex items-center justify-between sm:mb-6 lg:mb-8 mt-6">
-          <Link
-            href="/apps"
-            className="group inline-flex items-center text-gray-400 transition-all duration-300 hover:text-white"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4 transition-transform duration-300 group-hover:-translate-x-1 sm:h-5 sm:w-5" />
-            <span className="text-sm font-medium">Back to Apps</span>
-          </Link>
-          <div className="flex items-center space-x-2 text-xs text-gray-400 sm:text-sm">
-            <Link href="/apps" className="text-[#6C8EEF] hover:underline">
-              Apps
-            </Link>
-            <span>/</span>
-            <span>{categoryName}</span>
-          </div>
-        </nav>
-
-        {/* App Header */}
-        <div className="mb-12">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start space-x-8">
-              <div className="relative">
-                <div className="absolute -inset-4 rounded-2xl bg-white/5 opacity-0 transition-all duration-300 group-hover:opacity-100" />
-                <img
-                  src={plugin.image}
-                  alt={plugin.name}
-                  className="relative h-32 w-32 rounded-2xl object-cover shadow-xl"
-                />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white">{plugin.name}</h1>
-                <p className="mt-2 text-gray-400">by {plugin.author}</p>
-
-                {/* Capability Pills */}
-                <div className="flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
-                  {Array.from(plugin.capabilities).map((cap) => {
-                    const formattedCap = formatCapabilityName(cap);
-                    const Icon = getCapabilityIcon(formattedCap);
-                    return (
-                      <span
-                        key={cap}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium sm:px-3 sm:py-1.5 sm:text-sm',
-                          getCapabilityColor(formattedCap),
-                        )}
-                      >
-                        <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
-                        {formattedCap}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                <p className="max-w-3xl text-sm leading-relaxed text-gray-300 sm:mt-6 sm:text-base lg:text-lg">
-                  {plugin.description}
-                </p>
-
-                {/* Stats */}
-                <div className="flex items-center space-x-3 text-gray-400 sm:mt-4 sm:space-x-4">
-                  <div className="flex items-center">
-                    <Star className="mr-1 h-3 w-3 text-yellow-400 sm:h-4 sm:w-4" />
-                    <span className="text-sm sm:text-base">
-                      {(plugin.rating_avg ?? 0).toFixed(1)} ({plugin.rating_count})
-                    </span>
-                  </div>
-                  <span>•</span>
-                  <div className="flex items-center">
-                    <Download className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="text-sm sm:text-base">
-                      {plugin.installs.toLocaleString()} installs
-                    </span>
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                <div className="mt-6 sm:mt-8">
-                  <Button
-                    className="inline-flex items-center space-x-2 bg-[#6C8EEF] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#5A7DE8] hover:shadow-lg sm:px-6 sm:py-3 sm:text-base lg:px-8 lg:py-4 lg:text-lg"
-                    asChild
-                  >
-                    <Link href={link}>
-                      <span>Try it</span>
-                      <ArrowLeft className="ml-2 h-4 w-4 rotate-180 sm:h-5 sm:w-5" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Related Apps Section */}
-        <div>
-          <h2 className="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-lg">
-            More {categoryName} Apps
-          </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-            {relatedApps.map((app) => (
-              <Link key={app.id} href={`/apps/${app.id}`}>
-                <Card className="h-[100px] border-none bg-[#1A1F2E] transition-all duration-300 hover:bg-[#242938] hover:shadow-xl sm:h-[120px]">
-                  <CardContent className="p-2 sm:p-3">
-                    <div className="flex space-x-2 sm:space-x-3">
-                      <img
-                        src={app.image}
-                        alt={app.name}
-                        className="h-10 w-10 rounded-lg object-cover sm:h-12 sm:w-12"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-sm font-medium text-white sm:text-base">
-                          {app.name}
-                        </h3>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 sm:mt-1">
-                          {app.description}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+    <div className="relative flex min-h-screen flex-col bg-[#0B0F17]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={generateStructuredData(plugin, categoryName)}
+      />
+      {/* Fixed Header and Navigation */}
+      <div className="fixed inset-x-0 top-[4rem] z-50 bg-[#0B0F17]">
+        <div className="border-b border-white/5 shadow-lg">
+          <div className="container mx-auto px-[1.5rem] py-[2rem]">
+            <CategoryBreadcrumb category={plugin.category} />
           </div>
         </div>
       </div>
+
+      {/* Main Content */}
+      <main className="relative z-0 mt-[10rem] flex-grow">
+        <div className="container mx-auto px-[1.5rem] pt-[2rem]">
+          {/* Hero Section */}
+          <section className="grid grid-cols-1 gap-[3rem] lg:grid-cols-5">
+            {/* Image Column - 3 columns */}
+            <div className="lg:col-span-2">
+              <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
+                <img
+                  src={plugin.image}
+                  alt={plugin.name}
+                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                />
+              </div>
+            </div>
+            {/* Content Column - 2 columns */}
+            <div className="lg:col-span-3">
+              <div className="flex h-full flex-col justify-between">
+                {/* App Info Container */}
+                <div>
+                  <h1 className="text-4xl font-bold text-white">{plugin.name}</h1>
+                  <p className="mt-[0.5rem] text-xl text-gray-400">by {plugin.author}</p>
+
+                  {/* Stats Section */}
+                  <div className="mt-[2rem] flex items-center gap-[1rem]">
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold text-yellow-400">
+                        {plugin.rating_avg?.toFixed(1)}
+                      </span>
+                      <div className="ml-[0.5rem] flex flex-col">
+                        <span className="text-yellow-400">★</span>
+                        <span className="text-sm text-gray-400">
+                          ({plugin.rating_count} reviews)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-8 w-px bg-white/5" />
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold text-[#6C8EEF]">
+                        {plugin.installs.toLocaleString()}
+                      </span>
+                      <span className="ml-2 text-sm text-gray-400">downloads</span>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="mt-8">
+                    <AppActionButton
+                      link={link}
+                      className="max-w-[200px] rounded-xl transition-all duration-300 hover:translate-y-[-2px]"
+                    />
+                    {/* Store Buttons */}
+                    <div className="mt-4 flex items-center gap-4">
+                      <a
+                        href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-transform duration-300 hover:scale-105"
+                      >
+                        <img
+                          src="/app-store-badge.svg"
+                          alt="Download on the App Store"
+                          className="h-[40px]"
+                        />
+                      </a>
+                      <a
+                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-transform duration-300 hover:scale-105"
+                      >
+                        <img
+                          src="/google-play-badge.png"
+                          alt="Get it on Google Play"
+                          className="h-[40px]"
+                        />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Product Banner */}
+          <section className="mt-12">
+            <ProductBanner
+              variant="detail"
+              appName={plugin.name}
+              category={categoryName}
+            />
+          </section>
+
+          {/* About Section */}
+          <section className="mt-16">
+            <h2 className="text-2xl font-bold text-white">About</h2>
+            <div className="mt-4">
+              <p className="text-lg leading-relaxed text-gray-300">
+                {plugin.description}
+              </p>
+            </div>
+          </section>
+
+          {/* Additional Details Section */}
+          <section className="mt-16">
+            <h2 className="mb-6 text-2xl font-bold text-white">Additional Details</h2>
+            <div className="grid gap-8 sm:grid-cols-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Created</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">
+                  {formatDate(plugin.created_at)}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Creator</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">{plugin.author}</div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Category</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">{categoryName}</div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Puzzle className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Capabilities</div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 pl-7">
+                  {Array.from(plugin.capabilities).map((cap) => (
+                    <span
+                      key={cap}
+                      className="rounded-full bg-[#1A1F2E] px-3 py-1 text-sm text-white"
+                    >
+                      {cap}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Related Apps Section */}
+          <section className="mt-16 pb-12">
+            <h2 className="mb-8 text-2xl font-bold text-white">
+              More {categoryName} Apps
+            </h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {relatedApps.map((app, index) => (
+                <CompactPluginCard
+                  key={app.id}
+                  plugin={app}
+                  stat={stats.find((s) => s.id === app.id)}
+                  index={index + 1}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   );
 }

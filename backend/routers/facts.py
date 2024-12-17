@@ -18,7 +18,7 @@ def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.get('/v1/facts', tags=['facts'], response_model=List[FactDB])  # filters
-def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = facts_db.get_facts(uid, limit, offset)
     # facts = list(filter(lambda x: x['category'] == 'skills', facts))
     # TODO: consider this "$name" part if really is an issue, when changing name or smth.
@@ -43,6 +43,16 @@ def get_facts(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_cu
     # print(list(map(lambda x: x['category'], facts)))
     return list(filter(lambda x: x['category'] != 'learnings' and x['category'] != 'core', facts))
     # return facts
+
+
+@router.get('/v2/facts', tags=['facts'], response_model=List[FactDB])
+def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    # Use high limits for the first page
+    # Warn: should remove
+    if offset == 0:
+        limit = 5000
+    facts = facts_db.get_facts(uid, limit, offset)
+    return facts
 
 
 @router.delete('/v1/facts/{fact_id}', tags=['facts'])

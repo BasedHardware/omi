@@ -15,10 +15,10 @@
 #include "utils.h"
 // #include "nfc.h"
 #include "speaker.h"
-#include "button.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
+#include "mic.h"
 #include "lib/battery/battery.h"
 // #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
@@ -35,6 +35,7 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
+struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -626,7 +627,6 @@ bool write_to_storage(void) {//max possible packing
     return true;
 }
 
-extern bool is_off;
 static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
@@ -648,84 +648,86 @@ void pusher(void)
         //
         // Load current connection
         //
-        if(!is_off)
+        struct bt_conn *conn = current_connection;
+        //updating the most recent file size is expensive!
+        static bool file_size_updated = true;
+        static bool connection_was_true = false;
+        if (conn && !connection_was_true) 
         {
-            struct bt_conn *conn = current_connection;
-            //updating the most recent file size is expensive!
-            static bool file_size_updated = true;
-            static bool connection_was_true = false;
-            if (conn && !connection_was_true) 
-            {
-                k_msleep(100);
-                file_size_updated = false;
-                connection_was_true = true;
-            } 
-            else if (!conn) 
-            {
-                connection_was_true = false;
-            }
-            if (!file_size_updated) 
-            {
-                printk("updating file size\n");
-                update_file_size();
-                
-                file_size_updated = true;
-            }
-            if (conn)
-            {
-                conn = bt_conn_ref(conn);
-            }
-            bool valid = true;
-            if (current_mtu < MINIMAL_PACKET_SIZE)
-            {
-                valid = false;
-            }
-            else if (!conn)
-            {
-                valid = false;
-            }
-            else
-            {
-                valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-            }
+            k_msleep(100);
+            file_size_updated = false;
+            connection_was_true = true;
+        } 
+        else if (!conn) 
+        {
+            connection_was_true = false;
+        }
+        if (!file_size_updated) 
+        {
+            printk("updating file size\n");
+            update_file_size();
             
-            if (!valid  && !storage_is_on) 
-            {
-                bool result = false;
-                if (file_num_array[1] < MAX_STORAGE_BYTES)
-                {
-                result = write_to_storage();
-                }
-                if (result)
-                {
-                 heartbeat_count++;
-                 if (heartbeat_count == 255)
-                 {
-                    update_file_size();
-                    heartbeat_count = 0;
-                    printk("drawing\n");
-                 }
-                }
-                else 
-                {
+            file_size_updated = true;
+        }
+        if (conn)
+        {
+            conn = bt_conn_ref(conn);
+        }
+        bool valid = true;
+        if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else if (!conn)
+        {
+            valid = false;
+        }
+        else
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
         
-                }
-            }    
-            if (valid)
+        if (!valid  && !storage_is_on) 
+        {
+            bool result = false;
+            if (file_num_array[1] < MAX_STORAGE_BYTES)
             {
-                bool sent = push_to_gatt(conn);
-                if (!sent)
+                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+                if(is_sd_on()) 
                 {
-                    // k_sleep(K_MSEC(50));
+                    result = write_to_storage();
                 }
+                k_mutex_unlock(&write_sdcard_mutex);
             }
-            if (conn)
+            if (result)
             {
-                bt_conn_unref(conn);
+             heartbeat_count++;
+             if (heartbeat_count == 255)
+             {
+                update_file_size();
+                heartbeat_count = 0;
+                printk("drawing\n");
+             }
+            }
+            else 
+            {
+    
+            }
+        }    
+        if (valid)
+        {
+            bool sent = push_to_gatt(conn);
+            if (!sent)
+            {
+                // k_sleep(K_MSEC(50));
             }
         }
+        if (conn)
+        {
+            bt_conn_unref(conn);
+        }
 
-      k_yield();
+        k_yield();
     }
 }
 extern struct bt_gatt_service storage_service;
@@ -740,7 +742,9 @@ int bt_off()
    {
        printk("Failed to stop Bluetooth %d\n",err);
    }
+   k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
    sd_off();
+   k_mutex_unlock(&write_sdcard_mutex);
    mic_off();
    //everything else off
 
@@ -761,6 +765,7 @@ int bt_on()
 //periodic advertising
 int transport_start()
 {
+    k_mutex_init(&write_sdcard_mutex);
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
