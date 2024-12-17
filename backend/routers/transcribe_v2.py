@@ -4,6 +4,8 @@ import struct
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 
+from database.users import get_user_store_recording_permission
+from utils.other.storage import upload_memory_recording
 import opuslib
 import webrtcvad
 from fastapi import APIRouter, HTTPException, Depends
@@ -25,6 +27,8 @@ from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcri
 from utils.pusher import connect_to_trigger_pusher
 
 from utils.other import endpoints as auth
+
+import wave
 
 router = APIRouter()
 
@@ -165,10 +169,14 @@ async def _websocket_util(
     processing = memories_db.get_processing_memories(uid)
     asyncio.create_task(finalize_processing_memories(processing))
 
+    audio_data = bytearray()  # Variable to store audio bytes
+    current_memory_id = None  # Track the current memory ID
+
     async def _create_current_memory():
+        nonlocal current_memory_id
         print("_create_current_memory", uid)
 
-        # Reset state variablesr
+        # Reset state variables
         nonlocal seconds_to_trim
         nonlocal seconds_to_add
         seconds_to_trim = None
@@ -178,6 +186,31 @@ async def _websocket_util(
         if not memory or not memory['transcript_segments']:
             return
         await _create_memory(memory)
+
+        # Save audio bytes to a WAV file when the memory ends
+        if current_memory_id and get_user_store_recording_permission(uid):
+            try:
+                if not audio_data:
+                    print("No audio data to write.")
+                    return
+
+                path = f"_recordings/{current_memory_id}_audio.wav"
+                print(f"Saving audio file to {path}")
+
+                with wave.open(path, "wb") as wav_file:
+                    wav_file.setnchannels(channels)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(sample_rate)
+                    wav_file.writeframes(audio_data)
+
+                print(f"Audio file saved successfully: {path}")
+                upload_memory_recording(file_path=path,uid=uid,memory_id=current_memory_id)
+
+            except Exception as e:
+                print(f"Error saving audio file: {e}")
+        else:
+            print("Audio recording permission is false or no memory ID")
+        audio_data.clear()
 
     # memory_creation_task_lock = False
     memory_creation_task_lock = asyncio.Lock()
@@ -205,13 +238,14 @@ async def _websocket_util(
             )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
+        nonlocal current_memory_id
         if existing := retrieve_in_progress_memory(uid):
-            # print('_get_or_create_in_progress_memory existing', existing['id'], uid)
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
             redis_db.set_in_progress_memory_id(uid, memory.id)
+            current_memory_id = memory.id
             return memory
 
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
@@ -229,6 +263,7 @@ async def _websocket_util(
         print('_get_in_progress_memory new', memory, uid)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         redis_db.set_in_progress_memory_id(uid, memory.id)
+        current_memory_id = memory.id
         return memory
 
     async def create_memory_on_segment_received_task(finished_at: datetime):
@@ -470,17 +505,12 @@ async def _websocket_util(
         nonlocal websocket_close_code
 
         timer_start = time.time()
-        # f = open("audio.bin", "ab")
         try:
             while websocket_active:
                 data = await websocket.receive_bytes()
-                # save the data to a file
-                # data_length = len(data)
-                # f.write(struct.pack('I', data_length))  # Write length as 4 bytes
-                # f.write(data)
-
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
+                    audio_data.extend(data)
 
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
                     has_speech = _has_speech(data, sample_rate)
