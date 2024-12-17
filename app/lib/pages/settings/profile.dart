@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
@@ -10,6 +11,7 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 import 'delete_account.dart';
+import 'recordings_storage_permission.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -19,6 +21,25 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  Future<void> _checkRecordingPermission() async {
+    final permission = await getStoreRecordingPermission();
+    if (mounted) {
+      setState(() {
+        if (permission != null) {
+          SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
+        } else {
+          SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
+        }
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    _checkRecordingPermission();
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -148,6 +169,61 @@ class _ProfilePageState extends State<ProfilePage> {
                                 size: 18,
                               )
                             : null, // No icon when unchecked
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              child: InkWell(
+                onTap: () {
+                  routeToPage(context, const RecordingsStoragePermission());
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            routeToPage(context, const RecordingsStoragePermission());
+                          },
+                          child: const Text(
+                            'Allow Omi to store recordings of your conversations',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 16,
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+                              ? const Color.fromARGB(255, 150, 150, 150)
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: const Color.fromARGB(255, 150, 150, 150),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        width: 22,
+                        height: 22,
+                        child: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 18,
+                              )
+                            : null,
                       ),
                     ],
                   ),
