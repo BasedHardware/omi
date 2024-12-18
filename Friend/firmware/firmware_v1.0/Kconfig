@@ -22,4 +22,7 @@ menu "Build Configuration"
 config LEGACY_SDK
     bool "Using the legacy SDK(<=2.7.0)!!"
     default y
+config LEGACY_SOC
+    bool "Using the legacy SOC(nrf52840)!!"
+    default y
 endmenu
