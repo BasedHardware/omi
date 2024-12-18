@@ -1,10 +1,9 @@
 source "Kconfig.zephyr"
 
-menu "Friend Configuration"
+menu "Omi Configuration"
 config CODEC_OPUS
     bool "Opus Audio Codec Support"
     default n
-
 config OFFLINE_STORAGE
 	bool "Offline SD Card Storage Support"
 	default n
@@ -17,4 +16,13 @@ config ENABLE_BUTTON
 config ENABLE_SPEAKER
     bool "Enable the speaker!!"
     default n 
+endmenu
+
+menu "Build Configuration"
+config LEGACY_SDK
+    bool "Using the legacy SDK(<=2.7.0)!!"
+    default y
+config LEGACY_SOC
+    bool "Using the legacy SOC(nrf52840)!!"
+    default y
 endmenu
