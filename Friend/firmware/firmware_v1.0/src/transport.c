@@ -295,7 +295,7 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
     {
         uint32_t val = 0xA8;
-    #ifdef LEGACY_SDK
+    #ifdef CONFIG_LEGACY_SDK
         NRF_POWER->GPREGRET = val;
     #else
         nrf_power_gpregret_set(NRF_POWER, 0, val);
@@ -308,7 +308,7 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
         bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
 
         uint32_t val = 0xA8;
-    #ifdef LEGACY_SDK
+    #ifdef CONFIG_LEGACY_SDK
         NRF_POWER->GPREGRET = val;
     #else
         nrf_power_gpregret_set(NRF_POWER, 0, val);

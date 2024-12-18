@@ -546,7 +546,7 @@ void turnoff_all()
     NRF_USBD->INTENCLR= 0xFFFFFFFF;    
 
     // Enter low power mode
-#ifdef LEGACY_SDK
+#ifdef CONFIG_LEGACY_SDK
     // ncs <= 2.7.0
     NRF_POWER->SYSTEMOFF=1;
 #else

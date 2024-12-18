@@ -143,7 +143,7 @@ int main(void)
 	int err;
     // TODO: what does it mean ? disabled from_usb_event for now
     // for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording
-#ifdef LEGACY_SDK
+#ifdef CONFIG_LEGACY_SDK
     uint32_t reset_reas = NRF_POWER->RESETREAS;
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
