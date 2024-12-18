@@ -89,6 +89,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           },
           child: Scaffold(
             key: scaffoldKey,
+            extendBody: true,
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               automaticallyImplyLeading: false,
@@ -161,57 +162,146 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         )
                       : const SizedBox.shrink();
                 }),
-            body: Column(
+            body: Stack(
               children: [
-                TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  isScrollable: false,
-                  onTap: (value) {
-                    context.read<ConversationDetailProvider>().updateSelectedTab(value);
-                  },
-                  padding: EdgeInsets.zero,
-                  indicatorPadding: EdgeInsets.zero,
-                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                  tabs: [
-                    Selector<ConversationDetailProvider, ConversationSource?>(
-                        selector: (context, provider) => provider.conversation.source,
-                        builder: (context, conversationSource, child) {
-                          return Tab(
-                            text: conversationSource == ConversationSource.openglass
-                                ? 'Photos'
-                                : conversationSource == ConversationSource.screenpipe
-                                    ? 'Raw Data'
-                                    : 'Transcript',
+                Column(
+                  children: [
+                    TabBar(
+                      indicatorSize: TabBarIndicatorSize.label,
+                      isScrollable: false,
+                      onTap: (value) {
+                        context.read<ConversationDetailProvider>().updateSelectedTab(value);
+                      },
+                      padding: EdgeInsets.zero,
+                      indicatorPadding: EdgeInsets.zero,
+                      labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                      tabs: [
+                        Selector<ConversationDetailProvider, ConversationSource?>(
+                            selector: (context, provider) => provider.conversation.source,
+                            builder: (context, conversationSource, child) {
+                              return Tab(
+                                text: conversationSource == ConversationSource.openglass
+                                    ? 'Photos'
+                                    : conversationSource == ConversationSource.screenpipe
+                                        ? 'Raw Data'
+                                        : 'Transcript',
+                              );
+                            }),
+                        const Tab(text: 'Summary')
+                      ],
+                      indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Builder(builder: (context) {
+                          return TabBarView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: [
+                              Selector<ConversationDetailProvider, ConversationSource?>(
+                                selector: (context, provider) => provider.conversation.source,
+                                builder: (context, source, child) {
+                                  return ListView(
+                                    shrinkWrap: true,
+                                    children: source == ConversationSource.openglass
+                                        ? [const PhotosGridComponent(), const SizedBox(height: 32)]
+                                        : [const TranscriptWidgets()],
+                                  );
+                                },
+                              ),
+                              const SummaryTab(),
+                            ],
                           );
                         }),
-                    const Tab(text: 'Summary')
+                      ),
+                    ),
                   ],
-                  indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Builder(builder: (context) {
-                      return TabBarView(
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          Selector<ConversationDetailProvider, ConversationSource?>(
-                            selector: (context, provider) => provider.conversation.source,
-                            builder: (context, source, child) {
-                              return ListView(
-                                shrinkWrap: true,
-                                children: source == ConversationSource.openglass
-                                    ? [const PhotosGridComponent(), const SizedBox(height: 32)]
-                                    : [const TranscriptWidgets()],
-                              );
-                            },
-                          ),
-                          const SummaryTab(),
-                        ],
-                      );
-                    }),
-                  ),
-                ),
+                Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
+                  return (
+                    count: provider.conversation.unassignedSegmentsLength(),
+                    shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
+                  );
+                }, builder: (context, value, child) {
+                  if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                  return Positioned(
+                    bottom: MediaQuery.sizeOf(context).height * 0.06,
+                    left: 86,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.grey.shade900,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade900,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              spreadRadius: 1,
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                    provider.setShowUnassignedFloatingButton(false);
+                                  },
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            //TODO: when we move the copy button to settings, we can add this to give a cleaner look
+                            // Row(
+                            //   children: [
+                            //     const SizedBox(width: 8),
+                            //     ElevatedButton(
+                            //       style: ElevatedButton.styleFrom(
+                            //         backgroundColor: Colors.white24,
+                            //         shape: RoundedRectangleBorder(
+                            //           borderRadius: BorderRadius.circular(16),
+                            //         ),
+                            //       ),
+                            //       onPressed: () {
+                            //         // Tag action
+                            //       },
+                            //       child: const Text(
+                            //         "Tag",
+                            //         style: TextStyle(
+                            //           color: Colors.white,
+                            //         ),
+                            //       ),
+                            //     ),
+                            //   ],
+                            // ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ],
             ),
           ),

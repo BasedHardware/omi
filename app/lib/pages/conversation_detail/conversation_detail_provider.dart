@@ -54,8 +54,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool editSegmentLoading = false;
 
+  bool showUnassignedFloatingButton = true;
+
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
+    notifyListeners();
+  }
+
+  void setShowUnassignedFloatingButton(bool value) {
+    showUnassignedFloatingButton = value;
     notifyListeners();
   }
 
@@ -176,6 +183,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
+
+    showUnassignedFloatingButton = true;
 
     titleController!.text = conversation.structured.title;
     titleFocusNode!.addListener(() {
