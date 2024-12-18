@@ -24,7 +24,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
-  int selectedTab = 0;
+  int selectedTab = 1;
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
