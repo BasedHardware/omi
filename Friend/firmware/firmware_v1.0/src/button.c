@@ -544,7 +544,15 @@ void turnoff_all()
     gpio_pin_interrupt_configure_dt(&d5_pin_input,GPIO_INT_LEVEL_INACTIVE);
     //maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR= 0xFFFFFFFF;    
+
+    // Enter low power mode
+#ifdef LEGACY_SDK
+    // ncs <= 2.7.0
     NRF_POWER->SYSTEMOFF=1;
+#else
+    // ncs 2.8.0
+    nrf_power_system_off(NRF_POWER);
+#endif
 }
 
 void force_button_state(FSM_STATE_T state)

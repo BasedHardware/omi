@@ -10,17 +10,16 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <hal/nrf_power.h>
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
-// #include "nfc.h"
 #include "speaker.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
 #include "mic.h"
 #include "lib/battery/battery.h"
-// #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
@@ -159,6 +158,7 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
+
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -176,8 +176,6 @@ int accel_start()
 	}
     odr_attr.val1 = 10;
 	odr_attr.val2 = 0;
-
-
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
@@ -296,7 +294,12 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
     LOG_INF("dfu_control_point_write_handler");
     if (len == 1 && ((uint8_t *)buf)[0] == 0x06)
     {
-        NRF_POWER->GPREGRET = 0xA8;
+        uint32_t val = 0xA8;
+    #ifdef LEGACY_SDK
+        NRF_POWER->GPREGRET = val;
+    #else
+        nrf_power_gpregret_set(NRF_POWER, 0, val);
+    #endif
         NVIC_SystemReset();
     }
     else if (len == 2 && ((uint8_t *)buf)[0] == 0x01)
@@ -304,7 +307,12 @@ static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struc
         uint8_t notification_value = 0x10;
         bt_gatt_notify(conn, attr, &notification_value, sizeof(notification_value));
 
-        NRF_POWER->GPREGRET = 0xA8;
+        uint32_t val = 0xA8;
+    #ifdef LEGACY_SDK
+        NRF_POWER->GPREGRET = val;
+    #else
+        nrf_power_gpregret_set(NRF_POWER, 0, val);
+    #endif
         NVIC_SystemReset();
     }
     return len;
@@ -860,7 +868,6 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
     }
     return 0;
 }
-
 
 void accel_off()
 {

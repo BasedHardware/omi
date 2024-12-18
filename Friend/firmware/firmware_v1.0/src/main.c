@@ -1,5 +1,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
+#include <helpers/nrfx_reset_reason.h>
+#include <nrfx_power.h>
 #include "transport.h"
 #include "mic.h"
 #include "utils.h"
@@ -141,11 +143,30 @@ int main(void)
 	int err;
     // TODO: what does it mean ? disabled from_usb_event for now
     // for system power off, we have no choice but to handle usb detect wakeup events. if off, and this was the reason, initialize, skip lightshow, start not recording
+#ifdef LEGACY_SDK
     uint32_t reset_reas = NRF_POWER->RESETREAS;
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
-
     NRF_POWER->RESETREAS=1;
+#else
+    uint32_t reset_reas = nrfx_reset_reason_get();
+
+    // DC-DC
+#if NRF_POWER_HAS_DCDCEN
+	nrf_power_dcdcen_set(NRF_POWER, true);
+#endif
+
+#if NRF_POWER_HAS_DCDCEN_VDDH
+	nrf_power_dcdcen_vddh_set(NRF_POWER, true);
+#endif
+
+#if !NRF_POWER_HAS_DCDCEN && !NRF_POWER_HAS_DCDCEN_VDDH
+#pragma message "DC-DC related commands have no effect!"
+#endif
+
+    nrfx_reset_reason_clear(1);
+#endif
+
     // bool from_usb_event = (reset_reas & VBUS_DETECT);
     bool from_wakeup =  (reset_reas & WAKEUP_DETECT);
     // if (from_usb_event)
