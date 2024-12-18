@@ -4,8 +4,6 @@ import struct
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 
-from database.users import get_user_store_recording_permission
-from utils.other.storage import upload_memory_recording
 import opuslib
 import webrtcvad
 from fastapi import APIRouter, HTTPException, Depends
@@ -169,11 +167,11 @@ async def _websocket_util(
     processing = memories_db.get_processing_memories(uid)
     asyncio.create_task(finalize_processing_memories(processing))
 
-    audio_data = bytearray()  # Variable to store audio bytes
-    current_memory_id = None  # Track the current memory ID
+    # audio_data = bytearray()  # Variable to store audio bytes
+    # current_memory_id = None  # Track the current memory ID
 
     async def _create_current_memory():
-        nonlocal current_memory_id
+        # nonlocal current_memory_id
         print("_create_current_memory", uid)
 
         # Reset state variables
@@ -187,30 +185,30 @@ async def _websocket_util(
             return
         await _create_memory(memory)
 
-        # Save audio bytes to a WAV file when the memory ends
-        if current_memory_id and get_user_store_recording_permission(uid):
-            try:
-                if not audio_data:
-                    print("No audio data to write.")
-                    return
-
-                path = f"_recordings/{current_memory_id}_audio.wav"
-                print(f"Saving audio file to {path}")
-
-                with wave.open(path, "wb") as wav_file:
-                    wav_file.setnchannels(channels)
-                    wav_file.setsampwidth(2)
-                    wav_file.setframerate(sample_rate)
-                    wav_file.writeframes(audio_data)
-
-                print(f"Audio file saved successfully: {path}")
-                upload_memory_recording(file_path=path,uid=uid,memory_id=current_memory_id)
-
-            except Exception as e:
-                print(f"Error saving audio file: {e}")
-        else:
-            print("Audio recording permission is false or no memory ID")
-        audio_data.clear()
+        # # Save audio bytes to a WAV file when the memory ends
+        # if current_memory_id and get_user_store_recording_permission(uid):
+        #     try:
+        #         if not audio_data:
+        #             print("No audio data to write.")
+        #             return
+        #
+        #         path = f"_recordings/{current_memory_id}_audio.wav"
+        #         print(f"Saving audio file to {path}")
+        #
+        #         with wave.open(path, "wb") as wav_file:
+        #             wav_file.setnchannels(channels)
+        #             wav_file.setsampwidth(2)
+        #             wav_file.setframerate(sample_rate)
+        #             wav_file.writeframes(audio_data)
+        #
+        #         print(f"Audio file saved successfully: {path}")
+        #         upload_memory_recording(file_path=path,uid=uid,memory_id=current_memory_id)
+        #
+        #     except Exception as e:
+        #         print(f"Error saving audio file: {e}")
+        # else:
+        #     print("Audio recording permission is false or no memory ID")
+        # audio_data.clear()
 
     # memory_creation_task_lock = False
     memory_creation_task_lock = asyncio.Lock()
@@ -238,14 +236,14 @@ async def _websocket_util(
             )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
-        nonlocal current_memory_id
+        # nonlocal current_memory_id
         if existing := retrieve_in_progress_memory(uid):
             memory = Memory(**existing)
             memory.transcript_segments = TranscriptSegment.combine_segments(
                 memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
             )
             redis_db.set_in_progress_memory_id(uid, memory.id)
-            current_memory_id = memory.id
+            # current_memory_id = memory.id
             return memory
 
         started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
@@ -263,7 +261,7 @@ async def _websocket_util(
         print('_get_in_progress_memory new', memory, uid)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         redis_db.set_in_progress_memory_id(uid, memory.id)
-        current_memory_id = memory.id
+        # current_memory_id = memory.id
         return memory
 
     async def create_memory_on_segment_received_task(finished_at: datetime):
