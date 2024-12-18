@@ -21,22 +21,22 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  Future<void> _checkRecordingPermission() async {
-    final permission = await getStoreRecordingPermission();
-    if (mounted) {
-      setState(() {
-        if (permission != null) {
-          SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
-        } else {
-          SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
-        }
-      });
-    }
-  }
+  // Future<void> _checkRecordingPermission() async {
+  //   final permission = await getStoreRecordingPermission();
+  //   if (mounted) {
+  //     setState(() {
+  //       if (permission != null) {
+  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
+  //       } else {
+  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
+  //       }
+  //     });
+  //   }
+  // }
 
   @override
   void initState() {
-    _checkRecordingPermission();
+    // _checkRecordingPermission();
     super.initState();
   }
 
@@ -175,61 +175,61 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
-              child: InkWell(
-                onTap: () {
-                  routeToPage(context, const RecordingsStoragePermission());
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            routeToPage(context, const RecordingsStoragePermission());
-                          },
-                          child: const Text(
-                            'Allow Omi to store recordings of your conversations',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(
-                        width: 16,
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: SharedPreferencesUtil().permissionStoreRecordingsEnabled
-                              ? const Color.fromARGB(255, 150, 150, 150)
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: const Color.fromARGB(255, 150, 150, 150),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        width: 22,
-                        height: 22,
-                        child: SharedPreferencesUtil().permissionStoreRecordingsEnabled
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 18,
-                              )
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            // Padding(
+            //   padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+            //   child: InkWell(
+            //     onTap: () {
+            //       routeToPage(context, const RecordingsStoragePermission());
+            //     },
+            //     child: Padding(
+            //       padding: const EdgeInsets.symmetric(vertical: 12.0),
+            //       child: Row(
+            //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //         children: [
+            //           Expanded(
+            //             child: GestureDetector(
+            //               onTap: () {
+            //                 routeToPage(context, const RecordingsStoragePermission());
+            //               },
+            //               child: const Text(
+            //                 'Allow Omi to store recordings of your conversations',
+            //                 style: TextStyle(
+            //                   color: Colors.grey,
+            //                   fontSize: 16,
+            //                   decoration: TextDecoration.underline,
+            //                 ),
+            //               ),
+            //             ),
+            //           ),
+            //           const SizedBox(
+            //             width: 16,
+            //           ),
+            //           Container(
+            //             decoration: BoxDecoration(
+            //               color: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+            //                   ? const Color.fromARGB(255, 150, 150, 150)
+            //                   : Colors.transparent,
+            //               border: Border.all(
+            //                 color: const Color.fromARGB(255, 150, 150, 150),
+            //                 width: 2,
+            //               ),
+            //               borderRadius: BorderRadius.circular(12),
+            //             ),
+            //             width: 22,
+            //             height: 22,
+            //             child: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+            //                 ? const Icon(
+            //                     Icons.check,
+            //                     color: Colors.white,
+            //                     size: 18,
+            //                   )
+            //                 : null,
+            //           ),
+            //         ],
+            //       ),
+            //     ),
+            //   ),
+            // ),
             const SizedBox(height: 32),
             // Divider(color: Colors.grey.shade300, height: 1),
             const SizedBox(height: 24),
