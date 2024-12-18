@@ -16,10 +16,10 @@ config ENABLE_BUTTON
 config ENABLE_SPEAKER
     bool "Enable the speaker!!"
     default n 
-config ENABLE_LED
-    bool "Enable the led!!"
-    default y
+endmenu
+
+menu "Build Configuration"
 config LEGACY_SDK
-    bool "Using legacy SDK(<=2.7.0)!!"
+    bool "Using the legacy SDK(<=2.7.0)!!"
     default y
 endmenu
