@@ -84,13 +84,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
     if (app.worksExternally()) {
       if (app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
-        getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
-          value = value.replaceAll(
-            '](assets/',
-            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-          );
-          setState(() => instructionsMarkdown = value);
-        });
+        if (app.externalIntegration!.setupInstructionsFilePath.contains('raw.githubusercontent.com')) {
+          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
+            value = value.replaceAll(
+              '](assets/',
+              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+            );
+            setState(() => instructionsMarkdown = value);
+          });
+        }
       }
       checkSetupCompleted();
     }
