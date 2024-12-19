@@ -332,3 +332,18 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
     throw Exception('An error occurred uploadSample: $e');
   }
 }
+
+Future<List<String>> getConversationCategoriesServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversation-categories',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getConversationCategories: ${response.body}');
+  if (response.statusCode == 200) {
+    return (jsonDecode(response.body) as List<dynamic>).map((category) => category.toString()).toList();
+  }
+  return [];
+}
