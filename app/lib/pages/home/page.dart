@@ -60,8 +60,12 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
-      context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
-      await context.read<ConversationProvider>().getInitialConversations();
+      if (mounted) {
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+      }
+      if (mounted) {
+        await context.read<ConversationProvider>().getInitialConversations();
+      }
       if (mounted) {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }

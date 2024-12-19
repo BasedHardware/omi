@@ -59,7 +59,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             if (isScrollingDown) {
               isScrollingDown = false;
               _showDeleteOption = false;
-              setState(() {});
+              if (mounted) {
+                setState(() {});
+              }
             }
           });
         }

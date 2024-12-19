@@ -31,9 +31,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
     });
     MixpanelManager().deleteAccountConfirmed();
     MixpanelManager().deleteUser();
-    SharedPreferencesUtil().clear();
     await deleteAccount();
     await FirebaseAuth.instance.signOut();
+    SharedPreferencesUtil().clear();
     setState(() {
       isDeleteing = false;
     });

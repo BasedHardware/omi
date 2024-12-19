@@ -295,13 +295,17 @@ class _DeciderWidgetState extends State<DeciderWidget> {
 
   void openAppLink(Uri uri) async {
     if (uri.pathSegments.first == 'apps') {
-      var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
-      if (app != null) {
-        MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-      } else {
-        debugPrint('App not found: ${uri.pathSegments[1]}');
-        AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+      if (mounted) {
+        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
+        if (app != null) {
+          MixpanelManager().track('App Opened From DeepLink', properties: {'appId': app.id});
+          if (mounted) {
+            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+          }
+        } else {
+          debugPrint('App not found: ${uri.pathSegments[1]}');
+          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+        }
       }
     } else {
       debugPrint('Unknown link: $uri');
