@@ -806,6 +806,56 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     prompt = f'''
     You will be given a recent conversation within a user and an AI, \
     there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
+
+    It is super important that THE QUESTION MUST BE FULL CONTEXT base on the user last messages.
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
+
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    User last messages:
+    ```According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+    Attended an outdoor party (cold weather, talked a lot more than usual).
+    Smoked weed (unusual for me).
+    Drank lots of relaxing tea.
+
+    Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+    ```
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV?"
+
+    The user last messages:
+    ```
+    {Message.get_messages_as_string(user_last_messages)}
+    ```
+
+    Conversation:
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+
+    '''.replace('    ', '').strip()
+    #print(prompt)
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
+def extract_question_from_conversation_v2(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages)-1, -1,-1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
     your task is to understand the user last messages, and identify the single question or follow-up question the user is asking. \
 
     If the user is not asking a question or does not want to follow up, respond with an empty message.
