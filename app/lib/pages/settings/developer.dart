@@ -140,8 +140,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32.0),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Memories'),
-                    subtitle: const Text('Export all your memories to a JSON file.'),
+                    title: const Text('Export Conversations'),
+                    subtitle: const Text('Export all your conversations to a JSON file.'),
                     trailing: provider.loadingExportMemories
                         ? const SizedBox(
                             height: 16,
@@ -159,7 +159,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Memories Export Started. This may take a few seconds, please wait.'),
+                                content:
+                                    Text('Conversations Export Started. This may take a few seconds, please wait.'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
@@ -167,11 +168,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 await getConversations(limit: 10000, offset: 0); // 10k for now
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/memories.json');
+                            final file = File('${directory.path}/conversations.json');
                             await file.writeAsString(json);
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Memories from Friend');
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Thank you for sharing the picture!');
                             }
@@ -179,39 +180,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = false);
                           },
                   ),
-                  // -------------------------- Comment GCS ------------------
-                  // const SizedBox(height: 16),
-                  // Divider(color: Colors.grey.shade500),
-                  // const SizedBox(height: 32),
-                  // const Text(
-                  //   'Google Cloud Bucket',
-                  //   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  // ),
-                  // const SizedBox(height: 8),
-                  // Text(
-                  //   'Export new memories audio to Google Cloud Storage.',
-                  //   style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  // ),
-                  // const SizedBox(height: 16.0),
-                  // TextField(
-                  //   controller: provider.gcpCredentialsController,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enableSuggestions: false,
-                  //   enabled: true,
-                  //   decoration: _getTextFieldDecoration('GCP Credentials (Base64)'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
-                  // TextField(
-                  //   controller: provider.gcpBucketNameController,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enabled: true,
-                  //   enableSuggestions: false,
-                  //   decoration: _getTextFieldDecoration('GCP Bucket Name'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
-                  // ----------------------- Comment GCS --------------------
                   // KEEP ME?
                   // ListTile(
                   //   title: const Text('Import Memories'),

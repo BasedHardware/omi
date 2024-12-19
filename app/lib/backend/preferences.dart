@@ -57,10 +57,6 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  String get openAIApiKey => getString('openaiApiKey') ?? '';
-
-  set openAIApiKey(String value) => saveString('openaiApiKey', value);
-
   //----------------------------- Permissions ---------------------------------//
 
   set notificationsEnabled(bool value) => saveBool('notificationsEnabled', value);
@@ -72,14 +68,6 @@ class SharedPreferencesUtil {
   bool get locationEnabled => getBool('locationEnabled') ?? false;
 
   //---------------------- Developer Settings ---------------------------------//
-
-  String get gcpCredentials => getString('gcpCredentials') ?? '';
-
-  set gcpCredentials(String value) => saveString('gcpCredentials', value);
-
-  String get gcpBucketName => getString('gcpBucketName') ?? '';
-
-  set gcpBucketName(String value) => saveString('gcpBucketName', value);
 
   String get webhookOnConversationCreated => getString('webhookOnConversationCreated') ?? '';
 
@@ -141,17 +129,9 @@ class SharedPreferencesUtil {
 
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
-  bool get useFriendApiKeys => getBool('useFriendApiKeys') ?? true;
-
-  set useFriendApiKeys(bool value) => saveBool('useFriendApiKeys', value);
-
   bool get onboardingCompleted => getBool('onboardingCompleted') ?? false;
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
-
-  String get customWebsocketUrl => getString('customWebsocketUrl') ?? '';
-
-  set customWebsocketUrl(String value) => saveString('customWebsocketUrl', value);
 
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key') ?? '';
 
@@ -299,26 +279,6 @@ class SharedPreferencesUtil {
     saveString('modifiedConversationDetails', value == null ? '' : jsonEncode(value.toJson()));
   }
 
-  bool get backupsEnabled => getBool('backupsEnabled2') ?? true;
-
-  set backupsEnabled(bool value) => saveBool('backupsEnabled2', value);
-
-  String get lastDailySummaryDay => getString('lastDailySummaryDate') ?? '';
-
-  set lastDailySummaryDay(String value) => saveString('lastDailySummaryDate', value);
-
-  set scriptCategoriesAndEmojisExecuted(bool value) => saveBool('scriptCategoriesAndEmojisExecuted', value);
-
-  bool get scriptCategoriesAndEmojisExecuted => getBool('scriptCategoriesAndEmojisExecuted') ?? false;
-
-  set scriptConversationVectorsExecuted(bool value) => saveBool('scriptConversationVectorsExecuted2', value);
-
-  bool get scriptConversationVectorsExecuted => getBool('scriptConversationVectorsExecuted2') ?? false;
-
-  set scriptMigrateMemoriesToBack(bool value) => saveBool('scriptMigrateMemoriesToBack2', value);
-
-  bool get scriptMigrateMemoriesToBack => getBool('scriptMigrateMemoriesToBack2') ?? false;
-
   set calendarPermissionAlreadyRequested(bool value) => saveBool('calendarPermissionAlreadyRequested', value);
 
   bool get calendarPermissionAlreadyRequested => getBool('calendarPermissionAlreadyRequested') ?? false;
@@ -334,10 +294,6 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
   String get calendarType => getString('calendarType2') ?? 'manual';
-
-  bool get firstTranscriptMade => getBool('firstTranscriptMade') ?? false;
-
-  set firstTranscriptMade(bool value) => saveBool('firstTranscriptMade', value);
 
   //--------------------------------- Auth ------------------------------------//
 

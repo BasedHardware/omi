@@ -109,7 +109,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             MixpanelManager().pageOpened('Share Analytics Data Details');
                           },
                           child: const Text(
-                            'Help improve Friend by sharing anonymized analytics data',
+                            'Help improve Omi by sharing anonymized analytics data',
                             style: TextStyle(
                               color: Colors.grey,
                               fontSize: 16,
@@ -165,7 +165,8 @@ class _ProfilePageState extends State<ProfilePage> {
               trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
             ListTile(

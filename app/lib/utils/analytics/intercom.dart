@@ -64,7 +64,6 @@ class IntercomManager {
       'Calendar Enabled': _preferences.calendarEnabled,
       'Recordings Language': _preferences.recordingsLanguage,
       'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
-      'GCP Integration Set': _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
     });
   }
 }
