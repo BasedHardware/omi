@@ -22,6 +22,7 @@ from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
+llm_4o = ChatOpenAI(model='gpt-4o')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -923,7 +924,7 @@ def retrieve_metadata_fields_from_transcript(
     ```
     '''.replace('    ', '')
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        result: ExtractedInformation = llm_4o.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
         print('e', e)
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
