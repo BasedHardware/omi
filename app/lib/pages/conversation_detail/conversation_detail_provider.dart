@@ -24,7 +24,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
 
-  int selectedTab = 0;
+  int selectedTab = 1;
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
@@ -44,7 +44,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool canDisplaySeconds = true;
 
-  // bool hasAudioRecording = false;
+  bool hasAudioRecording = false;
 
   List<ConversationPhoto> photos = [];
   List<Tuple2<String, String>> photosData = [];
@@ -54,8 +54,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   bool editSegmentLoading = false;
 
+  bool showUnassignedFloatingButton = true;
+
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
+    notifyListeners();
+  }
+
+  void setShowUnassignedFloatingButton(bool value) {
+    showUnassignedFloatingButton = value;
     notifyListeners();
   }
 
@@ -177,6 +184,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
 
+    showUnassignedFloatingButton = true;
+
     titleController!.text = conversation.structured.title;
     titleFocusNode!.addListener(() {
       print('titleFocusNode focus changed');
@@ -194,9 +203,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         await populatePhotosData();
       });
     } else if (conversation.source == ConversationSource.friend) {
-      // await hasMemoryRecording(memory.id).then((value) {
-      //   hasAudioRecording = value;
-      // });
+      await hasConversationRecording(conversation.id).then((value) {
+        hasAudioRecording = value;
+      });
     }
     appsList = appProvider!.apps;
     if (!conversation.discarded) {
