@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 
 class SyncAnimation extends StatefulWidget {
   final double size;
@@ -106,7 +107,7 @@ class _SyncAnimationState extends State<SyncAnimation> with TickerProviderStateM
         alignment: Alignment.center,
         children: [
           Image.asset(
-            'assets/images/herologo.png',
+            Assets.images.herologo.path,
             width: widget.size * 0.75,
             height: widget.size * 0.75,
           ),

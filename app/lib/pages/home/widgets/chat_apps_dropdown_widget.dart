@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
@@ -95,12 +96,12 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     image: DecorationImage(
-                      image: AssetImage("assets/images/background.png"),
+                      image: AssetImage(Assets.images.background.path),
                       fit: BoxFit.cover,
                     ),
-                    borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                    borderRadius: const BorderRadius.all(Radius.circular(16.0)),
                   ),
                   height: 24,
                   width: 24,
@@ -108,7 +109,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     alignment: Alignment.center,
                     children: [
                       Image.asset(
-                        "assets/images/herologo.png",
+                        Assets.images.herologo.path,
                         height: 16,
                         width: 16,
                       ),
