@@ -168,6 +168,10 @@ class ServerConversation {
     };
   }
 
+  int unassignedSegmentsLength() {
+    return transcriptSegments.where((element) => (element.personId == null && !element.isUser)).length;
+  }
+
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'Openglass';

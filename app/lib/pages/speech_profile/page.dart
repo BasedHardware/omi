@@ -5,6 +5,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
@@ -381,14 +382,14 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         style: TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
-                              // TextButton(
-                              //     onPressed: () {
-                              //       routeToPage(context, const UserPeoplePage());
-                              //     },
-                              //     child: const Text(
-                              //       'Recognizing others 👀',
-                              //       style: TextStyle(color: Colors.white, fontSize: 16),
-                              //     )),
+                              TextButton(
+                                  onPressed: () {
+                                    routeToPage(context, const UserPeoplePage());
+                                  },
+                                  child: const Text(
+                                    'Recognizing others 👀',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  )),
                             ],
                           )
                         : provider.profileCompleted
