@@ -343,7 +343,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
 
 Future<List<PaymentPlan>> getPaymentPlansServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/app/payment-plans',
+    url: '${Env.apiBaseUrl}v1/app/plans',
     headers: {},
     body: '',
     method: 'GET',

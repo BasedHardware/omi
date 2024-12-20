@@ -52,26 +52,24 @@ class AppListItem extends StatelessWidget {
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      child: Row(
-                        children: [
-                          ConstrainedBox(
-                            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
-                            child: Text(
-                              app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                            ),
+                    Row(
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
+                          child: Text(
+                            app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     SizedBox(height: app.ratingAvg != null ? 4 : 0),
                     Padding(
@@ -122,7 +120,7 @@ class AppListItem extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: MediaQuery.sizeOf(context).width * 0.02),
               provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),

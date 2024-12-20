@@ -46,18 +46,6 @@ class _FoundDevicesState extends State<FoundDevices> {
             //   (route) => false,
             // );
             Navigator.pop(context);
-          } else if (info == 'OPENGLASS_NOT_SUPPORTED') {
-            showDialog(
-                context: context,
-                builder: (context) {
-                  return getDialog(context, () {
-                    Navigator.pop(context);
-                  }, () {
-                    Navigator.pop(context);
-                  }, "OpenGlass isn't supported",
-                      "OpenGlass isn’t available in this version of the app. It will be added in a future update once it's ready",
-                      singleButton: true);
-                });
           } else {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(info),

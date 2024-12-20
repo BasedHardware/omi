@@ -71,7 +71,7 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
 def query_vectors_by_metadata(
         uid: str, vector: List[float], dates_filter: List[datetime], people: List[str], topics: List[str],
-        entities: List[str], dates: List[str]
+    entities: List[str], dates: List[str], limit: int = 5,
 ):
     filter_data = {'$and': [
         {'uid': {'$eq': uid}},
@@ -88,7 +88,7 @@ def query_vectors_by_metadata(
     if dates_filter and len(dates_filter) == 2 and dates_filter[0] and dates_filter[1]:
         print('dates_filter', dates_filter)
         filter_data['$and'].append(
-            {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int((dates_filter[1]+timedelta(days=1)).timestamp())-1}}
+            {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
     print('query_vectors_by_metadata:', json.dumps(filter_data))
@@ -127,7 +127,7 @@ def query_vectors_by_metadata(
     memories_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
     memories_id.sort(key=lambda x: memory_id_to_matches[x], reverse=True)
     print('query_vectors_by_metadata result:', memories_id)
-    return memories_id[:5] if len(memories_id) > 5 else memories_id
+    return memories_id[:limit] if len(memories_id) > limit else memories_id
 
 
 def delete_vector(memory_id: str):

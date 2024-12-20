@@ -104,6 +104,7 @@ class _AddAppPageState extends State<AddAppPage> {
                             pickImage: () async {
                               await provider.pickImage();
                             },
+                            allowPaidApps: provider.allowPaidApps,
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
                             appDescriptionController: provider.appDescriptionController,
@@ -251,7 +252,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 shape: const CircleBorder(),
                               ),
                               SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.80,
+                                width: MediaQuery.of(context).size.width * 0.7,
                                 child: const Text("Make my app public"),
                               ),
                             ],
@@ -267,7 +268,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                 shape: const CircleBorder(),
                               ),
                               SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.80,
+                                width: MediaQuery.of(context).size.width * 0.78,
                                 child: const Text(
                                     "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
                               ),

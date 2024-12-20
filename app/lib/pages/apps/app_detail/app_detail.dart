@@ -137,7 +137,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
     bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
     bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
     int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -817,7 +816,9 @@ class RecentReviewsSection extends StatelessWidget {
           constraints: BoxConstraints(
             maxHeight: reviews.any((e) => e.response.isNotEmpty)
                 ? MediaQuery.of(context).size.height * 0.24
-                : MediaQuery.of(context).size.height * 0.138,
+                : (MediaQuery.of(context).size.height < 680
+                    ? MediaQuery.of(context).size.height * 0.2
+                    : MediaQuery.of(context).size.height * 0.138),
           ),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,

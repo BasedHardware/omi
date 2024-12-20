@@ -322,6 +322,12 @@ def get_is_user_paid_app(app_id: str, uid: str):
         return True
     return get_user_paid_app(app_id, uid) is not None
 
+def is_permit_payment_plan_get(uid: str):
+    if uid in MarketplaceAppReviewUIDs:
+        return False
+
+    return True
+
 def paid_app(app_id: str, uid: str):
     expired_seconds = 60*60*24*30  # 30 days
     set_user_paid_app(app_id, uid, expired_seconds)
