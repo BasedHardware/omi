@@ -35,6 +35,7 @@ OpusEncoder *opus_encoder = nullptr;
 #define CHANNELS 1
 #define MAX_PACKET_SIZE 1000
 
+#define FRAME_SIZE 160
 #define SAMPLE_RATE 16000
 #define SAMPLE_BITS 16
 
