@@ -404,6 +404,56 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
+    **Task:** Determine the appropriate date range in UTC that provides context for answering the question.
+
+    **Instructions:**
+
+     1. Current Date Reference: Utilize today's date, {datetime.now(timezone.utc).strftime('%Y-%m-%d')} in UTC. Note that the question is posed in the question timezone: {tz}.
+     2. Scope of Inquiry: Disregard any queries concerning historical events or future projections. For such inquiries, return an empty list.
+     3. Date Range Specification: Present the date range in UTC format.
+     4. Response Format: Use the format [YYYY-MM-DDTHH:MM:SSZ, YYYY-MM-DDTHH:MM:SSZ].
+
+    **Clarifications:**
+
+    - "Today" refers to the current date.
+    - "Tomorrow" indicates the day following today.
+    - "Yesterday" signifies the day preceding today.
+    - "Next week" starts on the upcoming Monday.
+
+    **Examples:**
+
+    - Example 1:
+
+      - Today: 2024-12-20 in UTC
+      - Question's timezone: America/Los_Angeles
+      - Question: What memories were captured on December 18, 2024, that you would like recapped?
+      - Answer: [2024-12-18T08:00:00Z, 2024-12-19T08:00:00Z]
+
+    - Example 2:
+
+      -Today: 2024-12-20 in UTC
+      -Question's timezone: America/Los_Angeles
+      -Question: What memories were captured on yesterday, that you would like recapped?
+      -Answer: [2024-12-19T08:00:00Z, 2024-12-20T08:00:00Z]
+
+    **Question's timezone:**
+    ```
+    {tz}
+    ```
+
+    **Question:**
+    ```
+    {question}
+    ```
+    '''.replace('    ', '').strip()
+
+    # print(prompt)
+    with_parser = llm_mini.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+def retrieve_context_dates_by_question_v1(question: str, tz: str) -> List[datetime]:
+    prompt = f'''
     Task: Identify the relevant date range needed to provide context for answering the user's recent question.
 
     Instructions:
@@ -493,7 +543,57 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    cited_prompt = """
+    Cite converstations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
+    Cite the most relevant converstation(memories) that answer the Question. Avoid citing irrelevant conversations(memories).
+    """ if cited else ""
+
+    prompt = f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the converstation(memory) provided.
+
+    If you don't know the answer or the premise is incorrect, explain why.
+    If the converstations(memories) are empty or irrelevent to the Question, answer the Question as well as you can with existing knowledge.
+
+    {cited_prompt}
+
+    Use three sentences maximum and keep the answer concise.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    Use the following User Facts if relevant to the Question:
+
+    **User Facts:**
+    ```
+    {facts_str.strip()}
+    ```
+
+    **Conversations:**
+    ```
+    {context}
+    ```
+
+    Answer:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    # print('qa_rag prompt', prompt)
+    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
+def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -527,7 +627,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     ```
     Answer:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    print('qa_rag prompt', prompt)
+    # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 
@@ -837,7 +937,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     ```
 
     '''.replace('    ', '').strip()
-    #print(prompt)
+    # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
