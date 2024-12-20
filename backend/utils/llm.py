@@ -553,6 +553,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
     Cite converstations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
     Cite the most relevant converstation(memories) that answer the Question. Avoid citing irrelevant conversations(memories).

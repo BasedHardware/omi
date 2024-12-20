@@ -162,7 +162,7 @@ def query_vectors(state: GraphState):
         limit=100,
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
-    print(memories_id)
+    # print(memories_id)
     return {"memories_found": memories}
 
 
