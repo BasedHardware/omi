@@ -555,16 +555,14 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
 
     # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
-    Cite converstations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
-    Cite the most relevant converstation(memories) that answer the Question. Avoid citing irrelevant conversations(memories).
+    Cite conversations(memories) using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation.
+    Cite the most relevant conversations(memories) that answer the Question. Avoid citing irrelevant conversations(memories).
+    Cite only in the conversations (memories), not in the User Fact.
     """ if cited else ""
 
     prompt = f"""
     You are an assistant for question-answering tasks.
-    You answer Question in the most personalized way possible, using the converstation(memory) provided.
-
-    If you don't know the answer or the premise is incorrect, explain why.
-    If the converstations(memories) are empty or irrelevent to the Question, answer the Question as well as you can with existing knowledge.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
 
     {cited_prompt}
 
