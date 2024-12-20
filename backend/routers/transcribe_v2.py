@@ -508,7 +508,7 @@ async def _websocket_util(
                 data = await websocket.receive_bytes()
                 if codec == 'opus' and sample_rate == 16000:
                     data = decoder.decode(bytes(data), frame_size=160)
-                    audio_data.extend(data)
+                    # audio_data.extend(data)
 
                 if include_speech_profile and codec != 'opus':  # don't do for opus 1.0.4 for now
                     has_speech = _has_speech(data, sample_rate)
