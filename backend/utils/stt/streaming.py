@@ -130,6 +130,12 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+        
+        async def keep_alive_wrapper():
+            while True:
+                dg_connection.keep_alive()
+                await asyncio.sleep(20)
+        asyncio.create_task(keep_alive_wrapper())
 
         def on_open(self, open, **kwargs):
             print("Connection Open")
