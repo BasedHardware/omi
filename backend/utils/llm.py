@@ -404,6 +404,34 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
+    Task: Determine the appropriate date range in {tz} that provides context for answering the question provided.
+
+    Instructions:
+
+    1. Identify the Current Date:
+        - Note the current date and time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}.
+
+    2. Understand Date References:
+        - Define "Today" as the converted current date in timezone {tz}.
+        - Define "Tomorrow" as the day after "Today" in timezone {tz}.
+        - Define "Yesterday" as the day before "Today" in timezone {tz}.
+        - Define "Next week" as starting from the upcoming Monday in timezone {tz}.
+        - Define "My day" as the converted current date in timezone {tz}.
+
+    Question:
+    ```
+    {question}
+    ```
+    '''.replace('    ', '').strip()
+
+    # print(prompt)
+    # print(llm_mini.invoke(prompt).content)
+    with_parser = llm_mini.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[datetime]:
+    prompt = f'''
     **Task:** Determine the appropriate date range in UTC that provides context for answering the question.
 
     **Instructions:**
