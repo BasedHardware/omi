@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/backend/schema/person.dart';
+import 'package:friend_private/backend/schema/profile.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
@@ -278,5 +279,111 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
     return jsonResponse['has_rating'] as bool? ?? false;
   } catch (e) {
     return false;
+  }
+}
+
+Future<CreatorProfile?> getCreatorProfile() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    print(response?.body);
+    if (response == null) return null;
+    debugPrint('getCreatorProfile response: ${response.body}');
+    if (response.statusCode == 200) {
+      Map<String, dynamic> json = jsonDecode(response.body);
+      if (json.isEmpty) {
+        return CreatorProfile.empty();
+      }
+      return CreatorProfile.fromJson(json);
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getCreatorProfile error: $e');
+    return null;
+  }
+}
+
+Future<bool> saveCreatorProfile(CreatorProfile profile) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'POST',
+      body: jsonEncode(profile.toJson()),
+    );
+    if (response == null) return false;
+    debugPrint('saveCreatorProfile response: ${response.body}');
+    return response.statusCode == 200;
+  } catch (e) {
+    debugPrint('saveCreatorProfile error: $e');
+    return false;
+  }
+}
+
+Future<bool> updateCreatorProfileServer(String? name, String? email, String? paypalEmail, String? paypalLink) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-profile',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode({
+        'creator_name': name,
+        'creator_email': email,
+        'paypal_details': {
+          'paypal_email': paypalEmail,
+          'paypal_me_link': paypalLink,
+        },
+      }),
+    );
+    if (response == null) return false;
+    debugPrint('updateCreatorProfile response: ${response.body}');
+    return response.statusCode == 200;
+  } catch (e) {
+    debugPrint('updateCreatorProfile error: $e');
+    return false;
+  }
+}
+
+Future<CreatorStats?> getCreatorStatsServer() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/creator-stats',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null) return null;
+    debugPrint('getCreatorStatsServer response: ${response.body}');
+    if (response.statusCode == 200) {
+      return CreatorStats.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getCreatorStatsServer error: $e');
+    return null;
+  }
+}
+
+Future getPayoutHistoryServer() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/users/payout-history',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null) return null;
+    debugPrint('getPayoutHistoryServer response: ${response.body}');
+    if (response.statusCode == 200) {
+      return PayoutTransaction.fromJsonList(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    debugPrint('getPayoutHistoryServer error: $e');
+    return null;
   }
 }
