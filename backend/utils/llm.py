@@ -907,6 +907,8 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     there could be a few messages exchanged, and partly built up the proper question, \
     your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
 
+    If the user's last message is a complete question, maintain the original version as accurately as possible. Avoid adding unnecessary words.
+
     It is super important that THE QUESTION MUST BE FULL CONTEXT base on the user last messages.
 
     If the user is not asking a question or does not want to follow up, respond with an empty message.
