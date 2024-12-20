@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict
 
@@ -176,14 +176,7 @@ class Memory(BaseModel):
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
-            formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
-            if use_transcript:
-                memory_str = (f"Memory #{i + 1}\n"
-                              f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
-                              f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
-                result.append(memory_str.strip())
-                continue
-
+            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%Y %d %b, at %H:%M") + " UTC"
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
@@ -193,6 +186,15 @@ class Memory(BaseModel):
                 memory_str += "Action Items:\n"
                 for item in memory.structured.action_items:
                     memory_str += f"- {item.description}\n"
+
+            if memory.structured.events:
+                memory_str += "Events:\n"
+                for event in memory.structured.events:
+                    memory_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+
+            if use_transcript:
+                memory_str += (f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+
             result.append(memory_str.strip())
 
         return "\n\n---------------------\n\n".join(result).strip()
