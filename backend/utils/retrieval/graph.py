@@ -51,6 +51,7 @@ class GraphState(TypedDict):
     messages: List[Message]
     plugin_selected: Optional[Plugin]
     tz: str
+    cited: Optional[bool] = False
 
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
@@ -148,16 +149,20 @@ def query_vectors(state: GraphState):
         else [0] * 3072
     )
     print("query_vectors vector:", vector[:5])
+    # TODO: enable it when the in-accurated topic filter get fixed
+    is_topic_filter_enabled = date_filters.get("start") is None
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=state.get("filters", {}).get("people", []),
-        topics=state.get("filters", {}).get("topics", []),
-        entities=state.get("filters", {}).get("entities", []),
+        people=state.get("filters", {}).get("people", []) if is_topic_filter_enabled else [],
+        topics=state.get("filters", {}).get("topics", []) if is_topic_filter_enabled else [],
+        entities=state.get("filters", {}).get("entities", []) if is_topic_filter_enabled else [],
         dates=state.get("filters", {}).get("dates", []),
+        limit=100,
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
+    print(memories_id)
     return {"memories_found": memories}
 
 
@@ -167,8 +172,9 @@ def qa_handler(state: GraphState):
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, True),
+        Memory.memories_to_string(memories, False),
         state.get("plugin_selected"),
+        cited=state.get("cited"),
     )
     return {"answer": response, "ask_for_nps": True}
 
@@ -211,12 +217,12 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[Plugin] = None
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin)
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "messages": messages, "plugin_selected": plugin},
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
