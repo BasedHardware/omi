@@ -150,8 +150,6 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             pass
 
         def on_close(self, close, **kwargs):
-            print('--------------',close)
-            print('-------------------',kwargs)
             print("Connection Closed")
 
         def on_unhandled(self, unhandled, **kwargs):
