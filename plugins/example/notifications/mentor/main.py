@@ -187,7 +187,7 @@ def send_reminder_notification(session_id, message_id):
         logger.error(f"No app ID found for session {session_id}")
         return
 
-    notification_url = f"{api_base_url.rstrip('/')}/v1/notification"
+    notification_url = f"{api_base_url.rstrip('/')}/v1/integrations/notification"
     
     try:
         payload = {
