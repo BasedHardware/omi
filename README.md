@@ -37,7 +37,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [App setup](https://docs.omi.me/docs/get_started/Setup/)
+- [App setup](https://docs.omi.me/docs/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
