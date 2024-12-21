@@ -404,24 +404,16 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
-    Task: Determine the appropriate date range in {tz} that provides context for answering the question provided.
+    You MUST determine the appropriate date range in {tz} that provides context for answering the question provided.
 
-    Instructions:
-
-    1. Identify the Current Date:
-        - Note the current date and time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}.
-
-    2. Understand Date References:
-        - Define "Today" as the converted current date in timezone {tz}.
-        - Define "Tomorrow" as the day after "Today" in timezone {tz}.
-        - Define "Yesterday" as the day before "Today" in timezone {tz}.
-        - Define "Next week" as starting from the upcoming Monday in timezone {tz}.
-        - Define "My day" as the converted current date in timezone {tz}.
+    Current date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC.
 
     Question:
     ```
     {question}
     ```
+
+    Date range:
     '''.replace('    ', '').strip()
 
     # print(prompt)
@@ -571,7 +563,66 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = []) -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    prompt = f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    {cited_prompt}
+
+    Use three sentences maximum and keep the answer concise.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Current date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC.
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    print('qa_rag prompt', prompt)
+    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
+def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -919,6 +970,58 @@ class OutputQuestion(BaseModel):
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages)-1, -1,-1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
+
+    If the user's last message is a complete question, maintain the original version as accurately as possible. Avoid adding unnecessary words.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's super IMPORTANT to refine the Question to be full context with the last messages only.
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
+
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    User last messages:
+    ```According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+    Attended an outdoor party (cold weather, talked a lot more than usual).
+    Smoked weed (unusual for me).
+    Drank lots of relaxing tea.
+
+    Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+    ```
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
+
+    **The user last messages:**
+    ```
+    {Message.get_messages_as_string(user_last_messages)}
+    ```
+
+    **Previous messages:**
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+
+    '''.replace('    ', '').strip()
+    # print(prompt)
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+def extract_question_from_conversation_v3(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
     for i in range(len(messages)-1, -1,-1):
