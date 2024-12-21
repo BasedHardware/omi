@@ -57,7 +57,7 @@ def send_message(
     cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
     if len(cited_memory_idxs) > 0:
         response = re.sub(r'\[\d+\]', '', response)
-    memories = [memories[i - 1] for i in cited_memory_idxs]
+    memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
 
     memories_id = []
     # check if the items in the memories list are dict
