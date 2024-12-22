@@ -56,7 +56,7 @@ class Message(BaseModel):
             return message.sender.upper()  # TODO: use plugin id
 
         formatted_messages = [
-            f"({message.created_at.strftime('%d %b, at %H:%M')}) {get_sender_name(message)}: {message.text}"
+            f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
             for message in sorted_messages
         ]
 
