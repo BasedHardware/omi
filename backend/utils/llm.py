@@ -615,11 +615,9 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     {facts_str.strip()}
     ---
 
-    Current date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC.
-
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    print('qa_rag prompt', prompt)
+    # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
 def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
@@ -986,6 +984,8 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     there could be a few messages exchanged, and partly built up the proper question, \
     your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
 
+    You MUST keep the original `date time term`.
+
     If the user's last message is a complete question, maintain the original version as accurately as possible. Avoid adding unnecessary words.
 
     You will be provided previous messages between you and user to help you answer the Question. \
@@ -1016,6 +1016,8 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     ```
     {Message.get_messages_as_string(messages)}
     ```
+
+    **Date time term:** today, my day, my week, this week, this day, etc.
 
     '''.replace('    ', '').strip()
     # print(prompt)
