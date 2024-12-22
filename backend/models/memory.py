@@ -176,7 +176,7 @@ class Memory(BaseModel):
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
-            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%Y %d %b, at %H:%M") + " UTC"
+            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
