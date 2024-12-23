@@ -9,9 +9,12 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
+import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -86,6 +89,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           },
           child: Scaffold(
             key: scaffoldKey,
+            extendBody: true,
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               automaticallyImplyLeading: false,
@@ -158,57 +162,146 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         )
                       : const SizedBox.shrink();
                 }),
-            body: Column(
+            body: Stack(
               children: [
-                TabBar(
-                  indicatorSize: TabBarIndicatorSize.label,
-                  isScrollable: false,
-                  onTap: (value) {
-                    context.read<ConversationDetailProvider>().updateSelectedTab(value);
-                  },
-                  padding: EdgeInsets.zero,
-                  indicatorPadding: EdgeInsets.zero,
-                  labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-                  tabs: [
-                    Selector<ConversationDetailProvider, ConversationSource?>(
-                        selector: (context, provider) => provider.conversation.source,
-                        builder: (context, conversationSource, child) {
-                          return Tab(
-                            text: conversationSource == ConversationSource.openglass
-                                ? 'Photos'
-                                : conversationSource == ConversationSource.screenpipe
-                                    ? 'Raw Data'
-                                    : 'Transcript',
+                Column(
+                  children: [
+                    TabBar(
+                      indicatorSize: TabBarIndicatorSize.label,
+                      isScrollable: false,
+                      onTap: (value) {
+                        context.read<ConversationDetailProvider>().updateSelectedTab(value);
+                      },
+                      padding: EdgeInsets.zero,
+                      indicatorPadding: EdgeInsets.zero,
+                      labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
+                      tabs: [
+                        Selector<ConversationDetailProvider, ConversationSource?>(
+                            selector: (context, provider) => provider.conversation.source,
+                            builder: (context, conversationSource, child) {
+                              return Tab(
+                                text: conversationSource == ConversationSource.openglass
+                                    ? 'Photos'
+                                    : conversationSource == ConversationSource.screenpipe
+                                        ? 'Raw Data'
+                                        : 'Transcript',
+                              );
+                            }),
+                        const Tab(text: 'Summary')
+                      ],
+                      indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Builder(builder: (context) {
+                          return TabBarView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            children: [
+                              Selector<ConversationDetailProvider, ConversationSource?>(
+                                selector: (context, provider) => provider.conversation.source,
+                                builder: (context, source, child) {
+                                  return ListView(
+                                    shrinkWrap: true,
+                                    children: source == ConversationSource.openglass
+                                        ? [const PhotosGridComponent(), const SizedBox(height: 32)]
+                                        : [const TranscriptWidgets()],
+                                  );
+                                },
+                              ),
+                              const SummaryTab(),
+                            ],
                           );
                         }),
-                    const Tab(text: 'Summary')
+                      ),
+                    ),
                   ],
-                  indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Builder(builder: (context) {
-                      return TabBarView(
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          Selector<ConversationDetailProvider, ConversationSource?>(
-                            selector: (context, provider) => provider.conversation.source,
-                            builder: (context, source, child) {
-                              return ListView(
-                                shrinkWrap: true,
-                                children: source == ConversationSource.openglass
-                                    ? [const PhotosGridComponent(), const SizedBox(height: 32)]
-                                    : [const TranscriptWidgets()],
-                              );
-                            },
-                          ),
-                          const SummaryTab(),
-                        ],
-                      );
-                    }),
-                  ),
-                ),
+                Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
+                  return (
+                    count: provider.conversation.unassignedSegmentsLength(),
+                    shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
+                  );
+                }, builder: (context, value, child) {
+                  if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                  return Positioned(
+                    bottom: MediaQuery.sizeOf(context).height * 0.06,
+                    left: 86,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.grey.shade900,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.grey.shade900,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              spreadRadius: 1,
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                    provider.setShowUnassignedFloatingButton(false);
+                                  },
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            //TODO: when we move the copy button to settings, we can add this to give a cleaner look
+                            // Row(
+                            //   children: [
+                            //     const SizedBox(width: 8),
+                            //     ElevatedButton(
+                            //       style: ElevatedButton.styleFrom(
+                            //         backgroundColor: Colors.white24,
+                            //         shape: RoundedRectangleBorder(
+                            //           borderRadius: BorderRadius.circular(16),
+                            //         ),
+                            //       ),
+                            //       onPressed: () {
+                            //         // Tag action
+                            //       },
+                            //       child: const Text(
+                            //         "Tag",
+                            //         style: TextStyle(
+                            //           color: Colors.white,
+                            //         ),
+                            //       ),
+                            //     ),
+                            //   ],
+                            // ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ],
             ),
           ),
@@ -337,37 +430,28 @@ class TranscriptWidgets extends StatelessWidget {
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
-                    editSegment: (_) {},
-                    // editSegment: !provider.memory.isPostprocessing()
-                    //     ? (i) {
-                    //         final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                    //         if (!connectivityProvider.isConnected) {
-                    //           ConnectivityProvider.showNoInternetDialog(context);
-                    //           return;
-                    //         }
-                    //         showModalBottomSheet(
-                    //           context: context,
-                    //           isScrollControlled: true,
-                    //           isDismissible: provider.editSegmentLoading ? false : true,
-                    //           shape: const RoundedRectangleBorder(
-                    //             borderRadius:
-                    //                 BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-                    //           ),
-                    //           builder: (context) {
-                    //             return EditSegmentWidget(
-                    //               segmentIdx: i,
-                    //               people: SharedPreferencesUtil().cachedPeople,
-                    //             );
-                    //           },
-                    //         );
-                    //       }
-                    //     : (_) {
-                    //         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    //           content: Text('Memory still processing. Please wait...'),
-                    //           duration: Duration(seconds: 1),
-                    //         ));
-                    //       },
-                  ),
+                    // editSegment: (_) {},
+                    editSegment: (i) {
+                      final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                      if (!connectivityProvider.isConnected) {
+                        ConnectivityProvider.showNoInternetDialog(context);
+                        return;
+                      }
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        isDismissible: provider.editSegmentLoading ? false : true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                        ),
+                        builder: (context) {
+                          return EditSegmentWidget(
+                            segmentIdx: i,
+                            people: SharedPreferencesUtil().cachedPeople,
+                          );
+                        },
+                      );
+                    }),
             const SizedBox(height: 32)
           ],
         );
@@ -426,45 +510,45 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  // !provider.hasAudioRecording
-                  //     ? GestureDetector(
-                  //         onTap: () {
-                  //           showDialog(
-                  //             context: context,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.pop(context),
-                  //               () {
-                  //                 Navigator.pop(context);
-                  //                 routeToPage(context, const RecordingsStoragePermission());
-                  //               },
-                  //               'Can\'t be used for speech training',
-                  //               'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                  //               okButtonText: 'View',
-                  //             ),
-                  //           );
-                  //         },
-                  //         child: Padding(
-                  //           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  //           child: Row(
-                  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //             crossAxisAlignment: CrossAxisAlignment.center,
-                  //             children: [
-                  //               Text('Can\'t be used for speech training',
-                  //                   style: Theme.of(context)
-                  //                       .textTheme
-                  //                       .bodyMedium!
-                  //                       .copyWith(decoration: TextDecoration.underline)),
-                  //               const Padding(
-                  //                 padding: EdgeInsets.only(right: 12),
-                  //                 child: Icon(Icons.info, color: Colors.grey, size: 20),
-                  //               ),
-                  //             ],
-                  //           ),
-                  //         ),
-                  //       )
-                  //     : const SizedBox(),
+                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
+                  !provider.hasAudioRecording
+                      ? GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () {
+                                  Navigator.pop(context);
+                                  routeToPage(context, const RecordingsStoragePermission());
+                                },
+                                'Can\'t be used for speech training',
+                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
+                                okButtonText: 'View',
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text('Can\'t be used for speech training',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium!
+                                        .copyWith(decoration: TextDecoration.underline)),
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 12),
+                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),
