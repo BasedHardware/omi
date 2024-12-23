@@ -236,7 +236,9 @@ class TopicsContext(BaseModel):
 
 
 class DatesContext(BaseModel):
-    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
+    dates_range: List[datetime] = Field(default=[],
+                                        examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
+                                        description="Dates range. (Optional)",)
 
 
 def requires_context_v1(messages: List[Message]) -> bool:
@@ -406,14 +408,13 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     prompt = f'''
     You MUST determine the appropriate date range in {tz} that provides context for answering the question provided.
 
-    Current date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC.
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
 
     Question:
     ```
     {question}
     ```
 
-    Date range:
     '''.replace('    ', '').strip()
 
     # print(prompt)
@@ -563,7 +564,7 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = []) -> str:
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -614,6 +615,10 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     ---
     {facts_str.strip()}
     ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
