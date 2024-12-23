@@ -16,6 +16,7 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +49,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   int usageCount = 0;
   Timer? _paymentCheckTimer;
   late App app;
+  late bool showInstallAppConfirmation;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -67,6 +69,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     app = widget.app;
+    showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
@@ -412,7 +415,41 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 child: AnimatedLoadingButton(
                                   width: MediaQuery.of(context).size.width * 0.9,
                                   text: 'Install App',
-                                  onPressed: () => _toggleApp(app.id, true),
+                                  onPressed: () async {
+                                    if (app.worksExternally()) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) {
+                                          return StatefulBuilder(builder: (ctx, setState) {
+                                            return ConfirmationDialog(
+                                              title: 'Data Access Notice',
+                                              description:
+                                                  'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                              checkboxText: "Don't show it again",
+                                              checkboxValue: !showInstallAppConfirmation,
+                                              updateCheckboxValue: (value) {
+                                                if (value != null) {
+                                                  setState(() {
+                                                    showInstallAppConfirmation = !value;
+                                                    SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                                  });
+                                                }
+                                              },
+                                              onConfirm: () {
+                                                _toggleApp(app.id, true);
+                                                Navigator.pop(context);
+                                              },
+                                              onCancel: () {
+                                                Navigator.pop(context);
+                                              },
+                                            );
+                                          });
+                                        },
+                                      );
+                                    } else {
+                                      _toggleApp(app.id, true);
+                                    }
+                                  },
                                   color: Colors.green,
                                 ),
                               ),
