@@ -6,6 +6,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 class TranscriptWidget extends StatefulWidget {
@@ -59,10 +60,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                // onTap: () {
-                //   widget.editSegment?.call(idx - 1);
-                //   MixpanelManager().assignSheetOpened();
-                // },
+                onTap: () {
+                  widget.editSegment?.call(idx - 1);
+                  MixpanelManager().assignSheetOpened();
+                },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
