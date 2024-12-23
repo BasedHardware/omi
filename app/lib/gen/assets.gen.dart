@@ -89,12 +89,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/ic_chart.svg
   String get icChart => 'assets/images/ic_chart.svg';
 
-  /// File path: assets/images/ic_check.svg
-  String get icCheck => 'assets/images/ic_check.svg';
-
-  /// File path: assets/images/ic_convo.svg
-  String get icConvo => 'assets/images/ic_convo.svg';
-
   /// File path: assets/images/ic_dollar.svg
   String get icDollar => 'assets/images/ic_dollar.svg';
 
@@ -144,8 +138,6 @@ class $AssetsImagesGen {
         emotionalFeedback1,
         herologo,
         icChart,
-        icCheck,
-        icConvo,
         icDollar,
         instruction1,
         instruction2,
