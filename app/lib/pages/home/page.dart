@@ -10,9 +10,9 @@ import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
 import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:friend_private/pages/home/widgets/home_sub_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -341,8 +341,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
-                        // OldConversationsPage(),
-                        HomeSubPage(),
+                        ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
                       ],
