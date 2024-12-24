@@ -446,7 +446,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
                       return Padding(
-                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.15),
+                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.08),
                         child: ChatAppsDropdownWidget(
                           controller: _controller,
                         ),
