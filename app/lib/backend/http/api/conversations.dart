@@ -347,3 +347,22 @@ Future<List<String>> getConversationCategoriesServer() async {
   }
   return [];
 }
+
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(String query, [int? page, int? limit]) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/search',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'query': query, 'page': page ?? 1, 'per_page': limit ?? 10}),
+  );
+  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response.statusCode == 200) {
+    List<dynamic> items = (jsonDecode(response.body))['items'];
+    int currentPage = (jsonDecode(response.body))['current_page'];
+    int totalPages = (jsonDecode(response.body))['total_pages'];
+    print('searchConversationsServer: ${items.length} $currentPage $totalPages');
+    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
+    return (convos, currentPage, totalPages);
+  }
+  return (<ServerConversation>[], 0, 0);
+}

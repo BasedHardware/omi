@@ -10,19 +10,16 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class ConversationProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerConversation> conversations = [];
+  List<ServerConversation> searchedConversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
-
-  List<String> convoCategories = [];
-
-  String selectedCategory = '';
-
-  List<(DateTime, int, ServerConversation)> recentConversations = [];
 
   bool isLoadingConversations = false;
   bool hasNonDiscardedConversations = true;
   bool showDiscardedConversations = false;
 
   String previousQuery = '';
+  int totalSearchPages = 1;
+  int currentSearchPage = 1;
 
   Timer? _processingConversationWatchTimer;
 
@@ -52,73 +49,54 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     _preload();
   }
 
-  void getRecentConversation() {
-    conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    List<(DateTime, int, ServerConversation)> recentConvos = [];
-    for (var i = 0; i < conversations.length; i++) {
-      if (recentConvos.length >= 6) {
-        break;
-      }
-      if (conversations[i].discarded) {
-        continue;
-      }
-      var date =
-          DateTime(conversations[i].createdAt.year, conversations[i].createdAt.month, conversations[i].createdAt.day);
-      recentConvos.add((date, i, conversations[i]));
-    }
-    recentConversations = recentConvos;
-    notifyListeners();
-  }
-
   _preload() async {
     _missingWals = await _wal.getSyncs().getMissingWals();
     notifyListeners();
   }
 
-  Future getConversationCategories() async {
-    if (convoCategories.isNotEmpty) return;
-    convoCategories = await getConversationCategoriesServer();
-    notifyListeners();
-  }
-
-  void clearQueryAndCategory() {
-    selectedCategory = '';
-    previousQuery = '';
-    _filterGroupedConversationsWithoutNotify('');
-    notifyListeners();
-  }
-
   void clearQuery() {
     previousQuery = '';
-    _filterGroupedConversationsWithoutNotify('');
+    groupConversationsByDate();
   }
 
-  void searchConversations(String query) {
+  Future<void> searchConversations(String query) async {
     if (query == previousQuery) {
       return;
     }
+    setIsFetchingConversations(true);
     previousQuery = query;
-    filterGroupedConversations(query);
+    var (convos, current, total) = await searchConversationsServer(query);
+    searchedConversations = convos;
+    currentSearchPage = current;
+    totalSearchPages = total;
+    groupSearchConvosByDate();
+    setIsFetchingConversations(false);
     notifyListeners();
   }
 
-  bool isCategorySelected(String category) {
-    return selectedCategory == category;
-  }
-
-  void selectCategory(String category) {
-    selectedCategory = category;
-    filterConversationsByCategory(category);
-  }
-
-  void deselectCategory() {
-    selectedCategory = '';
-    filterGroupedConversations('');
-  }
-
-  void filterConversationsByCategory(String category) {
-    _filterGroupedConversationsByCategoryWithoutNotify(category);
+  Future<void> searchMoreConversations() async {
+    if (totalSearchPages < currentSearchPage + 1) {
+      return;
+    }
+    setLoadingConversations(true);
+    var (newConvos, current, total) = await searchConversationsServer(
+      previousQuery,
+      currentSearchPage + 1,
+    );
+    searchedConversations.addAll(newConvos);
+    totalSearchPages = total;
+    currentSearchPage = current;
+    groupSearchConvosByDate();
+    setLoadingConversations(false);
     notifyListeners();
+  }
+
+  int groupedSearchConvoIndex(ServerConversation convo) {
+    var date = DateTime(convo.createdAt.year, convo.createdAt.month, convo.createdAt.day);
+    if (groupedConversations.containsKey(date)) {
+      return groupedConversations[date]!.indexWhere((element) => element.id == convo.id);
+    }
+    return -1;
   }
 
   void addProcessingConversation(ServerConversation conversation) {
@@ -141,7 +119,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       changed = true;
     }
     if (changed) {
-      filterGroupedConversations('');
+      groupConversationsByDate();
     }
   }
 
@@ -169,9 +147,24 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     } else {
       SharedPreferencesUtil().cachedConversations = conversations;
     }
-    getRecentConversation();
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
+  }
+
+  void _groupSearchConvosByDateWithoutNotify() {
+    groupedConversations = {};
+    for (var conversation in searchedConversations) {
+      // if (SharedPreferencesUtil().showDiscardedMemories && conversation.discarded && !conversation.isNew) continue;
+      var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+      if (!groupedConversations.containsKey(date)) {
+        groupedConversations[date] = [];
+      }
+      groupedConversations[date]?.add(conversation);
+    }
+    // Sort
+    for (final date in groupedConversations.keys) {
+      groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
   }
 
   void _groupConversationsByDateWithoutNotify() {
@@ -195,76 +188,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  void _filterGroupedConversationsWithoutNotify(String query) {
-    if (query.isEmpty && selectedCategory.isEmpty) {
-      groupedConversations = {};
-      _groupConversationsByDateWithoutNotify();
-    } else {
-      groupedConversations = {};
-      if (selectedCategory.isNotEmpty) {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-                  .toLowerCase()
-                  .contains(query.toLowerCase()) &&
-              (conversation.structured.category).toLowerCase().contains(selectedCategory.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      } else {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-              .toLowerCase()
-              .contains(query.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      }
-    }
-  }
-
-  void _filterGroupedConversationsByCategoryWithoutNotify(String category) {
-    if (category.isEmpty) {
-      groupedConversations = {};
-      _groupConversationsByDateWithoutNotify();
-    } else {
-      groupedConversations = {};
-      if (previousQuery.isNotEmpty) {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.getTranscript() + conversation.structured.title + conversation.structured.overview)
-                  .toLowerCase()
-                  .contains(previousQuery.toLowerCase()) &&
-              (conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      } else {
-        for (var conversation in conversations) {
-          var date = conversation.createdAt;
-          if (!groupedConversations.containsKey(date)) {
-            groupedConversations[date] = [];
-          }
-          if ((conversation.structured.category).toLowerCase().contains(category.toLowerCase())) {
-            groupedConversations[date]?.add(conversation);
-          }
-        }
-      }
-    }
-  }
-
-  void filterGroupedConversations(String query) {
-    _filterGroupedConversationsWithoutNotify(query);
+  void groupSearchConvosByDate() {
+    _groupSearchConvosByDateWithoutNotify();
     notifyListeners();
   }
 
@@ -303,7 +228,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     var newConversations = await getConversations(offset: conversations.length);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    filterGroupedConversations(previousQuery);
+    groupConversationsByDate();
     setLoadingConversations(false);
     notifyListeners();
   }
@@ -391,7 +316,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     }
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    filterGroupedConversations('');
+    groupConversationsByDate();
     notifyListeners();
   }
 
@@ -450,7 +375,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void deleteConversation(ServerConversation conversation, int index) {
     conversations.removeWhere((element) => element.id == conversation.id);
     deleteConversationServer(conversation.id);
-    filterGroupedConversations('');
+    groupConversationsByDate();
     notifyListeners();
   }
 
