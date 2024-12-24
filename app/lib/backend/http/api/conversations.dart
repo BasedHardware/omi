@@ -333,21 +333,6 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
   }
 }
 
-Future<List<String>> getConversationCategoriesServer() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversation-categories',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return [];
-  debugPrint('getConversationCategories: ${response.body}');
-  if (response.statusCode == 200) {
-    return (jsonDecode(response.body) as List<dynamic>).map((category) => category.toString()).toList();
-  }
-  return [];
-}
-
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(String query, [int? page, int? limit]) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/search',
@@ -360,7 +345,6 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(String qu
     List<dynamic> items = (jsonDecode(response.body))['items'];
     int currentPage = (jsonDecode(response.body))['current_page'];
     int totalPages = (jsonDecode(response.body))['total_pages'];
-    print('searchConversationsServer: ${items.length} $currentPage $totalPages');
     var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
     return (convos, currentPage, totalPages);
   }

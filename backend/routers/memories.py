@@ -270,35 +270,6 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
     return memories
 
 
-@router.get("/v1/conversation-categories", response_model=List, tags=['memories'])
-def get_conversation_categories():
-    return sorted([
-        'personal',
-        'education',
-        'health',
-        'finance',
-        'legal',
-        'philosophy',
-        'spiritual',
-        'science',
-        'entrepreneurship',
-        'parenting'
-        'romantic',
-        'travel',
-        'inspiration',
-        'technology',
-        'business',
-        'social',
-        'work',
-        'sports',
-        'politics',
-        'literature',
-        'history',
-        'architecture',
-        'other'
-    ])
-
-
 @router.post("/v1/memories/search", response_model=dict, tags=['memories'])
 def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
     return search_memories(query=search_request.query, page=search_request.page,
