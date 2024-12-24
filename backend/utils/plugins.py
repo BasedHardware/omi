@@ -285,7 +285,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         print(f"Plugins {plugin.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    max_prompt_char_limit = 8000
+    max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
     prompt = data.get('prompt', '')
@@ -302,7 +302,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = Memory.memories_to_string(memories, True)
+            context = Memory.memories_to_string(memories)
 
     # messages
     messages = []

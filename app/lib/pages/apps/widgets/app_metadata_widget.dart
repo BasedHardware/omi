@@ -17,6 +17,8 @@ class AppMetadataWidget extends StatelessWidget {
   final List<Category> categories;
   final Function(String?) setAppCategory;
   final String? category;
+  final String? appPricing;
+  final bool allowPaidApps;
 
   const AppMetadataWidget({
     super.key,
@@ -30,6 +32,8 @@ class AppMetadataWidget extends StatelessWidget {
     required this.categories,
     required this.setAppCategory,
     this.category,
+    this.appPricing,
+    required this.allowPaidApps,
   });
 
   @override
@@ -376,6 +380,123 @@ class AppMetadataWidget extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  allowPaidApps
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            'App Pricing',
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                          ),
+                        )
+                      : SizedBox.shrink(),
+                  allowPaidApps
+                      ? GestureDetector(
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              builder: (context) {
+                                return Consumer<AddAppProvider>(builder: (context, provider, child) {
+                                  return Container(
+                                    padding: const EdgeInsets.all(16.0),
+                                    height: MediaQuery.of(context).size.height * 0.36,
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(
+                                            height: 12,
+                                          ),
+                                          const Text(
+                                            'App Pricing',
+                                            style: TextStyle(color: Colors.white, fontSize: 18),
+                                          ),
+                                          const SizedBox(
+                                            height: 18,
+                                          ),
+                                          ListView(
+                                            shrinkWrap: true,
+                                            children: ['Free', 'Paid'].map((e) {
+                                              return InkWell(
+                                                onTap: () {
+                                                  provider.setIsPaid(e == 'Paid');
+                                                  Navigator.pop(context);
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                                  child: Row(
+                                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                                    children: [
+                                                      const SizedBox(
+                                                        width: 6,
+                                                      ),
+                                                      Text(
+                                                        e,
+                                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                                      ),
+                                                      const Spacer(),
+                                                      Checkbox(
+                                                        value: provider.isPaid == (e == 'Paid'),
+                                                        onChanged: (value) {
+                                                          provider.setIsPaid(e == 'Paid');
+                                                          Navigator.pop(context);
+                                                        },
+                                                        side: BorderSide(color: Colors.grey.shade300),
+                                                        shape: const CircleBorder(),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                });
+                              },
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade800,
+                              borderRadius: BorderRadius.circular(10.0),
+                            ),
+                            width: double.infinity,
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 12,
+                                ),
+                                Text(
+                                  (appPricing?.isNotEmpty == true ? appPricing : 'None Selected') ?? 'None Selected',
+                                  style: TextStyle(
+                                      color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
+                                      fontSize: 16),
+                                ),
+                                const Spacer(),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(
+                                  width: 12,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : SizedBox.shrink(),
                 ],
               ),
             ),

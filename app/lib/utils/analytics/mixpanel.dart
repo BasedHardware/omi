@@ -36,10 +36,6 @@ class MixpanelManager {
     setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
     setUserProperty('Recordings Language', _preferences.recordingsLanguage);
     setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
-    setUserProperty(
-      'GCP Integration Set',
-      _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
-    );
   }
 
   setUserProperty(String key, dynamic value) => _mixpanel?.getPeople().set(key, value);
@@ -83,14 +79,10 @@ class MixpanelManager {
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
   void settingsSaved({
-    bool hasGCPCredentials = false,
-    bool hasGCPBucketName = false,
     bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
   }) =>
       track('Developer Settings Saved', properties: {
-        'has_gcp_credentials': hasGCPCredentials,
-        'has_gcp_bucket_name': hasGCPBucketName,
         'has_webhook_memory_created': hasWebhookConversationCreated,
         'has_webhook_transcript_received': hasWebhookTranscriptReceived,
       });
@@ -101,6 +93,10 @@ class MixpanelManager {
     track('App Enabled', properties: {'app_id': appId});
     setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
   }
+
+  void appPurchaseStarted(String appId) => track('App Purchase Started', properties: {'app_id': appId});
+
+  void appPurchaseCompleted(String appId) => track('App Purchase Completed', properties: {'app_id': appId});
 
   void privateAppSubmitted(Map<String, dynamic> properties) => track('Private App Submitted', properties: properties);
 
