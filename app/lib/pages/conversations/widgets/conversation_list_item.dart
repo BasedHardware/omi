@@ -70,10 +70,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
             context,
             ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
-          String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-          if (startingTitle != newTitle) {
-            widget.conversation.structured.title = newTitle;
-            provider.upsertConversation(widget.conversation);
+          if (mounted) {
+            String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+            if (startingTitle != newTitle) {
+              widget.conversation.structured.title = newTitle;
+              provider.upsertConversation(widget.conversation);
+            }
           }
         },
         child: Padding(
