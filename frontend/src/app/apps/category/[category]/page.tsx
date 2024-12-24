@@ -12,6 +12,7 @@ import {
   generateCollectionPageSchema,
   generateBreadcrumbSchema,
   generateAppListSchema,
+  getCategoryMetadata,
 } from '../../utils/metadata';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppsByCategory } from '@/src/lib/api/apps';
@@ -41,14 +42,7 @@ async function getCategoryData(category: string) {
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { category } = params;
   const { categoryPlugins } = await getCategoryData(category);
-  const metadata = categoryMetadata[category];
-
-  if (!metadata) {
-    return {
-      title: 'Category Not Found - OMI Apps',
-      description: 'The requested category could not be found.',
-    };
-  }
+  const metadata = getCategoryMetadata(category);
 
   const title = `${metadata.title} - OMI Apps Marketplace`;
   const description = `${metadata.description} Browse ${categoryPlugins.length}+ ${category} apps for your OMI Necklace.`;
@@ -109,27 +103,22 @@ function getNewOrRecentApps(plugins: Plugin[]): Plugin[] {
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { categoryPlugins, stats } = await getCategoryData(params.category);
-
-  // Get new/recent apps
   const newOrRecentApps = getNewOrRecentApps(categoryPlugins);
-
-  // Get most popular apps (if we have enough)
   const mostPopular =
     categoryPlugins.length > 6
       ? [...categoryPlugins].sort((a, b) => b.installs - a.installs).slice(0, 6)
       : [];
-
-  // Get all apps sorted by installs
   const allApps = [...categoryPlugins].sort((a, b) => b.installs - a.installs);
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#0B0F17]">
-      {/* Fixed Header and Navigation */}
-      <div className="fixed inset-x-0 top-[4rem] z-40 bg-[#0B0F17]">
-        <div className="px-[1.5rem] py-[2rem]">
-          <div className="container mx-auto">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#0B0F17]">
+      {/* Fixed Header and Navigation - Optimized for mobile */}
+      <div className="fixed inset-x-0 top-14 z-40 transform-gpu bg-[#0B0F17] transition-all duration-300 ease-in-out">
+        {/* Breadcrumb and Category Header */}
+        <div className="border-b border-white/5">
+          <div className="container mx-auto px-3 py-3 sm:px-6 sm:py-4 md:px-8 md:py-5">
             <CategoryBreadcrumb category={params.category} />
-            <div className="mt-[2rem]">
+            <div className="mt-2 sm:mt-3 md:mt-4">
               <CategoryHeader
                 category={params.category}
                 totalApps={categoryPlugins.length}
@@ -138,67 +127,51 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           </div>
         </div>
 
-        <div className="border-b border-white/5 shadow-lg shadow-black/5">
-          <div className="px-[1.5rem]">
-            <div className="container mx-auto">
+        {/* Product Banner and Navigation */}
+        <div className="border-b border-white/5 bg-[#0B0F17]/80 backdrop-blur-sm">
+          <div className="container mx-auto px-3 sm:px-6 md:px-8">
+            {/* Product Banner */}
+            <div className="py-2 sm:py-2.5 md:py-3">
               <ProductBanner variant="category" category={params.category} />
-              <div className="py-[1.25rem]">
-                <ScrollableCategoryNav currentCategory={params.category} />
-              </div>
+            </div>
+            {/* Navigation Pills */}
+            <div className="py-2 sm:py-2.5 md:py-3">
+              <ScrollableCategoryNav currentCategory={params.category} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="relative z-0 mt-[34.75rem] flex-grow sm:mt-[29.75rem]">
-        <div className="px-[1rem] py-[1.5rem] sm:px-[1.5rem] sm:py-[2rem]">
-          <div className="container mx-auto">
-            <div className="space-y-[1.5rem] sm:space-y-[3rem]">
-              {/* New/Recent This Week Section */}
-              <section>
-                <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
-                  {newOrRecentApps.some((p) => p.installs === 0)
-                    ? 'New This Week'
-                    : 'Recently Added'}
-                </h3>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-6 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-                  {newOrRecentApps.map((plugin) => (
-                    <FeaturedPluginCard
-                      key={plugin.id}
-                      plugin={plugin}
-                      stat={stats.find((s) => s.id === plugin.id)}
-                    />
-                  ))}
-                </div>
-              </section>
+      {/* Main Content - Adjusted spacing for mobile */}
+      <main className="relative z-0 mt-[19.5rem] flex-grow transition-all duration-300 ease-in-out sm:mt-[21rem] md:mt-[22.5rem]">
+        <div className="container mx-auto px-3 py-2 sm:px-6 sm:py-4 md:px-8 md:py-6">
+          <div className="space-y-6 sm:space-y-8 md:space-y-10">
+            {/* New/Recent This Week Section */}
+            <section className="pt-4 sm:pt-6 md:pt-8">
+              <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
+                {newOrRecentApps.some((p) => p.installs === 0)
+                  ? 'New This Week'
+                  : 'Recently Added'}
+              </h3>
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+                {newOrRecentApps.map((plugin) => (
+                  <FeaturedPluginCard
+                    key={plugin.id}
+                    plugin={plugin}
+                    stat={stats.find((s) => s.id === plugin.id)}
+                  />
+                ))}
+              </div>
+            </section>
 
-              {/* Most Popular Section - Only show if we have enough apps */}
-              {mostPopular.length > 0 && (
-                <section>
-                  <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
-                    Most Popular
-                  </h3>
-                  <div className="mt-3 grid grid-cols-1 gap-y-2 sm:mt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-4 lg:grid-cols-3 lg:gap-x-12">
-                    {mostPopular.map((plugin, index) => (
-                      <CompactPluginCard
-                        key={plugin.id}
-                        plugin={plugin}
-                        stat={stats.find((s) => s.id === plugin.id)}
-                        index={index + 1}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* All Apps Section */}
+            {/* Most Popular Section */}
+            {mostPopular.length > 0 && (
               <section>
-                <h3 className="text-lg font-semibold text-white sm:mb-8 sm:text-xl">
-                  All Apps
+                <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
+                  Most Popular
                 </h3>
-                <div className="mt-3 grid grid-cols-1 gap-y-2 sm:mt-6 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-4 lg:grid-cols-3 lg:gap-x-12">
-                  {allApps.map((plugin, index) => (
+                <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
+                  {mostPopular.map((plugin, index) => (
                     <CompactPluginCard
                       key={plugin.id}
                       plugin={plugin}
@@ -208,7 +181,24 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   ))}
                 </div>
               </section>
-            </div>
+            )}
+
+            {/* All Apps Section */}
+            <section>
+              <h3 className="mb-3 text-sm font-semibold text-white sm:mb-4 sm:text-base md:mb-5 md:text-lg">
+                All Apps
+              </h3>
+              <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
+                {allApps.map((plugin, index) => (
+                  <CompactPluginCard
+                    key={plugin.id}
+                    plugin={plugin}
+                    stat={stats.find((s) => s.id === plugin.id)}
+                    index={index + 1}
+                  />
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </main>

@@ -19,7 +19,10 @@ class AppSectionCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return Container(
-      height: height ?? MediaQuery.sizeOf(context).height * 0.4,
+      height: height ??
+          (MediaQuery.sizeOf(context).height < 680
+              ? MediaQuery.sizeOf(context).height * 0.5
+              : MediaQuery.sizeOf(context).height * 0.4),
       margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 14),
       decoration: BoxDecoration(
         // color: Colors.grey.shade900,
@@ -39,7 +42,7 @@ class AppSectionCard extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                childAspectRatio: MediaQuery.sizeOf(context).width < 400 ? 0.25 : 0.3,
+                childAspectRatio: MediaQuery.sizeOf(context).width < 400 ? 0.26 : 0.3,
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
               ),
@@ -110,7 +113,10 @@ class SectionAppItemCard extends StatelessWidget {
                     Text(
                       app.name,
                       maxLines: 1,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontSize: MediaQuery.sizeOf(context).width < 400 ? 14 : 16),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
@@ -118,7 +124,7 @@ class SectionAppItemCard extends StatelessWidget {
                         app.getCategoryName(),
                         maxLines: 2,
                         style:
-                            TextStyle(color: Colors.grey, fontSize: MediaQuery.sizeOf(context).width < 400 ? 12 : 14),
+                            TextStyle(color: Colors.grey, fontSize: MediaQuery.sizeOf(context).width < 400 ? 10 : 14),
                       ),
                     ),
                     app.ratingAvg != null || app.installs > 0
@@ -140,6 +146,15 @@ class SectionAppItemCard extends StatelessWidget {
                                         ],
                                       )
                                     : const SizedBox(),
+                                //app.isPaid
+                                //    ? Padding(
+                                //        padding: const EdgeInsets.only(top: 4.0),
+                                //        child: Text(
+                                //          app.getFormattedPrice(),
+                                //          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                //        ),
+                                //      )
+                                //    : const SizedBox(),
                               ],
                             ),
                           )

@@ -12,6 +12,7 @@ from typing_extensions import TypedDict, Literal
 import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
+import database.notifications as notification_db
 from models.chat import Message
 from models.memory import Memory
 from models.plugin import Plugin
@@ -20,6 +21,7 @@ from utils.llm import (
     requires_context,
     answer_simple_message,
     retrieve_context_dates,
+    retrieve_context_dates_by_question,
     qa_rag,
     retrieve_is_an_omi_question,
     select_structured_filters,
@@ -48,6 +50,8 @@ class GraphState(TypedDict):
     uid: str
     messages: List[Message]
     plugin_selected: Optional[Plugin]
+    tz: str
+    cited: Optional[bool] = False
 
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
@@ -59,21 +63,27 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
 
+def determine_conversation(state: GraphState):
+    question = extract_question_from_conversation(state.get("messages", []))
+    print("determine_conversation parsed question:", question)
+    return {"parsed_question": question}
+
+
 def determine_conversation_type(
-        s: GraphState,
+        state: GraphState,
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
-    is_omi_question = retrieve_is_an_omi_question(s.get("messages", []))
-    # TODO: after asked many questions this is causing issues.
-    # TODO: an option to be considered, single prompt outputs response needed type (omi,no context, context, suggestion)
+    question = state.get("parsed_question", "")
+    if not question or len(question) == 0:
+        return "no_context_conversation"
+
+    is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
         return "omi_question"
 
-    requires = requires_context(s.get("messages", []))
-
+    requires = requires_context(question)
     if requires:
         return "context_dependent_conversation"
     return "no_context_conversation"
-
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
@@ -88,11 +98,14 @@ def omi_question(state: GraphState):
     return {'answer': answer, 'ask_for_nps': True}
 
 
-def context_dependent_conversation(state: GraphState):
+def context_dependent_conversation_v1(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
     print("context_dependent_conversation parsed question:", question)
     return {"parsed_question": question}
 
+
+def context_dependent_conversation(state: GraphState):
+    return state
 
 # !! include a question extractor? node?
 
@@ -119,9 +132,9 @@ def retrieve_topics_filters(state: GraphState):
 def retrieve_date_filters(state: GraphState):
     print('retrieve_date_filters')
     # TODO: if this makes vector search fail further, query firestore instead
-    dates_range = retrieve_context_dates(state.get("messages", []))
-    if dates_range and len(dates_range) == 2:
-        print('retrieve_date_filters dates_range:', dates_range)
+    dates_range = retrieve_context_dates_by_question(state.get("parsed_question", ""), state.get("tz", "UTC"))
+    print('retrieve_date_filters dates_range:', dates_range)
+    if dates_range and len(dates_range) >= 2:
         return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
     return {"date_filters": {}}
 
@@ -136,16 +149,20 @@ def query_vectors(state: GraphState):
         else [0] * 3072
     )
     print("query_vectors vector:", vector[:5])
+    # TODO: enable it when the in-accurated topic filter get fixed
+    is_topic_filter_enabled = date_filters.get("start") is None
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=state.get("filters", {}).get("people", []),
-        topics=state.get("filters", {}).get("topics", []),
-        entities=state.get("filters", {}).get("entities", []),
+        people=state.get("filters", {}).get("people", []) if is_topic_filter_enabled else [],
+        topics=state.get("filters", {}).get("topics", []) if is_topic_filter_enabled else [],
+        entities=state.get("filters", {}).get("entities", []) if is_topic_filter_enabled else [],
         dates=state.get("filters", {}).get("dates", []),
+        limit=100,
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
+    # print(memories_id)
     return {"memories_found": memories}
 
 
@@ -155,18 +172,23 @@ def qa_handler(state: GraphState):
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, True),
+        Memory.memories_to_string(memories, False),
         state.get("plugin_selected"),
+        cited=state.get("cited"),
+        messages=state.get("messages"),
+        tz=state.get("tz"),
     )
     return {"answer": response, "ask_for_nps": True}
 
 
 workflow = StateGraph(GraphState)
 
-workflow.add_conditional_edges(
-    START,
-    determine_conversation_type,
-)
+
+workflow.add_edge(START, "determine_conversation")
+
+workflow.add_node("determine_conversation", determine_conversation)
+
+workflow.add_conditional_edges("determine_conversation", determine_conversation_type)
 
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
@@ -197,11 +219,12 @@ graph = workflow.compile(checkpointer=checkpointer)
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[Plugin] = None
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin)
+    tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "messages": messages, "plugin_selected": plugin},
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])

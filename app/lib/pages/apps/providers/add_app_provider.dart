@@ -19,6 +19,7 @@ class AddAppProvider extends ChangeNotifier {
   GlobalKey<FormState> metadataKey = GlobalKey<FormState>();
   GlobalKey<FormState> externalIntegrationKey = GlobalKey<FormState>();
   GlobalKey<FormState> promptKey = GlobalKey<FormState>();
+  GlobalKey<FormState> pricingKey = GlobalKey<FormState>();
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
@@ -34,6 +35,13 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController setupCompletedController = TextEditingController();
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
+
+  // Pricing
+  TextEditingController priceController = TextEditingController();
+  String? selectePaymentPlan;
+  bool isPaid = false;
+
+  List<PaymentPlan> paymentPlans = [];
 
   bool termsAgreed = false;
 
@@ -53,6 +61,8 @@ class AddAppProvider extends ChangeNotifier {
   bool isSubmitting = false;
   bool isValid = false;
 
+  bool allowPaidApps = false;
+
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
   }
@@ -65,6 +75,9 @@ class AddAppProvider extends ChangeNotifier {
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
@@ -72,6 +85,15 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsLoading(bool loading) {
     isLoading = loading;
+    notifyListeners();
+  }
+
+  void setIsPaid(bool paid) {
+    if (!paid) {
+      priceController.clear();
+      selectePaymentPlan = null;
+    }
+    isPaid = paid;
     notifyListeners();
   }
 
@@ -93,13 +115,19 @@ class AddAppProvider extends ChangeNotifier {
     if (categories.isEmpty) {
       await getCategories();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     setAppCategory(app.category);
+    setPaymentPlan(app.paymentPlan);
+    isPaid = app.isPaid;
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
     creatorNameController.text = app.author.decodeString;
+    priceController.text = app.price.toString();
     creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
@@ -122,7 +150,7 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
-    checkValidity();
+    isValid = false;
     setIsLoading(false);
     notifyListeners();
   }
@@ -135,10 +163,14 @@ class AddAppProvider extends ChangeNotifier {
     chatPromptController.clear();
     conversationPromptController.clear();
     triggerEvent = null;
+    isPaid = false;
+    selectePaymentPlan = null;
     webhookUrlController.clear();
     setupCompletedController.clear();
     instructionsController.clear();
     authUrlController.clear();
+    priceController.clear();
+    selectePaymentPlan = null;
     termsAgreed = false;
     makeAppPublic = false;
     appCategory = null;
@@ -147,6 +179,24 @@ class AddAppProvider extends ChangeNotifier {
     selectedScopes.clear();
     updateAppId = null;
     selectedCapabilities.clear();
+  }
+
+  void setPaymentPlan(String? plan) {
+    if (plan == null) {
+      return;
+    }
+    selectePaymentPlan = plan;
+    notifyListeners();
+  }
+
+  Future<void> getPaymentPlans() async {
+    paymentPlans = await getPaymentPlansServer();
+    if (paymentPlans.isNotEmpty) {
+      allowPaidApps = true;
+    } else {
+      allowPaidApps = false;
+    }
+    notifyListeners();
   }
 
   Future<void> getCategories() async {
@@ -167,6 +217,13 @@ class AddAppProvider extends ChangeNotifier {
       return null;
     }
     return getTriggerEvents().firstWhere((element) => element.id == id).title;
+  }
+
+  String? mapPaymentPlanIdToName(String? id) {
+    if (id == null) {
+      return null;
+    }
+    return paymentPlans.firstWhere((element) => element.id == id).title;
   }
 
   Future<void> getAppCapabilities() async {
@@ -252,6 +309,9 @@ class AddAppProvider extends ChangeNotifier {
             isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
           }
         }
+        if (isPaid) {
+          isValid = formKey.currentState!.validate() && selectePaymentPlan != null;
+        }
         return isValid;
       } else {
         return false;
@@ -278,11 +338,20 @@ class AddAppProvider extends ChangeNotifier {
           return false;
         }
       }
+      if (pricingKey.currentState != null) {
+        if (!pricingKey.currentState!.validate()) {
+          return false;
+        }
+      }
       if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
         if (selectedScopes.isEmpty) {
           AppSnackbar.showSnackbarError('Please select one more core capability for your app to proceed');
           return false;
         }
+      }
+      if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
+        AppSnackbar.showSnackbarError('Please select a payment plan and enter a price for your app');
+        return false;
       }
       if (!termsAgreed) {
         AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
@@ -348,6 +417,9 @@ class AddAppProvider extends ChangeNotifier {
       'category': appCategory,
       'private': !makeAppPublic,
       'id': updateAppId,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -405,6 +477,9 @@ class AddAppProvider extends ChangeNotifier {
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {

@@ -13,7 +13,7 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
     return const Padding(
       padding: EdgeInsets.only(top: 240.0),
       child: Text(
-        'No memories generated yet.',
+        'No conversations yet.',
         style: TextStyle(color: Colors.grey, fontSize: 16),
       ),
     );

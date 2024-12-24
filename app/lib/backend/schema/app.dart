@@ -184,6 +184,11 @@ class App {
   bool deleted;
   int? usageCount;
   double? moneyMade;
+  bool isPaid;
+  String? paymentPlan;
+  double? price;
+  bool isUserPaid;
+  String? paymentLink;
 
   App({
     required this.id,
@@ -211,6 +216,11 @@ class App {
     this.proactiveNotification,
     this.usageCount,
     this.moneyMade,
+    required this.isPaid,
+    this.paymentPlan,
+    this.price,
+    required this.isUserPaid,
+    this.paymentLink,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -253,7 +263,23 @@ class App {
           : null,
       usageCount: json['usage_count'] ?? 0,
       moneyMade: json['money_made'] ?? 0.0,
+      isPaid: json['is_paid'] ?? false,
+      paymentPlan: json['payment_plan'],
+      price: json['price'] ?? 0.0,
+      isUserPaid: json['is_user_paid'] ?? false,
+      paymentLink: json['payment_link'],
     );
+  }
+
+  String getFormattedPrice() {
+    if (price == null) {
+      return 'Free';
+    }
+    if (paymentPlan == 'monthly_recurring') {
+      return '\$${price!} per month';
+    } else {
+      return '\$${price!}';
+    }
   }
 
   String getImageUrl() {
@@ -319,6 +345,11 @@ class App {
       'proactive_notification': proactiveNotification?.toJson(),
       'usage_count': usageCount,
       'money_made': moneyMade,
+      'is_paid': isPaid,
+      'payment_plan': paymentPlan,
+      'price': price,
+      'is_user_paid': isUserPaid,
+      'payment_link': paymentLink,
     };
   }
 
@@ -468,5 +499,33 @@ class ProactiveNotification {
     return {
       'scopes': scopes,
     };
+  }
+}
+
+class PaymentPlan {
+  final String title;
+  final String id;
+
+  PaymentPlan({
+    required this.title,
+    required this.id,
+  });
+
+  factory PaymentPlan.fromJson(Map<String, dynamic> json) {
+    return PaymentPlan(
+      title: json['title'],
+      id: json['id'],
+    );
+  }
+
+  toJson() {
+    return {
+      'title': title,
+      'id': id,
+    };
+  }
+
+  static List<PaymentPlan> fromJsonList(List<dynamic> jsonList) {
+    return jsonList.map((e) => PaymentPlan.fromJson(e)).toList();
   }
 }

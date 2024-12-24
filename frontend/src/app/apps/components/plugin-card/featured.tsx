@@ -2,6 +2,7 @@
 
 import { Star, Download } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Plugin, PluginStat } from '../types';
 import { NewBadge } from '../new-badge';
 
@@ -29,10 +30,13 @@ export function FeaturedPluginCard({ plugin, hideStats }: FeaturedPluginCardProp
     >
       {/* Image */}
       <div className="aspect-[16/9] w-full overflow-hidden">
-        <img
+        <Image
           src={plugin.image || 'https://via.placeholder.com/400x225'}
           alt={plugin.name}
+          width={400}
+          height={225}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          priority
         />
       </div>
 

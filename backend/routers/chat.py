@@ -1,4 +1,5 @@
 import uuid
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -50,7 +51,14 @@ def send_message(
     app_id = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)  # plugin
+
+    # cited extraction
+    cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+    if len(cited_memory_idxs) > 0:
+        response = re.sub(r'\[\d+\]', '', response)
+    memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+
     memories_id = []
     # check if the items in the memories list are dict
     if memories:

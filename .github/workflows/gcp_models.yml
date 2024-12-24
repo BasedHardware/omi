@@ -11,6 +11,7 @@ on:
 env:
   SERVICE: models
   REGION: us-central1
+  CONTAINER_NAME: speech-models
 
 jobs:
   deploy:
@@ -21,27 +22,61 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      # To workaround "no space left on device" issue of GitHub-hosted runner
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v0'
+        uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
       - run: gcloud auth configure-docker
+
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f backend/modal/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v0
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/modal/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+
+      - name: Create SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SPEECH_MODELS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Deploy Docker image
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+          ${{ secrets.SPEECH_MODELS_SSH_USERNAME }}@${{ secrets.SPEECH_MODELS_SSH_HOST }} \
+          "set -x; \
+          echo '[+] Pull latest Speech Models image...'; \
+          docker pull gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}; \
+          echo '[+] Remove current Speech Models container...'; \
+          docker rm -f ${{ env.CONTAINER_NAME }}; \
+          echo '[+
+          ] Start new Speech Models container...'; \
+          docker run -d --name ${{ env.CONTAINER_NAME }} -p 8080:8080 \
+            --volume /var/lib/nvidia/lib64:/usr/local/nvidia/lib64 \
+            --volume /var/lib/nvidia/bin:/usr/local/nvidia/bin \
+            --device /dev/nvidia0:/dev/nvidia0 \
+            --device /dev/nvidia-uvm:/dev/nvidia-uvm \
+            --device /dev/nvidiactl:/dev/nvidiactl \
+            -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            -e HUGGINGFACE_TOKEN=${{ secrets.HUGGINGFACE_TOKEN }} \
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}"
+
+      # - name: Deploy to Cloud Run
+      #   id: deploy
+      #   uses: google-github-actions/deploy-cloudrun@v2
+      #   with:
+      #     service: ${{ env.SERVICE }}
+      #     region: ${{ env.REGION }}
+      #     image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       # If required, use the Cloud Run url output in later steps
-      - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+      # - name: Show Output
+      #   run: echo ${{ steps.deploy.outputs.url }}
