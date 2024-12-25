@@ -14,8 +14,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'device_settings.dart';
 
 class SettingsPage extends StatefulWidget {
-  final bool showAppBar;
-  const SettingsPage({super.key, required this.showAppBar});
+  const SettingsPage({super.key});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -50,21 +49,19 @@ class _SettingsPageState extends State<SettingsPage> {
         canPop: true,
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: widget.showAppBar
-              ? AppBar(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  automaticallyImplyLeading: true,
-                  title: const Text('Settings'),
-                  centerTitle: false,
-                  leading: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  elevation: 0,
-                )
-              : null,
+          appBar: AppBar(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            automaticallyImplyLeading: true,
+            title: const Text('Settings'),
+            centerTitle: false,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+            ),
+            elevation: 0,
+          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(

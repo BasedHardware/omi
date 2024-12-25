@@ -27,6 +27,7 @@ import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/upgrade_alert.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
@@ -123,7 +124,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
-    '/settings': const SettingsPage(showAppBar: true),
+    '/settings': const SettingsPage(),
     '/facts': const FactsPage(),
   };
   bool? previousConnection;
@@ -224,7 +225,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "settings":
           MyApp.navigatorKey.currentState?.push(
             MaterialPageRoute(
-              builder: (context) => const SettingsPage(showAppBar: true),
+              builder: (context) => const SettingsPage(),
             ),
           );
           break;
@@ -349,7 +350,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
-                        SettingsPage(showAppBar: false),
+                        SearchPage(),
                       ],
                     ),
                   ),
@@ -383,8 +384,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               indicatorPadding: EdgeInsets.zero,
                               onTap: (index) {
                                 MixpanelManager()
-                                    .bottomNavigationTabClicked(['Memories', 'Chat', 'Apps', 'Settings'][index]);
+                                    .bottomNavigationTabClicked(['Memories', 'Chat', 'Apps', 'Search'][index]);
                                 primaryFocus?.unfocus();
+                                if (home.selectedIndex == index) {
+                                  return;
+                                }
+                                if (index == 0 && home.selectedIndex == 3) {
+                                  context.read<ConversationProvider>().clearQuery();
+                                }
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
@@ -420,7 +427,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 ),
                                 Tab(
                                   child: Text(
-                                    'Settings',
+                                    'Search',
                                     style: TextStyle(
                                       color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
@@ -449,15 +456,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
-                      return Padding(
-                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.08),
-                        child: ChatAppsDropdownWidget(
-                          controller: _controller,
-                        ),
+                      return ChatAppsDropdownWidget(
+                        controller: _controller,
                       );
                     } else if (provider.selectedIndex == 2) {
                       return Padding(
-                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.1),
+                        padding: EdgeInsets.only(left: MediaQuery.sizeOf(context).width * 0.12),
                         child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
                       );
                     } else {
@@ -483,52 +487,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-                Row(
-                  children: [
-                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
-                      if (home.selectedIndex != 0 ||
-                          !convoProvider.hasNonDiscardedConversations ||
-                          convoProvider.isLoadingConversations) {
-                        return const SizedBox.shrink();
+                Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
+                  if (home.selectedIndex != 0 ||
+                      !convoProvider.hasNonDiscardedConversations ||
+                      convoProvider.isLoadingConversations) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 4.0),
+                    child: IconButton(
+                      onPressed: convoProvider.toggleDiscardConversations,
+                      icon: Icon(
+                        SharedPreferencesUtil().showDiscardedMemories ? Icons.filter_list_off_sharp : Icons.filter_list,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                  );
+                }),
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                  onPressed: () async {
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().recordingsLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    await routeToPage(context, const SettingsPage());
+
+                    if (language != SharedPreferencesUtil().recordingsLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
                       }
-                      return Row(
-                        children: [
-                          const SizedBox(width: 10),
-                          IconButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SearchPage(
-                                    conversations: convoProvider.groupedConversations.values.expand((e) => e).toList(),
-                                    onQueryChanged: (query) {
-                                      convoProvider.searchConversations(query);
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.search,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: convoProvider.toggleDiscardConversations,
-                            icon: Icon(
-                              SharedPreferencesUtil().showDiscardedMemories
-                                  ? Icons.filter_list_off_sharp
-                                  : Icons.filter_list,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ],
-                )
+                    }
+                  },
+                ),
               ],
             ),
             elevation: 0,
