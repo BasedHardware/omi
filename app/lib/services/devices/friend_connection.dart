@@ -118,6 +118,7 @@ class FriendDeviceConnection extends DeviceConnection {
     var listener = batteryLevelCharacteristic.lastValueStream.listen((value) {
       // debugPrint('Battery level listener: $value');
       if (value.isNotEmpty) {
+        debugPrint('Battery level changed: ${value[0]}');
         onBatteryLevelChange!(value[0]);
       }
     });

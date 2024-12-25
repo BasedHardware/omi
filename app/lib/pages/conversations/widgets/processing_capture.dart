@@ -135,6 +135,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
     bool isHavingTranscript = captureProvider.segments.isNotEmpty;
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
+    bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -204,17 +205,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Right
     Widget statusIndicator = const SizedBox.shrink();
     var stateText = "";
-    if (!isHavingDesireDevice && !isUsingPhoneMic) {
+    if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
-    } else if (transcriptServiceStateOk) {
+    } else if (transcriptServiceStateOk && (isUsingPhoneMic || isHavingRecordingDevice)) {
       stateText = "Listening";
       statusIndicator = const RecordingStatusIndicator();
-    } else if (!internetConnectionStateOk || !transcriptServiceStateOk) {
-      stateText = "Reconnecting";
-      statusIndicator = const CircularProgressIndicator(
-        strokeWidth: 2.0,
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-      );
+    } else if (!internetConnectionStateOk) {
+      stateText = "Waiting for network";
+    } else if (!transcriptServiceStateOk) {
+      stateText = "Connecting";
     }
     Widget right = stateText.isNotEmpty
         ? Expanded(
