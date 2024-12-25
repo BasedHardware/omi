@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -33,6 +34,7 @@ class _SearchPageState extends State<SearchPage> {
                 height: 40,
                 child: TextFormField(
                   controller: searchController,
+                  focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
                   onChanged: (value) {
                     _debouncer.run(() async {
                       await provider.searchConversations(value);
