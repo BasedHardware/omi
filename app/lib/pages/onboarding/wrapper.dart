@@ -81,7 +81,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () {
           MixpanelManager().onboardingStepCompleted('Auth');
-          context.read<HomeProvider>().setupHasSpeakerProfile();
+          if (mounted) {
+            context.read<HomeProvider>().setupHasSpeakerProfile();
+          }
           IntercomManager.instance.intercom.loginIdentifiedUser(
             userId: SharedPreferencesUtil().uid,
           );
