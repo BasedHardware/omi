@@ -65,75 +65,116 @@ class _SettingsPageState extends State<SettingsPage> {
           body: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 32.0),
-                getItemAddOn2(
-                  'Need Help? Chat with us',
-                  () async {
-                    await Intercom.instance.displayMessenger();
-                  },
-                  icon: Icons.chat,
+                const SizedBox(height: 16),
+                // Account & Device Section
+                CustomListTile(
+                  title: 'Profile',
+                  onTap: () => routeToPage(context, const ProfilePage()),
+                  icon: Icons.person_outline_rounded,
+                  showChevron: true,
                 ),
-                const SizedBox(height: 20),
-                getItemAddOn2(
-                  'Profile',
-                  () => routeToPage(context, const ProfilePage()),
-                  icon: Icons.person,
-                ),
-                const SizedBox(height: 20),
-                getItemAddOn2(
-                  'Device Settings',
-                  () {
+                const SizedBox(height: 12),
+                CustomListTile(
+                  title: 'Device Settings',
+                  onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => const DeviceSettings(),
                       ),
                     );
                   },
-                  icon: Icons.bluetooth_connected_sharp,
+                  icon: Icons.bluetooth_outlined,
+                  showChevron: true,
                 ),
-                const SizedBox(height: 8),
-                getItemAddOn2(
-                  'Guides & Tutorials',
-                  () async {
+                const SizedBox(height: 12),
+                CustomListTile(
+                  title: 'Developer Mode',
+                  onTap: () async {
+                    await routeToPage(context, const DeveloperSettingsPage());
+                    setState(() {});
+                  },
+                  icon: Icons.code_rounded,
+                  showChevron: true,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 32, 0, 12),
+                  child: Text(
+                    'SUPPORT',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                CustomListTile(
+                  title: 'Need Help? Chat with us',
+                  onTap: () async {
+                    await Intercom.instance.displayMessenger();
+                  },
+                  icon: Icons.chat_bubble_outline_rounded,
+                  showChevron: true,
+                ),
+                const SizedBox(height: 12),
+                CustomListTile(
+                  title: 'Guides & Tutorials',
+                  onTap: () async {
                     await Intercom.instance.displayHelpCenter();
                   },
-                  icon: Icons.help_outline_outlined,
+                  icon: Icons.help_outline_rounded,
+                  showChevron: true,
                 ),
-                const SizedBox(height: 20),
-                getItemAddOn2(
-                  'About Omi',
-                  () => routeToPage(context, const AboutOmiPage()),
-                  icon: Icons.workspace_premium_sharp,
+                const SizedBox(height: 12),
+                CustomListTile(
+                  title: 'About Omi',
+                  onTap: () => routeToPage(context, const AboutOmiPage()),
+                  icon: Icons.workspace_premium_outlined,
+                  showChevron: true,
                 ),
-                const SizedBox(height: 8),
-                getItemAddOn2('Developer Mode', () async {
-                  await routeToPage(context, const DeveloperSettingsPage());
-                  setState(() {});
-                }, icon: Icons.code),
-                const SizedBox(height: 32),
-                getItemAddOn2('Sign Out', () async {
-                  await showDialog(
-                    context: context,
-                    builder: (ctx) {
-                      return getDialog(context, () {
-                        Navigator.of(context).pop();
-                      }, () {
-                        signOut();
-                        Navigator.of(context).pop();
-                        routeToPage(context, const DeciderWidget(), replace: true);
-                      }, "Sign Out?", "Are you sure you want to sign out?");
-                    },
-                  );
-                }, icon: Icons.logout),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Align(
-                    alignment: Alignment.center,
+
+                const SizedBox(height: 12),
+                CustomListTile(
+                  title: 'Sign Out',
+                  onTap: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (ctx) {
+                        return getDialog(
+                          context,
+                          () => Navigator.of(context).pop(),
+                          () {
+                            signOut();
+                            Navigator.of(context).pop();
+                            routeToPage(context, const DeciderWidget(), replace: true);
+                          },
+                          "Sign Out?",
+                          "Are you sure you want to sign out?",
+                        );
+                      },
+                    );
+                  },
+                  icon: Icons.logout_rounded,
+                  showChevron: false,
+                ),
+
+                const SizedBox(height: 28),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Text(
                       'Version: $version+$buildVersion',
-                      style: const TextStyle(color: Color.fromARGB(255, 150, 150, 150), fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
