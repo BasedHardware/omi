@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:friend_private/pages/settings/widgets.dart';
 
 import 'widgets/appbar_with_banner.dart';
 import 'widgets/toggle_section_widget.dart';
@@ -66,94 +67,29 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 ),
               ),
             ),
-            body: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ListView(
-                shrinkWrap: true,
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  //TODO: Model selection commented out because Soniox model is no longer being used
-                  // const SizedBox(height: 32),
-                  // const Padding(
-                  //   padding: EdgeInsets.symmetric(horizontal: 0),
-                  //   child: Align(
-                  //     alignment: Alignment.centerLeft,
-                  //     child: Text(
-                  //       'Transcription Model',
-                  //       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  //     ),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 14),
-                  // Center(
-                  //   child: Container(
-                  //     height: 60,
-                  //     decoration: BoxDecoration(
-                  //       border: Border.all(color: Colors.white),
-                  //       borderRadius: BorderRadius.circular(14),
-                  //     ),
-                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                  //     child: DropdownButton<String>(
-                  //       menuMaxHeight: 350,
-                  //       value: SharedPreferencesUtil().transcriptionModel,
-                  //       onChanged: (newValue) {
-                  //         if (newValue == null) return;
-                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-                  //         if (newValue == 'soniox') {
-                  //           showDialog(
-                  //             context: context,
-                  //             barrierDismissible: false,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.of(context).pop(),
-                  //               () => {},
-                  //               'Model Limitations',
-                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                  //                   'If you use a different configuration, it will fallback to deepgram.',
-                  //               singleButton: true,
-                  //             ),
-                  //           );
-                  //         }
-                  //       },
-                  //       dropdownColor: Colors.black,
-                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
-                  //       underline: Container(height: 0, color: Colors.white),
-                  //       isExpanded: true,
-                  //       itemHeight: 48,
-                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
-                  //         // 'speechmatics'
-                  //         return DropdownMenuItem<String>(
-                  //           value: value,
-                  //           child: Text(
-                  //             value == 'deepgram'
-                  //                 ? 'Deepgram (faster)'
-                  //                 : value == 'speechmatics'
-                  //                     ? 'Speechmatics (Experimental)'
-                  //                     : 'Soniox (better quality)',
-                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                  //           ),
-                  //         );
-                  //       }).toList(),
-                  //     ),
-                  //   ),
-                  // ),
-                  const SizedBox(height: 32.0),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Conversations'),
-                    subtitle: const Text('Export all your conversations to a JSON file.'),
-                    trailing: provider.loadingExportMemories
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 1,
-                            ),
-                          )
-                        : const Icon(Icons.upload),
+                  const SizedBox(height: 16),
+                  // Actions Section
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 0, 12),
+                    child: Text(
+                      'ACTIONS',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  CustomListTile(
+                    title: 'Export Conversations',
                     onTap: provider.loadingExportMemories
-                        ? null
+                        ? () {}
                         : () async {
                             if (provider.loadingExportMemories) return;
                             setState(() => provider.loadingExportMemories = true);
@@ -164,8 +100,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories =
-                                await getConversations(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/conversations.json');
@@ -179,227 +114,266 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             MixpanelManager().exportMemories();
                             setState(() => provider.loadingExportMemories = false);
                           },
+                    icon: Icons.upload_outlined,
+                    subtitle: 'Export all your conversations to a JSON file.',
+                    trailingIcon: provider.loadingExportMemories ? null : Icons.chevron_right_rounded,
+                    showChevron: false,
                   ),
-                  // KEEP ME?
-                  // ListTile(
-                  //   title: const Text('Import Memories'),
-                  //   subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                  //   contentPadding: EdgeInsets.zero,
-                  //   trailing: provider.loadingImportMemories
-                  //       ? const SizedBox(
-                  //           height: 16,
-                  //           width: 16,
-                  //           child: CircularProgressIndicator(
-                  //             color: Colors.white,
-                  //             strokeWidth: 2,
-                  //           ),
-                  //         )
-                  //       : const Icon(Icons.download),
-                  //   onTap: () async {
-                  //     if (provider.loadingImportMemories) return;
-                  //     setState(() => provider.loadingImportMemories = true);
-                  //     // open file picker
-                  //     var file = await FilePicker.platform.pickFiles(
-                  //       type: FileType.custom,
-                  //       allowedExtensions: ['json'],
-                  //     );
-                  //     MixpanelManager().importMemories();
-                  //     if (file == null) {
-                  //       setState(() => provider.loadingImportMemories = false);
-                  //       return;
-                  //     }
-                  //     var xFile = file.files.first.xFile;
-                  //     try {
-                  //       var content = (await xFile.readAsString());
-                  //       var decoded = jsonDecode(content);
-                  //       // Export uses [ServerMemory] structure
-                  //       List<ServerMemory> memories =
-                  //           decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
-                  //       debugPrint('Memories: $memories');
-                  //       var memoriesJson = memories.map((m) => m.toJson()).toList();
-                  //       bool result = await migrateMemoriesToBackend(memoriesJson);
-                  //       if (!result) {
-                  //         SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
-                  //         _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
-                  //       }
-                  //       _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                  //       MixpanelManager().importedMemories();
-                  //       SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
-                  //     } catch (e) {
-                  //       debugPrint(e.toString());
-                  //       _snackBar('Make sure the file is a valid JSON file.');
-                  //     }
-                  //     setState(() => provider.loadingImportMemories = false);
-                  //   },
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text(
-                        'Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+
+                  // Webhooks Section
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 32, 0, 12),
+                    child: Text(
+                      'WEBHOOKS',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
                       ),
-                      Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
-                          MixpanelManager().pageOpened('Advanced Mode Docs');
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Docs',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 18, 18, 18),
+                      borderRadius: BorderRadius.circular(12.0),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                        width: 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      children: [
+                        ToggleSectionWidget(
+                          isSectionEnabled: provider.conversationEventsToggled,
+                          sectionTitle: 'Conversation Events',
+                          sectionDescription: 'Triggers when a new conversation is created.',
+                          icon: Icons.chat_bubble_outline,
+                          options: [
+                            TextField(
+                              controller: provider.webhookOnConversationCreated,
+                              obscureText: false,
+                              autocorrect: false,
+                              enabled: true,
+                              enableSuggestions: false,
+                              decoration: _getTextFieldDecoration('Endpoint URL'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          onSectionEnabledChanged: provider.onConversationEventsToggled,
+                        ),
+                        const SizedBox(height: 8),
+                        ToggleSectionWidget(
+                          isSectionEnabled: provider.transcriptsToggled,
+                          sectionTitle: 'Real-time Transcript',
+                          sectionDescription: 'Triggers when a new transcript is received.',
+                          icon: Icons.text_snippet_outlined,
+                          options: [
+                            TextField(
+                              controller: provider.webhookOnTranscriptReceived,
+                              obscureText: false,
+                              autocorrect: false,
+                              enabled: true,
+                              enableSuggestions: false,
+                              decoration: _getTextFieldDecoration('Endpoint URL'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          onSectionEnabledChanged: provider.onTranscriptsToggled,
+                        ),
+                        ToggleSectionWidget(
+                          isSectionEnabled: provider.audioBytesToggled,
+                          sectionTitle: 'Realtime Audio Bytes',
+                          sectionDescription: 'Triggers when audio bytes are received.',
+                          icon: Icons.multitrack_audio_outlined,
+                          options: [
+                            TextField(
+                              controller: provider.webhookAudioBytes,
+                              obscureText: false,
+                              autocorrect: false,
+                              enabled: true,
+                              enableSuggestions: false,
+                              decoration: _getTextFieldDecoration('Endpoint URL'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            TextField(
+                              controller: provider.webhookAudioBytesDelay,
+                              obscureText: false,
+                              autocorrect: false,
+                              enabled: true,
+                              enableSuggestions: false,
+                              keyboardType: TextInputType.number,
+                              decoration: _getTextFieldDecoration('Every x seconds'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          onSectionEnabledChanged: provider.onAudioBytesToggled,
+                        ),
+                        ToggleSectionWidget(
+                          isSectionEnabled: provider.daySummaryToggled,
+                          sectionTitle: 'Day Summary',
+                          sectionDescription: 'Triggers when day summary is generated.',
+                          icon: Icons.summarize_outlined,
+                          options: [
+                            TextField(
+                              controller: provider.webhookDaySummary,
+                              obscureText: false,
+                              autocorrect: false,
+                              enabled: true,
+                              enableSuggestions: false,
+                              decoration: _getTextFieldDecoration('Endpoint URL'),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          onSectionEnabledChanged: provider.onDaySummaryToggled,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          child: InkWell(
+                            onTap: () {
+                              launchUrl(Uri.parse('https://docs.omi.me/docs/developer/apps/Introduction'));
+                              MixpanelManager().pageOpened('Advanced Mode Docs');
+                            },
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color.fromARGB(255, 28, 28, 28),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.menu_book_outlined,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Webhook Documentation',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Learn how to use webhooks with Omi',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.5),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(
-                    height: 10,
-                  ),
-                  ToggleSectionWidget(
-                    isSectionEnabled: provider.conversationEventsToggled,
-                    sectionTitle: 'Conversation Events',
-                    sectionDescription: 'Triggers when a new conversation is created.',
-                    options: [
-                      TextField(
-                        controller: provider.webhookOnConversationCreated,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('Endpoint URL'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    onSectionEnabledChanged: provider.onConversationEventsToggled,
-                  ),
-                  ToggleSectionWidget(
-                      isSectionEnabled: provider.transcriptsToggled,
-                      sectionTitle: 'Real-time Transcript',
-                      sectionDescription: 'Triggers when a new transcript is received.',
-                      options: [
-                        TextField(
-                          controller: provider.webhookOnTranscriptReceived,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          decoration: _getTextFieldDecoration('Endpoint URL'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
                       ],
-                      onSectionEnabledChanged: provider.onTranscriptsToggled),
-                  ToggleSectionWidget(
-                      isSectionEnabled: provider.audioBytesToggled,
-                      sectionTitle: 'Realtime Audio Bytes',
-                      sectionDescription: 'Triggers when audio bytes are received.',
-                      options: [
-                        TextField(
-                          controller: provider.webhookAudioBytes,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          decoration: _getTextFieldDecoration('Endpoint URL'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        TextField(
-                          controller: provider.webhookAudioBytesDelay,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.number,
-                          decoration: _getTextFieldDecoration('Every x seconds'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      onSectionEnabledChanged: provider.onAudioBytesToggled),
-                  ToggleSectionWidget(
-                    isSectionEnabled: provider.daySummaryToggled,
-                    sectionTitle: 'Day Summary',
-                    sectionDescription: 'Triggers when day summary is generated.',
-                    options: [
-                      TextField(
-                        controller: provider.webhookDaySummary,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('Endpoint URL'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    onSectionEnabledChanged: provider.onDaySummaryToggled,
+                    ),
                   ),
 
-                  // const Text(
-                  //   'Websocket Real-time audio bytes:',
-                  //   style: TextStyle(color: Colors.white, fontSize: 16),
-                  // ),
-                  // TextField(
-                  //   controller: provider.webhookAudioBytes,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enabled: true,
-                  //   enableSuggestions: false,
-                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  // Experimental Section
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 32, 0, 12),
+                    child: Text(
+                      'EXPERIMENTAL',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
                   Text(
                     'Try the latest experimental features from Omi Team.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Local Sync',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
                     ),
-                    value: provider.localSyncEnabled,
-                    onChanged: provider.onLocalSyncEnabledChanged,
                   ),
-                  const SizedBox(height: 36),
-                  const Text(
-                    'Pilot Features',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 18, 18, 18),
+                      borderRadius: BorderRadius.circular(12.0),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                        width: 1,
+                      ),
+                    ),
+                    padding: EdgeInsets.zero,
+                    child: ToggleSectionWidget(
+                      isSectionEnabled: provider.localSyncEnabled,
+                      sectionTitle: 'Local Sync',
+                      sectionDescription: 'Try the latest experimental features from Omi Team.',
+                      icon: Icons.sync_outlined,
+                      options: const [],
+                      onSectionEnabledChanged: provider.onLocalSyncEnabledChanged,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+
+                  // Pilot Features Section
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 24, 0, 12),
+                    child: Text(
+                      'PILOT FEATURES',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
                   Text(
                     'These features are tests and no support is guaranteed.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Suggest follow up question',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
                     ),
-                    value: provider.followUpQuestionEnabled,
-                    onChanged: provider.onFollowUpQuestionChanged,
                   ),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 18, 18, 18),
+                      borderRadius: BorderRadius.circular(12.0),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                        width: 1,
+                      ),
+                    ),
+                    padding: EdgeInsets.zero,
+                    child: ToggleSectionWidget(
+                      isSectionEnabled: provider.followUpQuestionEnabled,
+                      sectionTitle: 'Suggest follow up question',
+                      sectionDescription: 'These features are tests and no support is guaranteed.',
+                      icon: Icons.question_answer_outlined,
+                      options: const [],
+                      onSectionEnabledChanged: provider.onFollowUpQuestionChanged,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -414,13 +388,13 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       labelText: label,
       enabled: true && canBeDisabled,
       hintText: hintText,
-      // labelText: hintText,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(vertical: 4),
       labelStyle: const TextStyle(
-        fontSize: 16,
+        fontSize: 14,
         color: Colors.grey,
-        decoration: TextDecoration.underline,
+        height: 0.5,
       ),
-      // bottom border
       enabledBorder: InputBorder.none,
       focusedBorder: const UnderlineInputBorder(
         borderSide: BorderSide(color: Colors.grey),
