@@ -18,6 +18,12 @@ class _SearchPageState extends State<SearchPage> {
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 600));
 
   @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return Scaffold(
@@ -78,6 +84,17 @@ class _SearchPageState extends State<SearchPage> {
                 shrinkWrap: true,
                 scrollDirection: Axis.vertical,
                 itemBuilder: (ctx, idx) {
+                  if (provider.searchedConversations.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 20.0),
+                        child: Text(
+                          'No conversations found',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    );
+                  }
                   if (idx == provider.searchedConversations.length) {
                     if (provider.isLoadingConversations) {
                       return const Center(
