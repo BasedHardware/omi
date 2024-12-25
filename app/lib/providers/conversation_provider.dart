@@ -54,8 +54,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  void clearQuery() {
-    previousQuery = '';
+  void resetGroupedConvos() {
     groupConversationsByDate();
   }
 
@@ -66,6 +65,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     setIsFetchingConversations(true);
     previousQuery = query;
     var (convos, current, total) = await searchConversationsServer(query);
+    convos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
     totalSearchPages = total;
@@ -84,6 +84,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       currentSearchPage + 1,
     );
     searchedConversations.addAll(newConvos);
+    searchedConversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     totalSearchPages = total;
     currentSearchPage = current;
     groupSearchConvosByDate();
@@ -146,6 +147,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       conversations = SharedPreferencesUtil().cachedConversations;
     } else {
       SharedPreferencesUtil().cachedConversations = conversations;
+    }
+    if (searchedConversations.isEmpty) {
+      searchedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
