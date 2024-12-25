@@ -100,7 +100,7 @@ class BatteryInfoWidget extends StatelessWidget {
                       isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                       deviceProvider.isConnecting && isMemoriesPage
                           ? Text(
-                              "Connecting",
+                              "Searching",
                               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
                             )
                           : isMemoriesPage
