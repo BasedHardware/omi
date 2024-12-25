@@ -78,7 +78,7 @@ class _SearchPageState extends State<SearchPage> {
                 shrinkWrap: true,
                 scrollDirection: Axis.vertical,
                 itemBuilder: (ctx, idx) {
-                  if (idx == provider.groupedConversations.values.expand((element) => element).toList().length) {
+                  if (idx == provider.searchedConversations.length) {
                     if (provider.isLoadingConversations) {
                       return const Center(
                         child: Padding(
@@ -98,10 +98,10 @@ class _SearchPageState extends State<SearchPage> {
                           await provider.searchMoreConversations();
                         }
                       },
-                      child: const SizedBox(height: 20, width: double.maxFinite),
+                      child: const SizedBox(height: 80, width: double.maxFinite),
                     );
                   } else {
-                    var convo = provider.groupedConversations.values.expand((element) => element).toList()[idx];
+                    var convo = provider.searchedConversations[idx];
                     var date = DateTime(convo.createdAt.year, convo.createdAt.month, convo.createdAt.day);
                     var convoIdx = provider.groupedSearchConvoIndex(convo);
                     return ConversationListItem(conversation: convo, conversationIdx: convoIdx, date: date);
@@ -112,7 +112,7 @@ class _SearchPageState extends State<SearchPage> {
                     height: 8,
                   );
                 },
-                itemCount: provider.groupedConversations.values.expand((element) => element).toList().length + 1,
+                itemCount: provider.searchedConversations.length + 1,
               ),
       );
     });

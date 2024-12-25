@@ -390,7 +390,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   return;
                                 }
                                 if (index == 0 && home.selectedIndex == 3) {
-                                  context.read<ConversationProvider>().clearQuery();
+                                  context.read<ConversationProvider>().resetGroupedConvos();
                                 }
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
