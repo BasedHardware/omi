@@ -11,7 +11,7 @@ import 'package:friend_private/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'device_settings.dart';
+import 'device_settings/device_settings_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});

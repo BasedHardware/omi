@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/pages/settings/device_settings.dart';
+import 'package:friend_private/pages/settings/device_settings/device_settings_page.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/onboarding/find_device/page.dart';
 import 'package:friend_private/utils/other/temp.dart';

@@ -14,6 +14,9 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/pages/settings/widgets.dart';
+
+import 'widgets/device_info_card.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -23,7 +26,6 @@ class DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<DeviceSettings> {
-  // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
@@ -49,14 +51,87 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           title: const Text('Device Settings'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(4.0),
-          child: ListView(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 16),
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.pairedDevice, context),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DeviceInfoCard(device: provider.pairedDevice),
+                      const SizedBox(height: 24),
+                      // Actions Section
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 12),
+                        child: Text(
+                          'ACTIONS',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      CustomListTile(
+                        title: 'Update Version',
+                        onTap: () => routeToPage(context, FirmwareUpdate(device: provider.pairedDevice)),
+                        icon: Icons.system_update,
+                        subtitle: 'Current: ${provider.pairedDevice?.firmwareRevision ?? '1.0.2'}',
+                        showChevron: true,
+                      ),
+                      const SizedBox(height: 8),
+                      CustomListTile(
+                        title: 'SD Card Sync',
+                        onTap: () {
+                          if (!provider.isDeviceV2Connected) {
+                            showDialog(
+                              context: context,
+                              builder: (c) => getDialog(
+                                context,
+                                () => Navigator.of(context).pop(),
+                                () => {},
+                                'V2 undetected',
+                                'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+                                singleButton: true,
+                              ),
+                            );
+                          } else {
+                            routeToPage(context, const SyncPage());
+                          }
+                        },
+                        icon: Icons.sd_card,
+                        subtitle: 'Import audio files',
+                        showChevron: true,
+                      ),
+                      const SizedBox(height: 24),
+                      // Support Section
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 12),
+                        child: Text(
+                          'SUPPORT',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      CustomListTile(
+                        title: 'Issues charging the device?',
+                        onTap: () async {
+                          await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
+                        },
+                        icon: Icons.help_outline,
+                        subtitle: 'Tap to see the guide',
+                        showChevron: true,
+                      ),
+                    ],
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -95,15 +170,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       ),
                     ),
                 ],
-              ),
-              GestureDetector(
-                onTap: () async {
-                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
-                },
-                child: const ListTile(
-                  title: Text('Issues charging the device?'),
-                  subtitle: Text('Tap to see the guide'),
-                ),
               ),
             ],
           ),
@@ -156,72 +222,4 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       );
     });
   }
-}
-
-List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
-  var provider = Provider.of<DeviceProvider>(context, listen: true);
-
-  return [
-    ListTile(
-      title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Friend'),
-    ),
-    ListTile(
-      title: const Text('Device ID'),
-      subtitle: Text(device?.id ?? '12AB34CD:56EF78GH'),
-    ),
-    GestureDetector(
-      onTap: () {
-        routeToPage(context, FirmwareUpdate(device: device));
-      },
-      child: ListTile(
-        title: const Text('Update Latest Version'),
-        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-        ),
-      ),
-    ),
-    GestureDetector(
-      onTap: () {
-        if (!provider.isDeviceV2Connected) {
-          showDialog(
-            context: context,
-            builder: (c) => getDialog(
-              context,
-              () => Navigator.of(context).pop(),
-              () => {},
-              'V2 undetected',
-              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
-              singleButton: true,
-            ),
-          );
-        } else {
-          var page = const SyncPage();
-          routeToPage(context, page);
-        }
-      },
-      child: const ListTile(
-        title: Text('SD Card Sync'),
-        subtitle: Text('Import audio files from SD Card'),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-        ),
-      ),
-    ),
-    ListTile(
-      title: const Text('Hardware Revision'),
-      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
-    ),
-    ListTile(
-      title: const Text('Model Number'),
-      subtitle: Text(device?.modelNumber ?? 'Friend'),
-    ),
-    ListTile(
-      title: const Text('Manufacturer Name'),
-      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
-    ),
-  ];
 }
