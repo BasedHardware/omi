@@ -238,7 +238,7 @@ class TopicsContext(BaseModel):
 class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(default=[],
                                         examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
-                                        description="Dates range. (Optional)",)
+                                        description="Dates range. (Optional)", )
 
 
 def requires_context_v1(messages: List[Message]) -> bool:
@@ -255,6 +255,7 @@ def requires_context_v1(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def requires_context(question: str) -> bool:
     prompt = f'''
@@ -298,6 +299,7 @@ def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
     prompt = f'''
@@ -404,6 +406,7 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
+
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
     You MUST determine the appropriate date range in {tz} that provides context for answering the question provided.
@@ -422,6 +425,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
+
 
 def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[datetime]:
     prompt = f'''
@@ -472,6 +476,7 @@ def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[dateti
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
+
 
 def retrieve_context_dates_by_question_v1(question: str, tz: str) -> List[datetime]:
     prompt = f'''
@@ -564,7 +569,9 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -625,7 +632,9 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
 
-def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
+
+def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+              cited: Optional[bool] = False) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -673,6 +682,7 @@ def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
 
 def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
@@ -975,7 +985,7 @@ class OutputQuestion(BaseModel):
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
-    for i in range(len(messages)-1, -1,-1):
+    for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
             break
         if messages[i].sender == MessageSender.human:
@@ -1028,10 +1038,11 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
+
 def extract_question_from_conversation_v3(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
-    for i in range(len(messages)-1, -1,-1):
+    for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
             break
         if messages[i].sender == MessageSender.human:
@@ -1083,7 +1094,7 @@ def extract_question_from_conversation_v3(messages: List[Message]) -> str:
 def extract_question_from_conversation_v2(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
-    for i in range(len(messages)-1, -1,-1):
+    for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
             break
         if messages[i].sender == MessageSender.human:
@@ -1133,8 +1144,9 @@ def extract_question_from_conversation_v1(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
+
 def retrieve_metadata_fields_from_transcript(
-    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
+        uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
@@ -1339,4 +1351,20 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
     prompt = prompt.replace('    ', '').strip()
     # print(prompt)
 
+    return llm_mini.invoke(prompt).content
+
+
+# **************************************************
+# *************** APPS AI GENERATE *****************
+# **************************************************
+
+def generate_description(app_name: str, description: str) -> str:
+    prompt = f"""
+    You are an AI assistant specializing in crafting detailed and engaging descriptions for apps. 
+    You will be provided with the app's name and a brief description which might not be that good. Your task is to expand on the given information, creating a captivating and detailed app description that highlights the app's features, functionality, and benefits. 
+    The description should be concise, professional, and not more than 40 words, ensuring clarity and appeal. Respond with only the description, tailored to the app's concept and purpose.
+    App Name: {app_name}
+    Description: {description}
+    """
+    prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
