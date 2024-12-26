@@ -24,19 +24,19 @@ class ConversationCaptureWidget extends StatefulWidget {
 }
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
-  bool _isReady = false;
+  bool _isReady = true;
   Timer? _readyStateTimer;
 
   @override
   void initState() {
     super.initState();
 
-    // Warn: Should ensure every deps has started before set ready
-    _readyStateTimer = Timer(const Duration(seconds: 3), () {
-      setState(() {
-        _isReady = true;
-      });
-    });
+    //// Warn: Should ensure every deps has started before set ready
+    //_readyStateTimer = Timer(const Duration(seconds: 3), () {
+    //  setState(() {
+    //    _isReady = true;
+    //  });
+    //});
   }
 
   @override
