@@ -139,29 +139,29 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 );
               }),
             ),
-            floatingActionButton: Selector<ConversationDetailProvider, int>(
-                selector: (context, provider) => provider.selectedTab,
-                builder: (context, selectedTab, child) {
-                  return selectedTab == 0
-                      ? FloatingActionButton(
-                          backgroundColor: Colors.black,
-                          elevation: 8,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(32)),
-                              side: BorderSide(color: Colors.grey, width: 1)),
-                          onPressed: () {
-                            var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                            Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Transcript copied to clipboard'),
-                              duration: Duration(seconds: 1),
-                            ));
-                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
-                          },
-                          child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                        )
-                      : const SizedBox.shrink();
-                }),
+            // floatingActionButton: Selector<ConversationDetailProvider, int>(
+            //     selector: (context, provider) => provider.selectedTab,
+            //     builder: (context, selectedTab, child) {
+            //       return selectedTab == 0
+            //           ? FloatingActionButton(
+            //               backgroundColor: Colors.black,
+            //               elevation: 8,
+            //               shape: const RoundedRectangleBorder(
+            //                   borderRadius: BorderRadius.all(Radius.circular(32)),
+            //                   side: BorderSide(color: Colors.grey, width: 1)),
+            //               onPressed: () {
+            //                 var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+            //                 Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
+            //                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            //                   content: Text('Transcript copied to clipboard'),
+            //                   duration: Duration(seconds: 1),
+            //                 ));
+            //                 MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
+            //               },
+            //               child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+            //             )
+            //           : const SizedBox.shrink();
+            //     }),
             body: Stack(
               children: [
                 Column(
@@ -217,94 +217,267 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     ),
                   ],
                 ),
-                Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
-                  return (
-                    count: provider.conversation.unassignedSegmentsLength(),
-                    shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
-                  );
-                }, builder: (context, value, child) {
-                  if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                  return Positioned(
-                    bottom: MediaQuery.sizeOf(context).height * 0.06,
-                    left: 86,
-                    child: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.grey.shade900,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Colors.grey.shade900,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              spreadRadius: 1,
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                InkWell(
-                                  onTap: () {
-                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                    provider.setShowUnassignedFloatingButton(false);
-                                  },
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            //TODO: when we move the copy button to settings, we can add this to give a cleaner look
-                            // Row(
-                            //   children: [
-                            //     const SizedBox(width: 8),
-                            //     ElevatedButton(
-                            //       style: ElevatedButton.styleFrom(
-                            //         backgroundColor: Colors.white24,
-                            //         shape: RoundedRectangleBorder(
-                            //           borderRadius: BorderRadius.circular(16),
-                            //         ),
-                            //       ),
-                            //       onPressed: () {
-                            //         // Tag action
-                            //       },
-                            //       child: const Text(
-                            //         "Tag",
-                            //         style: TextStyle(
-                            //           color: Colors.white,
-                            //         ),
-                            //       ),
-                            //     ),
-                            //   ],
-                            // ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
               ],
             ),
+
+            bottomNavigationBar: Container(
+              padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12.0),
+                color: Colors.grey.shade900,
+                gradient: LinearGradient(
+                  colors: [Colors.black54, Colors.black.withOpacity(0)],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
+              child:
+                  Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
+                return (
+                  count: provider.conversation.unassignedSegmentsLength(),
+                  shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
+                );
+              }, builder: (context, value, child) {
+                if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                return Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.grey.shade900,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.grey.shade900,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          spreadRadius: 1,
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                provider.setShowUnassignedFloatingButton(false);
+                              },
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white24,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              onPressed: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.black,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                  ),
+                                  builder: (context) {
+                                    return const NameSpeakerBottomSheet();
+                                  },
+                                );
+                              },
+                              child: const Text(
+                                "Tag",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class NameSpeakerBottomSheet extends StatefulWidget {
+  const NameSpeakerBottomSheet({super.key});
+
+  @override
+  State<NameSpeakerBottomSheet> createState() => _NameSpeakerBottomSheetState();
+}
+
+class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
+  String selectedPerson = '';
+  bool allSegments = false;
+
+  void toggleAllSegments(bool value) {
+    if (allSegments == value) return;
+    setState(() {
+      allSegments = value;
+    });
+  }
+
+  void setSelectedPerson(String personId) {
+    if (selectedPerson == personId) return;
+    setState(() {
+      selectedPerson = personId;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: MediaQuery.of(context).viewInsets,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Who is Speaker 01?',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Enter Person\'s Name',
+                filled: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                fillColor: Colors.grey[900],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                hintStyle: const TextStyle(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Recently Used Names',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 4),
+            SharedPreferencesUtil().cachedPeople.isEmpty
+                ? Text(
+                    'No recently used names were found for now.',
+                    style: TextStyle(color: Colors.grey[600]),
+                  )
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                        children: [
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: ChoiceChip(
+                                  label: Text('${SharedPreferencesUtil().givenName} (You)'),
+                                  selected: selectedPerson == 'user',
+                                  showCheckmark: true,
+                                  backgroundColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  onSelected: (bool selected) {
+                                    setSelectedPerson('user');
+                                  },
+                                ),
+                              )
+                            ] +
+                            SharedPreferencesUtil().cachedPeople.map((e) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: ChoiceChip(
+                                  label: Text(e.name),
+                                  selected: selectedPerson == e.id,
+                                  showCheckmark: true,
+                                  backgroundColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  onSelected: (bool selected) {
+                                    setSelectedPerson(e.id);
+                                  },
+                                ),
+                              );
+                            }).toList()),
+                  ),
+            const SizedBox(height: 16),
+            RadioListTile(
+              contentPadding: EdgeInsets.zero,
+              value: 1,
+              groupValue: allSegments ? 2 : 1,
+              onChanged: (_) {
+                toggleAllSegments(false);
+              },
+              title: const Text('Apply to Current Segment Only'),
+              activeColor: Colors.white,
+            ),
+            RadioListTile(
+              contentPadding: EdgeInsets.zero,
+              value: 2,
+              groupValue: allSegments ? 2 : 1,
+              onChanged: (_) {
+                toggleAllSegments(true);
+              },
+              title: const Text(
+                'Apply to All Segments of This Speaker',
+              ),
+              activeColor: Colors.white,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {},
+              child: const Center(child: Text('Save')),
+            ),
+            const SizedBox(height: 28),
+          ],
         ),
       ),
     );
