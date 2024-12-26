@@ -10,18 +10,16 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
+#include "lib/battery/battery.h"
 #include "transport.h"
 #include "config.h"
 #include "utils.h"
-// #include "nfc.h"
 #include "speaker.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
 #include "mic.h"
-#include "lib/battery/battery.h"
 #include "accel.h"
-// #include "friend.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
@@ -309,7 +307,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 
-	is_connected = true;
+    is_connected = true;
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
@@ -329,8 +327,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     current_connection = NULL;
     current_mtu = 0;
 
-	// // restart NFC
-	// nfc_wake();
+    // // restart NFC
+    // nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -346,7 +344,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
     LOG_INF("Connection parameters updated.");
-	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+    LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
@@ -768,16 +766,16 @@ int transport_start()
     }
 
     int battErr = 0;
-	battErr |= battery_init();
-	battErr |= battery_charge_start();
-	if (battErr)
-	{
-		LOG_ERR("Battery init failed (err %d)", battErr);
-	}
-	else
-	{
-		LOG_INF("Battery initialized");
-	}
+    battErr |= battery_init();
+    battErr |= battery_charge_start();
+    if (battErr)
+    {
+        LOG_ERR("Battery init failed (err %d)", battErr);
+    }
+    else
+    {
+        LOG_INF("Battery initialized");
+    }
 
     // friend_init();
 

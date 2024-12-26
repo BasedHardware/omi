@@ -13,6 +13,7 @@ target_sources(app PRIVATE
     src/codec.c
     src/lib/battery/battery.c
     src/button.c
+    src/button_transport.c
     src/speaker.c
     src/sdcard.c
     src/storage.c

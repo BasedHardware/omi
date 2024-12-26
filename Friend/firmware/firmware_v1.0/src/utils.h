@@ -2,7 +2,6 @@
 #define UTILS_H
 
 #include <zephyr/logging/log.h>
-#include <zephyr/bluetooth/gatt.h>
 
 #define ASSERT_OK(result)                                          \
     if ((result) < 0)                                              \
