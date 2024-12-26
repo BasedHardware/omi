@@ -95,11 +95,11 @@ static ssize_t speaker_haptic_handler(struct bt_conn *conn, const struct bt_gatt
 
 	if (value == 1)
 	{
-		play_haptic_milli(20);
+		play_haptic_milli(200);
 	}
 	else if (value == 2)
 	{
-		play_haptic_milli(50);
+		play_haptic_milli(300);
 	}
 	else if (value == 3)
 	{

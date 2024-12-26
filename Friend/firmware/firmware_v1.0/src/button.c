@@ -25,7 +25,7 @@ void button_pressed_callback(const struct device *dev, struct gpio_callback *cb,
             uint32_t pins)
 {
     int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
-    printf("button_pressed_callback %d\n", temp);
+    // printf("button_pressed_callback %d\n", temp);
     if (temp) 
     {
         was_pressed = false;

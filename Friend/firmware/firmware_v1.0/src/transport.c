@@ -745,8 +745,6 @@ int transport_start()
     }
     LOG_INF("Speaker initialized");
     register_speaker_service();
-
-
 #endif
 
     // Start advertising
@@ -776,8 +774,6 @@ int transport_start()
     {
         LOG_INF("Battery initialized");
     }
-
-    // friend_init();
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);

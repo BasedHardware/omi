@@ -50,6 +50,7 @@ static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struc
 }
 
 int notify_gatt(const int attr_idx, const void *data, uint16_t len) {
+    LOG_INF("notify_gatt %d", attr_idx);
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
@@ -61,8 +62,9 @@ int notify_gatt(const int attr_idx, const void *data, uint16_t len) {
 
 int notify_gatt_button_state(const int state) 
 {
+    LOG_INF("notify_gatt_button_state %d", state);
     final_button_state[0] = state; 
-    notify_gatt(1, &final_button_state, sizeof(final_button_state));
+    return notify_gatt(1, &final_button_state, sizeof(final_button_state));
 }
 
 int register_gatt_service() {

@@ -47,11 +47,11 @@ int accel_start()
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
-        printk("Speaker Pin ready\n");
+        printk("Accel Pin ready\n");
     }
     else 
     {
-        printk("Error setting up speaker Pin\n");
+        printk("Error setting up accel Pin\n");
         return -1;
     }
     if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
