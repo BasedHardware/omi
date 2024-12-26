@@ -358,3 +358,21 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
     return [];
   }
 }
+
+Future<String> getGenratedDescription(String name, String description) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-description',
+    headers: {},
+    body: jsonEncode({'name': name, 'description': description}),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return '';
+    log('getGenratedDescription: ${response.body}');
+    return jsonDecode(response.body)['description'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return '';
+  }
+}
