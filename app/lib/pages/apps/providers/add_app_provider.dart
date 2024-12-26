@@ -60,6 +60,7 @@ class AddAppProvider extends ChangeNotifier {
   bool isUpdating = false;
   bool isSubmitting = false;
   bool isValid = false;
+  bool isGenratingDescription = false;
 
   bool allowPaidApps = false;
 
@@ -645,6 +646,20 @@ class AddAppProvider extends ChangeNotifier {
     }
     appCategory = category;
     checkValidity();
+    notifyListeners();
+  }
+
+  Future<void> generateDescription() async {
+    setIsGenratingDescription(true);
+    var res = await getGenratedDescription(appNameController.text, appDescriptionController.text);
+    appDescriptionController.text = res.decodeString;
+    checkValidity();
+    setIsGenratingDescription(false);
+    notifyListeners();
+  }
+
+  void setIsGenratingDescription(bool genrating) {
+    isGenratingDescription = genrating;
     notifyListeners();
   }
 }

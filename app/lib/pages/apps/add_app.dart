@@ -37,7 +37,7 @@ class _AddAppPageState extends State<AddAppPage> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: const Text('Submit Your App'),
+          title: const Text('Submit App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
         extendBody: true,
@@ -104,6 +104,7 @@ class _AddAppPageState extends State<AddAppPage> {
                             pickImage: () async {
                               await provider.pickImage();
                             },
+                            generatingDescription: provider.isGenratingDescription,
                             allowPaidApps: provider.allowPaidApps,
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
