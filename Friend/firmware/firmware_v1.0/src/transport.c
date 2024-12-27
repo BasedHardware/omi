@@ -123,14 +123,14 @@ K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
 void broadcast_accel(struct k_work *work_item) {
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
@@ -168,48 +168,48 @@ int accel_start()
     {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
-	}
+    }
     if (!device_is_ready(lsm6dsl_dev)) 
     {
-		LOG_ERR("LSM6DSL: not ready");
-		return 0;
-	}
+        LOG_ERR("LSM6DSL: not ready");
+        return 0;
+    }
     odr_attr.val1 = 10;
-	odr_attr.val2 = 0;
+    odr_attr.val2 = 0;
 
 
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
-		printk("Speaker Pin ready\n");
-	}
+        printk("Speaker Pin ready\n");
+    }
     else 
     {
-		printk("Error setting up speaker Pin\n");
+        printk("Error setting up speaker Pin\n");
         return -1;
-	}
-	if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    }
+    if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
     {
-		printk("Error setting up Haptic Pin\n");
+        printk("Error setting up Haptic Pin\n");
         return -1;
-	}
+    }
     gpio_pin_set_dt(&accel_gpio_pin, 1);
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
     {
-	    LOG_ERR("Cannot set sampling frequency for Accelerometer.");
-		return 0;
-	}
+        LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+        return 0;
+    }
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	    LOG_ERR("Cannot set sampling frequency for gyro.");
-	    return 0;
-	}
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+        LOG_ERR("Cannot set sampling frequency for gyro.");
+        return 0;
+    }
     if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
     {
         LOG_ERR("Sensor sample update error");
         return 0;
-	}
+    }
 
     LOG_INF("Accelerometer is ready for use \n");
     
@@ -371,7 +371,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 
-	is_connected = true;
+    is_connected = true;
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
@@ -391,8 +391,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     current_connection = NULL;
     current_mtu = 0;
 
-	// // restart NFC
-	// nfc_wake();
+    // // restart NFC
+    // nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -408,7 +408,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
     LOG_INF("Connection parameters updated.");
-	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+    LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
@@ -827,16 +827,16 @@ int transport_start()
     }
 
     int battErr = 0;
-	battErr |= battery_init();
-	battErr |= battery_charge_start();
-	if (battErr)
-	{
-		LOG_ERR("Battery init failed (err %d)", battErr);
-	}
-	else
-	{
-		LOG_INF("Battery initialized");
-	}
+    battErr |= battery_init();
+    battErr |= battery_charge_start();
+    if (battErr)
+    {
+        LOG_ERR("Battery init failed (err %d)", battErr);
+    }
+    else
+    {
+        LOG_INF("Battery initialized");
+    }
 
     // friend_init();
 
