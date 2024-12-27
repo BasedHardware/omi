@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -9,12 +8,10 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -23,6 +20,7 @@ import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
 import 'conversation_detail_provider.dart';
+import 'widgets/name_speaker_sheet.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -296,6 +294,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 ),
                               ),
                               onPressed: () {
+                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
+                                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
                                 showModalBottomSheet(
                                   context: context,
                                   isScrollControlled: true,
@@ -304,7 +305,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                   ),
                                   builder: (context) {
-                                    return const NameSpeakerBottomSheet();
+                                    return NameSpeakerBottomSheet(
+                                      segmentIdx: segmentIdx,
+                                      speakerId: speakerId,
+                                    );
                                   },
                                 );
                               },
@@ -324,160 +328,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               }),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class NameSpeakerBottomSheet extends StatefulWidget {
-  const NameSpeakerBottomSheet({super.key});
-
-  @override
-  State<NameSpeakerBottomSheet> createState() => _NameSpeakerBottomSheetState();
-}
-
-class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
-  String selectedPerson = '';
-  bool allSegments = false;
-
-  void toggleAllSegments(bool value) {
-    if (allSegments == value) return;
-    setState(() {
-      allSegments = value;
-    });
-  }
-
-  void setSelectedPerson(String personId) {
-    if (selectedPerson == personId) return;
-    setState(() {
-      selectedPerson = personId;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Who is Speaker 01?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.grey),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'Enter Person\'s Name',
-                filled: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                fillColor: Colors.grey[900],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                hintStyle: const TextStyle(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Recently Used Names',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 4),
-            SharedPreferencesUtil().cachedPeople.isEmpty
-                ? Text(
-                    'No recently used names were found for now.',
-                    style: TextStyle(color: Colors.grey[600]),
-                  )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                        children: [
-                              Padding(
-                                padding: const EdgeInsets.only(right: 10),
-                                child: ChoiceChip(
-                                  label: Text('${SharedPreferencesUtil().givenName} (You)'),
-                                  selected: selectedPerson == 'user',
-                                  showCheckmark: true,
-                                  backgroundColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  onSelected: (bool selected) {
-                                    setSelectedPerson('user');
-                                  },
-                                ),
-                              )
-                            ] +
-                            SharedPreferencesUtil().cachedPeople.map((e) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 10),
-                                child: ChoiceChip(
-                                  label: Text(e.name),
-                                  selected: selectedPerson == e.id,
-                                  showCheckmark: true,
-                                  backgroundColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  onSelected: (bool selected) {
-                                    setSelectedPerson(e.id);
-                                  },
-                                ),
-                              );
-                            }).toList()),
-                  ),
-            const SizedBox(height: 16),
-            RadioListTile(
-              contentPadding: EdgeInsets.zero,
-              value: 1,
-              groupValue: allSegments ? 2 : 1,
-              onChanged: (_) {
-                toggleAllSegments(false);
-              },
-              title: const Text('Apply to Current Segment Only'),
-              activeColor: Colors.white,
-            ),
-            RadioListTile(
-              contentPadding: EdgeInsets.zero,
-              value: 2,
-              groupValue: allSegments ? 2 : 1,
-              onChanged: (_) {
-                toggleAllSegments(true);
-              },
-              title: const Text(
-                'Apply to All Segments of This Speaker',
-              ),
-              activeColor: Colors.white,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {},
-              child: const Center(child: Text('Save')),
-            ),
-            const SizedBox(height: 28),
-          ],
         ),
       ),
     );
@@ -604,7 +454,7 @@ class TranscriptWidgets extends StatelessWidget {
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
                     // editSegment: (_) {},
-                    editSegment: (i) {
+                    editSegment: (i, j) {
                       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                       if (!connectivityProvider.isConnected) {
                         ConnectivityProvider.showNoInternetDialog(context);
@@ -613,14 +463,14 @@ class TranscriptWidgets extends StatelessWidget {
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        isDismissible: provider.editSegmentLoading ? false : true,
+                        backgroundColor: Colors.black,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                         ),
                         builder: (context) {
-                          return EditSegmentWidget(
+                          return NameSpeakerBottomSheet(
+                            speakerId: j,
                             segmentIdx: i,
-                            people: SharedPreferencesUtil().cachedPeople,
                           );
                         },
                       );
@@ -665,11 +515,6 @@ class EditSegmentWidget extends StatelessWidget {
                           onPressed: () {
                             MixpanelManager().unassignedSegment();
                             provider.unassignConversationTranscriptSegment(provider.conversation.id, segmentIdx);
-                            // setModalState(() {
-                            //   personId = null;
-                            //   isUserSegment = false;
-                            // });
-                            // setState(() {});
                             Navigator.pop(context);
                           },
                           child: const Text(
@@ -683,45 +528,6 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  // !provider.hasAudioRecording
-                  //     ? GestureDetector(
-                  //         onTap: () {
-                  //           showDialog(
-                  //             context: context,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.pop(context),
-                  //               () {
-                  //                 Navigator.pop(context);
-                  //                 routeToPage(context, const RecordingsStoragePermission());
-                  //               },
-                  //               'Can\'t be used for speech training',
-                  //               'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                  //               okButtonText: 'View',
-                  //             ),
-                  //           );
-                  //         },
-                  //         child: Padding(
-                  //           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  //           child: Row(
-                  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //             crossAxisAlignment: CrossAxisAlignment.center,
-                  //             children: [
-                  //               Text('Can\'t be used for speech training',
-                  //                   style: Theme.of(context)
-                  //                       .textTheme
-                  //                       .bodyMedium!
-                  //                       .copyWith(decoration: TextDecoration.underline)),
-                  //               const Padding(
-                  //                 padding: EdgeInsets.only(right: 12),
-                  //                 child: Icon(Icons.info, color: Colors.grey, size: 20),
-                  //               ),
-                  //             ],
-                  //           ),
-                  //         ),
-                  //       )
-                  //     : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),
