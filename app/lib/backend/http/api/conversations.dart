@@ -202,6 +202,26 @@ Future<bool> assignConversationTranscriptSegment(
   return response.statusCode == 200;
 }
 
+Future<bool> assignConversationSpeaker(
+  String conversationId,
+  int speakerId,
+  bool isUser, {
+  String? personId,
+  bool useForSpeechTraining = true,
+}) async {
+  String assignType = isUser ? 'is_user' : 'person_id';
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/assign-speaker/$speakerId?value=${isUser ? 'true' : personId}'
+        '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('assignConversationSpeaker: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<bool> setConversationVisibility(String conversationId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/$conversationId/visibility?value=$visibility&visibility=$visibility',
