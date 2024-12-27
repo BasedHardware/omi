@@ -22,6 +22,7 @@ from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
+llm_large = ChatOpenAI(model='o1-preview')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -623,7 +624,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
-    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+    return llm_large.invoke(prompt).content
 
 
 def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
