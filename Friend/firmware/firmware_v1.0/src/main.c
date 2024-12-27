@@ -19,7 +19,7 @@ LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 static void codec_handler(uint8_t *data, size_t len)
 {
-	int err = broadcast_audio_packets(data, len);
+    int err = broadcast_audio_packets(data, len);
     if (err)
     {
         LOG_ERR("Failed to broadcast audio packets: %d", err);
@@ -37,7 +37,7 @@ static void mic_handler(int16_t *buffer)
 
 void bt_ctlr_assert_handle(char *name, int type)
 {
-	LOG_INF("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
+    LOG_INF("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
 }
 
 
@@ -75,7 +75,7 @@ static void boot_led_sequence(void)
 
 void set_led_state()
 {
-	// Recording and connected state - BLUE
+    // Recording and connected state - BLUE
 
     if(usb_charge)
     {
@@ -95,30 +95,30 @@ void set_led_state()
     }
     if(is_off)
     {
-		set_led_red(false);
-		set_led_blue(false);
+        set_led_red(false);
+        set_led_blue(false);
         return;
     }
-	if (is_connected)
-	{
-		set_led_blue(true);
-		set_led_red(false);
-		return;
-	}
+    if (is_connected)
+    {
+        set_led_blue(true);
+        set_led_red(false);
+        return;
+    }
 
-	// Recording but lost connection - RED
-	if (!is_connected)
-	{
-		set_led_red(true);
-		set_led_blue(false);
-		return;
-	}
+    // Recording but lost connection - RED
+    if (!is_connected)
+    {
+        set_led_red(true);
+        set_led_blue(false);
+        return;
+    }
 
 }
 
 int main(void)
 {
-	int err;
+    int err;
     uint32_t reset_reas = NRF_POWER->RESETREAS;
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
@@ -225,13 +225,13 @@ int main(void)
 
     // Main loop
     printf("reset reas:%d\n",reset_reas);
-	while (1)
-	{
-		set_led_state();
-		k_msleep(500);
-	}
+    while (1)
+    {
+        set_led_state();
+        k_msleep(500);
+    }
 
-	// Unreachable
-	return 0;
+    // Unreachable
+    return 0;
 }
 
