@@ -175,7 +175,7 @@ Future<bool> hasConversationRecording(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getConversationPhotos: ${response.body}');
+  debugPrint('hasConversationRecording: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_recording'] ?? false;
   }
