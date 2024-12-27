@@ -57,6 +57,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             if data.get('payment_plan') is None:
                 raise HTTPException(status_code=422, detail='Payment plan is required')
     if external_integration := data.get('external_integration'):
+        external_integration['webhook_url'] = external_integration['webhook_url'].strip()
         if external_integration.get('triggers_on') is None:
             raise HTTPException(status_code=422, detail='Triggers on is required')
         # check if setup_instructions_file_path is a single url or a just a string of text
