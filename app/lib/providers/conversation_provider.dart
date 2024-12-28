@@ -58,6 +58,19 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     groupConversationsByDate();
   }
 
+  Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
+    var convo = await getConversationById(id);
+    if (convo != null) {
+      updateSpecificGroupedConvo(convo, date, idx);
+    }
+    notifyListeners();
+  }
+
+  void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
+    groupedConversations[date]![idx] = convo;
+    notifyListeners();
+  }
+
   Future<void> searchConversations(String query) async {
     if (query == previousQuery) {
       return;

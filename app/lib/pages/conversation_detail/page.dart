@@ -9,12 +9,11 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -48,6 +47,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
+      if (provider.conversation.appResults.isEmpty) {
+        await Provider.of<ConversationProvider>(context, listen: false)
+            .updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
