@@ -88,7 +88,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
-                key: Key(widget.conversation.id),
+                key: UniqueKey(),
                 direction: DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
