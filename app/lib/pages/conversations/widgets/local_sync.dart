@@ -86,8 +86,8 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           padding: const EdgeInsets.all(16),
           child: Text(
-            '${convertToHHMMSS(_missSeconds)} of conversation locally',
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            '${secondsToHumanReadable(_missSeconds.toString())} On-Device Conversations',
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(fontSize: 16),
             textAlign: TextAlign.center,
           ),
         );
@@ -104,22 +104,24 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
               color: Colors.grey.shade900,
               borderRadius: const BorderRadius.all(Radius.circular(12)),
             ),
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.download_rounded),
-                      const SizedBox(width: 16),
-                      Text(
-                        '${secondsToHumanReadable(_missSeconds.toString())} available. Sync now?',
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ],
-                  ),
+                const Row(
+                  children: [
+                    Text(
+                      'Stay in Sync',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+                Text(
+                  '${secondsToHumanReadable(_missSeconds.toString())} available',
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(decoration: TextDecoration.underline),
                 ),
               ],
             ),

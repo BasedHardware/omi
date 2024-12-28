@@ -95,6 +95,8 @@ class CaptureProvider extends ChangeNotifier
 
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
+  bool get havingRecordingDevice => _recordingDevice != null;
+
   // -----------------------
   // Conversation creation variables
   String conversationId = const Uuid().v4();
