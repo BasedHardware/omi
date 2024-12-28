@@ -62,8 +62,11 @@ async def get_users_in_timezones(timezones: list[str], filter: str):
             chunk_users = []
             try:
                 query = users_ref.where(filter=FieldFilter('time_zone', 'in', chunk))
-                for doc in query.stream():
-                    if (filter == 'fcm_token'):
+                for result in query.stream():
+                    doc = result.to_dict()
+                    if 'fcm_token' not in doc:
+                        continue
+                    if filter == 'fcm_token':
                         token = doc.get('fcm_token')
                     else:
                         token = doc.id, doc.get('fcm_token')
