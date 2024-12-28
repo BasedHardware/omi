@@ -13,7 +13,6 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
-import 'package:friend_private/pages/home/widgets/search_page.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -332,7 +331,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: DefaultTabController(
-            length: 4,
+            length: 3,
             initialIndex: _controller?.initialPage ?? 0,
             child: GestureDetector(
               onTap: () {
@@ -350,7 +349,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
-                        SearchPage(),
                       ],
                     ),
                   ),
@@ -383,14 +381,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
                               indicatorPadding: EdgeInsets.zero,
                               onTap: (index) {
-                                MixpanelManager()
-                                    .bottomNavigationTabClicked(['Memories', 'Chat', 'Apps', 'Search'][index]);
+                                MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 if (home.selectedIndex == index) {
                                   return;
-                                }
-                                if (index == 0 && home.selectedIndex == 3) {
-                                  context.read<ConversationProvider>().resetGroupedConvos();
                                 }
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
@@ -421,15 +415,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Apps',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
-                                    ),
-                                  ),
-                                ),
-                                Tab(
-                                  child: Text(
-                                    'Search',
-                                    style: TextStyle(
-                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                       fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
