@@ -50,8 +50,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SizedBox(height: 26)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+            const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: SearchWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
