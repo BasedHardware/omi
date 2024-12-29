@@ -31,7 +31,7 @@ class _SearchWidgetState extends State<SearchWidget> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 2, 0),
+          padding: const EdgeInsets.fromLTRB(16, 16, 2, 10),
           width: MediaQuery.sizeOf(context).width * 0.85,
           child: TextFormField(
             controller: searchController,
@@ -50,7 +50,15 @@ class _SearchWidgetState extends State<SearchWidget> {
               // fillColor: Colors.grey[900],
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade900, width: 0.5),
+                borderSide: BorderSide(color: Colors.grey.shade800, width: 0.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade500, width: 0.5),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade500, width: 0.5),
               ),
               prefixIcon: Icon(
                 Icons.search,
