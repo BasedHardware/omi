@@ -34,6 +34,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -438,6 +439,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const BatteryInfoWidget(),
+                context.read<ConversationProvider>().missingWalsInSeconds >= 120
+                    ? GestureDetector(
+                        onTap: () {
+                          routeToPage(context, const SyncPage());
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: const Icon(Icons.sync, color: Colors.white, size: 24),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
