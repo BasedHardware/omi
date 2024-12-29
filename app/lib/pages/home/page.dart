@@ -34,6 +34,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -438,6 +439,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const BatteryInfoWidget(),
+                Consumer<HomeProvider>(builder: (context, provider, child) {
+                  if (provider.selectedIndex == 0) {
+                    return (context.read<ConversationProvider>().missingWalsInSeconds >= 120
+                        ? GestureDetector(
+                            onTap: () {
+                              routeToPage(context, const SyncPage());
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.only(left: 12),
+                              child: const Icon(Icons.download, color: Colors.white, size: 24),
+                            ),
+                          )
+                        : const SizedBox.shrink());
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                }),
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
@@ -445,10 +463,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         controller: _controller,
                       );
                     } else if (provider.selectedIndex == 2) {
-                      return Padding(
-                        padding: EdgeInsets.only(left: MediaQuery.sizeOf(context).width * 0.12),
-                        child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
-                      );
+                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
                     } else {
                       return Flexible(
                         child: Row(

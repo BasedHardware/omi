@@ -99,30 +99,31 @@ class SpeechLanguageSheet extends StatelessWidget {
         );
       },
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.19,
-        height: MediaQuery.of(context).size.height * 0.041,
+        width: MediaQuery.of(context).size.width * 0.18,
+        height: MediaQuery.of(context).size.height * 0.0375,
         decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.grey,
-            width: 1,
-          ),
           borderRadius: BorderRadius.circular(10),
+          color: Colors.grey.shade900,
         ),
-        padding: const EdgeInsets.only(left: 12, right: 4),
+        padding: const EdgeInsets.only(left: 8, right: 2),
         child: Row(
           children: [
-            const Spacer(
-              flex: 1,
-            ),
-            Text(
-              SharedPreferencesUtil().recordingsLanguage,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-              textAlign: TextAlign.center,
+            const Icon(
+              Icons.language,
+              color: Colors.white,
+              size: 20,
             ),
             const Spacer(
               flex: 2,
             ),
-            const Icon(Icons.arrow_drop_down, color: Colors.white),
+            Text(
+              SharedPreferencesUtil().recordingsLanguage.toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const Spacer(
+              flex: 3,
+            ),
           ],
         ),
       ),
