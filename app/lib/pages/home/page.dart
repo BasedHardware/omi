@@ -487,24 +487,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-                Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
-                  if (home.selectedIndex != 0 ||
-                      !convoProvider.hasNonDiscardedConversations ||
-                      convoProvider.isLoadingConversations) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 4.0),
-                    child: IconButton(
-                      onPressed: convoProvider.toggleDiscardConversations,
-                      icon: Icon(
-                        SharedPreferencesUtil().showDiscardedMemories ? Icons.filter_list_off_sharp : Icons.filter_list,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  );
-                }),
                 IconButton(
                   icon: const Icon(Icons.settings, color: Colors.white, size: 30),
                   onPressed: () async {
