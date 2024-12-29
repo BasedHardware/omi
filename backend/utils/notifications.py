@@ -36,7 +36,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
                     token=token
                 ) for token in batch_users
             ]
-            return messaging.send_all(messages)
+            return messaging.send_each(messages)
 
         tasks = []
         for i in range(num_batches):
