@@ -75,9 +75,8 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
+                    color: Colors.grey.shade900,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey, width: 1),
                   ),
                   child: Row(
                     children: [

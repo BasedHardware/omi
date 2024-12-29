@@ -99,8 +99,8 @@ class SpeechLanguageSheet extends StatelessWidget {
         );
       },
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.19,
-        height: MediaQuery.of(context).size.height * 0.041,
+        width: MediaQuery.of(context).size.width * 0.18,
+        height: MediaQuery.of(context).size.height * 0.0375,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           color: Colors.grey.shade900,
@@ -108,9 +108,13 @@ class SpeechLanguageSheet extends StatelessWidget {
         padding: const EdgeInsets.only(left: 8, right: 2),
         child: Row(
           children: [
-            const Icon(Icons.language, color: Colors.white),
+            const Icon(
+              Icons.language,
+              color: Colors.white,
+              size: 20,
+            ),
             const Spacer(
-              flex: 1,
+              flex: 2,
             ),
             Text(
               SharedPreferencesUtil().recordingsLanguage.toUpperCase(),
@@ -118,7 +122,7 @@ class SpeechLanguageSheet extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const Spacer(
-              flex: 2,
+              flex: 3,
             ),
           ],
         ),
