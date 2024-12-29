@@ -16,7 +16,7 @@ class TranscriptWidget extends StatefulWidget {
   final bool separator;
   final bool canDisplaySeconds;
   final bool isConversationDetail;
-  final Function(int)? editSegment;
+  final Function(int, int)? editSegment;
 
   const TranscriptWidget({
     super.key,
@@ -61,7 +61,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             children: [
               GestureDetector(
                 onTap: () {
-                  widget.editSegment?.call(idx - 1);
+                  widget.editSegment?.call(idx - 1, data.speakerId);
                   MixpanelManager().assignSheetOpened();
                 },
                 child: Row(

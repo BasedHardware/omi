@@ -174,6 +174,21 @@ class ServerConversation {
     return transcriptSegments.where((element) => (element.personId == null && !element.isUser)).length;
   }
 
+  int speakerWithMostUnassignedSegments() {
+    var speakers = transcriptSegments
+        .where((element) => element.personId == null && !element.isUser)
+        .map((e) => e.speakerId)
+        .toList();
+    if (speakers.isEmpty) return -1;
+    var segmentsBySpeakers =
+        groupBy(speakers, (e) => e).entries.reduce((a, b) => a.value.length > b.value.length ? a : b).key;
+    return segmentsBySpeakers;
+  }
+
+  int firstSegmentIndexForSpeaker(int speakerId) {
+    return transcriptSegments.indexWhere((element) => element.speakerId == speakerId);
+  }
+
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'Openglass';
