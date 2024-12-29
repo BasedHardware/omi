@@ -463,7 +463,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         controller: _controller,
                       );
                     } else if (provider.selectedIndex == 2) {
-                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
+                      return Padding(
+                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
+                        child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      );
                     } else {
                       return Flexible(
                         child: Row(
