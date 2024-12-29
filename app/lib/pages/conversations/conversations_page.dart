@@ -119,7 +119,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (index == 0) const SizedBox(height: 16),
+                          if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
                             isFirst: index == 0,
                             conversations: memoriesForDate,
