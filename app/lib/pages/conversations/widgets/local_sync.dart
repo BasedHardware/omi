@@ -95,38 +95,39 @@ class _LocalSyncWidgetState extends State<LocalSyncWidget> {
 
       // ready to sync
       if (_status == LocalSyncStatus.flush) {
-        return GestureDetector(
-          onTap: () {
-            routeToPage(context, const SyncPage());
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade900,
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-            ),
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Row(
-                  children: [
-                    Text(
-                      'Stay in Sync',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-                Text(
-                  '${secondsToHumanReadable(_missSeconds.toString())} available',
-                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(decoration: TextDecoration.underline),
-                ),
-              ],
-            ),
-          ),
-        );
+        return SizedBox.shrink();
+        // return GestureDetector(
+        //   onTap: () {
+        //     routeToPage(context, const SyncPage());
+        //   },
+        //   child: Container(
+        //     decoration: BoxDecoration(
+        //       color: Colors.grey.shade900,
+        //       borderRadius: const BorderRadius.all(Radius.circular(12)),
+        //     ),
+        //     padding: const EdgeInsets.all(16),
+        //     margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        //     child: Row(
+        //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        //       crossAxisAlignment: CrossAxisAlignment.center,
+        //       children: [
+        //         const Row(
+        //           children: [
+        //             Text(
+        //               'Stay in Sync',
+        //               style: TextStyle(color: Colors.white, fontSize: 16),
+        //               textAlign: TextAlign.center,
+        //             ),
+        //           ],
+        //         ),
+        //         Text(
+        //           '${secondsToHumanReadable(_missSeconds.toString())} available',
+        //           style: Theme.of(context).textTheme.bodyMedium!.copyWith(decoration: TextDecoration.underline),
+        //         ),
+        //       ],
+        //     ),
+        //   ),
+        // );
       }
 
       return const SizedBox.shrink();
