@@ -268,3 +268,9 @@ class SetMemoryActionItemsStateRequest(BaseModel):
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool
+
+
+class SearchRequest(BaseModel):
+    query: str
+    page: Optional[int] = 1
+    per_page: Optional[int] = 10

@@ -7,6 +7,7 @@ from models.memory import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_memory
 from utils.memories.process_memory import process_memory
+from utils.memories.search import search_memories
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists, \
     delete_additional_profile_audio, delete_speech_sample_for_people
@@ -267,3 +268,9 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
     for memory in memories:
         memory['geolocation'] = None
     return memories
+
+
+@router.post("/v1/memories/search", response_model=dict, tags=['memories'])
+def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
+    return search_memories(query=search_request.query, page=search_request.page,
+                           per_page=search_request.per_page, uid=uid)

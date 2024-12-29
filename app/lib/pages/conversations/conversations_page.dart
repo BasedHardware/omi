@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/conversations/widgets/local_sync.dart';
 import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
+import 'package:friend_private/pages/conversations/widgets/search_widget.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -51,6 +52,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
             const SliverToBoxAdapter(child: LocalSyncWidget()),
+            const SliverToBoxAdapter(child: SearchWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
@@ -93,8 +95,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       return VisibilityDetector(
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
-                          if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
-                            convoProvider.getMoreConversationsFromServer();
+                          var provider = Provider.of<ConversationProvider>(context, listen: false);
+                          if (provider.previousQuery.isNotEmpty) {
+                            if (visibilityInfo.visibleFraction > 0 &&
+                                !provider.isLoadingConversations &&
+                                (provider.totalSearchPages > provider.currentSearchPage)) {
+                              provider.searchMoreConversations();
+                            }
+                          } else {
+                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                              convoProvider.getMoreConversationsFromServer();
+                            }
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),

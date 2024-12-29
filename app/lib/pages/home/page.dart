@@ -46,6 +46,7 @@ class HomePageWrapper extends StatefulWidget {
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -354,14 +355,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   Consumer<HomeProvider>(
                     builder: (context, home, child) {
                       if (home.chatFieldFocusNode.hasFocus ||
-                          home.conversationFieldFocusNode.hasFocus ||
+                          home.convoSearchFieldFocusNode.hasFocus ||
                           home.appsSearchFieldFocusNode.hasFocus) {
                         return const SizedBox.shrink();
                       } else {
                         return Align(
                           alignment: Alignment.bottomCenter,
                           child: Container(
-                            margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                            margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
                             decoration: const BoxDecoration(
                               color: Colors.black,
                               borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -377,11 +378,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               shape: BoxShape.rectangle,
                             ),
                             child: TabBar(
-                              padding: const EdgeInsets.only(top: 4, bottom: 4, left: 8, right: 8),
-                              labelPadding: EdgeInsets.zero,
+                              labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
+                              indicatorPadding: EdgeInsets.zero,
                               onTap: (index) {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
+                                if (home.selectedIndex == index) {
+                                  return;
+                                }
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
@@ -393,7 +397,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Home',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -402,7 +406,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -411,7 +415,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Apps',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -441,7 +445,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         controller: _controller,
                       );
                     } else if (provider.selectedIndex == 2) {
-                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
+                      return Padding(
+                        padding: EdgeInsets.only(left: MediaQuery.sizeOf(context).width * 0.12),
+                        child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      );
                     } else {
                       return Flexible(
                         child: Row(
@@ -465,44 +472,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-                Row(
-                  children: [
-                    Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
-                      if (home.selectedIndex != 0 ||
-                          !convoProvider.hasNonDiscardedConversations ||
-                          convoProvider.isLoadingConversations) {
-                        return const SizedBox.shrink();
-                      }
-                      return IconButton(
-                          onPressed: convoProvider.toggleDiscardConversations,
-                          icon: Icon(
-                            SharedPreferencesUtil().showDiscardedMemories
-                                ? Icons.filter_list_off_sharp
-                                : Icons.filter_list,
-                            color: Colors.white,
-                            size: 24,
-                          ));
-                    }),
-                    IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                      onPressed: () async {
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().recordingsLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        await routeToPage(context, const SettingsPage());
-
-                        if (language != SharedPreferencesUtil().recordingsLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        }
-                      },
+                Consumer2<ConversationProvider, HomeProvider>(builder: (context, convoProvider, home, child) {
+                  if (home.selectedIndex != 0 ||
+                      !convoProvider.hasNonDiscardedConversations ||
+                      convoProvider.isLoadingConversations) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 4.0),
+                    child: IconButton(
+                      onPressed: convoProvider.toggleDiscardConversations,
+                      icon: Icon(
+                        SharedPreferencesUtil().showDiscardedMemories ? Icons.filter_list_off_sharp : Icons.filter_list,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
-                  ],
-                )
+                  );
+                }),
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                  onPressed: () async {
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().recordingsLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    await routeToPage(context, const SettingsPage());
+
+                    if (language != SharedPreferencesUtil().recordingsLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                      }
+                    }
+                  },
+                ),
               ],
             ),
             elevation: 0,
