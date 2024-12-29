@@ -59,13 +59,6 @@ class BatteryInfoWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8.0),
-                        isMemoriesPage
-                            ? Text(
-                                deviceProvider.connectedDevice?.name ?? SharedPreferencesUtil().deviceName,
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                              )
-                            : const SizedBox.shrink(),
-                        isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                         Text(
                           deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
