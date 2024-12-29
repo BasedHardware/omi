@@ -134,7 +134,9 @@ class ServerConversation {
       appResults:
           ((json['plugins_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
-      photos: (json['photos'] as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList(),
+      photos: json['photos'] != null
+          ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
+          : [],
       discarded: json['discarded'] ?? false,
       source:
           json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.friend,
