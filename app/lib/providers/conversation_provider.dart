@@ -72,6 +72,11 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   Future<void> searchConversations(String query) async {
+    if (query.isEmpty) {
+      searchedConversations = conversations;
+      groupSearchConvosByDate();
+      return;
+    }
     if (query == previousQuery) {
       return;
     }
