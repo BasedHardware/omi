@@ -439,14 +439,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const BatteryInfoWidget(),
-                context.read<ConversationProvider>().missingWalsInSeconds >= 120
+                context.read<ConversationProvider>().missingWalsInSeconds >= 120 &&
+                        context.read<HomeProvider>().selectedIndex == 0
                     ? GestureDetector(
                         onTap: () {
                           routeToPage(context, const SyncPage());
                         },
                         child: Container(
                           padding: const EdgeInsets.only(left: 12),
-                          child: const Icon(Icons.sync, color: Colors.white, size: 24),
+                          child: const Icon(Icons.download, color: Colors.white, size: 24),
                         ),
                       )
                     : const SizedBox.shrink(),
@@ -458,7 +459,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       );
                     } else if (provider.selectedIndex == 2) {
                       return Padding(
-                        padding: EdgeInsets.only(left: MediaQuery.sizeOf(context).width * 0.12),
+                        padding: EdgeInsets.only(left: MediaQuery.sizeOf(context).width * 0.06),
                         child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
                       );
                     } else {
