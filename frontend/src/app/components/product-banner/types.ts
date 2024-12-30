@@ -21,7 +21,7 @@ export interface CategoryBannerProps extends ProductBannerBase {
 export const PRODUCT_INFO = {
   name: 'OMI Necklace',
   price: '$69.99',
-  url: 'https://www.omi.me/products/friend-dev-kit-2',
+  url: 'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page',
   shipping: 'Ships Worldwide',
   images: {
     primary: '/omi_1.webp',
