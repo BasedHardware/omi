@@ -67,6 +67,9 @@ class $AssetsFontsGen {
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
+  /// File path: assets/images/ai_magic.svg
+  String get aiMagic => 'assets/images/ai_magic.svg';
+
   /// File path: assets/images/app_launcher_icon.png
   AssetGenImage get appLauncherIcon =>
       const AssetGenImage('assets/images/app_launcher_icon.png');
@@ -132,6 +135,7 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
+        aiMagic,
         appLauncherIcon,
         background,
         blob,
