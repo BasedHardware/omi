@@ -441,17 +441,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 const BatteryInfoWidget(),
                 Consumer<HomeProvider>(builder: (context, provider, child) {
                   if (provider.selectedIndex == 0) {
-                    return (context.read<ConversationProvider>().missingWalsInSeconds >= 120
-                        ? GestureDetector(
-                            onTap: () {
-                              routeToPage(context, const SyncPage());
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.only(left: 12),
-                              child: const Icon(Icons.download, color: Colors.white, size: 24),
-                            ),
-                          )
-                        : const SizedBox.shrink());
+                    return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
+                      if (convoProvider.missingWalsInSeconds >= 120) {
+                        return GestureDetector(
+                          onTap: () {
+                            routeToPage(context, const SyncPage());
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: const Icon(Icons.download, color: Colors.white, size: 24),
+                          ),
+                        );
+                      } else {
+                        return const SizedBox.shrink();
+                      }
+                    });
                   } else {
                     return const SizedBox.shrink();
                   }
