@@ -447,20 +447,30 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   _sendMessageUtil(String message) async {
     MixpanelManager().chatMessageSent(message);
-    context.read<MessageProvider>().setSendingMessage(true);
-    String? appId = context.read<MessageProvider>().appProvider?.selectedChatAppId;
+    var provider = context.read<MessageProvider>();
+    provider.setSendingMessage(true);
+    String? appId = provider.appProvider?.selectedChatAppId;
     if (appId == 'no_selected') {
       appId = null;
     }
     var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
-    context.read<MessageProvider>().addMessage(newMessage);
+      const Uuid().v4(),
+      DateTime.now(),
+      message,
+      MessageSender.human,
+      MessageType.text,
+      appId,
+      false,
+      [],
+      files: provider.uploadedFile != null ? [provider.uploadedFile!] : [],
+    );
+    provider.addMessage(newMessage);
     scrollToBottom();
     textController.clear();
-    await context.read<MessageProvider>().sendMessageToServer(message, appId);
+    provider.sendMessageToServer(message, appId);
     // TODO: restore streaming capabilities, with initial empty message
     scrollToBottom();
-    context.read<MessageProvider>().setSendingMessage(false);
+    provider.setSendingMessage(false);
   }
 
   sendInitialAppMessage(App? app) async {
