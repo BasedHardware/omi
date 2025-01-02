@@ -53,7 +53,7 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
+Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String>? fileIds}) {
   var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/messages';
@@ -62,7 +62,7 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
     url: url,
     headers: {},
     method: 'POST',
-    body: jsonEncode({'text': text}),
+    body: jsonEncode({'text': text, 'file_ids': []}),
   ).then((response) {
     if (response == null) throw Exception('Failed to send message');
     if (response.statusCode == 200) {
@@ -118,5 +118,30 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   } catch (e) {
     debugPrint('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
+  }
+}
+
+Future<String?> uploadFileServer(File file, String fileType, {String? appId}) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/files?plugin_id=$appId'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 200) {
+      debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
+      var res = jsonDecode(response.body);
+      return res['id'];
+    } else {
+      debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadFileServer: $e');
+    throw Exception('An error occurred uploadFileServer: $e');
   }
 }
