@@ -1,11 +1,17 @@
+import 'dart:io';
+
 import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:image_picker/image_picker.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
@@ -19,12 +25,22 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
+  File? selectedFile;
+  String selectedFileType = '';
+  String uploadedFileId = '';
+  bool isUploadingFile = false;
+
   void updateAppProvider(AppProvider p) {
     appProvider = p;
   }
 
   void setHasCachedMessages(bool value) {
     hasCachedMessages = value;
+    notifyListeners();
+  }
+
+  void setIsUploadingFile(bool value) {
+    isUploadingFile = value;
     notifyListeners();
   }
 
@@ -46,6 +62,56 @@ class MessageProvider extends ChangeNotifier {
   void setLoadingMessages(bool value) {
     isLoadingMessages = value;
     notifyListeners();
+  }
+
+  void takeImage() async {
+    var res = await ImagePicker().pickImage(source: ImageSource.camera);
+    if (res != null) {
+      selectedFile = File(res.path);
+      selectedFileType = 'image';
+      uploadFile(appProvider?.selectedChatAppId);
+      notifyListeners();
+    }
+  }
+
+  void selectImage() async {
+    var res = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (res != null) {
+      selectedFile = File(res.path);
+      selectedFileType = 'image';
+      uploadFile(appProvider?.selectedChatAppId);
+      notifyListeners();
+    }
+  }
+
+  void selectFile() async {
+    var res = await FilePicker.platform.pickFiles(allowMultiple: false);
+    if (res != null) {
+      selectedFile = File(res.files.first.path!);
+      selectedFileType = 'file';
+      uploadFile(appProvider?.selectedChatAppId);
+      notifyListeners();
+    }
+  }
+
+  void clearSelectedFile() {
+    selectedFile = null;
+    notifyListeners();
+  }
+
+  void uploadFile(String? appId) async {
+    if (selectedFile != null) {
+      setIsUploadingFile(true);
+      var res = await uploadFileServer(selectedFile!, selectedFileType, appId: appId);
+      if (res != null) {
+        uploadedFileId = res;
+      } else {
+        clearSelectedFile();
+        AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
+      }
+      setIsUploadingFile(false);
+      notifyListeners();
+    }
   }
 
   Future refreshMessages({bool dropdownSelected = false}) async {
@@ -116,7 +182,8 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty());
-    var mes = await sendMessageServer(message, appId: appId);
+    var mes =
+        await sendMessageServer(message, appId: appId, fileIds: uploadedFileId.isNotEmpty ? [uploadedFileId] : []);
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }
