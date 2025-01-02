@@ -143,10 +143,8 @@ Future<bool> isAppSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data;
   try {
-    data = jsonDecode(response?.body ?? '{}');
-    print(data);
+    var data = jsonDecode(response?.body ?? '{}');
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
     debugPrint('Response not a valid json: $e');
@@ -160,7 +158,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
 Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/apps'),
+    Uri.parse('${Env.apiBaseUrl}v2/apps'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
