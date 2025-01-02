@@ -441,9 +441,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 const BatteryInfoWidget(),
                 Consumer<HomeProvider>(builder: (context, provider, child) {
                   if (provider.selectedIndex == 0) {
-                    return Consumer2<ConversationProvider, DeviceProvider>(
-                        builder: (context, convoProvider, deviceProvider, child) {
-                      if (convoProvider.missingWalsInSeconds >= 120 && deviceProvider.connectedDevice != null) {
+                    return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
+                      if (convoProvider.missingWalsInSeconds >= 120) {
                         return GestureDetector(
                           onTap: () {
                             routeToPage(context, const SyncPage());
