@@ -238,77 +238,203 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               Consumer<HomeProvider>(builder: (context, home, child) {
                 return Align(
                   alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: double.maxFinite,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    margin: EdgeInsets.only(left: 32, right: 32, bottom: home.isChatFieldFocused ? 40 : 120),
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.all(Radius.circular(16)),
-                      border: GradientBoxBorder(
-                        gradient: LinearGradient(colors: [
-                          Color.fromARGB(127, 208, 208, 208),
-                          Color.fromARGB(127, 188, 99, 121),
-                          Color.fromARGB(127, 86, 101, 182),
-                          Color.fromARGB(127, 126, 190, 236)
-                        ]),
-                        width: 1,
-                      ),
-                      shape: BoxShape.rectangle,
-                    ),
-                    child: TextField(
-                      enabled: true,
-                      controller: textController,
-                      // textCapitalization: TextCapitalization.sentences,
-                      obscureText: false,
-                      focusNode: home.chatFieldFocusNode,
-                      // canRequestFocus: true,
-                      textAlign: TextAlign.start,
-                      textAlignVertical: TextAlignVertical.center,
-                      decoration: InputDecoration(
-                        hintText: 'Message',
-                        hintStyle: const TextStyle(fontSize: 14.0, color: Colors.grey),
-                        focusedBorder: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        suffixIcon: IconButton(
-                          splashColor: Colors.transparent,
-                          splashRadius: 1,
-                          onPressed: provider.sendingMessage
-                              ? null
-                              : () async {
-                                  String message = textController.text;
-                                  if (message.isEmpty) return;
-                                  if (connectivityProvider.isConnected) {
-                                    _sendMessageUtil(message);
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Please check your internet connection and try again'),
-                                        duration: Duration(seconds: 2),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: double.maxFinite,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        margin: EdgeInsets.only(left: 28, right: 28, bottom: home.isChatFieldFocused ? 40 : 120),
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.all(Radius.circular(16)),
+                          border: GradientBoxBorder(
+                            gradient: LinearGradient(colors: [
+                              Color.fromARGB(127, 208, 208, 208),
+                              Color.fromARGB(127, 188, 99, 121),
+                              Color.fromARGB(127, 86, 101, 182),
+                              Color.fromARGB(127, 126, 190, 236)
+                            ]),
+                            width: 1,
+                          ),
+                          shape: BoxShape.rectangle,
+                        ),
+                        child: Column(
+                          children: [
+                            Consumer<MessageProvider>(builder: (context, provider, child) {
+                              if (provider.selectedFile != null) {
+                                return Stack(
+                                  children: [
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
+                                        height: MediaQuery.sizeOf(context).width * 0.2,
+                                        width: MediaQuery.sizeOf(context).width * 0.2,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[800],
+                                          image: provider.selectedFileType == 'image'
+                                              ? DecorationImage(
+                                                  image: FileImage(provider.selectedFile!),
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : null,
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Stack(
+                                          children: [
+                                            provider.selectedFileType != 'image'
+                                                ? const Center(
+                                                    child: Icon(
+                                                      Icons.insert_drive_file,
+                                                      color: Colors.white,
+                                                      size: 30,
+                                                    ),
+                                                  )
+                                                : Container(),
+                                            Positioned(
+                                              top: 5,
+                                              right: 5,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  provider.clearSelectedFile();
+                                                },
+                                                child: CircleAvatar(
+                                                  radius: 12,
+                                                  backgroundColor: Colors.grey[700],
+                                                  child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    );
-                                  }
-                                },
-                          icon: provider.sendingMessage
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ],
+                                );
+                              } else {
+                                return Container();
+                              }
+                            }),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.add,
+                                    color: Color(0xFFF7F4F4),
+                                    size: 24.0,
                                   ),
-                                )
-                              : const Icon(
-                                  Icons.send_rounded,
-                                  color: Color(0xFFF7F4F4),
-                                  size: 24.0,
+                                  onPressed: () {
+                                    showModalBottomSheet(
+                                      context: context,
+                                      backgroundColor: Colors.grey[850],
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+                                      ),
+                                      builder: (BuildContext context) {
+                                        return Padding(
+                                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 40),
+                                          child: Wrap(
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(Icons.camera_alt, color: Colors.white),
+                                                title:
+                                                    const Text("Take a Photo", style: TextStyle(color: Colors.white)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  context.read<MessageProvider>().takeImage();
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.photo, color: Colors.white),
+                                                title:
+                                                    const Text("Select a Photo", style: TextStyle(color: Colors.white)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  context.read<MessageProvider>().selectImage();
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.insert_drive_file, color: Colors.white),
+                                                title:
+                                                    const Text("Select a File", style: TextStyle(color: Colors.white)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  context.read<MessageProvider>().selectFile();
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
                                 ),
+                                Expanded(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 150,
+                                    ),
+                                    child: TextField(
+                                      enabled: true,
+                                      controller: textController,
+                                      obscureText: false,
+                                      focusNode: home.chatFieldFocusNode,
+                                      textAlign: TextAlign.start,
+                                      textAlignVertical: TextAlignVertical.top,
+                                      decoration: const InputDecoration(
+                                        hintText: 'Message',
+                                        hintStyle: TextStyle(fontSize: 14.0, color: Colors.grey),
+                                        focusedBorder: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        contentPadding: EdgeInsets.only(top: 8, bottom: 8),
+                                      ),
+                                      maxLines: null,
+                                      keyboardType: TextInputType.multiline,
+                                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  splashColor: Colors.transparent,
+                                  splashRadius: 1,
+                                  onPressed: provider.sendingMessage
+                                      ? null
+                                      : () async {
+                                          String message = textController.text;
+                                          if (message.isEmpty) return;
+                                          if (connectivityProvider.isConnected) {
+                                            _sendMessageUtil(message);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Please check your internet connection and try again'),
+                                                duration: Duration(seconds: 2),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                  icon: provider.sendingMessage
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.send_rounded,
+                                          color: Color(0xFFF7F4F4),
+                                          size: 24.0,
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      maxLines: 8,
-                      minLines: 1,
-                      keyboardType: TextInputType.multiline,
-                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
-                    ),
+                    ],
                   ),
                 );
               }),
