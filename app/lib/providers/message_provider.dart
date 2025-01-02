@@ -27,7 +27,7 @@ class MessageProvider extends ChangeNotifier {
 
   File? selectedFile;
   String selectedFileType = '';
-  String uploadedFileId = '';
+  MessageFile? uploadedFile;
   bool isUploadingFile = false;
 
   void updateAppProvider(AppProvider p) {
@@ -104,7 +104,7 @@ class MessageProvider extends ChangeNotifier {
       setIsUploadingFile(true);
       var res = await uploadFileServer(selectedFile!, selectedFileType, appId: appId);
       if (res != null) {
-        uploadedFileId = res;
+        uploadedFile = res;
       } else {
         clearSelectedFile();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
@@ -182,8 +182,8 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty());
-    var mes =
-        await sendMessageServer(message, appId: appId, fileIds: uploadedFileId.isNotEmpty ? [uploadedFileId] : []);
+    var mes = await sendMessageServer(message,
+        appId: appId, fileIds: uploadedFile != null ? [uploadedFile!.openaiFileId] : []);
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }

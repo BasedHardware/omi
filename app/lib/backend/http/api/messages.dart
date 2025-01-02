@@ -62,7 +62,7 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String
     url: url,
     headers: {},
     method: 'POST',
-    body: jsonEncode({'text': text, 'file_ids': []}),
+    body: jsonEncode({'text': text, 'file_ids': fileIds}),
   ).then((response) {
     if (response == null) throw Exception('Failed to send message');
     if (response.statusCode == 200) {
@@ -121,7 +121,7 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   }
 }
 
-Future<String?> uploadFileServer(File file, String fileType, {String? appId}) async {
+Future<MessageFile?> uploadFileServer(File file, String fileType, {String? appId}) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/files?plugin_id=$appId'),
@@ -134,8 +134,7 @@ Future<String?> uploadFileServer(File file, String fileType, {String? appId}) as
     var response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 200) {
       debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
-      var res = jsonDecode(response.body);
-      return res['id'];
+      return MessageFile.fromJson(jsonDecode(response.body));
     } else {
       debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
       throw Exception('Failed to upload file. Status code: ${response.statusCode}');
