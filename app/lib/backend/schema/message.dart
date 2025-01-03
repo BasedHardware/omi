@@ -59,6 +59,41 @@ class MessageConversation {
   }
 }
 
+class MessageFile {
+  String openaiFileId;
+  String thumbnail;
+  String name;
+  String mimeType;
+
+  MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType);
+
+  static MessageFile fromJson(Map<String, dynamic> json) {
+    return MessageFile(
+      json['openai_file_id'],
+      json['thumbnail'],
+      json['name'],
+      json['mime_type'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'openai_file_id': openaiFileId,
+      'thumbnail': thumbnail,
+      'name': name,
+      'mime_type': mimeType,
+    };
+  }
+
+  String mimeTypeToFileType() {
+    if (mimeType.contains('image')) {
+      return 'image';
+    } else {
+      return 'file';
+    }
+  }
+}
+
 class ServerMessage {
   String id;
   DateTime createdAt;
@@ -68,6 +103,8 @@ class ServerMessage {
 
   String? appId;
   bool fromIntegration;
+
+  List<MessageFile> files;
 
   List<MessageConversation> memories;
   bool askForNps = false;
@@ -81,6 +118,7 @@ class ServerMessage {
     this.appId,
     this.fromIntegration,
     this.memories, {
+    this.files = const [],
     this.askForNps = false,
   });
 
@@ -95,6 +133,7 @@ class ServerMessage {
       json['from_integration'] ?? false,
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? false,
+      files: ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
     );
   }
 
@@ -109,6 +148,7 @@ class ServerMessage {
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
+      'files': files.map((m) => m.toJson()).toList(),
     };
   }
 

@@ -97,6 +97,7 @@ dependencies:
   timeago: ^3.7.0
   app_links: ^6.3.2
   flutter_svg: ^2.0.16
+  file_picker: 8.0.7
 
 
 dependency_overrides:
