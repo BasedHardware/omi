@@ -36,7 +36,7 @@ class DeviceInfoCard extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Text(
-                device?.name ?? 'Friend',
+                device?.name ?? 'Omi DevKit',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
