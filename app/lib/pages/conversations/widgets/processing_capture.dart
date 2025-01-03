@@ -24,27 +24,6 @@ class ConversationCaptureWidget extends StatefulWidget {
 }
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
-  bool _isReady = true;
-  Timer? _readyStateTimer;
-
-  @override
-  void initState() {
-    super.initState();
-
-    //// Warn: Should ensure every deps has started before set ready
-    //_readyStateTimer = Timer(const Duration(seconds: 3), () {
-    //  setState(() {
-    //    _isReady = true;
-    //  });
-    //});
-  }
-
-  @override
-  void dispose() {
-    _readyStateTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer3<CaptureProvider, DeviceProvider, ConnectivityProvider>(
@@ -52,11 +31,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
           ? provider.conversationProvider!.conversations.first.id
           : null;
-
-      // Waiting ready state, 3s for now
-      if (!_isReady) {
-        return const SizedBox.shrink();
-      }
 
       var header = _getConversationHeader(context);
       if (header == null) {
@@ -159,10 +133,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
+          const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(
@@ -181,10 +152,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else {
       left = Row(
         children: [
-          const Text(
-            '🎙️',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
+          const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
             decoration: BoxDecoration(

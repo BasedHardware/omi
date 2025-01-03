@@ -51,7 +51,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 26)),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             const SliverToBoxAdapter(child: SearchWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
             getProcessingConversationsWidget(convoProvider.processingConversations),
@@ -81,7 +81,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
                     if (index == convoProvider.groupedConversations.length) {
-                      print('loading more conversations');
+                      debugPrint('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return const Center(
                           child: Padding(

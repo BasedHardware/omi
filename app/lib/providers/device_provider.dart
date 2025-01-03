@@ -23,6 +23,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
 
+  bool get havingNewFirmware => false; // FIXME
+
   Timer? _disconnectNotificationTimer;
 
   DeviceProvider() {
