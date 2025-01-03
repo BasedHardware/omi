@@ -30,6 +30,17 @@ class _FactsPage extends StatefulWidget {
 }
 
 class _FactsPageState extends State<_FactsPage> {
+  final Map<FactCategory, IconData> categoryIcons = {
+    FactCategory.core: Icons.stars,
+    FactCategory.lifestyle: Icons.local_activity,
+    FactCategory.hobbies: Icons.sports_esports,
+    FactCategory.interests: Icons.favorite,
+    FactCategory.habits: Icons.repeat,
+    FactCategory.work: Icons.work,
+    FactCategory.skills: Icons.psychology,
+    FactCategory.learnings: Icons.school,
+    FactCategory.other: Icons.more_horiz,
+  };
   @override
   void initState() {
     () {
@@ -100,261 +111,273 @@ class _FactsPageState extends State<_FactsPage> {
 
     final contentController = TextEditingController(text: fact?.content.decodeString ?? '');
     final formKey = GlobalKey<FormState>();
+    FactCategory selectedCategory = fact?.category ?? provider.selectedCategory ?? FactCategory.values.first;
 
-    await showDialog(
+    await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        FactCategory selectedCategory = fact?.category ?? provider.selectedCategory ?? FactCategory.values.first;
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
-            setCategory(FactCategory category) {
-              setModalState(() {
-                selectedCategory = category;
-              });
-            }
-
-            return Platform.isIOS
-                ? CupertinoAlertDialog(
-                    content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(
-                      context,
-                      formKey,
-                      contentController,
-                      selectedCategory,
-                      provider,
-                      isEditing: fact != null,
-                      fact: fact,
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.8,
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    height: 4,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade600,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                  )
-                : AlertDialog(
-                    content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(
-                      context,
-                      formKey,
-                      contentController,
-                      selectedCategory,
-                      provider,
-                      isEditing: fact != null,
-                      fact: fact,
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                        ),
+                        Text(
+                          fact == null ? 'Add Fact' : 'Edit Fact',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            if (formKey.currentState!.validate()) {
+                              if (fact != null) {
+                                provider.editFactProvider(fact, contentController.text, selectedCategory);
+                                MixpanelManager().factsPageEditedFact();
+                              } else {
+                                provider.createFactProvider(contentController.text, selectedCategory);
+                                MixpanelManager().factsPageCreatedFact(selectedCategory);
+                              }
+                              Navigator.pop(context);
+                            }
+                          },
+                          child: Text(
+                            fact == null ? 'Add' : 'Save',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
+                  ),
+                  const Divider(height: 1, color: Colors.white12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Label for category
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4, bottom: 8),
+                              child: Text(
+                                'Category',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            // Category Selector
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                showCupertinoModalPopup(
+                                  context: context,
+                                  builder: (BuildContext context) => CupertinoActionSheet(
+                                    title: const Text('Select Category'),
+                                    actions: FactCategory.values.map((category) {
+                                      return CupertinoActionSheetAction(
+                                        onPressed: () {
+                                          setModalState(() {
+                                            selectedCategory = category;
+                                          });
+                                          Navigator.pop(context);
+                                        },
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              categoryIcons[category] ?? Icons.circle,
+                                              color: Colors.white,
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              category.toString().split('.').last[0].toUpperCase() +
+                                                  category.toString().split('.').last.substring(1),
+                                              style: const TextStyle(color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    cancelButton: CupertinoActionSheetAction(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Cancel', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      categoryIcons[selectedCategory] ?? Icons.circle,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        selectedCategory.toString().split('.').last[0].toUpperCase() +
+                                            selectedCategory.toString().split('.').last.substring(1),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 17,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.keyboard_arrow_down,
+                                      color: Colors.white70,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // Label for fact content
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4, bottom: 8),
+                              child: Text(
+                                'Fact',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            // Text Field
+                            CupertinoTextField(
+                              controller: contentController,
+                              placeholder: 'Write your fact here...',
+                              placeholderStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                              style: const TextStyle(color: Colors.white),
+                              maxLines: 7,
+                              minLines: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.all(12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
           },
         );
       },
     );
   }
 
-  Widget _showFactDialogForm(
-    GlobalKey<FormState> formKey,
-    TextEditingController contentController,
-    FactCategory selectedCategory,
-    FactsProvider provider,
-    Function(FactCategory) setCategory,
-  ) {
-    return Form(
-      key: formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Platform.isIOS
-              ? CupertinoTextFormFieldRow(
-                  controller: contentController,
-                  placeholder: 'I love Omi ...',
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.sentences,
-                  textAlign: TextAlign.start,
-                  placeholderStyle: const TextStyle(color: Colors.white54),
-                  style: const TextStyle(color: Colors.white),
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
-                  maxLines: 1,
-                )
-              : TextFormField(
-                  controller: contentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Fact Content',
-                    hintText: 'I love Omi ...',
-                    border: InputBorder.none,
-                  ),
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.sentences,
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
-                  maxLines: 1,
-                  style: const TextStyle(color: Colors.white),
-                ),
-          const SizedBox(height: 16),
-          Platform.isIOS
-              ? CupertinoButton(
-                  child: Text(
-                    selectedCategory.toString().split('.').last,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  onPressed: () {
-                    showCupertinoModalPopup(
-                      context: context,
-                      builder: (BuildContext context) => CupertinoActionSheet(
-                        title: const Text('Select Category'),
-                        actions: FactCategory.values.map((category) {
-                          return CupertinoActionSheetAction(
-                            child: Text(
-                              category.toString().split('.').last,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            onPressed: () {
-                              setCategory(category);
-                              Navigator.pop(context);
-                            },
-                          );
-                        }).toList(),
-                        cancelButton: CupertinoActionSheetAction(
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : DropdownButtonFormField<FactCategory>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                  ),
-                  dropdownColor: Colors.grey.shade800,
-                  style: const TextStyle(color: Colors.white),
-                  items: FactCategory.values.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(
-                        category.toString().split('.').last,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setCategory(value!);
-                  },
-                ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _showFactDialogActions(
-    BuildContext context,
-    GlobalKey<FormState> formKey,
-    TextEditingController contentController,
-    FactCategory selectedCategory,
-    FactsProvider provider, {
-    bool isEditing = false,
-    Fact? fact,
-  }) {
-    onPressed() async {
-      if (formKey.currentState!.validate()) {
-        if (isEditing && fact != null) {
-          provider.editFactProvider(fact, contentController.text, selectedCategory);
-          MixpanelManager().factsPageEditedFact();
-        } else {
-          provider.createFactProvider(contentController.text, selectedCategory);
-          MixpanelManager().factsPageCreatedFact(selectedCategory);
-        }
-        Navigator.pop(context);
-      }
-    }
-
-    return Platform.isIOS
-        ? [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
-            ),
-            CupertinoDialogAction(
-              onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
-            ),
-          ]
-        : [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
-            ),
-          ];
-  }
-
   Widget _buildCategoryChips(FactsProvider provider) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 0, 32, 80),
-      child: Align(
-        alignment: Alignment.center,
-        child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 32,
-          runSpacing: 16,
-          children: provider.categories.map((item) {
-            final category = item.item1;
-            final count = item.item2;
-            return GestureDetector(
-              onTap: () {
-                MixpanelManager().factsPageCategoryOpened(category);
-                setState(() {
-                  provider.setCategory(category);
-                });
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.3),
-                      spreadRadius: 1,
-                      blurRadius: 3,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: provider.categories.length,
+      separatorBuilder: (context, index) => const Divider(
+        color: Colors.white12,
+        height: 1,
+      ),
+      itemBuilder: (context, index) {
+        final category = provider.categories[index].item1;
+        final count = provider.categories[index].item2;
+
+        return InkWell(
+          onTap: () {
+            MixpanelManager().factsPageCategoryOpened(category);
+            setState(() {
+              provider.setCategory(category);
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              children: [
+                Icon(
+                  categoryIcons[category] ?? Icons.circle,
+                  color: Colors.white,
+                  size: 24,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        category.toString().split('.').last[0].toUpperCase() +
-                            category.toString().split('.').last.substring(1),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        radius: 14,
-                        child: Text(
-                          count.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    category.toString().split('.').last[0].toUpperCase() +
+                        category.toString().split('.').last.substring(1),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
+                const SizedBox(width: 8),
+                Text(
+                  count.toString(),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.chevron_right,
+                  color: Colors.white30,
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
