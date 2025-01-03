@@ -50,9 +50,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SizedBox(height: 26)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             const SliverToBoxAdapter(child: SearchWidget()),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
@@ -80,7 +81,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
                     if (index == convoProvider.groupedConversations.length) {
-                      print('loading more conversations');
+                      debugPrint('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return const Center(
                           child: Padding(
@@ -113,9 +114,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     } else {
                       var date = convoProvider.groupedConversations.keys.elementAt(index);
                       List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
-                      bool hasDiscarded = memoriesForDate.any((element) => element.discarded);
-                      bool hasNonDiscarded = memoriesForDate.any((element) => !element.discarded);
-
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -124,9 +122,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             isFirst: index == 0,
                             conversations: memoriesForDate,
                             date: date,
-                            hasNonDiscardedMemories: hasNonDiscarded,
-                            showDiscardedMemories: convoProvider.showDiscardedConversations,
-                            hasDiscardedMemories: hasDiscarded,
                           ),
                         ],
                       );

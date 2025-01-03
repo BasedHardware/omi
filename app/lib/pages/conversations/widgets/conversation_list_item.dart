@@ -102,28 +102,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(
-                        SnackBar(
-                          content: const Text('Conversation deleted successfully 🗑️'),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          action: SnackBarAction(
-                            label: 'Undo',
-                            textColor: Colors.white,
-                            onPressed: () {
-                              provider.undoDeleteConversation(conversation.id, conversationIdx);
-                            },
-                          ),
-                        ),
-                      )
-                      .closed
-                      .then((reason) {
-                    if (reason != SnackBarClosedReason.action) {
-                      if (provider.memoriesToDelete.containsKey(conversation.id)) {
-                        provider.deleteConversationOnServer(conversation.id);
-                      }
-                    }
-                  });
+                  provider.deleteConversationOnServer(conversation.id);
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),
