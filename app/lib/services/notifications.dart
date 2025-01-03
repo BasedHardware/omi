@@ -27,8 +27,8 @@ class NotificationService {
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Friend Notifications',
-    channelDescription: 'Notification channel for Friend',
+    channelName: 'Omi Notifications',
+    channelDescription: 'Notification channel for Omi',
     defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
@@ -109,8 +109,8 @@ class NotificationService {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Your Friend Device Disconnected",
-          'description': "Please keep your app opened to continue using your Friend.",
+          'title': "Your Omi Device Disconnected",
+          'description': "Please keep your app opened to continue using your Omi.",
         },
       );
     } catch (e) {

@@ -66,19 +66,15 @@ class SpeechProfileCardWidget extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios)
+                            Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                           ],
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: 12,
+                    const Positioned(
+                      top: 6,
                       right: 24,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
+                      child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
                     ),
                   ],
                 );
@@ -95,55 +91,49 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (provider.pairedDevice == null || !provider.isConnected)
+        return (provider.pairedDevice == null || !provider.isConnected || !provider.havingNewFirmware)
             ? const SizedBox()
-            : (provider.pairedDevice?.firmwareRevision != '1.0.2')
-                ? const SizedBox()
-                : Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          MixpanelManager().pageOpened('Update Firmware Memories');
-                          IntercomManager.instance.displayFirmwareUpdateArticle();
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade900,
-                            borderRadius: const BorderRadius.all(Radius.circular(12)),
-                          ),
-                          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          padding: const EdgeInsets.all(16),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.upload),
-                                    SizedBox(width: 16),
-                                    Text(
-                                      'Update your Firmware',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ],
+            : Stack(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      MixpanelManager().pageOpened('Update Firmware Memories');
+                      IntercomManager.instance.displayFirmwareUpdateArticle();
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade900,
+                        borderRadius: const BorderRadius.all(Radius.circular(12)),
+                      ),
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: const EdgeInsets.all(16),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Icon(Icons.upload),
+                                SizedBox(width: 16),
+                                Text(
+                                  'Update your Firmware',
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
                                 ),
-                              ),
-                              Icon(Icons.arrow_forward_ios)
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                          Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                        ],
                       ),
-                      Positioned(
-                        top: 12,
-                        right: 24,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                        ),
-                      ),
-                    ],
-                  );
+                    ),
+                  ),
+                  const Positioned(
+                    top: 6,
+                    right: 24,
+                    child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
+                  ),
+                ],
+              );
       },
     );
   }

@@ -183,17 +183,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     DeviceAnimationWidget(animatedBackground: _controller!.index != -1),
-                    _controller!.index == 6 || _controller!.index == 7
-                        ? const SizedBox()
-                        : Center(
-                            child: Text(
-                              'Omi',
-                              style: TextStyle(
-                                  color: Colors.grey.shade200,
-                                  fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ),
+                    // _controller!.index == 6 || _controller!.index == 7
+                    //     ? const SizedBox()
+                    //     : Center(
+                    //         child: Text(
+                    //           'Omi',
+                    //           style: TextStyle(
+                    //               color: Colors.grey.shade200,
+                    //               fontSize: _controller!.index == _controller!.length - 1 ? 28 : 40,
+                    //               fontWeight: FontWeight.w500),
+                    //         ),
+                    //       ),
                     const SizedBox(height: 24),
                     [-1, 5, 6, 7].contains(_controller?.index)
                         ? const SizedBox(
@@ -205,7 +205,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               _controller!.index == _controller!.length - 1
                                   ? 'Your personal growth journey with AI that listens to your every word.'
                                   : 'Your personal growth journey with AI that listens to your every word.',
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                               textAlign: TextAlign.center,
                             ),
                           ),

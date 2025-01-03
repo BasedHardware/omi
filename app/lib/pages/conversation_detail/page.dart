@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -9,12 +8,11 @@ import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/widgets.dart';
 import 'package:friend_private/pages/settings/people.dart';
-import 'package:friend_private/pages/settings/recordings_storage_permission.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/expandable_text.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/widgets/photos_grid.dart';
@@ -23,6 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 
 import 'conversation_detail_provider.dart';
+import 'widgets/name_speaker_sheet.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -48,6 +47,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
+      if (provider.conversation.appResults.isEmpty) {
+        await Provider.of<ConversationProvider>(context, listen: false)
+            .updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
+        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -139,29 +143,29 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 );
               }),
             ),
-            floatingActionButton: Selector<ConversationDetailProvider, int>(
-                selector: (context, provider) => provider.selectedTab,
-                builder: (context, selectedTab, child) {
-                  return selectedTab == 0
-                      ? FloatingActionButton(
-                          backgroundColor: Colors.black,
-                          elevation: 8,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(32)),
-                              side: BorderSide(color: Colors.grey, width: 1)),
-                          onPressed: () {
-                            var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                            Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Transcript copied to clipboard'),
-                              duration: Duration(seconds: 1),
-                            ));
-                            MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
-                          },
-                          child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                        )
-                      : const SizedBox.shrink();
-                }),
+            // floatingActionButton: Selector<ConversationDetailProvider, int>(
+            //     selector: (context, provider) => provider.selectedTab,
+            //     builder: (context, selectedTab, child) {
+            //       return selectedTab == 0
+            //           ? FloatingActionButton(
+            //               backgroundColor: Colors.black,
+            //               elevation: 8,
+            //               shape: const RoundedRectangleBorder(
+            //                   borderRadius: BorderRadius.all(Radius.circular(32)),
+            //                   side: BorderSide(color: Colors.grey, width: 1)),
+            //               onPressed: () {
+            //                 var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+            //                 Clipboard.setData(ClipboardData(text: provider.conversation.getTranscript(generate: true)));
+            //                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            //                   content: Text('Transcript copied to clipboard'),
+            //                   duration: Duration(seconds: 1),
+            //                 ));
+            //                 MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Transcript');
+            //               },
+            //               child: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
+            //             )
+            //           : const SizedBox.shrink();
+            //     }),
             body: Stack(
               children: [
                 Column(
@@ -217,92 +221,117 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     ),
                   ],
                 ),
-                Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
-                  return (
-                    count: provider.conversation.unassignedSegmentsLength(),
-                    shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
-                  );
-                }, builder: (context, value, child) {
-                  if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-                  return Positioned(
-                    bottom: MediaQuery.sizeOf(context).height * 0.06,
-                    left: 86,
-                    child: Material(
-                      elevation: 8,
+              ],
+            ),
+
+            bottomNavigationBar: Container(
+              padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12.0),
+                color: Colors.grey.shade900,
+                gradient: LinearGradient(
+                  colors: [Colors.black54, Colors.black.withOpacity(0)],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
+              child:
+                  Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(selector: (context, provider) {
+                return (
+                  count: provider.conversation.unassignedSegmentsLength(),
+                  shouldShow: provider.showUnassignedFloatingButton && (provider.selectedTab == 0),
+                );
+              }, builder: (context, value, child) {
+                if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
+                return Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.grey.shade900,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 12,
+                    ),
+                    decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       color: Colors.grey.shade900,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 14,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          spreadRadius: 1,
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
                         ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Colors.grey.shade900,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              spreadRadius: 1,
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                InkWell(
-                                  onTap: () {
-                                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                    provider.setShowUnassignedFloatingButton(false);
-                                  },
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            //TODO: when we move the copy button to settings, we can add this to give a cleaner look
-                            // Row(
-                            //   children: [
-                            //     const SizedBox(width: 8),
-                            //     ElevatedButton(
-                            //       style: ElevatedButton.styleFrom(
-                            //         backgroundColor: Colors.white24,
-                            //         shape: RoundedRectangleBorder(
-                            //           borderRadius: BorderRadius.circular(16),
-                            //         ),
-                            //       ),
-                            //       onPressed: () {
-                            //         // Tag action
-                            //       },
-                            //       child: const Text(
-                            //         "Tag",
-                            //         style: TextStyle(
-                            //           color: Colors.white,
-                            //         ),
-                            //       ),
-                            //     ),
-                            //   ],
-                            // ),
-                          ],
-                        ),
-                      ),
+                      ],
                     ),
-                  );
-                }),
-              ],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                provider.setShowUnassignedFloatingButton(false);
+                              },
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white24,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              onPressed: () {
+                                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
+                                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.black,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                  ),
+                                  builder: (context) {
+                                    return NameSpeakerBottomSheet(
+                                      segmentIdx: segmentIdx,
+                                      speakerId: speakerId,
+                                    );
+                                  },
+                                );
+                              },
+                              child: const Text(
+                                "Tag",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ),
           ),
         ),
@@ -431,7 +460,7 @@ class TranscriptWidgets extends StatelessWidget {
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
                     // editSegment: (_) {},
-                    editSegment: (i) {
+                    editSegment: (i, j) {
                       final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                       if (!connectivityProvider.isConnected) {
                         ConnectivityProvider.showNoInternetDialog(context);
@@ -440,14 +469,14 @@ class TranscriptWidgets extends StatelessWidget {
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        isDismissible: provider.editSegmentLoading ? false : true,
+                        backgroundColor: Colors.black,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                         ),
                         builder: (context) {
-                          return EditSegmentWidget(
+                          return NameSpeakerBottomSheet(
+                            speakerId: j,
                             segmentIdx: i,
-                            people: SharedPreferencesUtil().cachedPeople,
                           );
                         },
                       );
@@ -492,11 +521,6 @@ class EditSegmentWidget extends StatelessWidget {
                           onPressed: () {
                             MixpanelManager().unassignedSegment();
                             provider.unassignConversationTranscriptSegment(provider.conversation.id, segmentIdx);
-                            // setModalState(() {
-                            //   personId = null;
-                            //   isUserSegment = false;
-                            // });
-                            // setState(() {});
                             Navigator.pop(context);
                           },
                           child: const Text(
@@ -510,45 +534,6 @@ class EditSegmentWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  !provider.hasAudioRecording ? const SizedBox(height: 12) : const SizedBox(),
-                  !provider.hasAudioRecording
-                      ? GestureDetector(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () {
-                                  Navigator.pop(context);
-                                  routeToPage(context, const RecordingsStoragePermission());
-                                },
-                                'Can\'t be used for speech training',
-                                'This segment can\'t be used for speech training as there is no audio recording available. Check if you have the required permissions for future memories.',
-                                okButtonText: 'View',
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text('Can\'t be used for speech training',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium!
-                                        .copyWith(decoration: TextDecoration.underline)),
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 12),
-                                  child: Icon(Icons.info, color: Colors.grey, size: 20),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox(),
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     title: const Text('Yours'),

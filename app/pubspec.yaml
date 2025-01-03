@@ -42,7 +42,7 @@ dependencies:
   mixpanel_flutter: ^2.2.0
 
   # Utils
-  collection: 1.18.0
+  collection: ^1.18.0
   equatable: 2.0.5
   flutter_blue_plus: 1.33.6
   http: ^1.2.1

@@ -252,3 +252,4 @@ webrtcvad==2.0.10
 websockets==12.0
 yarl==1.9.4
 stripe==11.3.0
+typesense==0.21.0

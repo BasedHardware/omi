@@ -108,7 +108,8 @@ src/recordings
 **/step-versions/
 
 # vscode configuration
-.vscode/
+/.vscode/
+!app/.vscode/launch.json
 !.vscode/extensions.json
 
 # test output

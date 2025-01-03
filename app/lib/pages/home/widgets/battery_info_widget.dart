@@ -33,12 +33,8 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.transparent,
+                      color: Colors.grey.shade900,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.grey,
-                        width: 1,
-                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -59,13 +55,6 @@ class BatteryInfoWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8.0),
-                        isMemoriesPage
-                            ? Text(
-                                deviceProvider.connectedDevice?.name ?? SharedPreferencesUtil().deviceName,
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                              )
-                            : const SizedBox.shrink(),
-                        isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
                         Text(
                           deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
@@ -86,9 +75,8 @@ class BatteryInfoWidget extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
+                    color: Colors.grey.shade900,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey, width: 1),
                   ),
                   child: Row(
                     children: [

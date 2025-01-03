@@ -206,8 +206,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(
-                            'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                        content:
+                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
@@ -222,4 +222,72 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       );
     });
   }
+}
+
+List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+  var provider = Provider.of<DeviceProvider>(context, listen: true);
+
+  return [
+    ListTile(
+      title: const Text('Device Name'),
+      subtitle: Text(device?.name ?? 'Omi DevKit'),
+    ),
+    ListTile(
+      title: const Text('Device ID'),
+      subtitle: Text(device?.id ?? '12AB34CD:56EF78GH'),
+    ),
+    GestureDetector(
+      onTap: () {
+        routeToPage(context, FirmwareUpdate(device: device));
+      },
+      child: ListTile(
+        title: const Text('Update Latest Version'),
+        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
+      ),
+    ),
+    GestureDetector(
+      onTap: () {
+        if (!provider.isDeviceV2Connected) {
+          showDialog(
+            context: context,
+            builder: (c) => getDialog(
+              context,
+              () => Navigator.of(context).pop(),
+              () => {},
+              'V2 undetected',
+              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+              singleButton: true,
+            ),
+          );
+        } else {
+          var page = const SyncPage();
+          routeToPage(context, page);
+        }
+      },
+      child: const ListTile(
+        title: Text('SD Card Sync'),
+        subtitle: Text('Import audio files from SD Card'),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+        ),
+      ),
+    ),
+    ListTile(
+      title: const Text('Hardware Revision'),
+      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
+    ),
+    ListTile(
+      title: const Text('Model Number'),
+      subtitle: Text(device?.modelNumber ?? 'Omi DevKit'),
+    ),
+    ListTile(
+      title: const Text('Manufacturer Name'),
+      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
+    ),
+  ];
 }

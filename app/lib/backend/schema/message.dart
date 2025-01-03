@@ -112,14 +112,14 @@ class ServerMessage {
     };
   }
 
-  static ServerMessage empty() {
+  static ServerMessage empty({String? appId}) {
     return ServerMessage(
       '0000',
       DateTime.now(),
       '',
       MessageSender.ai,
       MessageType.text,
-      null,
+      appId,
       false,
       [],
     );
