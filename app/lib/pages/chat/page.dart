@@ -399,6 +399,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       enabled: true,
                                       controller: textController,
                                       obscureText: false,
+                                      onChanged: (value) {
+                                        setShowSendButton();
+                                      },
                                       focusNode: home.chatFieldFocusNode,
                                       textAlign: TextAlign.start,
                                       textAlignVertical: TextAlignVertical.top,
@@ -410,36 +413,39 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         contentPadding: EdgeInsets.only(top: 8, bottom: 8),
                                       ),
                                       maxLines: null,
-                                          keyboardType: TextInputType.multiline,
-                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
+                                      keyboardType: TextInputType.multiline,
+                                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
                                     ),
                                   ),
                                 ),
-                               !shouldShowSuffixIcon(provider) ? const SizedBox.shrink() : IconButton(
-                                  splashColor: Colors.transparent,
-                                  splashRadius: 1,
-                                  onPressed: provider.sendingMessage
-                                      ? null
-                                      : () async {
-                                          String message = textController.text;
-                                          if (message.isEmpty) return;
-                                          if (connectivityProvider.isConnected) {
-                                            _sendMessageUtil(message);
-                                          } else {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Please check your internet connection and try again'),
-                                                duration: Duration(seconds: 2),
-                                              ),
-                                            );
-                                          }
-                                        },
-                                  icon: const Icon(
+                                !shouldShowSuffixIcon(provider) && !shouldShowSendButton(provider)
+                                    ? const SizedBox.shrink()
+                                    : IconButton(
+                                        splashColor: Colors.transparent,
+                                        splashRadius: 1,
+                                        onPressed: provider.sendingMessage
+                                            ? null
+                                            : () async {
+                                                String message = textController.text;
+                                                if (message.isEmpty) return;
+                                                if (connectivityProvider.isConnected) {
+                                                  _sendMessageUtil(message);
+                                                } else {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content:
+                                                          Text('Please check your internet connection and try again'),
+                                                      duration: Duration(seconds: 2),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                        icon: const Icon(
                                           Icons.arrow_upward_outlined,
                                           color: Color(0xFFF7F4F4),
                                           size: 20.0,
                                         ),
-                                ),
+                                      ),
                               ],
                             ),
                           ],
