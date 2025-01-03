@@ -23,6 +23,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
 
+  bool get havingNewFirmware => false; // FIXME
+
   Timer? _disconnectNotificationTimer;
 
   DeviceProvider() {
@@ -220,12 +222,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     print('after resetState inside initiateConnectionListener');
 
-    InstabugLog.logInfo('Friend Device Disconnected');
+    InstabugLog.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
       NotificationService.instance.createNotification(
-        title: 'Your Friend Device Disconnected',
-        body: 'Please reconnect to continue using your Friend.',
+        title: 'Your Omi Device Disconnected',
+        body: 'Please reconnect to continue using your Omi.',
       );
     });
     MixpanelManager().deviceDisconnected();

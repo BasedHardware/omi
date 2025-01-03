@@ -181,7 +181,7 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
-    messages.insert(0, ServerMessage.empty());
+    messages.insert(0, ServerMessage.empty(appId: appId));
     var mes = await sendMessageServer(message,
         appId: appId, fileIds: uploadedFile != null ? [uploadedFile!.openaiFileId] : []);
     if (messages[0].id == '0000') {

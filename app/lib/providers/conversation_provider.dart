@@ -15,7 +15,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   bool isLoadingConversations = false;
   bool hasNonDiscardedConversations = true;
-  bool showDiscardedConversations = false;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -142,14 +141,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     }
   }
 
-  void toggleDiscardConversations() {
-    MixpanelManager().showDiscardedMemoriesToggled(!SharedPreferencesUtil().showDiscardedMemories);
-    SharedPreferencesUtil().showDiscardedMemories = !SharedPreferencesUtil().showDiscardedMemories;
-    showDiscardedConversations = SharedPreferencesUtil().showDiscardedMemories;
-    // filterGroupedMemories('');
-    notifyListeners();
-  }
-
   void setLoadingConversations(bool value) {
     isLoadingConversations = value;
     notifyListeners();
@@ -176,13 +167,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void _groupSearchConvosByDateWithoutNotify() {
     groupedConversations = {};
     for (var conversation in searchedConversations) {
-      // if (SharedPreferencesUtil().showDiscardedMemories && conversation.discarded && !conversation.isNew) continue;
       var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
       if (!groupedConversations.containsKey(date)) {
         groupedConversations[date] = [];
       }
       groupedConversations[date]?.add(conversation);
     }
+
     // Sort
     for (final date in groupedConversations.keys) {
       groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -192,13 +183,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void _groupConversationsByDateWithoutNotify() {
     groupedConversations = {};
     for (var conversation in conversations) {
-      // if (SharedPreferencesUtil().showDiscardedMemories && conversation.discarded && !conversation.isNew) continue;
       var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
       if (!groupedConversations.containsKey(date)) {
         groupedConversations[date] = [];
       }
       groupedConversations[date]?.add(conversation);
     }
+
     // Sort
     for (final date in groupedConversations.keys) {
       groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));

@@ -37,6 +37,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool _showDeleteOption = false;
   bool isScrollingDown = false;
 
+  bool _showSendButton = false;
+
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
@@ -88,9 +90,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
+  void setShowSendButton() {
+    if (_showSendButton != textController.text.isNotEmpty) {
+      setState(() {
+        _showSendButton = textController.text.isNotEmpty;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
@@ -236,6 +247,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ),
               ),
               Consumer<HomeProvider>(builder: (context, home, child) {
+                bool shouldShowSuffixIcon(MessageProvider p) {
+                  return !p.sendingMessage && _showSendButton;
+                }
+
+                bool shouldShowSendButton(MessageProvider p) {
+                  return !p.sendingMessage && _showSendButton;
+                }
+
                 return Align(
                   alignment: Alignment.bottomCenter,
                   child: Column(
@@ -391,12 +410,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         contentPadding: EdgeInsets.only(top: 8, bottom: 8),
                                       ),
                                       maxLines: null,
-                                      keyboardType: TextInputType.multiline,
-                                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200),
+                                          keyboardType: TextInputType.multiline,
+                      style: TextStyle(fontSize: 14.0, color: Colors.grey.shade200, height: 24 / 14),
                                     ),
                                   ),
                                 ),
-                                IconButton(
+                               !shouldShowSuffixIcon(provider) ? const SizedBox.shrink() : IconButton(
                                   splashColor: Colors.transparent,
                                   splashRadius: 1,
                                   onPressed: provider.sendingMessage
@@ -415,18 +434,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             );
                                           }
                                         },
-                                  icon: provider.sendingMessage
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.send_rounded,
+                                  icon: const Icon(
+                                          Icons.arrow_upward_outlined,
                                           color: Color(0xFFF7F4F4),
-                                          size: 24.0,
+                                          size: 20.0,
                                         ),
                                 ),
                               ],
