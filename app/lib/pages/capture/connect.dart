@@ -17,7 +17,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: const Text('Connect Your Friend'),
+          title: const Text('Connect Your Omi'),
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             IconButton(
