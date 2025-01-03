@@ -40,25 +40,21 @@ class _SearchWidgetState extends State<SearchWidget> {
         },
         decoration: InputDecoration(
           hintText: 'Search Conversations',
-          hintStyle: TextStyle(color: Colors.grey.shade500),
-          filled: false,
-    
-          // fillColor: Colors.grey[900],
+          hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+          filled: true,
+          fillColor: Colors.grey.shade900,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade800, width: 0.5),
+            borderRadius: BorderRadius.circular(16),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade500, width: 0.5),
+            borderRadius: BorderRadius.circular(16),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade500, width: 0.5),
+            borderRadius: BorderRadius.circular(16),
           ),
           prefixIcon: Icon(
             Icons.search,
-            color: Colors.grey.shade500,
+            color: Colors.white60,
           ),
           suffixIcon: showClearButton
               ? GestureDetector(
