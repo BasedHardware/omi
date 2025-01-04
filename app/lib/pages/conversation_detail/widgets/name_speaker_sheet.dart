@@ -259,12 +259,9 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         } catch (e) {}
                       } else {
                         MixpanelManager().assignedSegment(selectedPerson == 'user' ? 'User' : 'User Person');
-                        for (var element in provider.conversation.transcriptSegments) {
-                          if (element.speakerId == widget.speakerId) {
-                            element.isUser = selectedPerson == 'user';
-                            element.personId = selectedPerson == 'user' ? null : selectedPerson;
-                          }
-                        }
+                        provider.conversation.transcriptSegments[widget.segmentIdx].isUser = selectedPerson == 'user';
+                        provider.conversation.transcriptSegments[widget.segmentIdx].personId =
+                            selectedPerson == 'user' ? null : selectedPerson;
                         await assignConversationTranscriptSegment(provider.conversation.id, widget.segmentIdx,
                             personId: selectedPerson == 'user' ? null : selectedPerson);
 
