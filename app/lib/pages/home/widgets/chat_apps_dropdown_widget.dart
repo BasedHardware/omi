@@ -36,7 +36,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: PopupMenuButton<String>(
-              iconSize: 132,
+              iconSize: 164,
               icon: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -46,12 +46,12 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   const SizedBox(width: 8),
                   Container(
                     constraints: const BoxConstraints(
-                      maxWidth: 68, // 100-32
+                      maxWidth: 100,
                     ),
                     child: Text(
                       selectedApp != null ? selectedApp.name : "Omi",
                       style: const TextStyle(color: Colors.white, fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
+                      overflow: TextOverflow.fade,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -66,7 +66,8 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 maxWidth: 250.0,
                 maxHeight: 350.0,
               ),
-              offset: Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 96),
+              offset:
+                  Offset((MediaQuery.sizeOf(context).width - 250) / 2 / MediaQuery.devicePixelRatioOf(context), 114),
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
               onSelected: (String? val) async {
                 if (val == null || val == provider.selectedChatAppId) {
@@ -272,28 +273,29 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             height: 40,
             value: app.id,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 _getAppAvatar(app),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Container(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          app.name.length > 18 ? '${app.name.substring(0, 15)}...' : app.name,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          overflow: TextOverflow.fade,
+                          app.name,
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                         ),
-                        selectedApp?.id == app.id
-                            ? const SizedBox(
-                                width: 24,
-                                child: Icon(Icons.check, color: Colors.white60, size: 16),
-                              )
-                            : const SizedBox.shrink(),
-                      ],
-                    ),
+                      ),
+                      selectedApp?.id == app.id
+                          ? const SizedBox(
+                              width: 24,
+                              child: Icon(Icons.check, color: Colors.white60, size: 16),
+                            )
+                          : const SizedBox.shrink(),
+                    ],
                   ),
                 ),
               ],
