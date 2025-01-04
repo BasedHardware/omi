@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
@@ -30,67 +31,142 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       child: Consumer<AppProvider>(builder: (context, provider, child) {
         return Padding(
           padding: const EdgeInsets.only(left: 0),
-          child: provider.apps.where((p) => p.enabled).isEmpty
-              ? GestureDetector(
-                  onTap: () {
-                    MixpanelManager().pageOpened('Chat Apps');
-                    // routeToPage(context, const AppsPage(filterChatOnly: true));
-                    context.read<HomeProvider>().setIndex(2);
-                    controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                  },
-                  child: const Row(
-                    children: [
-                      Icon(size: 20, Icons.chat, color: Colors.white),
-                      SizedBox(width: 10),
-                      Text(
-                        'Enable Apps',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                      ),
-                    ],
-                  ),
-                )
-              : Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DropdownButton<String>(
-                    menuMaxHeight: 350,
-                    value: provider.getSelectedApp()?.id ?? "no_selected",
-                    onChanged: (s) async {
-                      if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
-                        // routeToPage(context, const AppsPage(filterChatOnly: true));
-                        MixpanelManager().pageOpened('Chat Apps');
-                        context.read<HomeProvider>().setIndex(2);
-                        controller?.animateToPage(2,
-                            duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                        return;
-                      }
-                      if (s == null || s == provider.selectedChatAppId) return;
-                      provider.setSelectedChatAppId(s);
-                      await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
-                      var app = provider.getSelectedApp();
-                      if (context.read<MessageProvider>().messages.isEmpty) {
-                        context.read<MessageProvider>().sendInitialAppMessage(app);
-                      }
-                    },
-                    focusNode: focusNode,
-                    // icon: Container(),
-                    alignment: Alignment.center,
-                    dropdownColor: Colors.black,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    underline: Container(height: 0, color: Colors.transparent),
-                    isExpanded: false,
-                    itemHeight: 48,
-                    padding: EdgeInsets.zero,
-                    items: _getAppsDropdownItems(context, provider),
-                  ),
-                ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: PopupMenuButton<String>(
+              icon: Container(
+                child: Text("yoh"),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 250.0,
+                maxWidth: 250.0,
+              ),
+              offset: Offset((MediaQuery.sizeOf(context).width - 250) / 2, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+              onSelected: (s) async {
+                if ((s == 'no_selected' && provider.apps.where((p) => p.enabled).isEmpty) || s == 'enable') {
+                  // routeToPage(context, const AppsPage(filterChatOnly: true));
+                  MixpanelManager().pageOpened('Chat Apps');
+                  context.read<HomeProvider>().setIndex(2);
+                  controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+                  return;
+                }
+                if (s == null || s == provider.selectedChatAppId) return;
+                provider.setSelectedChatAppId(s);
+                await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
+                var app = provider.getSelectedApp();
+                if (context.read<MessageProvider>().messages.isEmpty) {
+                  context.read<MessageProvider>().sendInitialAppMessage(app);
+                }
+              },
+              itemBuilder: (BuildContext context) {
+                return _getAppsDropdownItems(context, provider);
+              },
+              color: Colors.grey.shade900,
+            ),
+          ),
         );
       }),
     );
   }
 
   _getAppsDropdownItems(BuildContext context, AppProvider provider) {
+    var selectedApp = provider.apps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+    var selectedAppName = selectedApp != null ? selectedApp.name : "Omi";
     var items = [
-          DropdownMenuItem<String>(
+          PopupMenuItem<String>(
+            value: '#',
+            height: 40,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 32),
+                  child: Text(
+                    selectedAppName.length > 18
+                        ? 'Chat with ' + '${selectedAppName.substring(0, 18)}...'
+                        : 'Chat with ' + selectedAppName,
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            height: 1,
+            child: Divider(
+              height: 1,
+            ),
+          ),
+          PopupMenuItem<String>(
+            height: 40,
+            value: 'clear_chat',
+            child: Padding(
+              padding: const EdgeInsets.only(left: 32),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+                  SizedBox(
+                    width: 24,
+                    child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                  ),
+                ],
+              ),
+            ),
+          )
+        ] +
+        [
+          PopupMenuItem<String>(
+            height: 1,
+            child: Divider(
+              height: 1,
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'enable',
+            height: 40,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        SizedBox(
+                          width: 24,
+                          child: Icon(Icons.apps, color: Colors.white, size: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        ] +
+        [
+          PopupMenuItem<String>(
+            height: 1,
+            child: Divider(
+              height: 1,
+            ),
+          ),
+          PopupMenuItem<String>(
+            height: 40,
             value: 'no_selected',
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -118,7 +194,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  provider.apps.where((p) => p.enabled).isEmpty ? 'Enable Apps' : 'Omi',
+                  'Omi',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                 ),
                 // const SizedBox(width: 40),
@@ -127,8 +203,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             ),
           )
         ] +
-        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<DropdownMenuItem<String>>((App app) {
-          return DropdownMenuItem<String>(
+        provider.apps.where((p) => p.enabled && p.worksWithChat()).map<PopupMenuItem<String>>((App app) {
+          return PopupMenuItem<String>(
+            height: 40,
             value: app.id,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -163,28 +240,11 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 Text(
                   app.name.length > 18 ? '${app.name.substring(0, 18)}...' : app.name + ' ' * (18 - app.name.length),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                )
+                ),
               ],
             ),
           );
         }).toList();
-    if (provider.apps.where((p) => p.enabled).isNotEmpty) {
-      items.add(const DropdownMenuItem<String>(
-        value: 'enable',
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.transparent,
-              maxRadius: 12,
-              child: Icon(Icons.star, color: Colors.purpleAccent),
-            ),
-            SizedBox(width: 8),
-            Text('Enable Apps   ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16))
-          ],
-        ),
-      ));
-    }
     return items;
   }
 }
