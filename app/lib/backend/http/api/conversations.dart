@@ -37,10 +37,15 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 }
 
 Future<List<ServerConversation>> getConversations(
-    {int limit = 50, int offset = 0, List<ConversationStatus> statuses = const []}) async {
+    {int limit = 50, int offset = 0, List<ConversationStatus> statuses = const [], int? segment_limit}) async {
+
+  var url = '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (segment_limit != null) {
+    url += '&segment_limit=$segment_limit';
+  }
+
   var response = await makeApiCall(
-      url:
-          '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+      url: url,
       headers: {},
       method: 'GET',
       body: '');

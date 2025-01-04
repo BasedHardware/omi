@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
     speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, apps, custom_auth, payment
+from utils.other.timeout import TimeoutMiddleware
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -39,6 +40,16 @@ app.include_router(apps.router)
 app.include_router(custom_auth.router)
 
 app.include_router(payment.router)
+
+
+methods_timeout = {
+        "GET": os.environ.get('HTTP_GET_TIMEOUT'),
+        "PUT": os.environ.get('HTTP_PUT_TIMEOUT'),
+        "PATCH": os.environ.get('HTTP_PATCH_TIMEOUT'),
+        "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
+        }
+
+app.add_middleware(TimeoutMiddleware,methods_timeout=methods_timeout)
 
 modal_app = App(
     name='backend',
