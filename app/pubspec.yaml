@@ -73,7 +73,7 @@ dependencies:
   flutter_background_service_platform_interface: 5.1.1
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
-  growthbook_sdk_flutter: ^3.9.2
+  growthbook_sdk_flutter: 3.9.2
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
