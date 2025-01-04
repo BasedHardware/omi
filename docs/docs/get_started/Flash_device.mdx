@@ -1,6 +1,6 @@
 ---
 title: Update OMI Firmware
-description: 'This document outlines the process of updating the OMI firmware.'
+description: "This document outlines the process of updating the OMI firmware."
 ---
 
 To update the firmware of your OMI device, navigate to the OMI App:  
@@ -12,10 +12,15 @@ To update the firmware of your OMI device, navigate to the OMI App:
 
 ### Video Tutorial
 
-<div style={{ textAlign: 'center' }}>
+<div style={{ textAlign: "center" }}>
   <video width="100%" height="auto" controls>
-    <source src="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov" type="video/mp4" />
-    Your browser does not support the video tag. <a href="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov">Click here to watch the video</a>.
+    <source
+      src="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov"
+      type="video/mp4"
+    />
+    Your browser does not support the video tag. <a href="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov">
+      Click here to watch the video
+    </a>.
   </video>
 </div>
 
@@ -34,14 +39,24 @@ To update the firmware of your OMI device, navigate to the OMI App:
 
 ### Putting OMI into DFU Mode
 
-1. **Locate the DFU Button:**  
-   - For Developer Kit 2, remove the lid to access the button.  
-   - For Developer Kit 1, see the image below for button location:  
-     <img src="/images/dfu_dev_kit_reset_button.png" title="DFU Button Location" width="300" />
-2. **Prepare a Pin:** Use a small pin or similar tool to press the tiny button.
-3. **Press the DFU Button Twice:** Quickly press the button twice in succession using the pin.
-4. **Check for Recognition:** After pressing the button, your computer should recognize a new drive.
-5. **Verify the Drive Name:** Look for a drive named `/Volumes/XIAO-SENSE` on your computer. This confirms the device is in DFU mode.
+1. Plug the OMI device into your computer using a USB cable.
+2. **Locate the DFU Button:**
+   - For Developer Kit 2, remove the lid to access the button which is labeled "RST"
+     - <img
+         src="/images/dk2_rst_button.jpeg"
+         title="DFU Button Location, DevKit 2"
+         width="300"
+       />
+   - For Developer Kit 1, see the image below for button location:
+     - <img
+         src="/images/dfu_dev_kit_reset_button.png"
+         title="DFU Button Location, DevKit 1"
+         width="300"
+       />
+3. **Prepare a Pin:** Use a small pin or similar tool to press the tiny button.
+4. **Press the DFU Button Twice:** Quickly press the button twice in succession using the pin.
+5. **Check for Recognition:** After pressing the button, your computer should recognize a new drive.
+6. **Verify the Drive Name:** Look for a drive named `/Volumes/XIAO-SENSE` on your computer. This confirms the device is in DFU mode.
 
 ---
 
