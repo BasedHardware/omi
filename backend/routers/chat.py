@@ -106,6 +106,8 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id in ['null', '']:
+        plugin_id = None
     err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')

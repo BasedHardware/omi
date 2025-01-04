@@ -40,7 +40,7 @@ Future<List<ServerMessage>> getMessagesServer({
 Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   if (pluginId == 'no_selected') pluginId = null;
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/messages?plugin_id=$pluginId',
+    url: '${Env.apiBaseUrl}v1/messages?plugin_id=${pluginId ?? ''}',
     headers: {},
     method: 'DELETE',
     body: '',
