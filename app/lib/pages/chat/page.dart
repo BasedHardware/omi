@@ -121,48 +121,49 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     ),
                   ),
                 )
-              : AnimatedMiniBanner(
-                  showAppBar: _showDeleteOption,
-                  height: 80,
-                  child: Container(
-                    width: double.infinity,
-                    height: 40,
-                    color: Theme.of(context).primaryColor,
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 20),
-                        const Spacer(),
-                        InkWell(
-                          onTap: () async {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) {
-                                return getDialog(context, () {
-                                  Navigator.of(context).pop();
-                                }, () {
-                                  setState(() {
-                                    _showDeleteOption = false;
-                                  });
-                                  context.read<MessageProvider>().clearChat();
-                                  Navigator.of(context).pop();
-                                }, "Clear Chat?",
-                                    "Are you sure you want to clear the chat? This action cannot be undone.");
-                              },
-                            );
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Text(
-                              "Clear Chat  \u{1F5D1}",
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                      ],
-                    ),
-                  ),
-                ),
+              : null,
+          // AnimatedMiniBanner(
+          //   showAppBar: _showDeleteOption,
+          //   height: 80,
+          //   child: Container(
+          //     width: double.infinity,
+          //     height: 40,
+          //     color: Theme.of(context).primaryColor,
+          //     child: Row(
+          //       children: [
+          //         const SizedBox(width: 20),
+          //         const Spacer(),
+          //         InkWell(
+          //           onTap: () async {
+          //             showDialog(
+          //               context: context,
+          //               builder: (ctx) {
+          //                 return getDialog(context, () {
+          //                   Navigator.of(context).pop();
+          //                 }, () {
+          //                   setState(() {
+          //                     _showDeleteOption = false;
+          //                   });
+          //                   context.read<MessageProvider>().clearChat();
+          //                   Navigator.of(context).pop();
+          //                 }, "Clear Chat?",
+          //                     "Are you sure you want to clear the chat? This action cannot be undone.");
+          //               },
+          //             );
+          //           },
+          //           child: const Padding(
+          //             padding: EdgeInsets.all(8.0),
+          //             child: Text(
+          //               "Clear Chat  \u{1F5D1}",
+          //               style: TextStyle(color: Colors.white, fontSize: 14),
+          //             ),
+          //           ),
+          //         ),
+          //         const SizedBox(width: 20),
+          //       ],
+          //     ),
+          //   ),
+          // ),
           body: Stack(
             children: [
               Align(
