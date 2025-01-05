@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 class SearchResultHeaderWidget extends StatefulWidget {
   const SearchResultHeaderWidget({super.key});
@@ -20,13 +21,16 @@ class _SearchResultHeaderWidgetState extends State<SearchResultHeaderWidget> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: onSearches
             ? (isSearching
-                ? const Text(
-                    "Search your converstations",
-                    style: TextStyle(color: Colors.white, fontSize: 14),
-                  )
+                ? Shimmer.fromColors(
+                    baseColor: Colors.white,
+                    highlightColor: Colors.grey,
+                    child: const Text(
+                      "Searching your conversations",
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ))
                 : provider.totalSearchPages > 0
-                    ? Text(
-                        "Search result ${provider.currentSearchPage}/${provider.totalSearchPages}",
+                    ? const Text(
+                        "Search results",
                         style: const TextStyle(color: Colors.white, fontSize: 14),
                       )
                     : const SizedBox.shrink())
