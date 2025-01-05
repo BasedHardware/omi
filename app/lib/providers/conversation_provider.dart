@@ -77,8 +77,10 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       totalSearchPages = 0;
       searchedConversations = conversations;
       groupSearchConvosByDate();
+      notifyListeners();
       return;
     }
+
     if (query == previousQuery) {
       return;
     }
