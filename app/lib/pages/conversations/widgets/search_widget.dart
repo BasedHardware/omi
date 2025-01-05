@@ -52,15 +52,15 @@ class _SearchWidgetState extends State<SearchWidget> {
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          prefixIcon: Icon(
+          prefixIcon: const Icon(
             Icons.search,
             color: Colors.white60,
           ),
           suffixIcon: showClearButton
               ? GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     var provider = Provider.of<ConversationProvider>(context, listen: false);
-                    provider.resetGroupedConvos();
+                    await provider.searchConversations(""); // clear
                     searchController.clear();
                     setShowClearButton();
                   },
