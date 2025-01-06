@@ -167,6 +167,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   }
 
   Future getInitialConversations() async {
+    // reset search
+    previousQuery = "";
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    searchedConversations = [];
+
+    // fetch convos
     conversations = await getConversationsFromServer();
 
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
