@@ -28,51 +28,69 @@ class _SearchWidgetState extends State<SearchWidget> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: TextFormField(
-        controller: searchController,
-        focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
-        onChanged: (value) {
-          var provider = Provider.of<ConversationProvider>(context, listen: false);
-          _debouncer.run(() async {
-            await provider.searchConversations(value);
-          });
-          setShowClearButton();
-        },
-        decoration: InputDecoration(
-          hintText: 'Search Conversations',
-          hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
-          filled: true,
-          fillColor: Colors.grey.shade900,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: searchController,
+              focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
+              onChanged: (value) {
+                var provider = Provider.of<ConversationProvider>(context, listen: false);
+                _debouncer.run(() async {
+                  await provider.searchConversations(value);
+                });
+                setShowClearButton();
+              },
+              decoration: InputDecoration(
+                hintText: 'Search Conversations',
+                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+                filled: true,
+                fillColor: Colors.grey.shade900,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.white60,
+                ),
+                suffixIcon: showClearButton
+                    ? GestureDetector(
+                        onTap: () async {
+                          var provider = Provider.of<ConversationProvider>(context, listen: false);
+                          await provider.searchConversations(""); // clear
+                          searchController.clear();
+                          setShowClearButton();
+                        },
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          prefixIcon: const Icon(
-            Icons.search,
-            color: Colors.white60,
-          ),
-          suffixIcon: showClearButton
-              ? GestureDetector(
-                  onTap: () async {
-                    var provider = Provider.of<ConversationProvider>(context, listen: false);
-                    await provider.searchConversations(""); // clear
-                    searchController.clear();
-                    setShowClearButton();
-                  },
-                  child: const Icon(
-                    Icons.close,
-                    color: Colors.white,
-                  ),
-                )
-              : null,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        ),
-        style: const TextStyle(color: Colors.white),
+          Consumer<ConversationProvider>(
+              builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+            return IconButton(
+              onPressed: convoProvider.toggleDiscardConversations,
+              icon: Icon(
+                convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
+                color: Colors.white,
+                size: 24,
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
