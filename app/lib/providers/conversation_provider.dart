@@ -154,9 +154,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     if (previousQuery.isNotEmpty) {
       groupSearchConvosByDate();
-      return;
+    } else {
+      groupConversationsByDate();
     }
-    groupConversationsByDate();
 
     MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
   }
