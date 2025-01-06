@@ -472,7 +472,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
                       );
                     } else {
-                      return Flexible(
+                      return Expanded(
                         child: Row(
                           children: [
                             const Spacer(),
@@ -480,7 +480,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               recordingLanguage: provider.recordingLanguage,
                               setRecordingLanguage: (language) {
                                 provider.setRecordingLanguage(language);
-
                                 // Notify capture provider
                                 if (context.mounted) {
                                   context.read<CaptureProvider>().onRecordProfileSettingChanged();
