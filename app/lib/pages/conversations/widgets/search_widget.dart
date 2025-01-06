@@ -84,7 +84,7 @@ class _SearchWidgetState extends State<SearchWidget> {
             return IconButton(
               onPressed: convoProvider.toggleDiscardConversations,
               icon: Icon(
-                convoProvider.showDiscardedConversations ? Icons.filter_list_off_sharp : Icons.filter_list,
+                convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
                 color: Colors.white,
                 size: 24,
               ),
