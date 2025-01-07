@@ -281,51 +281,61 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         child: Column(
                           children: [
                             Consumer<MessageProvider>(builder: (context, provider, child) {
-                              if (provider.selectedFile != null) {
+                              if (provider.selectedFiles.isNotEmpty) {
                                 return Stack(
                                   children: [
                                     Align(
                                       alignment: Alignment.centerLeft,
-                                      child: Container(
-                                        margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
-                                        height: MediaQuery.sizeOf(context).width * 0.2,
-                                        width: MediaQuery.sizeOf(context).width * 0.2,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[800],
-                                          image: provider.selectedFileType == 'image'
-                                              ? DecorationImage(
-                                                  image: FileImage(provider.selectedFile!),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: Stack(
-                                          children: [
-                                            provider.selectedFileType != 'image'
-                                                ? const Center(
-                                                    child: Icon(
-                                                      Icons.insert_drive_file,
-                                                      color: Colors.white,
-                                                      size: 30,
-                                                    ),
-                                                  )
-                                                : Container(),
-                                            Positioned(
-                                              top: 5,
-                                              right: 5,
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  provider.clearSelectedFile();
-                                                },
-                                                child: CircleAvatar(
-                                                  radius: 12,
-                                                  backgroundColor: Colors.grey[700],
-                                                  child: const Icon(Icons.close, size: 16, color: Colors.white),
-                                                ),
+                                      child: SizedBox(
+                                        height: MediaQuery.sizeOf(context).height * 0.118,
+                                        child: ListView.builder(
+                                          itemCount: provider.selectedFiles.length,
+                                          scrollDirection: Axis.horizontal,
+                                          shrinkWrap: true,
+                                          itemBuilder: (ctx, idx) {
+                                            return Container(
+                                              margin: const EdgeInsets.only(bottom: 10, top: 10, left: 10),
+                                              height: MediaQuery.sizeOf(context).width * 0.2,
+                                              width: MediaQuery.sizeOf(context).width * 0.2,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[800],
+                                                image: provider.selectedFileTypes[idx] == 'image'
+                                                    ? DecorationImage(
+                                                        image: FileImage(provider.selectedFiles[idx]),
+                                                        fit: BoxFit.cover,
+                                                      )
+                                                    : null,
+                                                borderRadius: BorderRadius.circular(10),
                                               ),
-                                            ),
-                                          ],
+                                              child: Stack(
+                                                children: [
+                                                  provider.selectedFileTypes[idx] != 'image'
+                                                      ? const Center(
+                                                          child: Icon(
+                                                            Icons.insert_drive_file,
+                                                            color: Colors.white,
+                                                            size: 30,
+                                                          ),
+                                                        )
+                                                      : Container(),
+                                                  Positioned(
+                                                    top: 5,
+                                                    right: 5,
+                                                    child: GestureDetector(
+                                                      onTap: () {
+                                                        provider.clearSelectedFile(idx);
+                                                      },
+                                                      child: CircleAvatar(
+                                                        radius: 12,
+                                                        backgroundColor: Colors.grey[700],
+                                                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ),
@@ -339,12 +349,21 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 IconButton(
-                                  icon: const Icon(
+                                  icon: Icon(
                                     Icons.add,
-                                    color: Color(0xFFF7F4F4),
+                                    color: provider.selectedFiles.length > 3 ? Colors.grey : const Color(0xFFF7F4F4),
                                     size: 24.0,
                                   ),
                                   onPressed: () {
+                                    if (provider.selectedFiles.length > 3) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('You can only upload 4 files at a time'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                      return;
+                                    }
                                     showModalBottomSheet(
                                       context: context,
                                       backgroundColor: Colors.grey[850],
@@ -479,7 +498,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       appId,
       false,
       [],
-      files: provider.uploadedFile != null ? [provider.uploadedFile!] : [],
+      files: provider.uploadedFiles,
     );
     provider.addMessage(newMessage);
     scrollToBottom();
