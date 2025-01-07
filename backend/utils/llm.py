@@ -27,6 +27,14 @@ llm_large = ChatOpenAI(model='o1-preview')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
+# *****************************************************
+# Research - Neotastisch
+# Cheap & good? DeepSeek V3
+# Best, but expensive? o1-mini
+# Also good? Nova 1.0 Pro & Grok 2 & Eve Llama 3.33
+# *****************************************************
+
+
 encoding = tiktoken.encoding_for_model('gpt-4')
 
 
