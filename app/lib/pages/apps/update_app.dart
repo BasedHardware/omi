@@ -105,6 +105,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                           pickImage: () async {
                             await provider.updateImage();
                           },
+                          generatingDescription: provider.isGenratingDescription,
                           allowPaidApps: provider.allowPaidApps,
                           appPricing: provider.isPaid ? 'Paid' : 'Free',
                           imageFile: provider.imageFile,

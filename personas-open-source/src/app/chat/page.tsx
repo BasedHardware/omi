@@ -245,9 +245,11 @@ function ChatContent() {
       timestamp: new Date().toISOString()
     });
 
+    /***
     console.log('Sending message:', inputText);
     console.log('User Message Count:', newUserMessageCount);
     console.log('Authenticated User:', auth.currentUser);
+    ***/
 
     // Check for login requirement after 2 messages (shows prompt before 3rd)
     if (!auth.currentUser && newUserMessageCount >= 3) {

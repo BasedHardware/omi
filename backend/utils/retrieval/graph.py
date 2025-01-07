@@ -175,6 +175,8 @@ def qa_handler(state: GraphState):
         Memory.memories_to_string(memories, False),
         state.get("plugin_selected"),
         cited=state.get("cited"),
+        messages=state.get("messages"),
+        tz=state.get("tz"),
     )
     return {"answer": response, "ask_for_nps": True}
 

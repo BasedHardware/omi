@@ -57,7 +57,7 @@ def send_message(
     cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
     if len(cited_memory_idxs) > 0:
         response = re.sub(r'\[\d+\]', '', response)
-    memories = [memories[i - 1] for i in cited_memory_idxs]
+    memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
 
     memories_id = []
     # check if the items in the memories list are dict
@@ -106,6 +106,8 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if plugin_id in ['null', '']:
+        plugin_id = None
     err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')

@@ -76,33 +76,34 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                if (provider.pairedDevice != null)
-                  Column(
-                    children: [
-                      Text(
-                        '${provider.pairedDevice?.modelNumber}, firmware ${provider.pairedDevice?.firmwareRevision}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'by ${provider.pairedDevice?.manufacturerName}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ),
+                provider.pairedDevice != null && provider.pairedDevice?.modelNumber != "Unknown"
+                    ? Column(
+                        children: [
+                          Text(
+                            '${provider.pairedDevice?.modelNumber}, firmware ${provider.pairedDevice?.firmwareRevision}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'by ${provider.pairedDevice?.manufacturerName}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w500,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
                 provider.connectedDevice != null
                     ? Container(
                         decoration: BoxDecoration(
@@ -135,7 +136,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                             ),
                           ],
                         ))
-                    : const SizedBox.shrink()
+                    : const Text(
+                        "Offline",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )
               ],
             ),
             const SizedBox(height: 32),

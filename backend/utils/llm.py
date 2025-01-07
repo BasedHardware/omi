@@ -22,6 +22,7 @@ from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
+llm_large = ChatOpenAI(model='o1-preview')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -236,7 +237,9 @@ class TopicsContext(BaseModel):
 
 
 class DatesContext(BaseModel):
-    dates_range: List[datetime] = Field(default=[], description="Dates range. (Optional)")
+    dates_range: List[datetime] = Field(default=[],
+                                        examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
+                                        description="Dates range. (Optional)", )
 
 
 def requires_context_v1(messages: List[Message]) -> bool:
@@ -253,6 +256,7 @@ def requires_context_v1(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def requires_context(question: str) -> bool:
     prompt = f'''
@@ -296,6 +300,7 @@ def retrieve_is_an_omi_question_v1(messages: List[Message]) -> bool:
         return response.value
     except ValidationError:
         return False
+
 
 def retrieve_is_an_omi_question_v2(messages: List[Message]) -> bool:
     prompt = f'''
@@ -402,26 +407,18 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
+
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
-    Task: Determine the appropriate date range in {tz} that provides context for answering the question provided.
+    You MUST determine the appropriate date range in {tz} that provides context for answering the question provided.
 
-    Instructions:
-
-    1. Identify the Current Date:
-        - Note the current date and time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}.
-
-    2. Understand Date References:
-        - Define "Today" as the converted current date in timezone {tz}.
-        - Define "Tomorrow" as the day after "Today" in timezone {tz}.
-        - Define "Yesterday" as the day before "Today" in timezone {tz}.
-        - Define "Next week" as starting from the upcoming Monday in timezone {tz}.
-        - Define "My day" as the converted current date in timezone {tz}.
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
 
     Question:
     ```
     {question}
     ```
+
     '''.replace('    ', '').strip()
 
     # print(prompt)
@@ -429,6 +426,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
+
 
 def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[datetime]:
     prompt = f'''
@@ -479,6 +477,7 @@ def retrieve_context_dates_by_question_v2(question: str, tz: str) -> List[dateti
     with_parser = llm_mini.with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
+
 
 def retrieve_context_dates_by_question_v1(question: str, tz: str) -> List[datetime]:
     prompt = f'''
@@ -571,7 +570,134 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False) -> str:
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    prompt = f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    {cited_prompt}
+
+    Keep the answer concise.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    # print('qa_rag prompt', prompt)
+    return llm_large.invoke(prompt).content
+
+
+def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    prompt = f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    {cited_prompt}
+
+    Use three sentences maximum and keep the answer concise.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    # print('qa_rag prompt', prompt)
+    return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
+
+def qa_rag_v2(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+              cited: Optional[bool] = False) -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -619,6 +745,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
     # print('qa_rag prompt', prompt)
     return ChatOpenAI(model='gpt-4o').invoke(prompt).content
+
 
 def qa_rag_v1(uid: str, question: str, context: str, plugin: Optional[Plugin] = None) -> str:
     user_name, facts_str = get_prompt_facts(uid)
@@ -921,7 +1048,64 @@ class OutputQuestion(BaseModel):
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
-    for i in range(len(messages)-1, -1,-1):
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
+
+    You MUST keep the original `date time term`.
+
+    If the user's last message is a complete question, maintain the original version as accurately as possible. Avoid adding unnecessary words.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's super IMPORTANT to refine the Question to be full context with the last messages only.
+
+    If the user is not asking a question or does not want to follow up, respond with an empty message.
+
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    User last messages:
+    ```According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+    Attended an outdoor party (cold weather, talked a lot more than usual).
+    Smoked weed (unusual for me).
+    Drank lots of relaxing tea.
+
+    Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+    ```
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
+
+    **The user last messages:**
+    ```
+    {Message.get_messages_as_string(user_last_messages)}
+    ```
+
+    **Previous messages:**
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+
+    **Date time term:** today, my day, my week, this week, this day, etc.
+
+    '''.replace('    ', '').strip()
+    # print(prompt)
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+
+def extract_question_from_conversation_v3(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
             break
         if messages[i].sender == MessageSender.human:
@@ -973,7 +1157,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 def extract_question_from_conversation_v2(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
-    for i in range(len(messages)-1, -1,-1):
+    for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
             break
         if messages[i].sender == MessageSender.human:
@@ -1023,8 +1207,9 @@ def extract_question_from_conversation_v1(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
+
 def retrieve_metadata_fields_from_transcript(
-    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
+        uid: str, created_at: datetime, transcript_segment: List[dict], tz: str
 ) -> ExtractedInformation:
     transcript = ''
     for segment in transcript_segment:
@@ -1229,4 +1414,20 @@ def get_proactive_message(uid: str, plugin_prompt: str, params: [str], context: 
     prompt = prompt.replace('    ', '').strip()
     # print(prompt)
 
+    return llm_mini.invoke(prompt).content
+
+
+# **************************************************
+# *************** APPS AI GENERATE *****************
+# **************************************************
+
+def generate_description(app_name: str, description: str) -> str:
+    prompt = f"""
+    You are an AI assistant specializing in crafting detailed and engaging descriptions for apps. 
+    You will be provided with the app's name and a brief description which might not be that good. Your task is to expand on the given information, creating a captivating and detailed app description that highlights the app's features, functionality, and benefits. 
+    The description should be concise, professional, and not more than 40 words, ensuring clarity and appeal. Respond with only the description, tailored to the app's concept and purpose.
+    App Name: {app_name}
+    Description: {description}
+    """
+    prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
