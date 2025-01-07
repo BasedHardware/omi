@@ -25,9 +25,9 @@ class MessageProvider extends ChangeNotifier {
 
   String firstTimeLoadingText = '';
 
-  File? selectedFile;
-  String selectedFileType = '';
-  MessageFile? uploadedFile;
+  List<File> selectedFiles = [];
+  List<String> selectedFileTypes = [];
+  List<MessageFile> uploadedFiles = [];
   bool isUploadingFile = false;
 
   void updateAppProvider(AppProvider p) {
@@ -67,46 +67,58 @@ class MessageProvider extends ChangeNotifier {
   void takeImage() async {
     var res = await ImagePicker().pickImage(source: ImageSource.camera);
     if (res != null) {
-      selectedFile = File(res.path);
-      selectedFileType = 'image';
-      uploadFile(appProvider?.selectedChatAppId);
+      selectedFiles.add(File(res.path));
+      selectedFileTypes.add('image');
+      var index = selectedFiles.length - 1;
+      uploadFile(appProvider?.selectedChatAppId, index);
       notifyListeners();
     }
   }
 
   void selectImage() async {
-    var res = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (res != null) {
-      selectedFile = File(res.path);
-      selectedFileType = 'image';
-      uploadFile(appProvider?.selectedChatAppId);
+    var res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+    if (res.isNotEmpty) {
+      for (var r in res) {
+        selectedFiles.add(File(r.path));
+        selectedFileTypes.add('image');
+        var index = selectedFiles.length - 1;
+        uploadFile(appProvider?.selectedChatAppId, index);
+      }
       notifyListeners();
     }
   }
 
   void selectFile() async {
-    var res = await FilePicker.platform.pickFiles(allowMultiple: false);
+    var res = await FilePicker.platform.pickFiles(allowMultiple: true);
     if (res != null) {
-      selectedFile = File(res.files.first.path!);
-      selectedFileType = 'file';
-      uploadFile(appProvider?.selectedChatAppId);
+      for (var r in res.files) {
+        selectedFiles.add(File(r.path!));
+        selectedFileTypes.add('file');
+        var index = selectedFiles.length - 1;
+        uploadFile(appProvider?.selectedChatAppId, index);
+        if (selectedFiles.length == 4) {
+          AppSnackbar.showSnackbarError('You can only upload 4 files at a time');
+          break;
+        }
+      }
       notifyListeners();
     }
   }
 
-  void clearSelectedFile() {
-    selectedFile = null;
+  void clearSelectedFile(int index) {
+    selectedFiles.removeAt(index);
+    selectedFileTypes.removeAt(index);
     notifyListeners();
   }
 
-  void uploadFile(String? appId) async {
-    if (selectedFile != null) {
+  void uploadFile(String? appId, int index) async {
+    if (selectedFiles.isNotEmpty) {
       setIsUploadingFile(true);
-      var res = await uploadFileServer(selectedFile!, selectedFileType, appId: appId);
+      var res = await uploadFileServer(selectedFiles[index], selectedFileTypes[index], appId: appId);
       if (res != null) {
-        uploadedFile = res;
+        uploadedFiles.add(res);
       } else {
-        clearSelectedFile();
+        clearSelectedFile(index);
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
       setIsUploadingFile(false);
@@ -182,8 +194,8 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty(appId: appId));
-    var mes = await sendMessageServer(message,
-        appId: appId, fileIds: uploadedFile != null ? [uploadedFile!.openaiFileId] : []);
+    var mes =
+        await sendMessageServer(message, appId: appId, fileIds: uploadedFiles.map((e) => e.openaiFileId).toList());
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }
