@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class AppMetadataWidget extends StatelessWidget {
   final File? imageFile;
@@ -19,6 +22,7 @@ class AppMetadataWidget extends StatelessWidget {
   final String? category;
   final String? appPricing;
   final bool allowPaidApps;
+  final bool generatingDescription;
 
   const AppMetadataWidget({
     super.key,
@@ -34,6 +38,7 @@ class AppMetadataWidget extends StatelessWidget {
     this.category,
     this.appPricing,
     required this.allowPaidApps,
+    required this.generatingDescription,
   });
 
   @override
@@ -349,35 +354,64 @@ class AppMetadataWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                     width: double.infinity,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: MediaQuery.sizeOf(context).height * 0.1,
-                        maxHeight: MediaQuery.sizeOf(context).height * 0.4,
-                      ),
-                      child: Scrollbar(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          reverse: false,
-                          child: TextFormField(
-                            maxLines: null,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please provide a valid description';
-                              }
-                              return null;
-                            },
-                            controller: appDescriptionController,
-                            decoration: const InputDecoration(
-                              contentPadding: EdgeInsets.only(top: 6, bottom: 2),
-                              isDense: true,
-                              border: InputBorder.none,
-                              hintText:
-                                  'My Awesome App is a great app that does amazing things. It is the best app ever!',
-                              hintMaxLines: 4,
+                    child: Stack(
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: MediaQuery.sizeOf(context).height * 0.1,
+                            maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                          ),
+                          child: Scrollbar(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              reverse: false,
+                              child: generatingDescription
+                                  ? Skeletonizer.zone(
+                                      enabled: generatingDescription,
+                                      effect: ShimmerEffect(
+                                        baseColor: Colors.grey[700]!,
+                                        highlightColor: Colors.grey[600]!,
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                      child: Bone.multiText(),
+                                    )
+                                  : TextFormField(
+                                      maxLines: null,
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please provide a valid description';
+                                        }
+                                        return null;
+                                      },
+                                      controller: appDescriptionController,
+                                      decoration: const InputDecoration(
+                                        contentPadding: EdgeInsets.only(top: 6, bottom: 2),
+                                        isDense: true,
+                                        border: InputBorder.none,
+                                        hintText:
+                                            'My Awesome App is a great app that does amazing things. It is the best app ever!',
+                                        hintMaxLines: 4,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
-                      ),
+                        appDescriptionController.text.isNotEmpty && appNameController.text.isNotEmpty
+                            ? Positioned(
+                                bottom: 2,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    await context.read<AddAppProvider>().generateDescription();
+                                  },
+                                  child: SvgPicture.asset(
+                                    Assets.images.aiMagic,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              )
+                            : SizedBox.shrink(),
+                      ],
                     ),
                   ),
                   const SizedBox(
