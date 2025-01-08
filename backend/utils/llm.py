@@ -1,11 +1,13 @@
 import json
 import re
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompt_values import StringPromptValue
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
@@ -23,6 +25,8 @@ from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_large = ChatOpenAI(model='o1-preview')
+llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
+#llm_large_stream = ChatOpenAI(model='gpt-4o', streaming=True, temperature=1)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -569,6 +573,72 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     Answer:
     """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+async def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]):
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    prompt = f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    {cited_prompt}
+
+    Keep the answer concise.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    # print('qa_rag prompt', prompt)
+    # return llm_large.invoke(prompt).content
+    # return asyncio.create_task(llm_large_stream.agenerate_prompt(prompts=[prompt], callbacks=callbacks))
+    print(callbacks)
+    # return asyncio.run(llm_large_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks))
+    await llm_large_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
 
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,

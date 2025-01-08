@@ -1,7 +1,9 @@
 import datetime
 import uuid
-from typing import List, Optional, Tuple
+import asyncio
+from typing import List, Optional, Tuple, AsyncGenerator
 
+from langchain.callbacks.base import BaseCallbackHandler
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
@@ -23,6 +25,7 @@ from utils.llm import (
     retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
+    qa_rag_stream,
     retrieve_is_an_omi_question,
     select_structured_filters,
     extract_question_from_conversation,
@@ -46,12 +49,43 @@ class DateRangeFilters(TypedDict):
     end: datetime.datetime
 
 
+class AsyncStreamingCallback(BaseCallbackHandler):
+    def __init__(self):
+        self.queue = asyncio.Queue()
+
+    async def put_data(self, text):
+        await self.queue.put(f"data: {text}")
+
+    async def put_thought(self, text):
+        await self.queue.put(f"think: {text}")
+
+    def put_thought_nowait(self, text):
+        self.queue.put_nowait(f"think: {text}")
+
+    async def end(self):
+        await self.queue.put(None)
+
+    async def on_llm_new_token(self, token: str, **kwargs) -> None:
+        await self.put_data(token)
+
+    async def on_llm_end(self, response, **kwargs) -> None:
+        await self.end()
+
+    async def on_llm_error(self, error: Exception, **kwargs) -> None:
+        print(f"Error on LLM {error}")
+        await self.end()
+
+
 class GraphState(TypedDict):
     uid: str
     messages: List[Message]
     plugin_selected: Optional[Plugin]
     tz: str
     cited: Optional[bool] = False
+    # streaming
+    streaming: Optional[bool] = False
+    task: Optional[AsyncGenerator] = None
+    callback: Optional[AsyncStreamingCallback] = None
 
     filters: Optional[StructuredFilters]
     date_filters: Optional[DateRangeFilters]
@@ -66,6 +100,11 @@ class GraphState(TypedDict):
 def determine_conversation(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
     print("determine_conversation parsed question:", question)
+
+    # stream
+    if state.get('streaming', False):
+        state['callback'].put_thought_nowait(question)
+
     return {"parsed_question": question}
 
 
@@ -109,7 +148,6 @@ def context_dependent_conversation(state: GraphState):
 
 # !! include a question extractor? node?
 
-
 def retrieve_topics_filters(state: GraphState):
     print("retrieve_topics_filters")
     filters = {
@@ -141,6 +179,11 @@ def retrieve_date_filters(state: GraphState):
 
 def query_vectors(state: GraphState):
     print("query_vectors")
+
+    # stream
+    if state.get('streaming', False):
+        state['callback'].put_thought_nowait("retrieving your memories")
+
     date_filters = state.get("date_filters")
     uid = state.get("uid")
     vector = (
@@ -149,6 +192,7 @@ def query_vectors(state: GraphState):
         else [0] * 3072
     )
     print("query_vectors vector:", vector[:5])
+
     # TODO: enable it when the in-accurated topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
     memories_id = query_vectors_by_metadata(
@@ -162,12 +206,38 @@ def query_vectors(state: GraphState):
         limit=100,
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
+
+    # stream
+    if state.get('streaming', False):
+        state['callback'].put_thought_nowait(f"found {len(memories)} relevant memories")
+
     # print(memories_id)
     return {"memories_found": memories}
 
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        state['callback'].put_thought_nowait("reasoning")
+
+        uid = state.get("uid")
+        memories = state.get("memories_found", [])
+        asyncio.run(qa_rag_stream(
+            uid,
+            state.get("parsed_question"),
+            Memory.memories_to_string(memories, False),
+            state.get("plugin_selected"),
+            cited=state.get("cited"),
+            messages=state.get("messages"),
+            tz=state.get("tz"),
+            callbacks=[state.get('callback')]
+        ))
+        return {"ask_for_nps": True}
+
+    # no streaming
     memories = state.get("memories_found", [])
     response: str = qa_rag(
         uid,
@@ -215,7 +285,7 @@ workflow.add_edge("qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
-
+graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
@@ -228,6 +298,27 @@ def execute_graph_chat(
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
+
+
+async def execute_graph_chat_stream(
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+) -> AsyncGenerator[str, None]:
+    print('execute_graph_chat_stream plugin: ', plugin)
+    tz = notification_db.get_user_time_zone(uid)
+    callback = AsyncStreamingCallback()
+    asyncio.create_task(graph_stream.ainvoke(
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
+         "streaming": True, "callback": callback},
+        {"configurable": {"thread_id": str(uuid.uuid4())}},
+    ))
+    while True:
+        try:
+            chunk = await callback.queue.get()
+            yield chunk
+        except asyncio.CancelledError:
+            break
+        if chunk is None:
+            break
 
 
 def _pretty_print_conversation(messages: List[Message]):
