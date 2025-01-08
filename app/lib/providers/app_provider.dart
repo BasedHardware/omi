@@ -341,6 +341,7 @@ class AppProvider extends BaseProvider {
       appLoading[idx] = false;
     }
     apps = SharedPreferencesUtil().appsList;
+    filterApps();
     notifyListeners();
   }
 
