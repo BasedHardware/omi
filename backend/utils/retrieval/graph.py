@@ -20,8 +20,10 @@ from models.memory import Memory
 from models.plugin import Plugin
 from utils.llm import (
     answer_omi_question,
+    answer_omi_question_stream,
     requires_context,
     answer_simple_message,
+    answer_simple_message_stream,
     retrieve_context_dates,
     retrieve_context_dates_by_question,
     qa_rag,
@@ -126,13 +128,46 @@ def determine_conversation_type(
 
 def no_context_conversation(state: GraphState):
     print("no_context_conversation node")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        # state['callback'].put_thought_nowait("Reasoning")
+        asyncio.run(answer_simple_message_stream(
+            state.get("uid"), state.get("messages"),
+            callbacks=[state.get('callback')]
+        ))
+        return {"ask_for_nps": False}
+
+    # no streaming
     return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
 
 
 def omi_question(state: GraphState):
     print("no_context_omi_question node")
+
+    # streaming
+    streaming = state.get("streaming")
+    if streaming:
+        state['callback'].put_thought_nowait("Searching through Omi's documents")
+
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
+
+    # streaming
+    if streaming:
+        state['callback'].put_thought_nowait(f"Found {len(context.items())} relevant documents")
+
+    # streaming
+    if streaming:
+        state['callback'].put_thought_nowait("Reasoning")
+        asyncio.run(answer_omi_question_stream(
+            state.get("messages", []), context_str,
+            callbacks=[state.get('callback')]
+        ))
+        return {"ask_for_nps": False}
+
+    # no streaming
     answer = answer_omi_question(state.get("messages", []), context_str)
     return {'answer': answer, 'ask_for_nps': True}
 
@@ -285,6 +320,7 @@ workflow.add_edge("qa_handler", END)
 
 checkpointer = MemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
+
 graph_stream = workflow.compile()
 
 @timeit
