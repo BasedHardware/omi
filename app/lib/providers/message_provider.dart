@@ -113,6 +113,47 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future sendMessageStreamToServer(String text, String? appId) async {
+    setShowTypingIndicator(true);
+    var message = ServerMessage.empty(appId: appId);
+    messages.insert(0, message);
+    notifyListeners();
+
+    try {
+      await for (var chunk in sendMessageStreamServer(text, appId: appId)) {
+        if (chunk.type == MessageChunkType.think) {
+          message.thinkings.add(chunk.text);
+          notifyListeners();
+          continue;
+        }
+
+        if (chunk.type == MessageChunkType.data) {
+          message.text += chunk.text;
+          notifyListeners();
+          continue;
+        }
+
+        if (chunk.type == MessageChunkType.done) {
+          message = chunk.message!;
+          messages[0] = message;
+          notifyListeners();
+          continue;
+        }
+
+        if (chunk.type == MessageChunkType.error) {
+          message.text = chunk.text;
+          notifyListeners();
+          continue;
+        }
+      }
+    } catch (e) {
+      message.text = ServerMessageChunk.failedMessage().text;
+      notifyListeners();
+    }
+
+    setShowTypingIndicator(false);
+  }
+
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty(appId: appId));

@@ -182,7 +182,7 @@ def query_vectors(state: GraphState):
 
     # stream
     if state.get('streaming', False):
-        state['callback'].put_thought_nowait("retrieving your memories")
+        state['callback'].put_thought_nowait("Searching through your memories")
 
     date_filters = state.get("date_filters")
     uid = state.get("uid")
@@ -208,8 +208,8 @@ def query_vectors(state: GraphState):
     memories = memories_db.get_memories_by_id(uid, memories_id)
 
     # stream
-    if state.get('streaming', False):
-        state['callback'].put_thought_nowait(f"found {len(memories)} relevant memories")
+    if state.get('streaming', False) and len(memories) > 0:
+        state['callback'].put_thought_nowait(f"Found {len(memories)} relevant memories")
 
     # print(memories_id)
     return {"memories_found": memories}
@@ -221,7 +221,7 @@ def qa_handler(state: GraphState):
     # streaming
     streaming = state.get("streaming")
     if streaming:
-        state['callback'].put_thought_nowait("reasoning")
+        state['callback'].put_thought_nowait("Reasoning")
 
         uid = state.get("uid")
         memories = state.get("memories_found", [])

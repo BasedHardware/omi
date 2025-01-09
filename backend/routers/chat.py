@@ -1,5 +1,6 @@
 import uuid
 import re
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -96,14 +97,15 @@ def send_message(
             if chunk:
                 if chunk.startswith("data: "):
                     response = response + chunk[6:]
-
-                yield f"id: {message_id}\n{chunk}\n\n"
+                data = chunk.replace("\n", "__CRLF__")
+                yield f'{data}\n\n'
 
             else:
                 # end
                 print(response)
                 ai_message = process_message(response, message_id)
-                yield f"id: {message_id}\ndone: {str(ai_message)}\n\n"
+                response_message = ResponseMessage(**ai_message)
+                yield f"done: {response_message.model_dump_json()}\n\n"
 
     return StreamingResponse(
         generate_stream(),
