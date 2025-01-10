@@ -132,11 +132,11 @@ def no_context_conversation(state: GraphState):
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
-        asyncio.run(answer_simple_message_stream(
+        answer: str = answer_simple_message_stream(
             state.get("uid"), state.get("messages"),
             callbacks=[state.get('callback')]
-        ))
-        return {"ask_for_nps": False}
+        )
+        return {"answer": answer, "ask_for_nps": False}
 
     # no streaming
     return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
@@ -160,11 +160,11 @@ def omi_question(state: GraphState):
     # streaming
     if streaming:
         state['callback'].put_thought_nowait("Reasoning")
-        asyncio.run(answer_omi_question_stream(
+        answer: str = answer_omi_question_stream(
             state.get("messages", []), context_str,
             callbacks=[state.get('callback')]
-        ))
-        return {"ask_for_nps": False}
+        )
+        return {'answer': answer, 'ask_for_nps': True}
 
     # no streaming
     answer = answer_omi_question(state.get("messages", []), context_str)
@@ -261,7 +261,7 @@ def qa_handler(state: GraphState):
     if streaming:
         state['callback'].put_thought_nowait("Reasoning")
         memories = state.get("memories_found", [])
-        asyncio.run(qa_rag_stream(
+        response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
             Memory.memories_to_string(memories, False),
@@ -270,8 +270,8 @@ def qa_handler(state: GraphState):
             messages=state.get("messages"),
             tz=state.get("tz"),
             callbacks=[state.get('callback')]
-        ))
-        return {"ask_for_nps": True}
+        )
+        return {"answer": response, "ask_for_nps": True}
 
     # no streaming
     memories = state.get("memories_found", [])
@@ -344,29 +344,29 @@ async def execute_graph_chat_stream(
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
-    async def invoke_graph():
-        return await graph_stream.ainvoke(
-            {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-             "streaming": True, "callback": callback},
-            {"configurable": {"thread_id": str(uuid.uuid4())}},
-        )
-
-    task = asyncio.create_task(invoke_graph())
+    task = asyncio.create_task(graph_stream.ainvoke(
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
+         "streaming": True, "callback": callback},
+        {"configurable": {"thread_id": str(uuid.uuid4())}},
+    ))
 
     while True:
         try:
             chunk = await callback.queue.get()
-            yield chunk
+            if chunk:
+                yield chunk
+            else:
+                break
         except asyncio.CancelledError:
-            break
-        if chunk is None:
             break
 
     await task
-
     result = task.result()
+    callback_data['answer'] = result.get("answer")
     callback_data['memories_found'] = result.get("memories_found", [])
     callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+
+    yield None
     return
 
 
