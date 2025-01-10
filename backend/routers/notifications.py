@@ -10,10 +10,10 @@ from utils.other import endpoints as auth
 
 # logger = logging.getLogger('uvicorn.error')
 # logger.setLevel(logging.DEBUG)
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['notifications'])
 
 
-@router.post('/v1/users/fcm-token')
+@v1_router.post('/users/fcm-token')
 def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_user_uid)):
     notification_db.save_token(uid, data.dict())
     return {'status': 'Ok'}
@@ -23,7 +23,7 @@ def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_us
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
 
-@router.post('/v1/notification')
+@v1_router.post('/notification')
 def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

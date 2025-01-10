@@ -16,15 +16,16 @@ from utils.other.storage import upload_profile_audio, get_profile_audio_if_exist
     delete_speech_sample_for_people, get_user_has_speech_profile
 from utils.stt.vad import apply_vad_for_speech_profile
 
-router = APIRouter()
+v3_router = APIRouter(prefix="/v3", tags=['speech-profile'])
+v4_router = APIRouter(prefix="/v4", tags=['speech-profile'])
 
 
-@router.get('/v3/speech-profile', tags=['v3'])
+@v3_router.get('/speech-profile')
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid) > 0}
 
 
-@router.get('/v4/speech-profile', tags=['v3'])
+@v4_router.get('/speech-profile')
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
 
@@ -36,7 +37,7 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # Consist of bytes (for initiating deepgram)
 # and audio itself, which we use on post-processing to use speechbrain model
 
-@router.post('/v3/upload-bytes', tags=['v3'])
+@v3_router.post('/upload-bytes')
 def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user_uid)):
     if data.duration < 10:
         raise HTTPException(status_code=400, detail="Audio duration is too short")
@@ -46,7 +47,7 @@ def upload_profile(data: UploadProfile, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.post('/v3/upload-audio', tags=['v3'])
+@v3_router.post('/upload-audio')
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"
@@ -115,7 +116,7 @@ def expand_speech_profile(
     return {"status": 'ok'}
 
 
-@router.delete('/v3/speech-profile/expand', tags=['v3'])
+@v3_router.delete('/speech-profile/expand')
 def delete_extra_speech_profile_sample(
         memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -132,7 +133,7 @@ def delete_extra_speech_profile_sample(
     return {'status': 'ok'}
 
 
-@router.get('/v3/speech-profile/expand', tags=['v3'])
+@v3_router.get('/speech-profile/expand')
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if person_id:
         return get_user_person_speech_samples(uid, person_id)

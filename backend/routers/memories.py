@@ -13,7 +13,8 @@ from utils.other.storage import get_memory_recording_if_exists, \
     delete_additional_profile_audio, delete_speech_sample_for_people
 from utils.plugins import trigger_external_integrations
 
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['memories'])
+v2_router = APIRouter(prefix='/v2', tags=['memories'])
 
 
 def _get_memory_by_id(uid: str, memory_id: str) -> dict:
@@ -23,7 +24,7 @@ def _get_memory_by_id(uid: str, memory_id: str) -> dict:
     return memory
 
 
-@router.post("/v2/memories", response_model=CreateMemoryResponse, tags=['memories'])
+@v2_router.post("/memories", response_model=CreateMemoryResponse)
 def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
     memory = retrieve_in_progress_memory(uid)
     if not memory:
@@ -42,14 +43,14 @@ def process_in_progress_memory(uid: str = Depends(auth.get_current_user_uid)):
 # class TranscriptRequest(BaseModel):
 #     transcript: str
 
-# @router.post('/v2/test-memory', response_model= [], tags=['memories'])
+# @v2_router.post('/test-memory', response_model= [])
 # def process_test_memory(
 #         request: TranscriptRequest, uid: str = Depends(auth.get_current_user_uid)
 # ):
 #   st =  get_transcript_structure(request.transcript, datetime.now(),'en','Asia/Kolkata')
 #   return [st.json()]
 
-@router.post('/v1/memories/{memory_id}/reprocess', response_model=Memory, tags=['memories'])
+@v1_router.post('/memories/{memory_id}/reprocess', response_model=Memory)
 def reprocess_memory(
         memory_id: str, language_code: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -68,40 +69,40 @@ def reprocess_memory(
     return process_memory(uid, language_code, memory, force_process=True, is_reprocess=True)
 
 
-@router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
+@v1_router.get('/memories', response_model=List[Memory])
 def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset, statuses)
     return memories_db.get_memories(uid, limit, offset, include_discarded=True,
                                     statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
-@router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
+@v1_router.get("/memories/{memory_id}", response_model=Memory)
 def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return _get_memory_by_id(uid, memory_id)
 
 
-@router.patch("/v1/memories/{memory_id}/title", tags=['memories'])
+@v1_router.patch("/memories/{memory_id}/title")
 def patch_memory_title(memory_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
     memories_db.update_memory_title(uid, memory_id, title)
     return {'status': 'Ok'}
 
 
-@router.get("/v1/memories/{memory_id}/photos", response_model=List[MemoryPhoto], tags=['memories'])
+@v1_router.get("/memories/{memory_id}/photos", response_model=List[MemoryPhoto])
 def get_memory_photos(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
     return memories_db.get_memory_photos(uid, memory_id)
 
 
-@router.get(
-    "/v1/memories/{memory_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]], tags=['memories']
+@v1_router.get(
+    "/memories/{memory_id}/transcripts", response_model=Dict[str, List[TranscriptSegment]]
 )
 def get_memory_transcripts_by_models(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
     return memories_db.get_memory_transcripts_by_model(uid, memory_id)
 
 
-@router.delete("/v1/memories/{memory_id}", status_code=204, tags=['memories'])
+@v1_router.delete("/memories/{memory_id}", status_code=204)
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('delete_memory', memory_id, uid)
     memories_db.delete_memory(uid, memory_id)
@@ -109,13 +110,13 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     return {"status": "Ok"}
 
 
-@router.get("/v1/memories/{memory_id}/recording", response_model=dict, tags=['memories'])
+@v1_router.get("/memories/{memory_id}/recording", response_model=dict)
 def memory_has_audio_recording(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_memory_by_id(uid, memory_id)
     return {'has_recording': get_memory_recording_if_exists(uid, memory_id) is not None}
 
 
-@router.patch("/v1/memories/{memory_id}/events", response_model=dict, tags=['memories'])
+@v1_router.patch("/memories/{memory_id}/events", response_model=dict)
 def set_memory_events_state(
         memory_id: str, data: SetMemoryEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -131,7 +132,7 @@ def set_memory_events_state(
     return {"status": "Ok"}
 
 
-@router.patch("/v1/memories/{memory_id}/action-items", response_model=dict, tags=['memories'])
+@v1_router.patch("/memories/{memory_id}/action-items", response_model=dict)
 def set_action_item_status(data: SetMemoryActionItemsStateRequest, memory_id: str,
                            uid=Depends(auth.get_current_user_uid)):
     memory = _get_memory_by_id(uid, memory_id)
@@ -146,7 +147,7 @@ def set_action_item_status(data: SetMemoryActionItemsStateRequest, memory_id: st
     return {"status": "Ok"}
 
 
-@router.delete("/v1/memories/{memory_id}/action-items", response_model=dict, tags=['memories'])
+@v1_router.delete("/memories/{memory_id}/action-items", response_model=dict)
 def delete_action_item(data: DeleteActionItemRequest, memory_id: str, uid=Depends(auth.get_current_user_uid)):
     print('here inside of delete action item')
     memory = _get_memory_by_id(uid, memory_id)
@@ -159,7 +160,7 @@ def delete_action_item(data: DeleteActionItemRequest, memory_id: str, uid=Depend
     return {"status": "Ok"}
 
 
-@router.patch('/v1/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory, tags=['memories'])
+@v1_router.patch('/memories/{memory_id}/segments/{segment_idx}/assign', response_model=Memory)
 def set_assignee_memory_segment(
         memory_id: str, segment_idx: int, assign_type: str, value: Optional[str] = None,
         use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
@@ -216,7 +217,7 @@ def set_assignee_memory_segment(
     return memory
 
 
-@router.patch('/v1/memories/{memory_id}/assign-speaker/{speaker_id}', response_model=Memory, tags=['memories'])
+@v1_router.patch('/memories/{memory_id}/assign-speaker/{speaker_id}', response_model=Memory)
 def set_assignee_memory_segment(
         memory_id: str, speaker_id: int, assign_type: str, value: Optional[str] = None,
         use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
@@ -290,7 +291,7 @@ def set_assignee_memory_segment(
 # ************* SHARING MEMORIES **************
 # *********************************************
 
-@router.patch('/v1/memories/{memory_id}/visibility', tags=['memories'])
+@v1_router.patch('/memories/{memory_id}/visibility')
 def set_memory_visibility(
         memory_id: str, value: MemoryVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -307,7 +308,7 @@ def set_memory_visibility(
     return {"status": "Ok"}
 
 
-@router.get("/v1/memories/{memory_id}/shared", response_model=Memory, tags=['memories'])
+@v1_router.get("/memories/{memory_id}/shared", response_model=Memory)
 def get_shared_memory_by_id(memory_id: str):
     uid = redis_db.get_memory_uid(memory_id)
     if not uid:
@@ -324,7 +325,7 @@ def get_shared_memory_by_id(memory_id: str):
     return memory
 
 
-@router.get("/v1/public-memories", response_model=List[Memory], tags=['memories'])
+@v1_router.get("/public-memories", response_model=List[Memory])
 def get_public_memories(offset: int = 0, limit: int = 1000):
     memories = redis_db.get_public_memories()
     data = []
@@ -340,7 +341,7 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
     return memories
 
 
-@router.post("/v1/memories/search", response_model=dict, tags=['memories'])
+@v1_router.post("/memories/search", response_model=dict)
 def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
     return search_memories(query=search_request.query, page=search_request.page,
                            per_page=search_request.per_page, uid=uid)

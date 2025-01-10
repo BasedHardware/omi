@@ -6,10 +6,11 @@ import database.facts as facts_db
 from models.facts import FactDB, Fact
 from utils.other import endpoints as auth
 
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['facts'])
+v2_router = APIRouter(prefix='/v2', tags=['facts'])
 
 
-@router.post('/v1/facts', tags=['facts'], response_model=FactDB)
+@v1_router.post('/facts', response_model=FactDB)
 def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
     fact_db = FactDB.from_fact(fact, uid, None, None)
     fact_db.manually_added = True
@@ -17,7 +18,7 @@ def create_fact(fact: Fact, uid: str = Depends(auth.get_current_user_uid)):
     return fact_db
 
 
-@router.get('/v1/facts', tags=['facts'], response_model=List[FactDB])  # filters
+@v1_router.get('/facts', response_model=List[FactDB])  # filters
 def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     facts = facts_db.get_facts(uid, limit, offset)
     # facts = list(filter(lambda x: x['category'] == 'skills', facts))
@@ -45,7 +46,7 @@ def get_facts_v1(limit: int = 5000, offset: int = 0, uid: str = Depends(auth.get
     # return facts
 
 
-@router.get('/v2/facts', tags=['facts'], response_model=List[FactDB])
+@v2_router.get('/facts', response_model=List[FactDB])
 def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
     # Use high limits for the first page
     # Warn: should remove
@@ -55,19 +56,19 @@ def get_facts(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_cur
     return facts
 
 
-@router.delete('/v1/facts/{fact_id}', tags=['facts'])
+@v1_router.delete('/facts/{fact_id}')
 def delete_fact(fact_id: str, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.delete_fact(uid, fact_id)
     return {'status': 'ok'}
 
 
-@router.post('/v1/facts/{fact_id}/review', tags=['facts'])
+@v1_router.post('/facts/{fact_id}/review')
 def review_fact(fact_id: str, value: bool, uid: str = Depends(auth.get_current_user_uid)):
     facts_db.review_fact(uid, fact_id, value)
     return {'status': 'ok'}
 
 
-@router.patch('/v1/facts/{fact_id}', tags=['facts'])
+@v1_router.patch('/facts/{fact_id}')
 def edit_fact(fact_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
     # first_word = value.split(' ')[0]
     # user_name = get_user_name(uid, use_default=False)

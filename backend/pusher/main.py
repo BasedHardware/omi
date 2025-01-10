@@ -15,7 +15,7 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
-app.include_router(pusher.router)
+app.include_router(pusher.v1_router)
 
 modal_app = App(
     name='pusher',

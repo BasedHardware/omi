@@ -6,10 +6,10 @@ from models import task
 from utils.memories.process_memory import process_user_expression_measurement_callback
 from utils.other import hume
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['agent'])
 
 
-@router.post('/v1/agents/hume/callback', response_model=shared.EmptyResponse, tags=['agent', 'hume', 'callback'])
+@v1_router.post('/agents/hume/callback', response_model=shared.EmptyResponse, tags=['agent', 'hume', 'callback'])
 async def hume_expression_measurement_callback(request: Request, data: dict):
     job_callback = hume.HumeJobCallbackModel.from_dict("prosody", data)
     if job_callback is None:

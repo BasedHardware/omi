@@ -11,7 +11,8 @@ class DeviceModel(int, Enum):
     OPEN_GLASS = 3
 
 
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['firmware'])
+v2_router = APIRouter(prefix='/v2', tags=['firmware'])
 
 
 # Device Model Number
@@ -28,7 +29,7 @@ def _get_device_by_model_number(device_model: str):
 
     return None
 
-@router.get("/v2/firmware/latest")
+@v2_router.get("/firmware/latest")
 async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
     device = _get_device_by_model_number(device_model)
     if not device:
@@ -95,7 +96,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         }
 
 
-@router.get("/v1/firmware/latest")
+@v1_router.get("/firmware/latest")
 async def get_latest_version_v1(device: int):
     # if device = 1 : Friend
     # if device = 2 : OpenGlass

@@ -20,7 +20,8 @@ from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['chat'])
+v2_router = APIRouter(prefix='/v2', tags=['chat'])
 
 
 def filter_messages(messages, plugin_id):
@@ -34,7 +35,7 @@ def filter_messages(messages, plugin_id):
     return collected
 
 
-@router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
+@v2_router.post('/messages', response_model=ResponseMessage)
 def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -113,7 +114,7 @@ def send_message(
         media_type="text/event-stream"
     )
 
-@router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
+@v1_router.post('/messages', response_model=ResponseMessage)
 def send_message_v1(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -169,7 +170,7 @@ def send_message_v1(
     return resp
 
 
-@router.post('/v1/messages/upload', tags=['chat'], response_model=ResponseMessage)
+@v1_router.post('/messages/upload', response_model=ResponseMessage)
 async def send_message_with_file(
         file: UploadFile = File(...), plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -185,7 +186,7 @@ async def send_message_with_file(
     # - If file is too big, it should do a mini RAG (later)
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+@v1_router.delete('/messages', response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
@@ -225,12 +226,12 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
     return ai_message
 
 
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
+@v1_router.post('/initial-message', response_model=Message)
 def create_initial_message(plugin_id: Optional[str], uid: str = Depends(auth.get_current_user_uid)):
     return initial_message_util(uid, plugin_id)
 
 
-@router.get('/v1/messages', response_model=List[Message], tags=['chat'])
+@v1_router.get('/messages', response_model=List[Message])
 def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
     messages = chat_db.get_messages(uid, limit=100, include_memories=True)
     if not messages:
@@ -238,7 +239,7 @@ def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
     return messages
 
 
-@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
+@v2_router.get('/messages', response_model=List[Message])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if plugin_id in ['null', '']:
         plugin_id = None
@@ -250,7 +251,7 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     return messages
 
 
-@router.post("/v1/voice-messages")
+@v1_router.post("/voice-messages")
 async def create_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     paths = retrieve_file_paths(files, uid)
     if len(paths) == 0:
@@ -274,7 +275,7 @@ async def create_voice_message(files: List[UploadFile] = File(...), uid: str = D
     return resp
 
 
-@router.post("/v2/voice-messages")
+@v2_router.post("/voice-messages")
 async def create_voice_message_stream(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # wav
     paths = retrieve_file_paths(files, uid)

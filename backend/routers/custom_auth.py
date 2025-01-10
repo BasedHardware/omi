@@ -5,7 +5,7 @@ from firebase_admin import auth
 import os
 import requests
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=["custom_auth"])
 
 
 class UserCredentials(BaseModel):
@@ -14,7 +14,7 @@ class UserCredentials(BaseModel):
     name: Optional[str] = None
 
 
-@router.post("/v1/signup")
+@v1_router.post("/signup")
 def sign_up(credentials: UserCredentials):
     try:
         user = auth.create_user(
@@ -27,7 +27,7 @@ def sign_up(credentials: UserCredentials):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/v1/signin")
+@v1_router.post("/signin")
 def sign_in(credentials: UserCredentials):
     try:
         api_key = os.getenv("CUSTOM_AUTH_FIREBASE_API_KEY")

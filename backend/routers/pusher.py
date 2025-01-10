@@ -10,7 +10,7 @@ from utils.plugins import trigger_realtime_integrations
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1")
 
 async def _websocket_util_trigger(
         websocket: WebSocket, uid: str, sample_rate: int = 8000,
@@ -112,7 +112,7 @@ async def _websocket_util_trigger(
                 print(f"Error closing WebSocket: {e}")
 
 
-@router.websocket("/v1/trigger/listen")
+@v1_router.websocket("/trigger/listen")
 async def websocket_endpoint_trigger(
         websocket: WebSocket, uid: str, sample_rate: int = 8000,
 ):

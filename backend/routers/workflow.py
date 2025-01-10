@@ -11,11 +11,10 @@ import models.memory as memory_models
 from routers.memories import process_memory, trigger_external_integrations
 from utils.memories.location import get_google_maps_location
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['integration', 'workflow', 'memories'])
 
 
-@router.post('/v1/integrations/workflow/memories', response_model=integration_models.EmptyResponse,
-             tags=['integration', 'workflow', 'memories'])
+@v1_router.post('/integrations/workflow/memories', response_model=integration_models.EmptyResponse)
 def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()],
                   create_memory: memory_models.WorkflowCreateMemory):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
@@ -52,8 +51,7 @@ def create_memory(request: Request, uid: str, api_key: Annotated[str | None, Hea
     return {}
 
 
-@router.get('/v1/integrations/workflow/memories', response_model=List[memory_models.Memory],
-            tags=['integration', 'workflow', 'memories'])
+@v1_router.get('/integrations/workflow/memories', response_model=List[memory_models.Memory])
 def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header()], limit: int = 1):
     if api_key != os.getenv('WORKFLOW_API_KEY'):
         raise HTTPException(status_code=401, detail="Invalid API Key")
