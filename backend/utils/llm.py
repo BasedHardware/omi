@@ -556,9 +556,9 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
-async def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]):
+def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -586,9 +586,9 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini.invoke(prompt).content
 
-async def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []):
+def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
 
 
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
@@ -660,12 +660,12 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     return llm_large.invoke(prompt).content
 
 
-async def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                        messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]):
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
 
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    await llm_large_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+    return llm_large_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
