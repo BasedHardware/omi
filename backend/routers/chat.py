@@ -93,22 +93,20 @@ def send_message(
         return ai_message, ask_for_nps
 
     async def generate_stream():
-        response = ""
         callback_data = {}
         async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data):
             if chunk:
-                if chunk.startswith("data: "):
-                    response = response + chunk[6:]
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
-
             else:
-                ai_message, ask_for_nps = process_message(response, callback_data)
-                ai_message_dict = ai_message.dict()
-                response_message = ResponseMessage(**ai_message_dict)
-                response_message.ask_for_nps = ask_for_nps
-                data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                yield f"done: {data}\n\n"
+                response = callback_data.get('answer')
+                if response:
+                    ai_message, ask_for_nps = process_message(response, callback_data)
+                    ai_message_dict = ai_message.dict()
+                    response_message = ResponseMessage(**ai_message_dict)
+                    response_message.ask_for_nps = ask_for_nps
+                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {data}\n\n"
 
     return StreamingResponse(
         generate_stream(),
