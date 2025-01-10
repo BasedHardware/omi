@@ -25,7 +25,9 @@ import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/file.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -172,46 +174,15 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<File> _flushBytesToTempFile(List<List<int>> chunk, int timerStart) async {
-    final directory = await getTemporaryDirectory();
-    String filePath = '${directory.path}/audio_${timerStart}.bin';
-    List<int> data = [];
-    for (int i = 0; i < chunk.length; i++) {
-      var frame = chunk[i];
-
-      // Format: <length>|<data> ; bytes: 4 | n
-      final byteFrame = ByteData(frame.length);
-      for (int i = 0; i < frame.length; i++) {
-        byteFrame.setUint8(i, frame[i]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-    final file = File(filePath);
-    await file.writeAsBytes(data);
-
-    return file;
-  }
-
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
     if (data.isEmpty) {
       debugPrint("voice frames is empty");
       return;
     }
 
-    debugPrint("Send ${data.length} voice frames to backend");
-    var file =
-        await _flushBytesToTempFile(data, DateTime.now().millisecondsSinceEpoch ~/ 1000 - (data.length / 100).ceil());
-    try {
-      var messages = await sendVoiceMessageServer([file]);
-      debugPrint("Command respond: ${messages.map((m) => m.text).join(" | ")}");
-      if (messages.isNotEmpty) {
-        messageProvider?.refreshMessages();
-        _playSpeakerHaptic(deviceId, 2);
-      }
-    } catch (e) {
-      debugPrint(e.toString());
-    }
+    await messageProvider?.sendVoiceMessageStreamToServer(data, onFirstChunkRecived: () {
+      _playSpeakerHaptic(deviceId, 2);
+    });
   }
 
   // Just incase the ble connection get loss

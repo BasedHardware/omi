@@ -340,22 +340,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  _sendMessageUtil(String message) async {
-    MixpanelManager().chatMessageSent(message);
-    context.read<MessageProvider>().setSendingMessage(true);
-    String? appId = context.read<MessageProvider>().appProvider?.selectedChatAppId;
+  _sendMessageUtil(String text) async {
+    var provider = context.read<MessageProvider>();
+    MixpanelManager().chatMessageSent(text);
+    provider.setSendingMessage(true);
+    String? appId = provider.appProvider?.selectedChatAppId;
     if (appId == 'no_selected') {
       appId = null;
     }
-    var newMessage = ServerMessage(
-        const Uuid().v4(), DateTime.now(), message, MessageSender.human, MessageType.text, appId, false, []);
-    context.read<MessageProvider>().addMessage(newMessage);
+    var message =
+        ServerMessage(const Uuid().v4(), DateTime.now(), text, MessageSender.human, MessageType.text, appId, false, []);
+    provider.addMessage(message);
     scrollToBottom();
     textController.clear();
-    await context.read<MessageProvider>().sendMessageToServer(message, appId);
-    // TODO: restore streaming capabilities, with initial empty message
+    await provider.sendMessageStreamToServer(text, appId);
     scrollToBottom();
-    context.read<MessageProvider>().setSendingMessage(false);
+    provider.setSendingMessage(false);
   }
 
   sendInitialAppMessage(App? app) async {

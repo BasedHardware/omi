@@ -79,6 +79,55 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
   });
 }
 
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId}) async* {
+  var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v2/messages';
+  }
+
+  try {
+    final request = await HttpClient().postUrl(Uri.parse(url));
+    request.headers.set('Authorization', await getAuthHeader());
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({'text': text}));
+
+    final response = await request.close();
+
+    if (response.statusCode != 200) {
+      Logger.error('Failed to send message: ${response.statusCode}');
+      yield ServerMessageChunk.failedMessage();
+      return;
+    }
+
+    var messageId = "1000"; // default new message
+    await for (var data in response.transform(utf8.decoder)) {
+      var lines = data.split('\n\n');
+      for (var line in lines.where((line) => line.isNotEmpty)) {
+        if (line.startsWith('think: ')) {
+          yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
+          continue;
+        }
+
+        if (line.startsWith('data: ')) {
+          yield ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
+          continue;
+        }
+
+        if (line.startsWith('done: ')) {
+          var text = line.substring(6);
+          debugPrint(text);
+          yield ServerMessageChunk(messageId, text, MessageChunkType.done,
+              message: ServerMessage.fromJson(json.decode(text)));
+          continue;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.error('Error sending message: $e');
+    yield ServerMessageChunk.failedMessage();
+  }
+}
+
 Future<ServerMessage> getInitialAppMessage(String? appId) {
   return makeApiCall(
     url: '${Env.apiBaseUrl}v1/initial-message?plugin_id=$appId',
@@ -93,6 +142,59 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
       throw Exception('Failed to send message');
     }
   });
+}
+
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v2/voice-messages'),
+  );
+  for (var file in files) {
+    request.files.add(await http.MultipartFile.fromPath('files', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var response = await request.send();
+    if (response.statusCode != 200) {
+      Logger.error('Failed to send message: ${response.statusCode}');
+      yield ServerMessageChunk.failedMessage();
+      return;
+    }
+
+    var messageId = "1000"; // default new message
+    await for (var data in response.stream.transform(utf8.decoder)) {
+      var lines = data.split('\n\n');
+      for (var line in lines.where((line) => line.isNotEmpty)) {
+        if (line.startsWith('think: ')) {
+          yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
+          continue;
+        }
+
+        if (line.startsWith('data: ')) {
+          yield ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
+          continue;
+        }
+
+        if (line.startsWith('done: ')) {
+          var text = line.substring(6);
+          yield ServerMessageChunk(messageId, text, MessageChunkType.done,
+              message: ServerMessage.fromJson(json.decode(text)));
+          continue;
+        }
+
+        if (line.startsWith('message: ')) {
+          var text = line.substring(9);
+          yield ServerMessageChunk(messageId, text, MessageChunkType.message,
+              message: ServerMessage.fromJson(json.decode(text)));
+          continue;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.error('Error sending message: $e');
+    yield ServerMessageChunk.failedMessage();
+  }
 }
 
 Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {

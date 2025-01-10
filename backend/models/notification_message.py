@@ -1,13 +1,12 @@
-
 from typing import Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 
 class NotificationMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(tz=timezone.utc).isoformat())
     sender: str = Field(default='ai')
     plugin_id: Optional[str] = None
     from_integration: str
