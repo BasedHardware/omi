@@ -6,6 +6,7 @@ import 'package:friend_private/backend/http/shared.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
+import 'package:friend_private/utils/other/string_utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:path/path.dart';
@@ -99,10 +100,25 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
       return;
     }
 
-    var messageId = "1000"; // default new message
+    var buffers = <String>[];
+    var messageId = "1000"; // Default new message
     await for (var data in response.transform(utf8.decoder)) {
       var lines = data.split('\n\n');
       for (var line in lines.where((line) => line.isNotEmpty)) {
+        // Dealing w/ the package spliting by 1024 bytes in dart
+        // Waiting for the next package
+        if (line.length >= 1024) {
+          buffers.add(line);
+          continue;
+        }
+
+        // Merge package if needed
+        if (buffers.isNotEmpty) {
+          buffers.add(line);
+          line = buffers.join();
+          buffers.clear();
+        }
+
         if (line.startsWith('think: ')) {
           yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
           continue;
@@ -114,8 +130,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
         }
 
         if (line.startsWith('done: ')) {
-          var text = utf8.decode(base64.decode(line.substring(6)));
-          debugPrint(text);
+          var text = decodeBase64(line.substring(6));
           yield ServerMessageChunk(messageId, text, MessageChunkType.done,
               message: ServerMessage.fromJson(json.decode(text)));
           continue;
@@ -162,10 +177,25 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
       return;
     }
 
-    var messageId = "1000"; // default new message
+    var buffers = <String>[];
+    var messageId = "1000"; // Default new message
     await for (var data in response.stream.transform(utf8.decoder)) {
       var lines = data.split('\n\n');
       for (var line in lines.where((line) => line.isNotEmpty)) {
+        // Dealing w/ the package spliting by 1024 bytes in dart
+        // Waiting for the next package
+        if (line.length >= 1024) {
+          buffers.add(line);
+          continue;
+        }
+
+        // Merge package if needed
+        if (buffers.isNotEmpty) {
+          buffers.add(line);
+          line = buffers.join();
+          buffers.clear();
+        }
+
         if (line.startsWith('think: ')) {
           yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
           continue;
@@ -177,14 +207,14 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
         }
 
         if (line.startsWith('done: ')) {
-          var text = utf8.decode(base64.decode(line.substring(6)));
+          var text = decodeBase64(line.substring(6));
           yield ServerMessageChunk(messageId, text, MessageChunkType.done,
               message: ServerMessage.fromJson(json.decode(text)));
           continue;
         }
 
         if (line.startsWith('message: ')) {
-          var text = utf8.decode(base64.decode(line.substring(9)));
+          var text = decodeBase64(line.substring(9));
           yield ServerMessageChunk(messageId, text, MessageChunkType.message,
               message: ServerMessage.fromJson(json.decode(text)));
           continue;
