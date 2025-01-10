@@ -337,16 +337,21 @@ def execute_graph_chat(
 
 
 async def execute_graph_chat_stream(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {},
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream plugin: ', plugin)
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
-    asyncio.create_task(graph_stream.ainvoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback},
-        {"configurable": {"thread_id": str(uuid.uuid4())}},
-    ))
+
+    async def invoke_graph():
+        return await graph_stream.ainvoke(
+            {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
+             "streaming": True, "callback": callback},
+            {"configurable": {"thread_id": str(uuid.uuid4())}},
+        )
+
+    task = asyncio.create_task(invoke_graph())
+
     while True:
         try:
             chunk = await callback.queue.get()
@@ -355,6 +360,13 @@ async def execute_graph_chat_stream(
             break
         if chunk is None:
             break
+
+    await task
+
+    result = task.result()
+    callback_data['memories_found'] = result.get("memories_found", [])
+    callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+    return
 
 
 def _pretty_print_conversation(messages: List[Message]):

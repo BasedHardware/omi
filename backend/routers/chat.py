@@ -15,7 +15,7 @@ from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
-from utils.chat import process_voice_message_segment
+from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
@@ -54,26 +54,29 @@ def send_message(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
 
-    def process_message(response: str, mid: str):
+    def process_message(response: str, callback_data: dict):
+        memories = callback_data.get('memories_found', [])
+        ask_for_nps = callback_data.get('ask_for_nps', False)
+
         # cited extraction
         cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
         if len(cited_memory_idxs) > 0:
             response = re.sub(r'\[\d+\]', '', response)
-        # TODO: support memories
-        # memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+        memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
 
         memories_id = []
         # check if the items in the memories list are dict
-        # if memories:
-        #    converted_memories = []
-        #    for m in memories[:5]:
-        #        if isinstance(m, dict):
-        #            converted_memories.append(Memory(**m))
-        #        else:
-        #            converted_memories.append(m)
-        #    memories_id = [m.id for m in converted_memories]
+        if memories:
+            converted_memories = []
+            for m in memories[:5]:
+                if isinstance(m, dict):
+                    converted_memories.append(Memory(**m))
+                else:
+                    converted_memories.append(m)
+            memories_id = [m.id for m in converted_memories]
+
         ai_message = Message(
-            id=mid,
+            id=str(uuid.uuid4()),
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
@@ -82,18 +85,16 @@ def send_message(
             memories_id=memories_id,
         )
         chat_db.add_message(uid, ai_message.dict())
-        # ai_message.memories = memories if len(memories) < 5 else memories[:5]
-        # if app_id:
-        #    record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+        ai_message.memories = memories if len(memories) < 5 else memories[:5]
+        if app_id:
+            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-        resp = ai_message.dict()
-        # resp['ask_for_nps'] = ask_for_nps
-        return resp
+        return ai_message, ask_for_nps
 
     async def generate_stream():
         response = ""
-        message_id = str(uuid.uuid4())
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True):
+        callback_data = {}
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data):
             if chunk:
                 if chunk.startswith("data: "):
                     response = response + chunk[6:]
@@ -101,10 +102,10 @@ def send_message(
                 yield f'{data}\n\n'
 
             else:
-                # end
-                print(response)
-                ai_message = process_message(response, message_id)
-                response_message = ResponseMessage(**ai_message)
+                ai_message, ask_for_nps = process_message(response, callback_data)
+                ai_message_dict = ai_message.dict()
+                response_message = ResponseMessage(**ai_message_dict)
+                response_message.ask_for_nps = ask_for_nps
                 yield f"done: {response_message.model_dump_json()}\n\n"
 
     return StreamingResponse(
@@ -271,3 +272,25 @@ async def create_voice_message(files: List[UploadFile] = File(...), uid: str = D
         raise HTTPException(status_code=400, detail='Bad params')
 
     return resp
+
+
+@router.post("/v2/voice-messages")
+async def create_voice_message_stream(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+    # wav
+    paths = retrieve_file_paths(files, uid)
+    if len(paths) == 0:
+        raise HTTPException(status_code=400, detail='Paths is invalid')
+
+    wav_paths = decode_files_to_wav(paths)
+    if len(wav_paths) == 0:
+        raise HTTPException(status_code=400, detail='Wav path is invalid')
+
+    # process
+    async def generate_stream():
+        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
+            yield chunk
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream"
+    )
