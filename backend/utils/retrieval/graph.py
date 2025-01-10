@@ -1,6 +1,5 @@
 import datetime
 import uuid
-import random
 import asyncio
 from typing import List, Optional, Tuple, AsyncGenerator
 
@@ -260,8 +259,7 @@ def qa_handler(state: GraphState):
     # streaming
     streaming = state.get("streaming")
     if streaming:
-        msg = random.choice(["Reasoning", "Reasoning to bring you the best results", "Working through reasoning now"])
-        state['callback'].put_thought_nowait(msg)
+        state['callback'].put_thought_nowait("Reasoning")
         memories = state.get("memories_found", [])
         asyncio.run(qa_rag_stream(
             uid,
