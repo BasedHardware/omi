@@ -150,26 +150,25 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
         return ai_message, ask_for_nps
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response = ""
     callback_data = {}
     async for chunk in execute_graph_chat_stream(uid, messages, plugin, cited=False, callback_data=callback_data):
         if chunk:
-            if chunk.startswith("data: "):
-                response = response + chunk[6:]
             data = chunk.replace("\n", "__CRLF__")
             yield f'{data}\n\n'
 
         else:
-            ai_message, ask_for_nps = process_message(response, callback_data)
-            ai_message_dict = ai_message.dict()
-            response_message = ResponseMessage(**ai_message_dict)
-            response_message.ask_for_nps = ask_for_nps
-            data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-            yield f"done: {data}\n\n"
+            response = callback_data.get('answer')
+            if response:
+                ai_message, ask_for_nps = process_message(response, callback_data)
+                ai_message_dict = ai_message.dict()
+                response_message = ResponseMessage(**ai_message_dict)
+                response_message.ask_for_nps = ask_for_nps
+                data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                yield f"done: {data}\n\n"
 
-            # send notification
-            token = notification_db.get_token_only(uid)
-            send_chat_message_notification(token, "Omi", "omi", ai_message.text, ai_message.id)
+                # send notification
+                token = notification_db.get_token_only(uid)
+                send_chat_message_notification(token, "Omi", "omi", ai_message.text, ai_message.id)
 
     return
 
