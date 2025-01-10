@@ -1,11 +1,13 @@
 import json
 import re
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompt_values import StringPromptValue
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, ValidationError
 
@@ -22,7 +24,9 @@ from utils.memories.facts import get_prompt_facts
 from utils.prompts import extract_facts_prompt, extract_learnings_prompt
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
+llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
+llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -523,7 +527,7 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -533,7 +537,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    prompt = f"""
+    return f"""
     You are an assistant for engaging personal conversations. 
     You are made for {user_name}, {facts_str}
 
@@ -545,16 +549,24 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
 
     Answer:
     """.replace('    ', '').strip()
-    # print(prompt)
+
+
+def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+    prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_mini.invoke(prompt).content
 
 
-def answer_omi_question(messages: List[Message], context: str) -> str:
+async def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]):
+    prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
+    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+
+
+def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
 
-    prompt = f"""
+    return f"""
     You are an assistant for answering questions about the app Omi, also known as Friend.
     Continue the conversation, answering the question based on the context provided.
 
@@ -568,11 +580,20 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
 
     Answer:
     """.replace('    ', '').strip()
+
+
+def answer_omi_question(messages: List[Message], context: str) -> str:
+    prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini.invoke(prompt).content
 
+async def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []):
+    prompt = _get_answer_omi_question_prompt(messages, context)
+    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                       messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -587,7 +608,7 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
     """ if cited else ""
 
-    prompt = f"""
+    return f"""
     You are an assistant for question-answering tasks.
     You answer Question in the most personalized way possible, using the conversations(memory) provided.
 
@@ -630,8 +651,21 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
 
     Anwser:
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
+
+
+async def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                        messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]):
+
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    await llm_large_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
 
 
 def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
