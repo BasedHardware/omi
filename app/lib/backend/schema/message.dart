@@ -148,6 +148,7 @@ enum MessageChunkType {
   data('data'),
   done('done'),
   error('error'),
+  message('message'),
   ;
 
   final String value;
