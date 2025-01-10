@@ -110,11 +110,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void addMessage(ServerMessage message) {
-    debugPrint("Preadd message ${message.id}");
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
-    debugPrint("Add message ${message.id}");
     messages.insert(0, message);
     notifyListeners();
   }
@@ -154,7 +152,6 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
-          debugPrint("chunk done ${message.id}");
           messages[0] = message;
           notifyListeners();
           continue;

@@ -262,8 +262,6 @@ def qa_handler(state: GraphState):
     if streaming:
         msg = random.choice(["Reasoning", "Reasoning to bring you the best results", "Working through reasoning now"])
         state['callback'].put_thought_nowait(msg)
-
-        uid = state.get("uid")
         memories = state.get("memories_found", [])
         asyncio.run(qa_rag_stream(
             uid,
