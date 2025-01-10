@@ -114,7 +114,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
         }
 
         if (line.startsWith('done: ')) {
-          var text = line.substring(6);
+          var text = utf8.decode(base64.decode(line.substring(6)));
           debugPrint(text);
           yield ServerMessageChunk(messageId, text, MessageChunkType.done,
               message: ServerMessage.fromJson(json.decode(text)));
@@ -177,14 +177,14 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
         }
 
         if (line.startsWith('done: ')) {
-          var text = line.substring(6);
+          var text = utf8.decode(base64.decode(line.substring(6)));
           yield ServerMessageChunk(messageId, text, MessageChunkType.done,
               message: ServerMessage.fromJson(json.decode(text)));
           continue;
         }
 
         if (line.startsWith('message: ')) {
-          var text = line.substring(9);
+          var text = utf8.decode(base64.decode(line.substring(9)));
           yield ServerMessageChunk(messageId, text, MessageChunkType.message,
               message: ServerMessage.fromJson(json.decode(text)));
           continue;
