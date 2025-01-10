@@ -27,7 +27,6 @@ llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
-# llm_large_stream = ChatOpenAI(model='gpt-4o', streaming=True, temperature=1)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -528,7 +527,7 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str]) -> st
     return response.summary
 
 
-def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+def _get_answer_simple_message_prompt(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -538,7 +537,7 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    prompt = f"""
+    return f"""
     You are an assistant for engaging personal conversations. 
     You are made for {user_name}, {facts_str}
 
@@ -550,199 +549,121 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
 
     Answer:
     """.replace('    ', '').strip()
-    # print(prompt)
+
+
+def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Plugin] = None) -> str:
+    prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_mini.invoke(prompt).content
 
+
 async def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]):
+    prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
+    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+
+
+def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
-    user_name, facts_str = get_prompt_facts(uid)
 
-    plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+    return f"""
+    You are an assistant for answering questions about the app Omi, also known as Friend.
+    Continue the conversation, answering the question based on the context provided.
 
-    prompt = f"""
-    You are an assistant for engaging personal conversations. 
-    You are made for {user_name}, {facts_str}
-
-    Use what you know about {user_name}, to continue the conversation, feel free to ask questions, share stories, or just say hi.
-    {plugin_info}
+    Context:
+    ```
+    {context}
+    ```
 
     Conversation History:
     {conversation_history}
 
     Answer:
     """.replace('    ', '').strip()
-    # print(prompt)
-    await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
-    conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
-    )
-
-    prompt = f"""
-    You are an assistant for answering questions about the app Omi, also known as Friend.
-    Continue the conversation, answering the question based on the context provided.
-
-    Context:
-    ```
-    {context}
-    ```
-
-    Conversation History:
-    {conversation_history}
-
-    Answer:
-    """.replace('    ', '').strip()
+    prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini.invoke(prompt).content
 
 async def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []):
-    conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
-    )
-
-    prompt = f"""
-    You are an assistant for answering questions about the app Omi, also known as Friend.
-    Continue the conversation, answering the question based on the context provided.
-
-    Context:
-    ```
-    {context}
-    ```
-
-    Conversation History:
-    {conversation_history}
-
-    Answer:
-    """.replace('    ', '').strip()
+    prompt = _get_answer_omi_question_prompt(messages, context)
     await llm_mini_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
+
+
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                       messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    return f"""
+    You are an assistant for question-answering tasks.
+    You answer Question in the most personalized way possible, using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    {cited_prompt}
+
+    Keep the answer concise.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
 def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
            messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
-
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
-    context = context.replace('\n\n', '\n').strip()
-    plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
-
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
-    cited_prompt = """
-    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
-    """ if cited else ""
-
-    prompt = f"""
-    You are an assistant for question-answering tasks.
-    You answer Question in the most personalized way possible, using the conversations(memory) provided.
-
-    You will be provided previous messages between you and user to help you answer the Question. \
-    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
-
-    {cited_prompt}
-
-    Keep the answer concise.
-
-    Use markdown to bold text sparingly, primarily for emphasis within sentences.
-
-    {plugin_info}
-
-    **Question:**
-    ```
-    {question}
-    ```
-
-    **Conversations(Memories):**
-    ---
-    {context}
-    ---
-
-    **Previous messages:**
-    ---
-     {Message.get_messages_as_string(messages)}
-    ---
-
-    Use the following User Facts if relevant to the Question.
-
-    **User Facts:**
-    ---
-    {facts_str.strip()}
-    ---
-
-    Question's timezone: {tz}
-
-    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
-
-    Anwser:
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
 
+
 async def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                         messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]):
-    user_name, facts_str = get_prompt_facts(uid)
-    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
-    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
-    context = context.replace('\n\n', '\n').strip()
-    plugin_info = ""
-    if plugin:
-        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
-
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
-    cited_prompt = """
-    Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]". NO SPACE between the last word and the citation. Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
-    """ if cited else ""
-
-    prompt = f"""
-    You are an assistant for question-answering tasks.
-    You answer Question in the most personalized way possible, using the conversations(memory) provided.
-
-    You will be provided previous messages between you and user to help you answer the Question. \
-    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
-
-    {cited_prompt}
-
-    Keep the answer concise.
-
-    Use markdown to bold text sparingly, primarily for emphasis within sentences.
-
-    {plugin_info}
-
-    **Question:**
-    ```
-    {question}
-    ```
-
-    **Conversations(Memories):**
-    ---
-    {context}
-    ---
-
-    **Previous messages:**
-    ---
-     {Message.get_messages_as_string(messages)}
-    ---
-
-    Use the following User Facts if relevant to the Question.
-
-    **User Facts:**
-    ---
-    {facts_str.strip()}
-    ---
-
-    Question's timezone: {tz}
-
-    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
-
-    Anwser:
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     await llm_large_stream.agenerate_prompt(prompts=[StringPromptValue(text=prompt)], callbacks=callbacks)
 
