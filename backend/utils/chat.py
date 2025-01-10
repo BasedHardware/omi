@@ -1,5 +1,6 @@
 import threading
 import time
+import base64
 import uuid
 from datetime import datetime, timezone
 from typing import List, AsyncGenerator
@@ -111,7 +112,8 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
     chat_db.add_message(uid, message.dict())
 
     # stream
-    yield f"message: {message.model_dump_json()}\n\n"
+    mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
+    yield f"message: {mdata}\n\n"
 
     # not support plugin
     plugin = None
@@ -162,7 +164,8 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             ai_message_dict = ai_message.dict()
             response_message = ResponseMessage(**ai_message_dict)
             response_message.ask_for_nps = ask_for_nps
-            yield f"done: {response_message.model_dump_json()}\n\n"
+            data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+            yield f"done: {data}\n\n"
 
             # send notification
             token = notification_db.get_token_only(uid)
