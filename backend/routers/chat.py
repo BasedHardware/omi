@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage
+from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
@@ -86,7 +86,7 @@ def send_message(
             memories_id=memories_id,
         )
         chat_db.add_message(uid, ai_message.dict())
-        ai_message.memories = memories if len(memories) < 5 else memories[:5]
+        ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
