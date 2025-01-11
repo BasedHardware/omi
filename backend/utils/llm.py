@@ -27,6 +27,8 @@ llm_mini = ChatOpenAI(model='gpt-4o-mini')
 llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
+llm_medium = ChatOpenAI(model='gpt-4o')
+llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True, temperature=1)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
@@ -590,9 +592,88 @@ def answer_omi_question_stream(messages: List[Message], context: str, callbacks:
     prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
 
-
 def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_prompt = """
+    You MUST cite the most relevant converstations(memories) that answer the question. \
+    You MUST ADHERE to the following instructions for citing coverstations(memories).
+     - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
+     - NO SPACE between the last word and the citation.
+     - Cite the most relevant memories that answer the Question. Avoid citing irrelevant memories.
+    """ if cited else ""
+
+    return f"""
+    You are an assistant for question-answering tasks.
+    Write an accurate, detailed, and comprehensive response to the Question in the most personalized way possible, \
+    using the conversations(memory) provided.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's IMPORTANT to refine the Question base on the last messages only before anwser it.
+
+    Keep the answer concise and high-quality.
+
+    Use markdown to bold text sparingly, primarily for emphasis within sentences.
+
+    {cited_prompt}
+
+    {plugin_info}
+
+    **Question:**
+    ```
+    {question}
+    ```
+
+    **Conversations(Memories):**
+    ---
+    {context}
+    ---
+
+    **Previous messages:**
+    ---
+     {Message.get_messages_as_string(messages)}
+    ---
+
+    Use the following User Facts if relevant to the Question.
+
+    **User Facts:**
+    ---
+    {facts_str.strip()}
+    ---
+
+    Question's timezone: {tz}
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    Anwser:
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium.invoke(prompt).content
+
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+
+def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
 
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
@@ -653,15 +734,14 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+              messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
 
-
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                     messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
 
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
@@ -1080,6 +1160,65 @@ class OutputQuestion(BaseModel):
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation within a user and an AI, \
+    there could be a few messages exchanged, and partly built up the proper question, \
+    your task is to understand the user last messages, and identify the question or follow-up question the user is asking. \
+
+    You MUST keep the original `date time term`.
+
+    First determine whether the user is asking a question or a follow-up question or not. \
+    If the user is not asking a question or does not want to follow up, respond with an empty message. \
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is empty.
+
+    If the user's last message is a complete question, maintain the original version as accurately as possible. \
+    Avoid adding unnecessary words.
+
+    You will be provided previous messages between you and user to help you answer the Question. \
+    It's super IMPORTANT to refine the Question to be full context with the last messages only.
+
+    Output at WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    User last messages:
+    ```According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+    Attended an outdoor party (cold weather, talked a lot more than usual).
+    Smoked weed (unusual for me).
+    Drank lots of relaxing tea.
+
+    Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+    ```
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
+
+    **The user last messages:**
+    ```
+    {Message.get_messages_as_string(user_last_messages)}
+    ```
+
+    **Previous messages:**
+    ```
+    {Message.get_messages_as_string(messages)}
+    ```
+
+    **Date time term:** today, my day, my week, this week, this day, etc.
+
+    '''.replace('    ', '').strip()
+    # print(prompt)
+    return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
+def extract_question_from_conversation_v4(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
