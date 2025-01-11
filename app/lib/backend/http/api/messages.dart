@@ -80,6 +80,30 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
   });
 }
 
+ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line.startsWith('think: ')) {
+    return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
+  }
+
+  if (line.startsWith('data: ')) {
+    return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
+  }
+
+  if (line.startsWith('done: ')) {
+    var text = decodeBase64(line.substring(6));
+    return ServerMessageChunk(messageId, text, MessageChunkType.done,
+        message: ServerMessage.fromJson(json.decode(text)));
+  }
+
+  if (line.startsWith('message: ')) {
+    var text = decodeBase64(line.substring(9));
+    return ServerMessageChunk(messageId, text, MessageChunkType.message,
+        message: ServerMessage.fromJson(json.decode(text)));
+  }
+
+  return null;
+}
+
 Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
@@ -119,22 +143,18 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
           buffers.clear();
         }
 
-        if (line.startsWith('think: ')) {
-          yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
-          continue;
+        var messageChunk = parseMessageChunk(line, messageId);
+        if (messageChunk != null) {
+          yield messageChunk;
         }
+      }
+    }
 
-        if (line.startsWith('data: ')) {
-          yield ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
-          continue;
-        }
-
-        if (line.startsWith('done: ')) {
-          var text = decodeBase64(line.substring(6));
-          yield ServerMessageChunk(messageId, text, MessageChunkType.done,
-              message: ServerMessage.fromJson(json.decode(text)));
-          continue;
-        }
+    // Flush remainings
+    if (buffers.isNotEmpty) {
+      var messageChunk = parseMessageChunk(buffers.join(), messageId);
+      if (messageChunk != null) {
+        yield messageChunk;
       }
     }
   } catch (e) {
@@ -196,29 +216,18 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async*
           buffers.clear();
         }
 
-        if (line.startsWith('think: ')) {
-          yield ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
-          continue;
+        var messageChunk = parseMessageChunk(line, messageId);
+        if (messageChunk != null) {
+          yield messageChunk;
         }
+      }
+    }
 
-        if (line.startsWith('data: ')) {
-          yield ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
-          continue;
-        }
-
-        if (line.startsWith('done: ')) {
-          var text = decodeBase64(line.substring(6));
-          yield ServerMessageChunk(messageId, text, MessageChunkType.done,
-              message: ServerMessage.fromJson(json.decode(text)));
-          continue;
-        }
-
-        if (line.startsWith('message: ')) {
-          var text = decodeBase64(line.substring(9));
-          yield ServerMessageChunk(messageId, text, MessageChunkType.message,
-              message: ServerMessage.fromJson(json.decode(text)));
-          continue;
-        }
+    // Flush remainings
+    if (buffers.isNotEmpty) {
+      var messageChunk = parseMessageChunk(buffers.join(), messageId);
+      if (messageChunk != null) {
+        yield messageChunk;
       }
     }
   } catch (e) {

@@ -62,6 +62,42 @@ class Message(BaseModel):
 
         return '\n'.join(formatted_messages)
 
+    @staticmethod
+    def get_messages_as_xml(
+            messages: List['Message'],
+            use_user_name_if_available: bool = False,
+            use_plugin_name_if_available: bool = False
+    ) -> str:
+        sorted_messages = sorted(messages, key=lambda m: m.created_at)
+
+        def get_sender_name(message: Message) -> str:
+            if message.sender == 'human':
+                return 'User'
+            # elif use_plugin_name_if_available and message.plugin_id is not None:
+            #     plugin = next((p for p in plugins if p.id == message.plugin_id), None)
+            #     if plugin:
+            #         return plugin.name RESTORE ME
+            return message.sender.upper()  # TODO: use plugin id
+
+        formatted_messages = [
+            f"""
+                <message>
+                <created_at>
+                    {message.created_at.strftime('%d %b %Y at %H:%M UTC')}
+                </created_at>
+                <sender>
+                    {get_sender_name(message)}
+                </sender>
+                <content>
+                    {message.text}
+                </content>
+                </message>
+            """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+            for message in sorted_messages
+        ]
+
+        return '\n'.join(formatted_messages)
+
 
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
