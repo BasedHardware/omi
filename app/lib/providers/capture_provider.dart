@@ -504,7 +504,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _loadInProgressConversation() async {
-    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1, segment_limit: 50);
     _inProgressConversation = memories.isNotEmpty ? memories.first : null;
     if (_inProgressConversation != null) {
       segments = _inProgressConversation!.transcriptSegments;

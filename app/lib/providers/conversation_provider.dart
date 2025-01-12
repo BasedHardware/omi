@@ -251,7 +251,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future getConversationsFromServer() async {
     setLoadingConversations(true);
-    var mem = await getConversations();
+    var mem = await getConversations(segment_limit: 50);
     conversations = mem;
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     setLoadingConversations(false);
@@ -281,7 +281,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations = await getConversations(offset: conversations.length);
+    var newConversations = await getConversations(offset: conversations.length, segment_limit: 50);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     groupConversationsByDate();
