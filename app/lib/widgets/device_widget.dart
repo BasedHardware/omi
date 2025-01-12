@@ -46,23 +46,23 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
             Image.asset(
               Assets.images.stars.path,
             ),
-            //widget.animatedBackground
-            //    ? AnimatedBuilder(
-            //        animation: _animation,
-            //        builder: (context, child) {
-            //          return Image.asset(
-            //            Assets.images.blob.path,
-            //            height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-            //                widget.sizeMultiplier *
-            //                _animation.value,
-            //            width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
-            //                widget.sizeMultiplier *
-            //                _animation.value,
-            //          );
-            //        },
-            //      )
-            //    : Container(),
-            //// Image.asset("assets/images/blob.png"),
+            widget.animatedBackground
+                ? AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      return Image.asset(
+                        Assets.images.blob.path,
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
+                            widget.sizeMultiplier *
+                            _animation.value,
+                      );
+                    },
+                  )
+                : Container(),
+            // Image.asset("assets/images/blob.png"),
             Image.asset(
               Assets.images.herologo.path,
               height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,

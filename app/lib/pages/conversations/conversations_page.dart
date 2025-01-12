@@ -3,6 +3,7 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/conversations/widgets/local_sync.dart';
 import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
+import 'package:friend_private/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:friend_private/pages/conversations/widgets/search_widget.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
@@ -54,6 +55,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
             const SliverToBoxAdapter(child: SearchWidget()),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
