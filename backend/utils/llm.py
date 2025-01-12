@@ -624,6 +624,103 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
 
     <instructions>
     - Refine the <question> based on the last <previous_messages> before answering it.
+    - DO NOT use the AI's message from <previous_messages> as references to answer the <question>
+    - Use <question_timezone> and <current_datetime_utc> to refer to the time context of the <question>
+    - It is EXTREMELY IMPORTANT to directly answer the question, keep the answer concise and high-quality.
+    - NEVER say "based on the available memories". Get straight to the point.
+    - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
+    - You MUST follow the <reports_instructions> if the user is asking for reporting or summarizing their dates, weeks, months, or years.
+    {cited_instruction if cited and len(context) > 0 else ""}
+    {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
+    </instructions>
+
+    <plugin_instructions>
+    {plugin_info}
+    </plugin_instructions>
+
+    <reports_instructions>
+    - Answer with the template:
+     - Goals and Achievements
+     - Mood Tracker
+     - Gratitude Log
+     - Lessons Learned
+    </reports_instructions>
+
+    <question>
+    {question}
+    <question>
+
+    <memories>
+    {context}
+    </memories>
+
+    <previous_messages>
+    {Message.get_messages_as_xml(messages)}
+    </previous_messages>
+
+    <user_facts>
+    [Use the following User Facts if relevant to the <question>]
+        {facts_str.strip()}
+    </user_facts>
+
+    <current_datetime_utc>
+        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+    </current_datetime_utc>
+
+    <question_timezone>
+        Question's timezone: {tz}
+    </question_timezone>
+
+    <answer>
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium.invoke(prompt).content
+
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+
+
+def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_instruction = """
+    - You MUST cite the most relevant <memories> that answer the question. \
+      - Only cite in <memories> not <user_facts>, not <previous_messages>.
+      - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
+      - NO SPACE between the last word and the citation.
+      - Avoid citing irrelevant memories.
+    """
+
+    return f"""
+    <assistant_role>
+        You are an assistant for question-answering tasks.
+    </assistant_role>
+
+    <task>
+        Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
+    </task>
+
+    <instructions>
+    - Refine the <question> based on the last <previous_messages> before answering it.
     - DO NOT use the AI's message in <previous_messages> as references to answer the Question.
     - Keep the answer concise and high-quality.
     - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
@@ -664,20 +761,6 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
 
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-
-
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
-
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
@@ -1232,8 +1315,77 @@ class FiltersToUse(BaseModel):
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
-
 def extract_question_from_conversation(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation between a <user> and an <AI>. \
+    The conversation may include a few messages exchanged in <previous_messages> and partly build up the proper question. \
+    Your task is to understand the <user_last_messages> and identify the question or follow-up question the user is asking.
+
+    You will be provided with <previous_messages> between you and the user to help you indentify the question.
+
+    First, determine whether the user is asking a question or a follow-up question. \
+    If the user is not asking a question or does not want to follow up, respond with an empty message. \
+    For example, if the user says "Hi", "Hello", "How are you?", or "Good morning", the answer should be empty.
+
+    If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
+    Avoid adding unnecessary words.
+
+    You MUST keep the original <date_in_term>
+
+    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    <user_last_messages>
+    <message>
+        <sender>User</sender>
+        <content>
+            According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+            Attended an outdoor party (cold weather, talked a lot more than usual).
+            Smoked weed (unusual for me).
+            Drank lots of relaxing tea.
+
+            Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+        </content>
+    </message>
+    </user_last_messages>
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
+
+    <user_last_messages>
+    {Message.get_messages_as_xml(user_last_messages)}
+    </user_last_messages>
+
+    <previous_messages>
+    {Message.get_messages_as_xml(messages)}
+    </previous_messages>
+
+    <date_in_term>
+    - today
+    - my day
+    - my week
+    - this week
+    - this day
+    - etc.
+    </date_in_term>
+    '''.replace('    ', '').strip()
+    print(prompt)
+    question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    print(question)
+    return question
+
+
+def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
