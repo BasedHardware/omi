@@ -109,6 +109,8 @@ class ServerMessage {
   List<MessageConversation> memories;
   bool askForNps = false;
 
+  List<String> thinkings = [];
+
   ServerMessage(
     this.id,
     this.createdAt,
@@ -179,4 +181,39 @@ class ServerMessage {
   }
 
   bool get isEmpty => id == '0000';
+}
+
+enum MessageChunkType {
+  think('think'),
+  data('data'),
+  done('done'),
+  error('error'),
+  message('message'),
+  ;
+
+  final String value;
+
+  const MessageChunkType(this.value);
+}
+
+class ServerMessageChunk {
+  String messageId;
+  MessageChunkType type;
+  String text;
+  ServerMessage? message;
+
+  ServerMessageChunk(
+    this.messageId,
+    this.text,
+    this.type, {
+    this.message,
+  });
+
+  static ServerMessageChunk failedMessage() {
+    return ServerMessageChunk(
+      const Uuid().v4(),
+      'Looks like we are having issues with the server. Please try again later.',
+      MessageChunkType.error,
+    );
+  }
 }

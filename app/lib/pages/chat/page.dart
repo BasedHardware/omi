@@ -121,48 +121,49 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     ),
                   ),
                 )
-              : AnimatedMiniBanner(
-                  showAppBar: _showDeleteOption,
-                  height: 80,
-                  child: Container(
-                    width: double.infinity,
-                    height: 40,
-                    color: Theme.of(context).primaryColor,
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 20),
-                        const Spacer(),
-                        InkWell(
-                          onTap: () async {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) {
-                                return getDialog(context, () {
-                                  Navigator.of(context).pop();
-                                }, () {
-                                  setState(() {
-                                    _showDeleteOption = false;
-                                  });
-                                  context.read<MessageProvider>().clearChat();
-                                  Navigator.of(context).pop();
-                                }, "Clear Chat?",
-                                    "Are you sure you want to clear the chat? This action cannot be undone.");
-                              },
-                            );
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Text(
-                              "Clear Chat  \u{1F5D1}",
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                      ],
-                    ),
-                  ),
-                ),
+              : null,
+          // AnimatedMiniBanner(
+          //   showAppBar: _showDeleteOption,
+          //   height: 80,
+          //   child: Container(
+          //     width: double.infinity,
+          //     height: 40,
+          //     color: Theme.of(context).primaryColor,
+          //     child: Row(
+          //       children: [
+          //         const SizedBox(width: 20),
+          //         const Spacer(),
+          //         InkWell(
+          //           onTap: () async {
+          //             showDialog(
+          //               context: context,
+          //               builder: (ctx) {
+          //                 return getDialog(context, () {
+          //                   Navigator.of(context).pop();
+          //                 }, () {
+          //                   setState(() {
+          //                     _showDeleteOption = false;
+          //                   });
+          //                   context.read<MessageProvider>().clearChat();
+          //                   Navigator.of(context).pop();
+          //                 }, "Clear Chat?",
+          //                     "Are you sure you want to clear the chat? This action cannot be undone.");
+          //               },
+          //             );
+          //           },
+          //           child: const Padding(
+          //             padding: EdgeInsets.all(8.0),
+          //             child: Text(
+          //               "Clear Chat  \u{1F5D1}",
+          //               style: TextStyle(color: Colors.white, fontSize: 14),
+          //             ),
+          //           ),
+          //         ),
+          //         const SizedBox(width: 20),
+          //       ],
+          //     ),
+          //   ),
+          // ),
           body: Stack(
             children: [
               Align(
@@ -481,18 +482,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  _sendMessageUtil(String message) async {
-    MixpanelManager().chatMessageSent(message);
+
+  _sendMessageUtil(String text) async {
     var provider = context.read<MessageProvider>();
+    MixpanelManager().chatMessageSent(text);
     provider.setSendingMessage(true);
     String? appId = provider.appProvider?.selectedChatAppId;
     if (appId == 'no_selected') {
       appId = null;
     }
-    var newMessage = ServerMessage(
+    var message = ServerMessage(
       const Uuid().v4(),
       DateTime.now(),
-      message,
+      text,
       MessageSender.human,
       MessageType.text,
       appId,
@@ -500,11 +502,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       [],
       files: provider.uploadedFiles,
     );
-    provider.addMessage(newMessage);
+    provider.addMessage(message);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageToServer(message, appId);
-    // TODO: restore streaming capabilities, with initial empty message
+    provider.sendMessageStreamToServer(text, appId);
     scrollToBottom();
     provider.setSendingMessage(false);
   }
