@@ -9,7 +9,7 @@ import 'package:friend_private/widgets/device_widget.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-import '../settings/device_settings.dart';
+import '../settings/device_settings/device_settings_page.dart';
 
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
