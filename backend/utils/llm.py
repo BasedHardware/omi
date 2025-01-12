@@ -1315,8 +1315,77 @@ class FiltersToUse(BaseModel):
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
-
 def extract_question_from_conversation(messages: List[Message]) -> str:
+    # user last messages
+    user_message_idx = len(messages)
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].sender == MessageSender.ai:
+            break
+        if messages[i].sender == MessageSender.human:
+            user_message_idx = i
+    user_last_messages = messages[user_message_idx:]
+    if len(user_last_messages) == 0:
+        return ""
+
+    prompt = f'''
+    You will be given a recent conversation between a <user> and an <AI>. \
+    The conversation may include a few messages exchanged in <previous_messages> and partly build up the proper question. \
+    Your task is to understand the <user_last_messages> and identify the question or follow-up question the user is asking.
+
+    You will be provided with <previous_messages> between you and the user to help you indentify the question.
+
+    First, determine whether the user is asking a question or a follow-up question. \
+    If the user is not asking a question or does not want to follow up, respond with an empty message. \
+    For example, if the user says "Hi", "Hello", "How are you?", or "Good morning", the answer should be empty.
+
+    If the <user_last_messages> contain a complete question, maintain the original version as accurately as possible. \
+    Avoid adding unnecessary words.
+
+    You MUST keep the original <date_in_term>
+
+    Output a WH-question, that is, a question that starts with a WH-word, like "What", "When", "Where", "Who", "Why", "How".
+
+    Example 1:
+    <user_last_messages>
+    <message>
+        <sender>User</sender>
+        <content>
+            According to WHOOP, my HRV this Sunday was the highest it's been in a month. Here's what I did:
+
+            Attended an outdoor party (cold weather, talked a lot more than usual).
+            Smoked weed (unusual for me).
+            Drank lots of relaxing tea.
+
+            Can you prioritize each activity on a 0-10 scale for how much it might have influenced my HRV?
+        </content>
+    </message>
+    </user_last_messages>
+    Expected output: "How should each activity (going to a party and talking a lot, smoking weed, and drinking lots of relaxing tea) be prioritized on a scale of 0-10 in terms of their impact on my HRV, considering the recent activities that led to the highest HRV this month?"
+
+    <user_last_messages>
+    {Message.get_messages_as_xml(user_last_messages)}
+    </user_last_messages>
+
+    <previous_messages>
+    {Message.get_messages_as_xml(messages)}
+    </previous_messages>
+
+    <date_in_term>
+    - today
+    - my day
+    - my week
+    - this week
+    - this day
+    - etc.
+    </date_in_term>
+    '''.replace('    ', '').strip()
+    print(prompt)
+    question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    print(question)
+    return question
+
+
+def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
