@@ -7,3 +7,4 @@ class WebhookType(str, Enum):
     realtime_transcript = 'realtime_transcript'
     memory_created = 'memory_created',
     day_summary = 'day_summary'
+    notifications_history = 'notifications_history'

@@ -16,6 +16,7 @@ from models.chat import Message
 from models.memory import Memory, MemorySource
 from models.notification_message import NotificationMessage
 from models.plugin import Plugin, UsageHistoryType
+from utils.webhooks import notifications_history_webhook
 from utils.apps import get_available_apps, weighted_rating
 from utils.notifications import send_notification
 from utils.llm import (
@@ -317,6 +318,18 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
         print(f"Plugins {plugin.id}, message too short", uid)
         return None
 
+    # Create notification message
+    notification_message = NotificationMessage(
+        plugin_id=plugin.id,
+        from_integration='plugin',
+        type='proactive',
+        notification_type='info',
+        text=message,
+    )
+    
+    # Send to notifications history webhook
+    notifications_history_webhook(uid, notification_message)
+
     # send notification
     send_plugin_notification(token, plugin.name, plugin.id, message)
 
@@ -404,4 +417,7 @@ def send_plugin_notification(token: str, app_name: str, app_id: str, message: st
         navigate_to=f'/chat/{app_id}',
     )
 
+    # Send to notifications history webhook
+    notifications_history_webhook(token, ai_message)
+    
     send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
