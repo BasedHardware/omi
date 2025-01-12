@@ -624,6 +624,103 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
 
     <instructions>
     - Refine the <question> based on the last <previous_messages> before answering it.
+    - DO NOT use the AI's message from <previous_messages> as references to answer the <question>
+    - Use <question_timezone> and <current_datetime_utc> to refer to the time context of the <question>
+    - It is EXTREMELY IMPORTANT to directly answer the question, keep the answer concise and high-quality.
+    - NEVER say "based on the available memories". Get straight to the point.
+    - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
+    - You MUST follow the <reports_instructions> if the user is asking for reporting or summarizing their dates, weeks, months, or years.
+    {cited_instruction if cited and len(context) > 0 else ""}
+    {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
+    </instructions>
+
+    <plugin_instructions>
+    {plugin_info}
+    </plugin_instructions>
+
+    <reports_instructions>
+    - Answer with the template:
+     - Goals and Achievements
+     - Mood Tracker
+     - Gratitude Log
+     - Lessons Learned
+    </reports_instructions>
+
+    <question>
+    {question}
+    <question>
+
+    <memories>
+    {context}
+    </memories>
+
+    <previous_messages>
+    {Message.get_messages_as_xml(messages)}
+    </previous_messages>
+
+    <user_facts>
+    [Use the following User Facts if relevant to the <question>]
+        {facts_str.strip()}
+    </user_facts>
+
+    <current_datetime_utc>
+        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+    </current_datetime_utc>
+
+    <question_timezone>
+        Question's timezone: {tz}
+    </question_timezone>
+
+    <answer>
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
+
+def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium.invoke(prompt).content
+
+def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+
+    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
+    # print('qa_rag prompt', prompt)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+
+
+def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+    user_name, facts_str = get_prompt_facts(uid)
+    facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
+
+    # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
+    context = context.replace('\n\n', '\n').strip()
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
+
+    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
+    cited_instruction = """
+    - You MUST cite the most relevant <memories> that answer the question. \
+      - Only cite in <memories> not <user_facts>, not <previous_messages>.
+      - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
+      - NO SPACE between the last word and the citation.
+      - Avoid citing irrelevant memories.
+    """
+
+    return f"""
+    <assistant_role>
+        You are an assistant for question-answering tasks.
+    </assistant_role>
+
+    <task>
+        Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
+    </task>
+
+    <instructions>
+    - Refine the <question> based on the last <previous_messages> before answering it.
     - DO NOT use the AI's message in <previous_messages> as references to answer the Question.
     - Keep the answer concise and high-quality.
     - If you don't know the answer or the premise is incorrect, explain why. If the <memories> are empty or unhelpful, answer the question as well as you can with existing knowledge.
@@ -664,20 +761,6 @@ def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[P
 
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-
-
-def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
-
-def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-
-    prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
-    # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
