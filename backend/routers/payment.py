@@ -3,9 +3,9 @@ import stripe
 from utils import stripe as stripe_utils
 from utils.apps import paid_app
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['stripe', 'payment'])
 
-@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
+@v1_router.post('/stripe/webhook', tags=['stripe', 'webhook'])
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 

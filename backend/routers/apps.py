@@ -23,24 +23,24 @@ from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['apps'])
 
 
 # ******************************************************
 # ********************* APPS CRUD **********************
 # ******************************************************
 
-@router.get('/v1/apps', tags=['v1'], response_model=List[App])
+@v1_router.get('/apps', response_model=List[App])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     return get_available_apps(uid, include_reviews=include_reviews)
 
 
-@router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
+@v1_router.get('/approved-apps', response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
     return get_approved_available_apps(include_reviews=include_reviews)
 
 
-@router.post('/v1/apps', tags=['v1'])
+@v1_router.post('/apps')
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     data['approved'] = False
@@ -87,7 +87,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}', tags=['v1'])
+@v1_router.patch('/apps/{app_id}')
 def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(None),
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
@@ -118,7 +118,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/{app_id}', tags=['v1'])
+@v1_router.delete('/apps/{app_id}')
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     plugin = get_available_app_by_id(app_id, uid)
     if not plugin:
@@ -132,7 +132,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}', tags=['v1'])
+@v1_router.get('/apps/{app_id}')
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = App(**app) if app else None
@@ -154,7 +154,7 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return app
 
 
-@router.post('/v1/apps/review', tags=['v1'])
+@v1_router.post('/apps/review')
 def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -182,7 +182,7 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review', tags=['v1'])
+@v1_router.patch('/apps/{app_id}/review')
 def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
@@ -213,7 +213,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
+@v1_router.patch('/apps/{app_id}/review/reply')
 def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -236,7 +236,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
+@v1_router.get('/apps/{app_id}/reviews')
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
     reviews = [
@@ -245,7 +245,7 @@ def app_reviews(app_id: str):
     return reviews
 
 
-@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
+@v1_router.patch('/apps/{app_id}/change-visibility')
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -258,7 +258,7 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     return {'status': 'ok'}
 
 
-@router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
+@v1_router.get('/app/proactive-notification-scopes')
 def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
@@ -268,7 +268,7 @@ def get_notification_scopes():
     ]
 
 
-@router.get('/v1/app-capabilities', tags=['v1'])
+@v1_router.get('/app-capabilities')
 def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
@@ -287,14 +287,14 @@ def get_plugin_capabilities():
 
 
 # @deprecated
-@router.get('/v1/app/payment-plans', tags=['v1'])
+@v1_router.get('/app/payment-plans')
 def get_payment_plans_v1():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
 
 
-@router.get('/v1/app/plans', tags=['v1'])
+@v1_router.get('/app/plans')
 def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
         return []
@@ -303,7 +303,7 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     ]
 
 
-@router.post('/v1/app/generate-description', tags=['v1'])
+@v1_router.post('/app/generate-description')
 def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     if data['name'] == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -319,7 +319,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
 
-@router.post('/v1/apps/enable')
+@v1_router.post('/apps/enable')
 def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -344,7 +344,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/disable')
+@v1_router.post('/apps/disable')
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -363,7 +363,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************* TEAM ENDPOINTS *******************
 # ******************************************************
 
-@router.post('/v1/apps/tester', tags=['v1'])
+@v1_router.post('/apps/tester')
 def add_new_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -376,7 +376,7 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/access', tags=['v1'])
+@v1_router.post('/apps/tester/access')
 def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -388,7 +388,7 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/tester/access', tags=['v1'])
+@v1_router.delete('/apps/tester/access')
 def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -400,14 +400,14 @@ def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/tester/check', tags=['v1'])
+@v1_router.get('/apps/tester/check')
 def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
     if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
 
 
-@router.get('/v1/apps/public/unapproved', tags=['v1'])
+@v1_router.get('/apps/public/unapproved')
 def get_unapproved_public_apps(secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -415,7 +415,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
     return apps
 
 
-@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
+@v1_router.post('/apps/{app_id}/approve')
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -429,7 +429,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
+@v1_router.post('/apps/{app_id}/reject')
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -444,7 +444,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'])
+@v1_router.delete('/personas/{persona_id}')
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -455,7 +455,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/personas/{persona_id}', tags=['v1'])
+@v1_router.get('/personas/{persona_id}')
 def get_personas(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

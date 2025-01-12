@@ -28,7 +28,8 @@ from utils.other import endpoints as auth
 
 import wave
 
-router = APIRouter()
+v2_router = APIRouter(prefix="/v2", tags=['transcribe'])
+v3_router = APIRouter(prefix="/v3", tags=['transcribe'])
 
 
 class STTService(str, Enum):
@@ -619,14 +620,14 @@ async def _websocket_util(
                 print(f"Error closing Pusher: {e}", uid)
 
 
-@router.websocket("/v2/listen")
+@v2_router.websocket("/listen")
 async def websocket_endpoint(
         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
 
-@router.websocket("/v3/listen")
+@v3_router.websocket("/listen")
 async def websocket_endpoint_v3(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox

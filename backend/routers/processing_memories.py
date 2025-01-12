@@ -8,11 +8,13 @@ from models.processing_memory import DetailProcessingMemoryResponse, \
 from database.redis_db import cache_user_geolocation
 from utils.other import endpoints as auth
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['processing_memories'])
 
-# Deprecated
-@router.patch("/v1/processing-memories/{processing_memory_id}", response_model=UpdateProcessingMemoryResponse,
-              tags=['processing_memories'])
+@v1_router.patch(
+        "/processing-memories/{processing_memory_id}",
+        response_model=UpdateProcessingMemoryResponse,
+        deprecated=True
+)
 def update_processing_memory(
         processing_memory_id: str,
         updates_processing_memory: UpdateProcessingMemory,
@@ -40,10 +42,9 @@ def update_processing_memory(
     return UpdateProcessingMemoryResponse(result=BasicProcessingMemory(**processing_memory.dict()))
 
 
-@router.get(
-    "/v1/processing-memories/{processing_memory_id}",
+@v1_router.get(
+    "/processing-memories/{processing_memory_id}",
     response_model=DetailProcessingMemoryResponse,
-    tags=['processing_memories']
 )
 def get_processing_memory(processing_memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
@@ -61,8 +62,10 @@ def get_processing_memory(processing_memory_id: str, uid: str = Depends(auth.get
     return DetailProcessingMemoryResponse(result=processing_memory)
 
 
-@router.get("/v1/processing-memories", response_model=DetailProcessingMemoriesResponse,
-            tags=['processing_memories'])
+@v1_router.get(
+        "/processing-memories",
+        response_model=DetailProcessingMemoriesResponse,
+)
 def list_processing_memory(uid: str = Depends(auth.get_current_user_uid), filter_ids: Optional[str] = None):
     """
     List ProcessingMemory endpoint.

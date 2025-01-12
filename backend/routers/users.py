@@ -17,10 +17,10 @@ from utils.other.storage import delete_all_memory_recordings, get_user_person_sp
     delete_user_person_speech_samples
 from utils.webhooks import webhook_first_time_setup
 
-router = APIRouter()
+v1_router = APIRouter(prefix='/v1', tags=['users'])
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
+@v1_router.delete('/users/delete-account')
 def delete_account(uid: str = Depends(auth.get_current_user_uid)):
     try:
         delete_user_data(uid)
@@ -32,7 +32,7 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch('/v1/users/geolocation', tags=['v1'])
+@v1_router.patch('/users/geolocation')
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
     cache_user_geolocation(uid, geolocation.dict())
     return {'status': 'ok'}
@@ -43,7 +43,7 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 
-@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+@v1_router.post('/users/developer/webhook/{wtype}')
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
     url = data['url']
     if url == '' or url == ',':
@@ -52,24 +52,24 @@ def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+@v1_router.get('/users/developer/webhook/{wtype}')
 def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_user_webhook_db(uid, wtype)}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
+@v1_router.post('/users/developer/webhook/{wtype}/disable')
 def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     disable_user_webhook_db(uid, wtype)
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
+@v1_router.post('/users/developer/webhook/{wtype}/enable')
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhooks/status', tags=['v1'])
+@v1_router.get('/users/developer/webhooks/status')
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
     audio_bytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
@@ -96,18 +96,18 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
 # ************* RECORDING PERMISSION **************
 # *************************************************
 
-@router.post('/v1/users/store-recording-permission', tags=['v1'])
+@v1_router.post('/users/store-recording-permission')
 def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/store-recording-permission', tags=['v1'])
+@v1_router.get('/users/store-recording-permission')
 def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)):
     return {'store_recording_permission': get_user_store_recording_permission(uid)}
 
 
-@router.delete('/v1/users/store-recording-permission', tags=['v1'])
+@v1_router.delete('/users/store-recording-permission')
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
     delete_all_memory_recordings(uid)
@@ -119,7 +119,7 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 # ****************************************
 
 # TODO: consider adding person photo.
-@router.post('/v1/users/people', tags=['v1'], response_model=Person)
+@v1_router.post('/users/people', response_model=Person)
 def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
     data = {
         'id': str(uuid.uuid4()),
@@ -132,7 +132,7 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
     return result
 
 
-@router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
+@v1_router.get('/users/people/{person_id}', response_model=Person)
 def get_single_person(
         person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -144,7 +144,7 @@ def get_single_person(
     return person
 
 
-@router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
+@v1_router.get('/users/people', response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
@@ -158,7 +158,7 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     return people
 
 
-@router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
+@v1_router.patch('/users/people/{person_id}/name')
 def update_person_name(
         person_id: str,
         value: str,  # = Field(min_length=2, max_length=40),
@@ -168,7 +168,7 @@ def update_person_name(
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
+@v1_router.delete('/users/people/{person_id}', status_code=204)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
@@ -180,7 +180,7 @@ def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_u
 # **********************************************************
 
 
-@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
+@v1_router.delete('/joan/{memory_id}/followup-question', status_code=204)
 def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_memory(uid)
@@ -196,7 +196,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 # ************* Analytics **************
 # **************************************
 
-@router.post('/v1/users/analytics/memory_summary', tags=['v1'])
+@v1_router.post('/users/analytics/memory_summary')
 def set_memory_summary_rating(
         memory_id: str,
         value: int,  # 0, 1, -1 (shown)
@@ -206,7 +206,7 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'])
+@v1_router.get('/users/analytics/memory_summary')
 def get_memory_summary_rating(
         memory_id: str,
         _: str = Depends(auth.get_current_user_uid),
@@ -218,7 +218,7 @@ def get_memory_summary_rating(
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
-@router.post('/v1/users/analytics/chat_message', tags=['v1'])
+@v1_router.post('/users/analytics/chat_message')
 def set_chat_message_analytics(
         message_id: str,
         value: int,

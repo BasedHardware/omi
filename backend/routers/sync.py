@@ -18,7 +18,7 @@ from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syn
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 from utils.stt.vad import vad_is_empty
 
-router = APIRouter()
+v1_router = APIRouter(prefix="/v1", tags=['sync'])
 
 import shutil
 import wave
@@ -208,7 +208,7 @@ def process_segment(path: str, uid: str, response: dict):
         update_memory_segments(uid, closest_memory['id'], segments)
 
 
-@router.post("/v1/sync-local-files")
+@v1_router.post("/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
     paths = retrieve_file_paths(files, uid)
