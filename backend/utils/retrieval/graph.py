@@ -212,11 +212,14 @@ def query_vectors(state: GraphState):
 
     date_filters = state.get("date_filters")
     uid = state.get("uid")
-    vector = (
-        generate_embedding(state.get("parsed_question", ""))
-        if state.get("parsed_question")
-        else [0] * 3072
-    )
+    # vector = (
+    #    generate_embedding(state.get("parsed_question", ""))
+    #    if state.get("parsed_question")
+    #    else [0] * 3072
+    # )
+
+    # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
+    vector = ([1] * 3072)
     print("query_vectors vector:", vector[:5])
 
     # TODO: enable it when the in-accurated topic filter get fixed
@@ -233,8 +236,8 @@ def query_vectors(state: GraphState):
     )
     memories = memories_db.get_memories_by_id(uid, memories_id)
 
-    ## stream
-    #if state.get('streaming', False):
+    # stream
+    # if state.get('streaming', False):
     #    if len(memories) == 0:
     #        msg = "No relevant memories found"
     #    else:
