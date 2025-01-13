@@ -220,11 +220,11 @@ int read_audio_data(uint8_t *buf, int amount,int offset)
 	int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
     rc = fs_seek(&read_file,offset,FS_SEEK_SET);
     rc = fs_read(&read_file, temp_ptr, amount);
-    // printk("read data :");
+    // LOG_PRINTK("read data :");
     // for (int i = 0; i < amount;i++) {
-    //     printk("%d ",temp_ptr[i]);
+    //     LOG_PRINTK("%d ",temp_ptr[i]);
     // }
-    // printk("\n");
+    // LOG_PRINTK("\n");
   	fs_close(&read_file);
 
     return rc;
@@ -337,7 +337,7 @@ int delete_audio_file(uint8_t num)
     int res = fs_unlink(current_full_path);
     if (res) 
     {
-        printk("error deleting file in delete\n");
+        LOG_PRINTK("error deleting file in delete\n");
         return -1;
     }
 
@@ -360,7 +360,7 @@ int clear_audio_directory()
         k_msleep(10);
         if (res) 
         {
-            printk("error on %d\n",i);
+            LOG_PRINTK("error on %d\n",i);
             return -1;
         }  
     }
