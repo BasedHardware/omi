@@ -8,8 +8,10 @@
 #include "speaker.h"
 #include "transport.h"
 LOG_MODULE_REGISTER(usb, CONFIG_LOG_DEFAULT_LEVEL);
+
 //add all device drivers here?
 bool usb_charge = false;
+
 usb_dc_status_callback udc_status_cb(enum usb_dc_status_code status,
                          const uint8_t *param)
 {
@@ -24,16 +26,15 @@ usb_dc_status_callback udc_status_cb(enum usb_dc_status_code status,
         default:
             usb_charge = true;
     }
+
     return;
-    
 }
-
-
 
 int init_usb()
 {
-    usb_disable();
-    int ret = usb_enable(udc_status_cb);
-    printk("USB ret: %d\n", ret);
+    // usb_disable();
+    // int ret = usb_enable(udc_status_cb);
+    // LOG_INF("USB ret: %d\n", ret);
+    usb_dc_set_status_callback(udc_status_cb);
     return 0;
 }
