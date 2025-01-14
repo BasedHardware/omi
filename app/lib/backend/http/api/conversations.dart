@@ -360,8 +360,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
   int? limit,
-  bool includeDiscarded = false,
+  bool includeDiscarded = true,
 }) async {
+  debugPrint(Env.apiBaseUrl);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/search',
     headers: {},
