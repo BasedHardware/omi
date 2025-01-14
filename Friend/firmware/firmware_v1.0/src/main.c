@@ -113,27 +113,44 @@ void set_led_state()
         set_led_blue(false);
         return;
     }
-
 }
 
 int main(void)
 {
     int err;
-    uint32_t reset_reas = NRF_POWER->RESETREAS;
+
+    // Store reset reason code
+    uint32_t reset_reason = NRF_POWER->RESETREAS;
+
     NRF_POWER->DCDCEN=1;
     NRF_POWER->DCDCEN0=1;
     NRF_POWER->RESETREAS=1;
 
-    LOG_INF("Friend device firmware starting...");
+    LOG_INF("Booting...\n");
+
+    LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
+    LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
+    LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
+
+    LOG_DBG("Reset reason: %d\n", reset_reason);
+
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing LEDs...\n");
+
     err = led_start();
     if (err)
     {
         LOG_ERR("Failed to initialize LEDs: %d", err);
         return err;
     }
+
     // Run the boot LED sequence
     boot_led_sequence();
+
     // Indicate transport initialization
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing transport...\n");
+
     set_led_green(true);
     set_led_green(false);
 
@@ -150,27 +167,48 @@ int main(void)
         set_led_green(false);
         // return err;
     }
+
+    LOG_PRINTK("\n");
+    LOG_INF("Play boot sound...\n");
+
+    // This messes up the UART console, so commented out
+    // if console logs are enabled
     play_boot_sound();
+
+    LOG_PRINTK("\n");
+    LOG_INF("Mount SD card...\n");
+
     err = mount_sd_card();
     if (err)
     {
         LOG_ERR("Failed to mount SD card: %d", err);
     }
-    LOG_INF("result of mount:%d",err);
 
     k_msleep(500);
+
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing storage...\n");
+
     err = storage_init();
     if (err)
     {
         LOG_ERR("Failed to initialize storage: %d", err);
     }
+
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing haptic...\n");
+
     err = init_haptic_pin();
     if (err)
     {
         LOG_ERR("Failed to initialize haptic pin: %d", err);
     }
 
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing codec...\n");
+
     set_led_blue(true);
+
     set_codec_callback(codec_handler);
     err = codec_start();
     if (err)
@@ -185,13 +223,17 @@ int main(void)
         set_led_blue(false);
         return err;
     }
+
     play_haptic_milli(500);
     set_led_blue(false);
 
     // Indicate microphone initialization
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing microphone...\n");
+
     set_led_red(true);
     set_led_green(true);
-    LOG_INF("Starting microphone initialization");
+
     set_mic_callback(mic_handler);
     err = mic_start();
     if (err)
@@ -208,23 +250,31 @@ int main(void)
         set_led_green(false);
         return err;
     }
+
     set_led_red(false);
     set_led_green(false);
 
-    // Indicate successful initialization
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing power supply check...\n");
+
     err = init_usb();
     if (err)
     {
         LOG_ERR("Failed to initialize power supply: %d", err);
     }
 
-    LOG_INF("Omi firmware initialized successfully\n");
+    // Indicate successful initialization
+    LOG_PRINTK("\n");
+    LOG_INF("Device initialized successfully\n");
+
     set_led_blue(true);
     k_msleep(1000);
     set_led_blue(false);
 
     // Main loop
-    printf("reset reas:%d\n",reset_reas);
+    LOG_PRINTK("\n");
+    LOG_INF("Entering main loop...\n");
+
     while (1)
     {
         set_led_state();
@@ -234,4 +284,3 @@ int main(void)
     // Unreachable
     return 0;
 }
-
