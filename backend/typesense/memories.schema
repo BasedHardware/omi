@@ -25,6 +25,10 @@
     {
       "name": "userId",
       "type": "string"
+    },
+    {
+      "name": "discarded",
+      "type": "bool"
     }
   ],
   "default_sorting_field": "created_at",
