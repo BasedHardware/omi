@@ -145,12 +145,13 @@ def get_messages(
 def get_message(uid: str, message_id: str) -> Message | None:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
-    message = message_ref.stream().get().to_dict()
+    message_doc = next(message_ref, None)
+    message = Message(**message_doc.to_dict()) if message_doc else None
 
     if not message:
         return None
 
-    if message.get('deleted') is True:
+    if message.deleted is True:
         return None
 
     return message
@@ -159,7 +160,7 @@ def get_message(uid: str, message_id: str) -> Message | None:
 def report_message(uid: str, msg_doc_id: str):
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
-    message = message_ref.stream().get().to_dict()
+    message = message_ref.get().to_dict()
 
     if not message:
         return {"message": "Message not found"}
