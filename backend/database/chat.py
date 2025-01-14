@@ -142,7 +142,7 @@ def get_messages(
     return messages
 
 
-def get_message(uid: str, message_id: str) -> Message | None:
+def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
@@ -154,22 +154,18 @@ def get_message(uid: str, message_id: str) -> Message | None:
     if message.deleted is True:
         return None
 
-    return message
+    return message, message_doc.id
 
 
 def report_message(uid: str, msg_doc_id: str):
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
-    message = message_ref.get().to_dict()
-
-    if not message:
-        return {"message": "Message not found"}
-
-    if message.get('deleted') is True:
-        return {"message": "Message already deleted"}
-
-    message_ref.update({'deleted': True, 'reported': True})
-    return None
+    try:
+        message_ref.update({'deleted': True, 'reported': True})
+        return {"message": "Message reported"}
+    except Exception as e:
+        print("Update failed:", e)
+        return {"message": f"Update failed: {e}"}
 
 
 def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):

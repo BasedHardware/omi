@@ -118,15 +118,15 @@ def send_message(
 def report_message(
         message_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
-    print('report_message', message_id, uid)
-    message = chat_db.get_message(uid, message_id)
+
+    message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
     if message.sender != 'ai':
         raise HTTPException(status_code=400, detail='Only AI messages can be reported')
     if message.reported:
         raise HTTPException(status_code=400, detail='Message already reported')
-    chat_db.report_message(uid, message.id)
+    chat_db.report_message(uid, msg_doc_id)
     return {'message': 'Message reported'}
 
 
