@@ -82,10 +82,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       return;
     }
 
-    if (query == previousQuery) {
-      return;
-    }
-
     setIsFetchingConversations(true);
     previousQuery = query;
     var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
@@ -154,9 +150,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     showDiscardedConversations = !showDiscardedConversations;
 
     if (previousQuery.isNotEmpty) {
-      groupSearchConvosByDate();
+      searchConversations(previousQuery);
     } else {
-      groupConversationsByDate();
+      fetchConversations();
     }
 
     MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -167,14 +163,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future getInitialConversations() async {
-    // reset search
+  Future fetchConversations() async {
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // fetch convos
     conversations = await getConversationsFromServer();
 
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -189,23 +183,16 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       searchedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
+
     notifyListeners();
   }
 
+  Future getInitialConversations() async {
+    await fetchConversations();
+  }
+
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
-    var havingFilters = true;
-    if (showDiscardedConversations) {
-      havingFilters = false;
-    }
-    if (!havingFilters) {
-      return convos;
-    }
-    return convos.where((convo) {
-      if (!showDiscardedConversations && (convo.discarded && !convo.isNew)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    return convos;
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
