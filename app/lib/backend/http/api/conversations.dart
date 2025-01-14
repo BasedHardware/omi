@@ -37,10 +37,13 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 }
 
 Future<List<ServerConversation>> getConversations(
-    {int limit = 50, int offset = 0, List<ConversationStatus> statuses = const []}) async {
+    {int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = true}) async {
   var response = await makeApiCall(
       url:
-          '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+          '${Env.apiBaseUrl}v1/memories?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
       headers: {},
       method: 'GET',
       body: '');
@@ -353,12 +356,19 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
   }
 }
 
-Future<(List<ServerConversation>, int, int)> searchConversationsServer(String query, [int? page, int? limit]) async {
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+  String query, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+}) async {
+  debugPrint(Env.apiBaseUrl);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/memories/search',
     headers: {},
     method: 'POST',
-    body: jsonEncode({'query': query, 'page': page ?? 1, 'per_page': limit ?? 10}),
+    body:
+        jsonEncode({'query': query, 'page': page ?? 1, 'per_page': limit ?? 10, 'include_discarded': includeDiscarded}),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
