@@ -2,13 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
-import 'package:friend_private/pages/apps/app_detail/widgets/app_analytics_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -46,8 +43,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool setupCompleted = false;
   bool appLoading = false;
   bool isLoading = false;
-  double moneyMade = 0.0;
-  int usageCount = 0;
   Timer? _paymentCheckTimer;
   late App app;
   late bool showInstallAppConfirmation;
@@ -77,12 +72,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       setState(() {
         if (res != null) {
           app = res;
-          moneyMade = res.moneyMade ?? 0.0;
-          usageCount = res.usageCount ?? 0;
         }
       });
       setIsLoading(false);
-
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
@@ -728,7 +720,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              app.private ? const SizedBox.shrink() : AppAnalyticsWidget(usageCount: usageCount, moneyMade: moneyMade),
+              // app.private ? const SizedBox.shrink() : AppAnalyticsWidget(usageCount: usageCount, moneyMade: moneyMade),
               const SizedBox(height: 60),
             ],
           ),
