@@ -1,0 +1,43 @@
+// To get started, press Ctrl+Space (or Option+Esc) to bring up the completion menu and view the available nodes.
+
+// You can also use the buttons in the sidebar to perform actions on nodes.
+// Actions currently available include:
+
+// * Enabling / disabling the node
+// * Adding the bus to a bus
+// * Removing the node
+// * Connecting ADC channels
+
+// For more help, browse the DeviceTree documentation at https: //docs.zephyrproject.org/latest/guides/dts/index.html
+// You can also visit the nRF DeviceTree extension documentation at https: //nrfconnect.github.io/vscode-nrf-connect/devicetree/nrfdevicetree.html
+/ {
+    aliases {
+        sw0 = &button0;
+    };
+    buttons {
+        compatible = "gpio-keys";
+        button0: button_0 {
+            gpios = <&gpio0 3 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+            label = "User button";
+        };
+    };
+};
+
+&i2c1 {
+    camera: camera@30 {
+        compatible = "i2c-device";
+        reg = <0x30>;
+        label = "CAMERA";
+    };
+};
+
+&spi2 {
+    cs-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>, <&gpio0 28 GPIO_ACTIVE_LOW>;
+
+    camera_spi: camera_spi_device@0 {
+        status = "okay";
+        compatible = "vnd,spi-device"; // https: //devzone.nordicsemi.com/f/nordic-q-a/108613/yet-another-zephyr-devicetree-problem-this-time-with-spi-spi-max-frequency-amongst-others
+        reg = <0>;
+        spi-max-frequency = <4000000>;
+    };
+};
