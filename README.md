@@ -1,11 +1,12 @@
 <div align="center">
 
-# **Omi (prev. Friend)**
+# **Omi**
 
 Meet Omi, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
 
-![Omi](https://github.com/user-attachments/assets/0c757e55-c030-4ae7-a15b-7218950c8ba0)
+![Omi](https://github.com/user-attachments/assets/630e8e7e-1f48-4996-b0db-045b0c61159b)
+
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/omi) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
