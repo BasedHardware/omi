@@ -21,12 +21,18 @@ def search_memories(
         query: str,
         page: int = 1,
         per_page: int = 10,
+        include_discarded: bool = True,
 ) -> Dict:
     try:
+
+        filter_by = f'userId:={uid} && deleted:=false'
+        if not include_discarded:
+            filter_by = filter_by + ' && discarded:=false'
+
         search_parameters = {
             'q': query,
             'query_by': 'structured, transcript_segments',
-            'filter_by': 'userId := ' + uid,
+            'filter_by': filter_by,
             'sort_by': 'created_at:desc',
             'per_page': per_page,
             'page': page,
