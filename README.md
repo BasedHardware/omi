@@ -1,6 +1,6 @@
 <div align="center">
 
-# **Omi (prev. Friend)**
+# **Omi**
 
 Meet Omi, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
