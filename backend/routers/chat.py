@@ -113,6 +113,23 @@ def send_message(
         media_type="text/event-stream"
     )
 
+
+@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+def report_message(
+        message_id: str, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('report_message', message_id, uid)
+    message = chat_db.get_message(uid, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail='Message not found')
+    if message.sender != 'ai':
+        raise HTTPException(status_code=400, detail='Only AI messages can be reported')
+    if message.reported:
+        raise HTTPException(status_code=400, detail='Message already reported')
+    chat_db.report_message(uid, message.id)
+    return {'message': 'Message reported'}
+
+
 @router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message_v1(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
@@ -275,7 +292,8 @@ async def create_voice_message(files: List[UploadFile] = File(...), uid: str = D
 
 
 @router.post("/v2/voice-messages")
-async def create_voice_message_stream(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def create_voice_message_stream(files: List[UploadFile] = File(...),
+                                      uid: str = Depends(auth.get_current_user_uid)):
     # wav
     paths = retrieve_file_paths(files, uid)
     if len(paths) == 0:

@@ -142,6 +142,35 @@ def get_messages(
     return messages
 
 
+def get_message(uid: str, message_id: str) -> Message | None:
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
+    message = message_ref.stream().get().to_dict()
+
+    if not message:
+        return None
+
+    if message.get('deleted') is True:
+        return None
+
+    return message
+
+
+def report_message(uid: str, msg_doc_id: str):
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').document(msg_doc_id)
+    message = message_ref.stream().get().to_dict()
+
+    if not message:
+        return {"message": "Message not found"}
+
+    if message.get('deleted') is True:
+        return {"message": "Message already deleted"}
+
+    message_ref.update({'deleted': True, 'reported': True})
+    return None
+
+
 def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):
     messages_ref = (
         parent_doc_ref.collection('messages')
