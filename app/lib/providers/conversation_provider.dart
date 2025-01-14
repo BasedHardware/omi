@@ -88,7 +88,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
     setIsFetchingConversations(true);
     previousQuery = query;
-    var (convos, current, total) = await searchConversationsServer(query);
+    var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
     convos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
@@ -106,7 +106,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     setLoadingConversations(true);
     var (newConvos, current, total) = await searchConversationsServer(
       previousQuery,
-      currentSearchPage + 1,
+      page: currentSearchPage + 1,
+      includeDiscarded: showDiscardedConversations,
     );
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -251,7 +252,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future getConversationsFromServer() async {
     setLoadingConversations(true);
-    var mem = await getConversations();
+    var mem = await getConversations(includeDiscarded: showDiscardedConversations);
     conversations = mem;
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     setLoadingConversations(false);
@@ -281,7 +282,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations = await getConversations(offset: conversations.length);
+    var newConversations =
+        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     groupConversationsByDate();
