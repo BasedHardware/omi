@@ -57,8 +57,7 @@ workflows:
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
           # DEV, should remove
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
@@ -66,14 +65,13 @@ workflows:
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
             --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-app-id=com.friend.ios.dev \
+            --android-package-name=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
             --project="based-hardware-dev" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
       - name: Set up App .env
         script: |
@@ -253,8 +251,7 @@ workflows:
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
           # DEV, should remove
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
@@ -262,14 +259,13 @@ workflows:
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
             --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-app-id=com.friend.ios.dev \
+            --android-package-name=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
             --project="based-hardware-dev" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
       - name: Set up local.properties
         script: |
@@ -430,8 +426,7 @@ workflows:
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
           # DEV, should remove
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
@@ -439,14 +434,13 @@ workflows:
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
             --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-app-id=com.friend.ios.dev \
+            --android-package-name=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
             --project="based-hardware-dev" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
       - name: Set up App .env
         script: |
@@ -596,8 +590,7 @@ workflows:
             --service-account="./firebase_key.json" \
             --project="based-hardware" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
           # DEV, should remove
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
@@ -605,14 +598,13 @@ workflows:
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
             --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-app-id=com.friend.ios.dev \
+            --android-package-name=com.friend.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
             --project="based-hardware-dev" \
             --ios-target="Runner" \
-            --yes \
-            --macos-bundle-id="no-id" --web-app-id="no-id" --windows-app-id="no-id"
+            --yes
 
       - name: Set up local.properties
         script: |
