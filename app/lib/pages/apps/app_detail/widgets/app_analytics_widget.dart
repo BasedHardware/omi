@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class AppAnalyticsWidget extends StatelessWidget {
-  final int usageCount;
+  final int installs;
   final double moneyMade;
-  const AppAnalyticsWidget({super.key, required this.usageCount, required this.moneyMade});
+  const AppAnalyticsWidget({super.key, required this.installs, required this.moneyMade});
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +22,27 @@ class AppAnalyticsWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+          Row(
+            children: [
+              const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () async {
+                  await IntercomManager().displayEarnMoneyArticle();
+                },
+                child: Row(
+                  children: [
+                    Text("learn more", style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                    Icon(
+                      Icons.arrow_outward_rounded,
+                      size: 12,
+                      color: Colors.grey.shade400,
+                    )
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -33,13 +54,13 @@ class AppAnalyticsWidget extends StatelessWidget {
                       Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
                       const SizedBox(width: 8),
                       Text(
-                        usageCount.toString(),
+                        installs.toString(),
                         style: const TextStyle(color: Colors.white, fontSize: 30),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+                  Text('Installs', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
                 ],
               ),
               const Spacer(flex: 2),
