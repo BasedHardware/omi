@@ -140,48 +140,76 @@ int main(void)
     err = led_start();
     if (err)
     {
-        LOG_ERR("Failed to initialize LEDs: %d", err);
+        LOG_ERR("Failed to initialize LEDs (err %d)", err);
         return err;
     }
 
     // Run the boot LED sequence
     boot_led_sequence();
 
-    // Indicate transport initialization
-    LOG_PRINTK("\n");
-    LOG_INF("Initializing transport...\n");
-
-    set_led_green(true);
-    set_led_green(false);
-
-    err = transport_start();
+    // Enable battery
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+    err = battery_init();
     if (err)
     {
-        LOG_ERR("Failed to start transport: %d", err);
-        // Blink green LED to indicate error
-        for (int i = 0; i < 5; i++)
-        {
-            set_led_green(!gpio_pin_get_dt(&led_green));
-            k_msleep(200);
-        }
-        set_led_green(false);
-        // return err;
+        LOG_ERR("Battery init failed (err %d)", err);
+        return err;
     }
 
-    LOG_PRINTK("\n");
-    LOG_INF("Play boot sound...\n");
+    err == battery_charge_start();
+    if (err)
+    {
+        LOG_ERR("Battery failed to start (err %d)", err);
+        return err;
+    }
+    LOG_INF("Battery initialized");
+#endif
 
-    // This messes up the UART console, so commented out
-    // if console logs are enabled
-    play_boot_sound();
 
+    // Enable button
+#ifdef CONFIG_OMI_ENABLE_BUTTON
+    err = button_init();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize Button (err %d)", err);
+        return err;
+    }
+    LOG_INF("Button initialized");
+    activate_button_work();
+#endif
+
+    // Enable accelerometer
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
+    err = accel_start();
+    if (err)
+    {
+        LOG_ERR("Accelerometer failed to activated (err %d)", err);
+        return err;
+    }
+    LOG_INF("Accelerometer initialized");
+#endif
+
+    // Enable speaker
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+    err = speaker_init();
+    if (err)
+    {
+        LOG_ERR("Speaker failed to start");
+        return err;
+    }
+    LOG_INF("Speaker initialized");
+#endif
+
+    // Enable sdcard
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     LOG_PRINTK("\n");
     LOG_INF("Mount SD card...\n");
 
     err = mount_sd_card();
     if (err)
     {
-        LOG_ERR("Failed to mount SD card: %d", err);
+        LOG_ERR("Failed to mount SD card (err %d)", err);
+        return err;
     }
 
     k_msleep(500);
@@ -192,23 +220,81 @@ int main(void)
     err = storage_init();
     if (err)
     {
-        LOG_ERR("Failed to initialize storage: %d", err);
+        LOG_ERR("Failed to initialize storage (err %d)", err);
     }
+#endif
 
+    // Enable haptic
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
     LOG_PRINTK("\n");
     LOG_INF("Initializing haptic...\n");
 
     err = init_haptic_pin();
     if (err)
     {
-        LOG_ERR("Failed to initialize haptic pin: %d", err);
+        LOG_ERR("Failed to initialize haptic pin (err %d)", err);
+        return err;
     }
+    LOG_INF("Haptic pin initialized");
+#endif
+
+    // Enable usb
+#ifdef CONFIG_ENABLE_USB
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing power supply check...\n");
+
+    err = init_usb();
+    if (err)
+    {
+        LOG_ERR("Failed to initialize power supply (err %d)", err);
+        return err;
+    }
+#endif
+
+    // Indicate transport initialization
+    LOG_PRINTK("\n");
+    LOG_INF("Initializing transport...\n");
+
+    set_led_green(true);
+    set_led_green(false);
+
+    // Start transport
+    int transportErr;
+    transportErr = transport_start();
+    if (transportErr)
+    {
+        LOG_ERR("Failed to start transport (err %d)", err);
+        // TODO: Detect the current core is app core or net core
+        // // Blink green LED to indicate error
+        // for (int i = 0; i < 5; i++)
+        // {
+        //     set_led_green(!gpio_pin_get_dt(&led_green));
+        //     k_msleep(200);
+        // }
+        // set_led_green(false);
+        // // return err;
+        return err;
+    }
+
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+#ifndef CONFIG_UART_CONSOLE
+    LOG_PRINTK("\n");
+    LOG_INF("Play boot sound...\n");
+
+    // This messes up the UART console, so comment out
+    // if console logs are enabled
+    play_boot_sound();
+#else
+    LOG_INF("UART console enabled, not playing boot sound");
+#endif
+#endif
 
     LOG_PRINTK("\n");
     LOG_INF("Initializing codec...\n");
 
     set_led_blue(true);
 
+    // Audio codec(opus) callback
     set_codec_callback(codec_handler);
     err = codec_start();
     if (err)
@@ -224,7 +310,9 @@ int main(void)
         return err;
     }
 
+#ifdef CONFIG_OMI_ENABLE_HAPTIC
     play_haptic_milli(500);
+#endif
     set_led_blue(false);
 
     // Indicate microphone initialization
@@ -253,15 +341,6 @@ int main(void)
 
     set_led_red(false);
     set_led_green(false);
-
-    LOG_PRINTK("\n");
-    LOG_INF("Initializing power supply check...\n");
-
-    err = init_usb();
-    if (err)
-    {
-        LOG_ERR("Failed to initialize power supply: %d", err);
-    }
 
     // Indicate successful initialization
     LOG_PRINTK("\n");
