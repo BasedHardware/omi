@@ -32,11 +32,14 @@ usb_dc_status_callback udc_status_cb(enum usb_dc_status_code status,
 
 int init_usb()
 {
+#ifndef CONFIG_UART_CONSOLE
     usb_disable();
     int ret = usb_enable(udc_status_cb);
     LOG_INF("USB ret: %d\n", ret);
+#else
     // Use this instead of the disable/enable lines above
     // as USB disabling messes up the UART logging
-    // usb_dc_set_status_callback(udc_status_cb);
+    usb_dc_set_status_callback(udc_status_cb);
+#endif
     return 0;
 }
