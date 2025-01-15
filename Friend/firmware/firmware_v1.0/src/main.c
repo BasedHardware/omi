@@ -263,7 +263,7 @@ int main(void)
     transportErr = transport_start();
     if (transportErr)
     {
-        LOG_ERR("Failed to start transport (err %d)", err);
+        LOG_ERR("Failed to start transport (err %d)", transportErr);
         // TODO: Detect the current core is app core or net core
         // // Blink green LED to indicate error
         // for (int i = 0; i < 5; i++)
@@ -273,7 +273,7 @@ int main(void)
         // }
         // set_led_green(false);
         // // return err;
-        return err;
+        return transportErr;
     }
 
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
