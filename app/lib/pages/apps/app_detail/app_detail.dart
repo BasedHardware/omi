@@ -25,6 +25,7 @@ import 'dart:async';
 
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
+import 'widgets/app_analytics_widget.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -720,7 +721,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              // app.private ? const SizedBox.shrink() : AppAnalyticsWidget(usageCount: usageCount, moneyMade: moneyMade),
+              app.private
+                  ? const SizedBox.shrink()
+                  : AppAnalyticsWidget(
+                      installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
               const SizedBox(height: 60),
             ],
           ),
