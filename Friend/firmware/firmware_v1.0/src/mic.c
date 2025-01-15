@@ -79,7 +79,7 @@ int mic_start()
     pdm_config.mode = NRF_PDM_MODE_MONO;
     pdm_config.edge = NRF_PDM_EDGE_LEFTFALLING;
     pdm_config.ratio = NRF_PDM_RATIO_80X;
-#ifdef CONFIG_LEGACY_SOC
+#ifdef CONFIG_OMI_USE_LEGACY_SOC
     IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!
 #else
     IRQ_DIRECT_CONNECT(PDM0_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!

@@ -141,7 +141,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                         content: Text(
-                            'Your Friend is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                            'Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
@@ -164,7 +164,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   return [
     ListTile(
       title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Friend'),
+      subtitle: Text(device?.name ?? 'Omi DevKit'),
     ),
     ListTile(
       title: const Text('Device ID'),
@@ -217,7 +217,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(device?.modelNumber ?? 'Friend'),
+      subtitle: Text(device?.modelNumber ?? 'Omi DevKit'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),

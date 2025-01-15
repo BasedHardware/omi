@@ -1,0 +1,36 @@
+{
+  "name": "memories",
+  "fields": [
+    {
+      "name": "structured",
+      "type": "object"
+    },
+    {
+      "name": "structured.category",
+      "type": "string",
+      "facet": true
+    },
+    {
+      "name": "transcript_segments",
+      "type": "object[]"
+    },
+    {
+      "name": "created_at",
+      "type": "int64"
+    },
+    {
+      "name": "deleted",
+      "type": "bool"
+    },
+    {
+      "name": "userId",
+      "type": "string"
+    },
+    {
+      "name": "discarded",
+      "type": "bool"
+    }
+  ],
+  "default_sorting_field": "created_at",
+  "enable_nested_fields": true
+}

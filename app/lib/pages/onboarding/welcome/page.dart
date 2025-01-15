@@ -91,7 +91,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
                     height: 45, // Fixed height for the button
                     alignment: Alignment.center,
                     child: const Text(
-                      'Connect My Friend',
+                      'Connect My Omi',
                       style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 18,

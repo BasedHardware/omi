@@ -14,6 +14,7 @@ import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/audio/foreground.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -148,7 +149,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     VoidCallback? goNext,
   }) async {
     if (device.name.toLowerCase() == 'openglass' || device.type == DeviceType.openglass) {
-      notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      // notifyInfo('OPENGLASS_NOT_SUPPORTED');
+      AppSnackbar.showSnackbarError(
+          'OpenGlass is not supported at the moment. Support will be added in a future update');
       return;
     }
     try {

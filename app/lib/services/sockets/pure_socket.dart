@@ -50,20 +50,26 @@ class PureCore {
 
   PureCore.createInstance() {
     internetConnection = InternetConnection.createInstance(
-        /*
+      useDefaultOptions: false,
       customCheckOptions: [
         InternetCheckOption(
-          uri: Uri.parse(Env.apiBaseUrl!),
-          timeout: const Duration(
-            seconds: 30,
-          ),
-          responseStatusFn: (resp) {
-            return resp.statusCode < 500;
-          },
+          uri: Uri.parse('https://one.one.one.one'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://icanhazip.com/'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://jsonplaceholder.typicode.com/todos/1'),
+          timeout: const Duration(seconds: 12),
+        ),
+        InternetCheckOption(
+          uri: Uri.parse('https://reqres.in/api/users/1'),
+          timeout: const Duration(seconds: 12),
         ),
       ],
-		*/
-        );
+    );
   }
 }
 

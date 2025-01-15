@@ -302,7 +302,7 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = Memory.memories_to_string(memories, True)
+            context = Memory.memories_to_string(memories)
 
     # messages
     messages = []

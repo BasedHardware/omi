@@ -37,10 +37,13 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 }
 
 Future<List<ServerConversation>> getConversations(
-    {int limit = 50, int offset = 0, List<ConversationStatus> statuses = const []}) async {
+    {int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = true}) async {
   var response = await makeApiCall(
       url:
-          '${Env.apiBaseUrl}v1/memories?limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
+          '${Env.apiBaseUrl}v1/memories?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
       headers: {},
       method: 'GET',
       body: '');
@@ -175,7 +178,7 @@ Future<bool> hasConversationRecording(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getConversationPhotos: ${response.body}');
+  debugPrint('hasConversationRecording: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_recording'] ?? false;
   }
@@ -199,6 +202,26 @@ Future<bool> assignConversationTranscriptSegment(
   );
   if (response == null) return false;
   debugPrint('assignConversationTranscriptSegment: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> assignConversationSpeaker(
+  String conversationId,
+  int speakerId,
+  bool isUser, {
+  String? personId,
+  bool useForSpeechTraining = true,
+}) async {
+  String assignType = isUser ? 'is_user' : 'person_id';
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/$conversationId/assign-speaker/$speakerId?value=${isUser ? 'true' : personId}'
+        '&assign_type=$assignType&use_for_speech_training=$useForSpeechTraining',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('assignConversationSpeaker: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -331,4 +354,29 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
     debugPrint('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
   }
+}
+
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+  String query, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+}) async {
+  debugPrint(Env.apiBaseUrl);
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/search',
+    headers: {},
+    method: 'POST',
+    body:
+        jsonEncode({'query': query, 'page': page ?? 1, 'per_page': limit ?? 10, 'include_discarded': includeDiscarded}),
+  );
+  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response.statusCode == 200) {
+    List<dynamic> items = (jsonDecode(response.body))['items'];
+    int currentPage = (jsonDecode(response.body))['current_page'];
+    int totalPages = (jsonDecode(response.body))['total_pages'];
+    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
+    return (convos, currentPage, totalPages);
+  }
+  return (<ServerConversation>[], 0, 0);
 }

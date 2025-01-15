@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:frame_sdk/bluetooth.dart';
 import 'package:frame_sdk/frame_sdk.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/devices/device_connection.dart';
 
@@ -122,9 +123,8 @@ class FrameDeviceConnection extends DeviceConnection {
     await setTimeOnFrame();
     bool isLoaded = false;
     bool isRunning = false;
-    final String mainLuaContent = (await rootBundle.loadString('assets/device_assets/frame_lib.lua'))
-        .replaceAll("\t", "")
-        .replaceAll("\n\n", "\n");
+    final String mainLuaContent =
+        (await rootBundle.loadString(Assets.deviceAssets.frameLib)).replaceAll("\t", "").replaceAll("\n\n", "\n");
     final int frameLibHash = mainLuaContent.hashCode;
 
     if (_isLooping == false) {

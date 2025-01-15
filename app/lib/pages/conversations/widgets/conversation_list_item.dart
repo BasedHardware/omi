@@ -70,10 +70,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
             context,
             ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
-          String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-          if (startingTitle != newTitle) {
-            widget.conversation.structured.title = newTitle;
-            provider.upsertConversation(widget.conversation);
+          if (mounted) {
+            String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+            if (startingTitle != newTitle) {
+              widget.conversation.structured.title = newTitle;
+              provider.upsertConversation(widget.conversation);
+            }
           }
         },
         child: Padding(
@@ -88,7 +90,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
               child: Dismissible(
-                key: Key(widget.conversation.id),
+                key: UniqueKey(),
                 direction: DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
@@ -100,28 +102,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(
-                        SnackBar(
-                          content: const Text('Conversation deleted successfully 🗑️'),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          action: SnackBarAction(
-                            label: 'Undo',
-                            textColor: Colors.white,
-                            onPressed: () {
-                              provider.undoDeleteConversation(conversation.id, conversationIdx);
-                            },
-                          ),
-                        ),
-                      )
-                      .closed
-                      .then((reason) {
-                    if (reason != SnackBarClosedReason.action) {
-                      if (provider.memoriesToDelete.containsKey(conversation.id)) {
-                        provider.deleteConversationOnServer(conversation.id);
-                      }
-                    }
-                  });
+                  provider.deleteConversationOnServer(conversation.id);
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),

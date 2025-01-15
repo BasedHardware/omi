@@ -59,7 +59,7 @@ void button_pressed_callback(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
     int temp = gpio_pin_get_raw(dev,d5_pin_input.pin);
-    printf("button_pressed_callback %d\n", temp);
+    LOG_PRINTK("button_pressed_callback %d\n", temp);
     if (temp) 
     {
         was_pressed = false;
@@ -75,14 +75,12 @@ void check_button_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
-
 #define DEFAULT_STATE 0
 #define SINGLE_TAP 1
 #define DOUBLE_TAP 2
 #define LONG_TAP 3
 #define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
-
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
@@ -100,7 +98,7 @@ static void reset_count()
 static inline void notify_press() 
 {
     final_button_state[0] = BUTTON_PRESS;
-    LOG_INF("pressed");
+    LOG_INF("Button pressed");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
@@ -111,12 +109,10 @@ static inline void notify_press()
 static inline void notify_unpress() 
 {
     final_button_state[0] = BUTTON_RELEASE; 
-    LOG_INF("unpressed");
-    printf("unpressed\n");
+    LOG_INF("Button released");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
-        printf("unpressed sent\n");
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
@@ -124,7 +120,7 @@ static inline void notify_unpress()
 static inline void notify_tap() 
 {
     final_button_state[0] = SINGLE_TAP;
-    LOG_INF("tap");
+    LOG_INF("Button single tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
@@ -135,7 +131,7 @@ static inline void notify_tap()
 static inline void notify_double_tap() 
 {
     final_button_state[0] = DOUBLE_TAP; //button press
-    LOG_INF("double tap");
+    LOG_INF("Button double tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
@@ -146,7 +142,7 @@ static inline void notify_double_tap()
 static inline void notify_long_tap() 
 {
     final_button_state[0] = LONG_TAP; //button press
-    LOG_INF("long tap");
+    LOG_INF("Button long tap");
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL)
     { 
@@ -224,7 +220,7 @@ void check_button_level(struct k_work *work_item)
     // Single tap
     if (event == BUTTON_EVENT_SINGLE_TAP)
     {
-        printk("single tap detected\n");
+        LOG_PRINTK("single tap detected\n");
         btn_last_event = event;
         notify_tap();
 
@@ -237,7 +233,7 @@ void check_button_level(struct k_work *work_item)
     // Double tap
     if (event == BUTTON_EVENT_DOUBLE_TAP)
     {
-        printk("double tap detected\n");
+        LOG_PRINTK("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
     }
@@ -245,7 +241,7 @@ void check_button_level(struct k_work *work_item)
     // Long press, one time event
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS)
     {
-        printk("long press detected\n");
+        LOG_PRINTK("long press detected\n");
         btn_last_event = event;
         notify_long_tap();
     }
@@ -253,7 +249,7 @@ void check_button_level(struct k_work *work_item)
     // Releases, one time event
     if (event == BUTTON_EVENT_RELEASE && btn_last_event != BUTTON_EVENT_RELEASE)
     {
-        printk("release detected\n");
+        LOG_PRINTK("release detected\n");
         btn_last_event = event;
         notify_unpress();
 
@@ -448,7 +444,7 @@ void check_button_level(struct k_work *work_item)
 static ssize_t button_data_read_characteristic(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset) 
 {
     LOG_INF("button_data_read_characteristic");
-    printf("was_pressed: %d\n", final_button_state[0]);
+    LOG_PRINTK("was_pressed: %d\n", final_button_state[0]);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
 
@@ -546,7 +542,7 @@ void turnoff_all()
     NRF_USBD->INTENCLR= 0xFFFFFFFF;    
 
     // Enter low power mode
-#ifdef CONFIG_LEGACY_SDK
+#ifdef CONFIG_OMI_USE_LEGACY_SDK
     // ncs <= 2.7.0
     NRF_POWER->SYSTEMOFF=1;
 #else

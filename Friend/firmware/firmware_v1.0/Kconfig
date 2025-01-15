@@ -1,28 +1,70 @@
 source "Kconfig.zephyr"
 
-menu "Omi Configuration"
-config CODEC_OPUS
-    bool "Opus Audio Codec Support"
+menu "Omi Features Configuration"
+
+config OMI_CODEC_OPUS
+    bool "Opus Audio Codec"
+    help
+        "Enable the Opus audio codec support."
     default n
-config OFFLINE_STORAGE
-	bool "Offline SD Card Storage Support"
+
+config OMI_ENABLE_OFFLINE_STORAGE
+	bool "Offline SD Card Storage"
+    select DISK_ACCESS
+    select FILE_SYSTEM
+    select FAT_FILESYSTEM_ELM
+    select FS_FATFS_MOUNT_MKFS
+    select FS_FATFS_EXFAT
+    help
+        "Enable the offline storage support. Requires a SD Card."
 	default n
-config ACCELEROMETER
+
+config OMI_ENABLE_ACCELEROMETER
     bool "Accelerometer Support"
+    help
+        "Enable the accelerometer support."
     default n
-config ENABLE_BUTTON
-    bool "Button support on Devkit2"
+
+config OMI_ENABLE_BUTTON
+    bool "Button support"
+    help
+        "Enable the software button support."
     default n
-config ENABLE_SPEAKER
-    bool "Enable the speaker!!"
-    default n 
+
+config OMI_ENABLE_SPEAKER
+    bool "Enable the speaker"
+    help
+        "Enable the speaker support."
+    default n
+
+config OMI_ENABLE_BATTERY
+    bool "Enable the battery"
+    help
+        "Enable the battery support."
+    default n
+
+config OMI_ENABLE_USB
+    bool "Enable the usb"
+    help
+        "Enable the USB power check support."
+    default n
+
+config OMI_ENABLE_HAPTIC
+    bool "Enable the haptic"
+    help
+        "Enable the haptic support."
+    default n
+
 endmenu
 
-menu "Build Configuration"
-config LEGACY_SDK
-    bool "Using the legacy SDK(<=2.7.0)!!"
+menu "Omi Build Configuration"
+
+config OMI_USE_LEGACY_SDK
+    bool "Using the legacy SDK (<=2.7.0)!!"
     default y
-config LEGACY_SOC
-    bool "Using the legacy SOC(nrf52840)!!"
+
+config OMI_USE_LEGACY_SOC
+    bool "Using the legacy SOC (nrf52840)!!"
     default y
+
 endmenu
