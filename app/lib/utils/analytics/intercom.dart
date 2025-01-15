@@ -34,6 +34,10 @@ class IntercomManager {
     }
   }
 
+  Future displayEarnMoneyArticle() async {
+    return await intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps');
+  }
+
   Future displayFirmwareUpdateArticle() async {
     return await intercom.displayArticle('9918118-updating-your-friend-device-firmware');
   }
