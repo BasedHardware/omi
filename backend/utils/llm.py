@@ -416,6 +416,27 @@ def retrieve_context_dates(messages: List[Message], tz: str) -> List[datetime]:
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
+    You MUST determine the appropriate date range in {tz} that provides context for answering the <question> provided.
+
+    If the <question> does not reference a date or a date range, respond with an empty list: []
+
+    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+
+    <question>
+    {question}
+    </question>
+
+    '''.replace('    ', '').strip()
+
+    # print(prompt)
+    # print(llm_mini.invoke(prompt).content)
+    with_parser = llm_mini.with_structured_output(DatesContext)
+    response: DatesContext = with_parser.invoke(prompt)
+    return response.dates_range
+
+
+def retrieve_context_dates_by_question_v3(question: str, tz: str) -> List[datetime]:
+    prompt = f'''
     You MUST determine the appropriate date range in {tz} that provides context for answering the question provided.
 
     Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
