@@ -72,7 +72,7 @@ void codec_entry()
         // Check if we have enough data
         if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2)
         {
-            // printk("waiting on data....\n");
+            // LOG_PRINTK("waiting on data....\n");
             k_sleep(K_MSEC(10));
             continue;
         }

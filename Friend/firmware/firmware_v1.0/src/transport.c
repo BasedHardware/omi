@@ -181,16 +181,16 @@ int accel_start()
 
     if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
-        printk("Speaker Pin ready\n");
+        LOG_PRINTK("Speaker Pin ready\n");
     }
     else 
     {
-        printk("Error setting up speaker Pin\n");
+        LOG_PRINTK("Error setting up speaker Pin\n");
         return -1;
     }
     if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
     {
-        printk("Error setting up Haptic Pin\n");
+        LOG_PRINTK("Error setting up Haptic Pin\n");
         return -1;
     }
     gpio_pin_set_dt(&accel_gpio_pin, 1);
@@ -329,7 +329,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        printk("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+        LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
@@ -487,7 +487,7 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    // printk("tx_buffer_size %d\n",tx_buffer_size);
+    // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -524,7 +524,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        // printk("sent %d bytes \n",tx_buffer_size);
+        // LOG_PRINTK("sent %d bytes \n",tx_buffer_size);
 
         offset += packet_size;
         index++;
@@ -636,8 +636,8 @@ void update_file_size()
 {
     file_num_array[0] = get_file_size(1);
     file_num_array[1] = get_offset();
-    // printk("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // printk("offset for file count %d %d\n",file_count,file_num_array[1]);
+    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
+    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
 }
 
 void pusher(void)
@@ -664,7 +664,7 @@ void pusher(void)
         }
         if (!file_size_updated) 
         {
-            printk("updating file size\n");
+            LOG_PRINTK("updating file size\n");
             update_file_size();
             
             file_size_updated = true;
@@ -706,7 +706,7 @@ void pusher(void)
              {
                 update_file_size();
                 heartbeat_count = 0;
-                printk("drawing\n");
+                LOG_PRINTK("drawing\n");
              }
             }
             else 
@@ -740,7 +740,7 @@ int bt_off()
    int err = bt_le_adv_stop();
    if (err)
    {
-       printk("Failed to stop Bluetooth %d\n",err);
+       LOG_PRINTK("Failed to stop Bluetooth %d\n",err);
    }
    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
    sd_off();

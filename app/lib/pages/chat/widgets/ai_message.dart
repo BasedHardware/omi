@@ -4,7 +4,6 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
@@ -21,6 +20,9 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
+import 'markdown_message_widget.dart';
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -95,21 +97,14 @@ class _AIMessageState extends State<AIMessage> {
               ),
         const SizedBox(width: 16.0),
         Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 6),
-              buildMessageWidget(
-                widget.message,
-                widget.sendMessage,
-                widget.showTypingIndicator,
-                widget.displayOptions,
-                widget.appSender,
-                widget.updateConversation,
-                widget.setMessageNps,
-              ),
-            ],
+          child: buildMessageWidget(
+            widget.message,
+            widget.sendMessage,
+            widget.showTypingIndicator,
+            widget.displayOptions,
+            widget.appSender,
+            widget.updateConversation,
+            widget.setMessageNps,
           ),
         ),
       ],
@@ -147,38 +142,13 @@ Widget buildMessageWidget(
   } else {
     return NormalMessageWidget(
       showTypingIndicator: showTypingIndicator,
+      thinkings: message.thinkings,
       messageText: message.text.decodeString,
       message: message,
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
     );
   }
-}
-
-Widget _getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3);
-  return MarkdownBody(
-    shrinkWrap: true,
-    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style,
-      p: style,
-      blockquote: style.copyWith(
-        backgroundColor: Colors.transparent,
-        color: Colors.black,
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: Colors.grey.shade800,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      code: style.copyWith(
-        backgroundColor: Colors.transparent,
-        decoration: TextDecoration.none,
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    data: content,
-  );
 }
 
 Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
@@ -222,24 +192,18 @@ class InitialMessageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SelectionArea(
-            child: showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, messageText)
-            // AutoSizeText(
-            //         messageText,
-            // style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            // ),
-            ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, messageText),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -275,20 +239,18 @@ class DaySummaryWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : daySummaryMessagesList(messageText),
-        ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : daySummaryMessagesList(messageText),
       ],
     );
   }
@@ -353,6 +315,7 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
+  final List<String> thinkings;
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime createdAt;
@@ -364,39 +327,78 @@ class NormalMessageWidget extends StatelessWidget {
     required this.message,
     required this.setMessageNps,
     required this.createdAt,
+    this.thinkings = const [],
   });
 
   @override
   Widget build(BuildContext context) {
+    var previousThinkingText = message.thinkings.length > 1
+        ? message.thinkings
+            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
+    var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Text(
-            formatChatTimestamp(createdAt),
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
+        showTypingIndicator && messageText.isEmpty
+            ? Container(
+                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+                child: Row(
                   children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
+                    thinkingText != null
+                        ? Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                previousThinkingText != null
+                                    ? Text(
+                                        overflow: TextOverflow.fade,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        previousThinkingText,
+                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                                      )
+                                    : const SizedBox.shrink(),
+                                Shimmer.fromColors(
+                                  baseColor: Colors.white,
+                                  highlightColor: Colors.grey,
+                                  child: Text(
+                                    overflow: TextOverflow.fade,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    thinkingText,
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                )
+                              ],
+                            ),
+                          )
+                        : const SizedBox(
+                            height: 16,
+                            child: TypingIndicator(),
+                          ),
                   ],
-                )
-              : _getMarkdownWidget(context, messageText),
-        ),
+                ))
+            : const SizedBox.shrink(),
+        !(showTypingIndicator && messageText.isEmpty)
+            ? Container(
+                margin: const EdgeInsets.only(bottom: 4.0),
+                child: Text(
+                  formatChatTimestamp(createdAt),
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 12,
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
+        messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
         _getNpsWidget(context, message, setMessageNps),
-        if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
     );
   }
@@ -450,25 +452,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             ),
           ),
         ),
-        SelectionArea(
-            child: widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, widget.messageText)
-            // AutoSizeText(
-            //         widget.messageText,
-            //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            //       ),
-            ),
-        CopyButton(messageText: widget.messageText),
+        widget.showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(

@@ -78,6 +78,10 @@ class $AssetsImagesGen {
   AssetGenImage get appLauncherIconV1 =>
       const AssetGenImage('assets/images/app_launcher_icon_v1.png');
 
+  /// File path: assets/images/app_launcher_icon_v2.png
+  AssetGenImage get appLauncherIconV2 =>
+      const AssetGenImage('assets/images/app_launcher_icon_v2.png');
+
   /// File path: assets/images/background.png
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
@@ -97,9 +101,13 @@ class $AssetsImagesGen {
   AssetGenImage get herologoV1 =>
       const AssetGenImage('assets/images/herologo_v1.png');
 
-  /// File path: assets/images/herologo_v2.png
-  AssetGenImage get herologoV2 =>
-      const AssetGenImage('assets/images/herologo_v2.png');
+  /// File path: assets/images/herologo_v3.png
+  AssetGenImage get herologoV3 =>
+      const AssetGenImage('assets/images/herologo_v3.png');
+
+  /// File path: assets/images/herologo_v4.png
+  AssetGenImage get herologoV4 =>
+      const AssetGenImage('assets/images/herologo_v4.png');
 
   /// File path: assets/images/ic_chart.svg
   String get icChart => 'assets/images/ic_chart.svg';
@@ -127,6 +135,10 @@ class $AssetsImagesGen {
   AssetGenImage get logoTransparentV1 =>
       const AssetGenImage('assets/images/logo_transparent_v1.png');
 
+  /// File path: assets/images/logo_transparent_v2.png
+  AssetGenImage get logoTransparentV2 =>
+      const AssetGenImage('assets/images/logo_transparent_v2.png');
+
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
@@ -150,9 +162,17 @@ class $AssetsImagesGen {
   AssetGenImage get splashIconV1 =>
       const AssetGenImage('assets/images/splash_icon_v1.png');
 
+  /// File path: assets/images/splash_icon_v2.png
+  AssetGenImage get splashIconV2 =>
+      const AssetGenImage('assets/images/splash_icon_v2.png');
+
   /// File path: assets/images/splash_v1.png
   AssetGenImage get splashV1 =>
       const AssetGenImage('assets/images/splash_v1.png');
+
+  /// File path: assets/images/splash_v2.png
+  AssetGenImage get splashV2 =>
+      const AssetGenImage('assets/images/splash_v2.png');
 
   /// File path: assets/images/stars.png
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
@@ -162,12 +182,14 @@ class $AssetsImagesGen {
         aiMagic,
         appLauncherIcon,
         appLauncherIconV1,
+        appLauncherIconV2,
         background,
         blob,
         emotionalFeedback1,
         herologo,
         herologoV1,
-        herologoV2,
+        herologoV3,
+        herologoV4,
         icChart,
         icDollar,
         instruction1,
@@ -175,13 +197,16 @@ class $AssetsImagesGen {
         instruction3,
         logoTransparent,
         logoTransparentV1,
+        logoTransparentV2,
         recordingGreenCircleIcon,
         speaker0Icon,
         speaker1Icon,
         splash,
         splashIcon,
         splashIconV1,
+        splashIconV2,
         splashV1,
+        splashV2,
         stars
       ];
 }
