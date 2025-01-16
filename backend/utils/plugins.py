@@ -241,7 +241,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
 
     date_filters = {}  # not support yet
     filters = user_context.get('filters', {})
-    memories_id = query_vectors_by_metadata(
+    memories_id, memories_metadata = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
@@ -250,7 +250,7 @@ def _retrieve_contextual_memories(uid: str, user_context):
         entities=filters.get("entities", []),
         dates=filters.get("dates", []),
     )
-    return memories_db.get_memories_by_id(uid, memories_id)
+    return memories_db.get_memories_by_id(uid, memories_id), memories_metadata
 
 
 def _hit_proactive_notification_rate_limits(uid: str, plugin: App):
@@ -300,9 +300,9 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
     # context
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories, memories_metadata = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
-            context = Memory.memories_to_string(memories)
+            context = Memory.memories_to_string_with_metadata(memories, memories_metadata=memories_metadata)
 
     # messages
     messages = []

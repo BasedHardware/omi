@@ -71,7 +71,7 @@ def query_vectors(state: GraphState):
     uid = state.get('uid')
     vector = generate_embedding(state.get('parsed_question', '')) if state.get('parsed_question') else [0] * 3072
     print('query_vectors vector:', vector[:5])
-    memories_id = query_vectors_by_metadata(
+    memories_id, memories_metadata = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[],

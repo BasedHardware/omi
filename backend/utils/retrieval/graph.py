@@ -92,6 +92,7 @@ class GraphState(TypedDict):
     date_filters: Optional[DateRangeFilters]
 
     memories_found: Optional[List[Memory]]
+    memories_metadata: Optional[List[dict]]
 
     parsed_question: Optional[str]
     answer: Optional[str]
@@ -224,7 +225,7 @@ def query_vectors(state: GraphState):
 
     # TODO: enable it when the in-accurated topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
-    memories_id = query_vectors_by_metadata(
+    memories_id, memories_metadata = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
@@ -245,21 +246,22 @@ def query_vectors(state: GraphState):
     #    state['callback'].put_thought_nowait(msg)
 
     # print(memories_id)
-    return {"memories_found": memories}
+    return {"memories_found": memories, "memories_metadata": memories_metadata}
 
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+    memories = state.get("memories_found", [])
+    memories_metadata = state.get("memories_metadata", [])
 
     # streaming
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
-        memories = state.get("memories_found", [])
         response: str = qa_rag_stream(
             uid,
             state.get("parsed_question"),
-            Memory.memories_to_string(memories, False),
+            Memory.memories_to_string_with_metadata(memories, False, memories_metadata),
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -269,11 +271,10 @@ def qa_handler(state: GraphState):
         return {"answer": response, "ask_for_nps": True}
 
     # no streaming
-    memories = state.get("memories_found", [])
     response: str = qa_rag(
         uid,
         state.get("parsed_question"),
-        Memory.memories_to_string(memories, False),
+        Memory.memories_to_string_with_metadata(memories, False, memories_metadata),
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),

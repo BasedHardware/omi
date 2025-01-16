@@ -68,7 +68,6 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
     # print(xc)
     return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
 
-
 def query_vectors_by_metadata(
         uid: str, vector: List[float], dates_filter: List[datetime], people: List[str], topics: List[str],
     entities: List[str], dates: List[str], limit: int = 5,
@@ -127,8 +126,7 @@ def query_vectors_by_metadata(
     memories_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
     memories_id.sort(key=lambda x: memory_id_to_matches[x], reverse=True)
     print('query_vectors_by_metadata result:', memories_id)
-    return memories_id[:limit] if len(memories_id) > limit else memories_id
-
+    return memories_id[:limit] if len(memories_id) > limit else memories_id, [m['metadata'] for m in xc['matches']]
 
 def delete_vector(memory_id: str):
     # TODO: does this work?

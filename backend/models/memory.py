@@ -171,6 +171,46 @@ class Memory(BaseModel):
     status: Optional[MemoryStatus] = MemoryStatus.completed
 
     @staticmethod
+    def memories_to_string_with_metadata(memories: List['Memory'], use_transcript: bool = False, memories_metadata: List[dict] = []) -> str:
+        result = []
+        metadata = {}
+        for m in memories_metadata:
+            metadata[m['memory_id']] = m
+        for i, memory in enumerate(memories):
+            if isinstance(memory, dict):
+                memory = Memory(**memory)
+            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+            memory_str = (f"Memory #{i + 1}\n"
+                          f"Created At: {formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
+                          f"Title: {str(memory.structured.title).capitalize()}\n"
+                          f"Overview: {str(memory.structured.overview).capitalize()}\n")
+
+            if memory.structured.action_items:
+                memory_str += "Action Items:\n"
+                for item in memory.structured.action_items:
+                    memory_str += f"- {item.description}\n"
+
+            if memory.structured.events:
+                memory_str += "Events:\n"
+                for event in memory.structured.events:
+                    memory_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+
+            # metadata
+            memory_meta = metadata[memory.id]
+            if memory_meta:
+                memory_str += f"Related People: {', '.join(memory_meta['people'])}\n"
+                memory_str += f"Related Topics: {', '.join(memory_meta['topics'])}\n"
+                memory_str += f"Related Entities: {', '.join(memory_meta['entities'])}\n"
+                memory_str += f"Related Dates: {', '.join(memory_meta['dates'])}\n"
+
+            if use_transcript:
+                memory_str += (f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+
+            result.append(memory_str.strip())
+
+        return "\n\n---------------------\n\n".join(result).strip()
+
+    @staticmethod
     def memories_to_string(memories: List['Memory'], use_transcript: bool = False) -> str:
         result = []
         for i, memory in enumerate(memories):
