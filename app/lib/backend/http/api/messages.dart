@@ -261,3 +261,16 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
     throw Exception('An error occurred uploadSample: $e');
   }
 }
+
+Future reportMessageServer(String messageId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/messages/$messageId/report',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) throw Exception('Failed to report message');
+  if (response.statusCode != 200) {
+    throw Exception('Failed to report message');
+  }
+}

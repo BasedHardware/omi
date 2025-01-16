@@ -37,6 +37,8 @@ class Message(BaseModel):
     memories_id: List[str] = []  # used in db
     memories: List[MessageMemory] = []  # used front facing
     deleted: bool = False
+    reported: bool = False
+    report_reason: Optional[str] = None
 
     @staticmethod
     def get_messages_as_string(

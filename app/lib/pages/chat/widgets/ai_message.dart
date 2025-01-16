@@ -4,7 +4,6 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
@@ -22,6 +21,8 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+
+import 'markdown_message_widget.dart';
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -150,32 +151,6 @@ Widget buildMessageWidget(
   }
 }
 
-Widget _getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3);
-  return MarkdownBody(
-    shrinkWrap: true,
-    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style,
-      p: style,
-      blockquote: style.copyWith(
-        backgroundColor: Colors.transparent,
-        color: Colors.black,
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: Colors.grey.shade800,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      code: style.copyWith(
-        backgroundColor: Colors.transparent,
-        decoration: TextDecoration.none,
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    data: content,
-  );
-}
-
 Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
   if (!message.askForNps) return const SizedBox();
 
@@ -217,24 +192,18 @@ class InitialMessageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SelectionArea(
-            child: showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, messageText)
-            // AutoSizeText(
-            //         messageText,
-            // style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            // ),
-            ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, messageText),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -270,20 +239,18 @@ class DaySummaryWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : daySummaryMessagesList(messageText),
-        ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : daySummaryMessagesList(messageText),
       ],
     );
   }
@@ -430,11 +397,8 @@ class NormalMessageWidget extends StatelessWidget {
                 ),
               )
             : const SizedBox.shrink(),
-        SelectionArea(
-          child: messageText.isEmpty ? const SizedBox.shrink() : _getMarkdownWidget(context, messageText),
-        ),
+        messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
         _getNpsWidget(context, message, setMessageNps),
-        if (!showTypingIndicator) CopyButton(messageText: messageText),
       ],
     );
   }
@@ -488,25 +452,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             ),
           ),
         ),
-        SelectionArea(
-            child: widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, widget.messageText)
-            // AutoSizeText(
-            //         widget.messageText,
-            //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            //       ),
-            ),
-        CopyButton(messageText: widget.messageText),
+        widget.showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
