@@ -1379,9 +1379,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - etc.
     </date_in_term>
     '''.replace('    ', '').strip()
-    print(prompt)
+    # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
-    print(question)
+    # print(question)
     return question
 
 
