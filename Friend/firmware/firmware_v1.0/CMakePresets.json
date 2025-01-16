@@ -13,7 +13,7 @@
 			"hidden": false,
 			"description": "Debug build for devkit v1 device with no external modules",
 			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv1",
+			"binaryDir": "${sourceDir}/build/dk1",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
@@ -30,7 +30,7 @@
 			"hidden": false,
 			"description": "Debug build for devkit v1 device with external SPI SD card module",
 			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv1-spisd",
+			"binaryDir": "${sourceDir}/build/dk1-spisd",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
@@ -42,12 +42,12 @@
 			}
         },{
 			"name": "build_xiao_ble_sense_devkitv2-adafruit",
-			"displayName": "Devkit V2 (with Adafruit BFF Module)",
+			"displayName": "Devkit V2 (xiao ble sense | nrf52840)",
 			"configuration": "Debug",
 			"hidden": false,
-			"description": "Debug build for devkit v2 device with adafruit audio bff module",
+			"description": "Debug build for devkit v2 device using Xiao BLE Sense and nrf52840",
 			"generator": "Ninja",
-			"binaryDir": "${sourceDir}/build/build_xiao_ble_sense_devkitv2-adafruit",
+			"binaryDir": "${sourceDir}/build/dk2",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
 				"CMAKE_BUILD_TYPE": "Debug",
@@ -58,21 +58,21 @@
 				"DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_devkitv2-adafruit.overlay"
             }
         },{
-            "name": "build_xiao_ble_sense_consumerv1-5340",
-            "displayName": "Consumer V1 (with nrf5340)",
+            "name": "build_nrf7002dk_nrf5340_consumerv1",
+            "displayName": "Consumer V1 (nrf5340)",
             "configuration": "Debug",
             "hidden": false,
             "description": "Debug build for consumer v1 device with nrf5340",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/build_xiao_ble_sense_consumerv1-5340",
+            "binaryDir": "${sourceDir}/build/cv1",
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "PLATFORM": "nrf5340",
-                "BOARD": "xiao_ble_sense",
-                "CACHED_CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_consumerv1-5340.conf",
-                "CONF_FILE": "${sourceDir}/prj_xiao_ble_sense_consumerv1-5340.conf",
-                "DTC_OVERLAY_FILE": "${sourceDir}/overlay/xiao_ble_sense_consumerv1-5340.overlay"
+                "BOARD": "nrf7002/dk/nrf5340/cpuapp/ns",
+                "CACHED_CONF_FILE": "${sourceDir}/prj_nrf7002dk_nrf5340_consumerv1.conf",
+                "CONF_FILE": "${sourceDir}/prj_nrf7002dk_nrf5340_consumerv1.conf",
+                "DTC_OVERLAY_FILE": "${sourceDir}/overlay/nrf7002dk_nrf5340_consumerv1.overlay"
             }
         }
     ]

@@ -20,10 +20,13 @@ static int16_t _buffer_0[MIC_BUFFER_SAMPLES];
 static int16_t _buffer_1[MIC_BUFFER_SAMPLES];
 static volatile uint8_t _next_buffer_index = 0;
 static volatile mix_handler _callback = NULL;
+
+#ifndef CONFIG_OMI_USE_LEGACY_SOC
 static nrfx_pdm_t pdm_instance = {
     .p_reg = NRF_PDM0,
     .drv_inst_idx = 0
 };
+#endif
 
 static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
 {
@@ -38,16 +41,13 @@ static void pdm_irq_handler(nrfx_pdm_evt_t const *event)
     if (event->buffer_requested)
     {
         LOG_DBG("Audio buffer requested");
-        if (_next_buffer_index == 0)
-        {
-            nrfx_pdm_buffer_set(&pdm_instance, _buffer_0, MIC_BUFFER_SAMPLES);
-            _next_buffer_index = 1;
-        }
-        else
-        {
-            nrfx_pdm_buffer_set(&pdm_instance, _buffer_1, MIC_BUFFER_SAMPLES);
-            _next_buffer_index = 0;
-        }
+        int16_t *currentBuffer = _next_buffer_index == 0 ? _buffer_0 : _buffer_1;
+        _next_buffer_index = _next_buffer_index == 0 ? 1 : 0;
+#ifdef CONFIG_OMI_USE_LEGACY_SOC
+        nrfx_pdm_buffer_set(currentBuffer, MIC_BUFFER_SAMPLES);
+#else
+        nrfx_pdm_buffer_set(&pdm_instance, currentBuffer, MIC_BUFFER_SAMPLES);
+#endif
     }
 
     // Release buffer
@@ -80,11 +80,12 @@ int mic_start()
     pdm_config.edge = NRF_PDM_EDGE_LEFTFALLING;
     pdm_config.ratio = NRF_PDM_RATIO_80X;
 #ifdef CONFIG_OMI_USE_LEGACY_SOC
-    IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!
+    IRQ_DIRECT_CONNECT(PDM_IRQn, 5, nrfx_pdm_irq_handler, 0); // IMPORTANT!
+    if (nrfx_pdm_init(&pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
 #else
     IRQ_DIRECT_CONNECT(PDM0_IRQn, 5, nrfx_pdm_0_irq_handler, 0); // IMPORTANT!
-#endif
     if (nrfx_pdm_init(&pdm_instance, &pdm_config, pdm_irq_handler) != NRFX_SUCCESS)
+#endif
     {
         LOG_ERR("Audio unable to initialize PDM");
         return -1;
@@ -95,7 +96,11 @@ int mic_start()
     nrfy_gpio_pin_set(PDM_PWR_PIN);
 
     // Start PDM
+#ifdef CONFIG_OMI_USE_LEGACY_SOC
+    if (nrfx_pdm_start() != NRFX_SUCCESS)
+#else
     if (nrfx_pdm_start(&pdm_instance) != NRFX_SUCCESS)
+#endif
     {
         LOG_ERR("Audio unable to start PDM");
         return -1;

@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-set(BOARD seeed_xiao_nrf52840_sense)
+if (OMI_USE_LEGACY_SOC)
+    set(BOARD xiao_ble_sense_devkitv2-adafruit)
+else ()
+    set(BOARD nrf7002dk_nrf5340_consumerv1)
+endif ()
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(nrf52840_nordic)
+project(omi_firmware)
 enable_language(C ASM)
 
 target_sources(app PRIVATE
