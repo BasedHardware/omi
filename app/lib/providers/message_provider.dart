@@ -128,6 +128,11 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
+   void removeLocalMessage(String id) {
+    messages.removeWhere((m) => m.id == id);
+    notifyListeners();
+  }
+  
   Future refreshMessages({bool dropdownSelected = false}) async {
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {

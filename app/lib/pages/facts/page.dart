@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/fact.dart';
@@ -30,6 +31,9 @@ class _FactsPage extends StatefulWidget {
 }
 
 class _FactsPageState extends State<_FactsPage> {
+  static List<String> values = ["_all", ...FactCategory.values.map((c) => c.toString().split(".").last)];
+  String? value = values.first;
+
   @override
   void initState() {
     () {
@@ -40,6 +44,26 @@ class _FactsPageState extends State<_FactsPage> {
 
   @override
   Widget build(BuildContext context) {
+    List<DropdownMenuItem<String>> buildDropdownItems(FactsProvider provider) {
+      String title(String val, int count) {
+        if (provider.loading) {
+          return val.capitalize();
+        }
+        return "${val.capitalize()} ($count)";
+      }
+
+      return values.map((val) {
+        var count = (provider.facts.where((f) => f.category.toString().split(".").last == val)).length;
+        return DropdownMenuItem<String>(
+            value: val,
+            child: Text(val == "_all"
+                ? title("About you", provider.facts.length)
+                : val == "other"
+                    ? title('Other things', count)
+                    : title(val, count)));
+      }).toList();
+    }
+
     return Consumer<FactsProvider>(
       builder: (context, provider, _) {
         return PopScope(
@@ -52,21 +76,24 @@ class _FactsPageState extends State<_FactsPage> {
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Text(provider.selectedCategory == null
-                  ? 'About you'
-                  : provider.selectedCategory == FactCategory.other
-                      ? 'Other things'
-                      : 'About your ${provider.selectedCategory.toString().split('.').last}'),
-              leading: provider.selectedCategory != null
-                  ? IconButton(
-                      icon: Platform.isIOS ? const Icon(Icons.arrow_back_ios_new) : const Icon(Icons.arrow_back),
-                      onPressed: () {
-                        setState(() {
-                          provider.setCategory(null);
-                        });
-                      },
-                    )
-                  : null,
+              title: DropdownButton<String>(
+                value: value,
+                itemHeight: 48,
+                items: buildDropdownItems(provider),
+                underline: const SizedBox.shrink(),
+                onChanged: (String? val) {
+                  var cat = FactCategory.values.firstWhereOrNull((fc) => fc.toString().split(".").last == val);
+                  setState(() {
+                    if (cat == null) {
+                      value = values.first;
+                      provider.setCategory(null);
+                    } else {
+                      value = val;
+                      provider.setCategory(cat);
+                    }
+                  });
+                },
+              ),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -82,9 +109,13 @@ class _FactsPageState extends State<_FactsPage> {
                     child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ))
-                : provider.selectedCategory == null
-                    ? _buildCategoryChips(provider)
-                    : _buildFactsList(provider),
+                : RefreshIndicator(
+                    color: Colors.white,
+                    onRefresh: () async {
+                      return await provider.loadFacts();
+                    },
+                    child: _buildFactsList(provider),
+                  ),
           ),
         );
       },
@@ -113,31 +144,22 @@ class _FactsPageState extends State<_FactsPage> {
               });
             }
 
-            return Platform.isIOS
-                ? CupertinoAlertDialog(
-                    content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(
-                      context,
-                      formKey,
-                      contentController,
-                      selectedCategory,
-                      provider,
-                      isEditing: fact != null,
-                      fact: fact,
-                    ),
-                  )
-                : AlertDialog(
-                    content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
-                    actions: _showFactDialogActions(
-                      context,
-                      formKey,
-                      contentController,
-                      selectedCategory,
-                      provider,
-                      isEditing: fact != null,
-                      fact: fact,
-                    ),
-                  );
+            return AlertDialog(
+              backgroundColor: Colors.grey.shade900,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              content: _showFactDialogForm(formKey, contentController, selectedCategory, provider, setCategory),
+              actions: _showFactDialogActions(
+                context,
+                formKey,
+                contentController,
+                selectedCategory,
+                provider,
+                isEditing: fact != null,
+                fact: fact,
+              ),
+            );
           },
         );
       },
@@ -155,89 +177,85 @@ class _FactsPageState extends State<_FactsPage> {
       key: formKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Platform.isIOS
-              ? CupertinoTextFormFieldRow(
-                  controller: contentController,
-                  placeholder: 'I love Omi ...',
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.sentences,
-                  textAlign: TextAlign.start,
-                  placeholderStyle: const TextStyle(color: Colors.white54),
-                  style: const TextStyle(color: Colors.white),
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
-                  maxLines: 1,
-                )
-              : TextFormField(
-                  controller: contentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Fact Content',
-                    hintText: 'I love Omi ...',
-                    border: InputBorder.none,
-                  ),
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.sentences,
-                  validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
-                  maxLines: 1,
-                  style: const TextStyle(color: Colors.white),
-                ),
+          TextFormField(
+            controller: contentController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'I love Omi ...',
+              border: InputBorder.none,
+              labelStyle: TextStyle(color: Colors.grey),
+            ),
+            maxLines: 5,
+            minLines: 1,
+            keyboardType: TextInputType.text,
+            textCapitalization: TextCapitalization.sentences,
+            validator: (value) => value!.isEmpty ? 'Can\'t be empty' : null,
+            style: const TextStyle(color: Colors.white, fontSize: 24),
+          ),
           const SizedBox(height: 16),
-          Platform.isIOS
-              ? CupertinoButton(
-                  child: Text(
-                    selectedCategory.toString().split('.').last,
-                    style: const TextStyle(color: Colors.white),
+          Wrap(
+            spacing: 0.0,
+            runSpacing: 0.0,
+            children: FactCategory.values.map((category) {
+              return TextButton(
+                onPressed: () {
+                  setCategory(category);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: category == selectedCategory ? Colors.grey.shade800 : Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  onPressed: () {
-                    showCupertinoModalPopup(
-                      context: context,
-                      builder: (BuildContext context) => CupertinoActionSheet(
-                        title: const Text('Select Category'),
-                        actions: FactCategory.values.map((category) {
-                          return CupertinoActionSheetAction(
-                            child: Text(
-                              category.toString().split('.').last,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            onPressed: () {
-                              setCategory(category);
-                              Navigator.pop(context);
-                            },
-                          );
-                        }).toList(),
-                        cancelButton: CupertinoActionSheetAction(
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : DropdownButtonFormField<FactCategory>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                  ),
-                  dropdownColor: Colors.grey.shade800,
-                  style: const TextStyle(color: Colors.white),
-                  items: FactCategory.values.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      category == selectedCategory
+                          ? const Row(
+                              children: [
+                                Icon(
+                                  size: 14,
+                                  Icons.check,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(
+                                  width: 4,
+                                ),
+                              ],
+                            )
+                          : SizedBox.shrink(),
+                      Text(
                         category.toString().split('.').last,
                         style: const TextStyle(color: Colors.white),
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setCategory(value!);
-                  },
+                    ],
+                  ),
                 ),
+              );
+            }).toList(),
+          ),
+          //DropdownButtonFormField<FactCategory>(
+          //  value: selectedCategory,
+          //  decoration: const InputDecoration(
+          //    labelText: 'Category',
+          //  ),
+          //  dropdownColor: Colors.grey.shade800,
+          //  style: const TextStyle(color: Colors.white),
+          //  items: FactCategory.values.map((category) {
+          //    return DropdownMenuItem(
+          //      value: category,
+          //      child: Text(
+          //        category.toString().split('.').last,
+          //        style: const TextStyle(color: Colors.white),
+          //      ),
+          //    );
+          //  }).toList(),
+          //  onChanged: (value) {
+          //    setCategory(value!);
+          //  },
+          //),
         ],
       ),
     );
@@ -265,27 +283,26 @@ class _FactsPageState extends State<_FactsPage> {
       }
     }
 
-    return Platform.isIOS
-        ? [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
-            ),
-            CupertinoDialogAction(
-              onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
-            ),
-          ]
-        : [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: onPressed,
-              child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
-            ),
-          ];
+    return [
+      isEditing
+          ? TextButton(
+              onPressed: () {
+                if (fact != null) {
+                  provider.deleteFactProvider(fact);
+                }
+                Navigator.pop(context);
+              },
+              child: const Opacity(
+                opacity: .6,
+                child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+              ),
+            )
+          : const SizedBox.shrink(),
+      TextButton(
+        onPressed: onPressed,
+        child: Text(isEditing ? 'Update' : 'Add', style: const TextStyle(color: Colors.white)),
+      ),
+    ];
   }
 
   Widget _buildCategoryChips(FactsProvider provider) {

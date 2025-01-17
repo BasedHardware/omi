@@ -28,6 +28,10 @@ class FactsProvider extends BaseProvider {
   }
 
   void init() async {
+    loadFacts();
+  }
+
+  Future loadFacts() async {
     loading = true;
     notifyListeners();
     facts = await getFacts();

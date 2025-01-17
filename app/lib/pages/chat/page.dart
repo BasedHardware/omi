@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
@@ -17,9 +18,13 @@ import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/dialog.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
+
+import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -224,25 +229,115 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           ? 200
                                           : 170
                                       : 0;
-                                  return Padding(
-                                    key: ValueKey(message.id),
-                                    padding:
-                                        EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
-                                    child: message.sender == MessageSender.ai
-                                        ? AIMessage(
-                                            showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
-                                            message: message,
-                                            sendMessage: _sendMessageUtil,
-                                            displayOptions: provider.messages.length <= 1,
-                                            appSender: provider.messageSenderApp(message.appId),
-                                            updateConversation: (ServerConversation conversation) {
-                                              context.read<ConversationProvider>().updateConversation(conversation);
-                                            },
-                                            setMessageNps: (int value) {
-                                              provider.setMessageNps(message, value);
-                                            },
-                                          )
-                                        : HumanMessage(message: message),
+                                  return GestureDetector(
+                                    onLongPress: () {
+                                      showModalBottomSheet(
+                                        context: context,
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.vertical(
+                                            top: Radius.circular(20),
+                                          ),
+                                        ),
+                                        builder: (context) => MessageActionMenu(
+                                          message: message.text.decodeString,
+                                          onCopy: () async {
+                                            await Clipboard.setData(ClipboardData(text: message.text.decodeString));
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Message copied to clipboard.',
+                                                  style: TextStyle(
+                                                    color: Color.fromARGB(255, 255, 255, 255),
+                                                    fontSize: 12.0,
+                                                  ),
+                                                ),
+                                                duration: Duration(milliseconds: 2000),
+                                              ),
+                                            );
+                                            Navigator.pop(context);
+                                          },
+                                          onShare: () {
+                                            MixpanelManager()
+                                                .track('Chat Message Shared', properties: {'message': message.text});
+                                            Share.share(
+                                              '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
+                                              subject: 'Chat with Omi',
+                                            );
+                                            Navigator.pop(context);
+                                          },
+                                          onReport: () {
+                                            if (message.sender == MessageSender.human) {
+                                              Navigator.pop(context);
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'You cannot report your own messages.',
+                                                    style: TextStyle(
+                                                      color: Color.fromARGB(255, 255, 255, 255),
+                                                      fontSize: 12.0,
+                                                    ),
+                                                  ),
+                                                  duration: Duration(milliseconds: 2000),
+                                                ),
+                                              );
+                                              return;
+                                            }
+                                            showDialog(
+                                              context: context,
+                                              builder: (context) {
+                                                return getDialog(
+                                                  context,
+                                                  () {
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                  () {
+                                                    Navigator.of(context).pop();
+                                                    Navigator.of(context).pop();
+                                                    context.read<MessageProvider>().removeLocalMessage(message.id);
+                                                    reportMessageServer(message.id);
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Message reported successfully.',
+                                                          style: TextStyle(
+                                                            color: Color.fromARGB(255, 255, 255, 255),
+                                                            fontSize: 12.0,
+                                                          ),
+                                                        ),
+                                                        duration: Duration(milliseconds: 2000),
+                                                      ),
+                                                    );
+                                                  },
+                                                  'Report Message',
+                                                  'Are you sure you want to report this message?',
+                                                );
+                                              },
+                                            );
+                                            // Navigator.pop(context);
+                                          },
+                                        ),
+                                      );
+                                    },
+                                    child: Padding(
+                                      key: ValueKey(message.id),
+                                      padding:
+                                          EdgeInsets.only(bottom: bottomPadding, left: 18, right: 18, top: topPadding),
+                                      child: message.sender == MessageSender.ai
+                                          ? AIMessage(
+                                              showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+                                              message: message,
+                                              sendMessage: _sendMessageUtil,
+                                              displayOptions: provider.messages.length <= 1,
+                                              appSender: provider.messageSenderApp(message.appId),
+                                              updateConversation: (ServerConversation conversation) {
+                                                context.read<ConversationProvider>().updateConversation(conversation);
+                                              },
+                                              setMessageNps: (int value) {
+                                                provider.setMessageNps(message, value);
+                                              },
+                                            )
+                                          : HumanMessage(message: message),
+                                    ),
                                   );
                                 },
                               ),
