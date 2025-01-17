@@ -60,12 +60,15 @@ class MessageConversation {
 }
 
 class MessageFile {
+  String id;
   String openaiFileId;
-  String thumbnail;
+  String? thumbnail;
+  String? thumbnailName;
   String name;
   String mimeType;
+  DateTime createdAt;
 
-  MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType);
+  MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType, this.id, this.createdAt, this.thumbnailName);
 
   static MessageFile fromJson(Map<String, dynamic> json) {
     return MessageFile(
@@ -73,7 +76,14 @@ class MessageFile {
       json['thumbnail'],
       json['name'],
       json['mime_type'],
+      json['id'],
+      DateTime.parse(json['created_at']).toLocal(),
+      json['thumb_name'],
     );
+  }
+
+  static List<MessageFile> fromJsonList(List<dynamic> json) {
+    return json.map((e) => MessageFile.fromJson(e)).toList();
   }
 
   Map<String, dynamic> toJson() {
@@ -82,6 +92,9 @@ class MessageFile {
       'thumbnail': thumbnail,
       'name': name,
       'mime_type': mimeType,
+      'id': id,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'thumb_name': thumbnailName,
     };
   }
 

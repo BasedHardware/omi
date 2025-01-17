@@ -29,7 +29,7 @@ class MessageProvider extends ChangeNotifier {
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
-  bool isUploadingFile = false;
+  bool isUploadingFiles = false;
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
@@ -40,8 +40,8 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setIsUploadingFile(bool value) {
-    isUploadingFile = value;
+  void setIsUploadingFiles(bool value) {
+    isUploadingFiles = value;
     notifyListeners();
   }
 
@@ -123,16 +123,15 @@ class MessageProvider extends ChangeNotifier {
 
   void uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
-      setIsUploadingFile(true);
+      setIsUploadingFiles(true);
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
-        print('res: $res');
-        uploadedFiles.add(res);
+        uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
-      setIsUploadingFile(false);
+      setIsUploadingFiles(false);
       notifyListeners();
     }
   }
@@ -167,13 +166,11 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    print('getMessagesFromServer');
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
-    print('appProvider?.selectedChatAppId: ${appProvider?.selectedChatAppId}');
     var mes = await getMessagesServer(
       pluginId: appProvider?.selectedChatAppId,
       dropdownSelected: dropdownSelected,

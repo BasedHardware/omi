@@ -262,7 +262,7 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   }
 }
 
-Future<MessageFile?> uploadFilesServer(List<File> files, {String? appId}) async {
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
   var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/files';
@@ -289,7 +289,7 @@ Future<MessageFile?> uploadFilesServer(List<File> files, {String? appId}) async 
     var response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode == 200) {
       debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
-      return MessageFile.fromJson(jsonDecode(response.body));
+      return MessageFile.fromJsonList(jsonDecode(response.body));
     } else {
       debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
       throw Exception('Failed to upload file. Status code: ${response.statusCode}');
