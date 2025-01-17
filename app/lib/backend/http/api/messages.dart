@@ -104,7 +104,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId}) async* {
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
@@ -114,7 +114,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
     final request = await HttpClient().postUrl(Uri.parse(url));
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'text': text}));
+    request.write(jsonEncode({'text': text, 'file_ids': filesId}));
 
     final response = await request.close();
 
@@ -262,13 +262,27 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   }
 }
 
-Future<MessageFile?> uploadFileServer(File file, String fileType, {String? appId}) async {
+Future<MessageFile?> uploadFilesServer(List<File> files, {String? appId}) async {
+  var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v1/files';
+  }
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/files?plugin_id=$appId'),
+    Uri.parse(url),
   );
-  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
+  for (var file in files) {
+    var stream = http.ByteStream(file.openRead());
+    var length = await file.length();
+    var multipartFile = http.MultipartFile(
+      'files',
+      stream,
+      length,
+      filename: basename(file.path),
+    );
+    request.files.add(multipartFile);
+  }
 
   try {
     var streamedResponse = await request.send();
