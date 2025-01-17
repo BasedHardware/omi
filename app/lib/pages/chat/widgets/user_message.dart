@@ -31,7 +31,7 @@ class HumanMessage extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 4.0),
                   child: message.files.first.mimeTypeToFileType() != 'image'
                       ? CachedNetworkImage(
-                          imageUrl: message.files.first.thumbnail,
+                          imageUrl: message.files.first.thumbnail ?? '',
                           imageBuilder: (context, imageProvider) => Container(
                             decoration: BoxDecoration(
                               color: Theme.of(context).primaryColor,
