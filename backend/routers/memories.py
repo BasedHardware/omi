@@ -69,9 +69,9 @@ def reprocess_memory(
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
-def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str = Depends(auth.get_current_user_uid)):
+def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset, statuses)
-    return memories_db.get_memories(uid, limit, offset, include_discarded=True,
+    return memories_db.get_memories(uid, limit, offset, include_discarded=include_discarded,
                                     statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
@@ -202,16 +202,16 @@ def set_assignee_memory_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
-    segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
-
-    # TODO: can do this async
-    if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-        person_id = value if assign_type == 'person_id' else None
-        expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
-    else:
-        path = f'{memory_id}_segment_{segment_idx}.wav'
-        delete_additional_profile_audio(uid, path)
-        delete_speech_sample_for_people(uid, path)
+    # thinh's note: disabled for now
+    # segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
+    # # TODO: can do this async
+    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
+    #     person_id = value if assign_type == 'person_id' else None
+    #     expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    # else:
+    #     path = f'{memory_id}_segment_{segment_idx}.wav'
+    #     delete_additional_profile_audio(uid, path)
+    #     delete_speech_sample_for_people(uid, path)
 
     return memory
 
@@ -343,4 +343,4 @@ def get_public_memories(offset: int = 0, limit: int = 1000):
 @router.post("/v1/memories/search", response_model=dict, tags=['memories'])
 def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
     return search_memories(query=search_request.query, page=search_request.page,
-                           per_page=search_request.per_page, uid=uid)
+                           per_page=search_request.per_page, uid=uid, include_discarded=search_request.include_discarded)

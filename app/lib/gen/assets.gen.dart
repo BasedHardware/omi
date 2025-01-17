@@ -166,13 +166,13 @@ class $AssetsImagesGen {
   AssetGenImage get splashIconV2 =>
       const AssetGenImage('assets/images/splash_icon_v2.png');
 
+  /// File path: assets/images/splash_v1.png
+  AssetGenImage get splashV1 =>
+      const AssetGenImage('assets/images/splash_v1.png');
+
   /// File path: assets/images/splash_v2.png
   AssetGenImage get splashV2 =>
       const AssetGenImage('assets/images/splash_v2.png');
-
-  /// File path: assets/images/splash_v3.png
-  AssetGenImage get splashV3 =>
-      const AssetGenImage('assets/images/splash_v3.png');
 
   /// File path: assets/images/stars.png
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
@@ -205,8 +205,8 @@ class $AssetsImagesGen {
         splashIcon,
         splashIconV1,
         splashIconV2,
+        splashV1,
         splashV2,
-        splashV3,
         stars
       ];
 }

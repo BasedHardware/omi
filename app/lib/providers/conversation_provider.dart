@@ -77,18 +77,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       totalSearchPages = 0;
       searchedConversations = [];
       groupConversationsByDate();
-
-      notifyListeners();
-      return;
-    }
-
-    if (query == previousQuery) {
       return;
     }
 
     setIsFetchingConversations(true);
     previousQuery = query;
-    var (convos, current, total) = await searchConversationsServer(query);
+    var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
     convos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
@@ -106,7 +100,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     setLoadingConversations(true);
     var (newConvos, current, total) = await searchConversationsServer(
       previousQuery,
-      currentSearchPage + 1,
+      page: currentSearchPage + 1,
+      includeDiscarded: showDiscardedConversations,
     );
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -153,9 +148,9 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     showDiscardedConversations = !showDiscardedConversations;
 
     if (previousQuery.isNotEmpty) {
-      groupSearchConvosByDate();
+      searchConversations(previousQuery);
     } else {
-      groupConversationsByDate();
+      fetchConversations();
     }
 
     MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -166,14 +161,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
-  Future getInitialConversations() async {
-    // reset search
+  Future fetchConversations() async {
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // fetch convos
     conversations = await getConversationsFromServer();
 
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -188,19 +181,17 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       searchedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
+
     notifyListeners();
   }
 
+  Future getInitialConversations() async {
+    await fetchConversations();
+  }
+
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
-    var havingFilters = true;
-    if (showDiscardedConversations) {
-      havingFilters = false;
-    }
-    if (!havingFilters) {
-      return convos;
-    }
     return convos.where((convo) {
-      if (!showDiscardedConversations && (convo.discarded && !convo.isNew)) {
+      if (!showDiscardedConversations && convo.discarded) {
         return false;
       }
       return true;
@@ -251,24 +242,13 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   Future getConversationsFromServer() async {
     setLoadingConversations(true);
-    var mem = await getConversations();
+    var mem = await getConversations(includeDiscarded: showDiscardedConversations);
     conversations = mem;
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     setLoadingConversations(false);
     notifyListeners();
     return conversations;
   }
-
-  // void createEventsForMemories() {
-  //   for (var memory in memories) {
-  //     if (memory.structured.events.isNotEmpty &&
-  //         !memory.structured.events.first.created &&
-  //         memory.startedAt != null &&
-  //         memory.startedAt!.isAfter(DateTime.now().add(const Duration(days: -1)))) {
-  //       _handleCalendarCreation(memory);
-  //     }
-  //   }
-  // }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
@@ -281,17 +261,18 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations = await getConversations(offset: conversations.length);
+    var newConversations =
+        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
     conversations.addAll(newConversations);
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    groupConversationsByDate();
+    _groupConversationsByDateWithoutNotify();
     setLoadingConversations(false);
     notifyListeners();
   }
 
   void addConversation(ServerConversation conversation) {
     conversations.insert(0, conversation);
-    addConvoToGroupedConversations(conversation);
+    _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
 
@@ -302,31 +283,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     } else {
       updateConversation(conversation, idx);
     }
-  }
-
-  void addConvoToGroupedConversations(ServerConversation conversation) {
-    var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
-    if (groupedConversations.containsKey(date)) {
-      groupedConversations[date]!.insert(0, conversation);
-      groupedConversations[date]!.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (syncedConversationsPointers.isNotEmpty) {
-        // if the synced conversation pointers contain a conversation on this date, then update their index
-        // This usually happens when a conversation is added to the grouped memories while/after syncing
-        if (syncedConversationsPointers.where((element) => element.key == date).isNotEmpty) {
-          var len = syncedConversationsPointers.where((element) => element.key == date).length;
-          for (var i = 0; i < len; i++) {
-            var mem = syncedConversationsPointers.where((element) => element.key == date).elementAt(i);
-            var newIdx = groupedConversations[date]!.indexWhere((m) => m.id == mem.conversation.id);
-            updateSyncedConversationPointerIndex(mem, newIdx);
-          }
-        }
-      }
-    } else {
-      groupedConversations[date] = [conversation];
-      groupedConversations =
-          Map.fromEntries(groupedConversations.entries.toList()..sort((a, b) => b.key.compareTo(a.key)));
-    }
-    notifyListeners();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
@@ -372,7 +328,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       }
     }
     conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    groupConversationsByDate();
+    _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
 
@@ -417,21 +373,12 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     memoriesToDelete.remove(conversationId);
   }
 
-  void undoDeleteConversation(String conversationId, int index) {
-    if (memoriesToDelete.containsKey(conversationId)) {
-      ServerConversation conversation = memoriesToDelete.remove(conversationId)!;
-      conversations.insert(0, conversation);
-      addConvoToGroupedConversations(conversation);
-    }
-    notifyListeners();
-  }
-
   /////////////////////////////////////////////////////////////////
 
   void deleteConversation(ServerConversation conversation, int index) {
     conversations.removeWhere((element) => element.id == conversation.id);
     deleteConversationServer(conversation.id);
-    groupConversationsByDate();
+    _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
 

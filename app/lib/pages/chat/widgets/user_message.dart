@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
@@ -97,10 +96,6 @@ class HumanMessage extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          CopyButton(
-            messageText: message.text,
-            isUserMessage: true,
           ),
         ],
       ),
