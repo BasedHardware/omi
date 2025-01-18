@@ -162,3 +162,5 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
 /docs/.docusaurus
+app/lib/env/env.dart
+app/setup.sh

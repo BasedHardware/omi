@@ -30,7 +30,7 @@ echo "- bash setup.sh android"
 echo ""
 
 
-API_BASE_URL=https://backend-dt5lrfkkoa-uc.a.run.app/
+API_BASE_URL=https://deadly-upward-griffon.ngrok-free.app/
 
 ######################################
 # Setup Firebase with prebuilt configs
