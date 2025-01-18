@@ -1,4 +1,5 @@
 import uuid
+import threading
 import asyncio
 import struct
 from datetime import datetime, timezone, timedelta
@@ -276,51 +277,193 @@ async def _websocket_util(
             memory_creation_task = asyncio.create_task(
                 _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
+    user_speaker_id = None
+
+    def create_speaker_indentification_task(uid: str, language: str, sample_rate: int):
+        nonlocal websocket_active, user_speaker_id
+        is_stopped = False
+        segment_buffers = []
+        audio_buffers = bytearray()
+        checks = {}  # int: <id>
+
+        audio_bytes_per_seconds: int = 32000  # sample_rate * channels * bit per sample / 8
+        frame_size: int = 160
+
+        lock = threading.Lock()
+
+        def clean():
+            nonlocal segment_buffers
+            nonlocal audio_buffers
+            segment_buffers = []
+            audio_buffers = []
+
+        def on_new_transcript_segments(segments):
+            print("on_new_transcript_segments")
+            nonlocal segment_buffers
+            if is_stopped:
+                return
+            segment_buffers.extend(segments)
+
+        def on_new_audio_bytes(audio_bytes):
+            nonlocal audio_buffers
+            if is_stopped:
+                return
+            with lock:
+                audio_buffers.extend(audio_bytes)
+
+        async def run():
+            nonlocal uid, language, sample_rate
+            nonlocal websocket_active, user_speaker_id
+            nonlocal is_stopped, segment_buffers, checks, audio_buffers, lock
+
+            audio_bytes_adjustment_seconds = None
+            audio_bytes_pivoted_seconds = 0
+            transcript_segments_adjustment_seconds = None
+
+            print(f"hello run {uid}, {language}, {sample_rate}")
+
+            # Create user's speech profile
+            has_speech_profile = create_user_speech_profile(uid) if uid \
+                and sample_rate == 16000 \
+                and language == "en" else False
+            if not has_speech_profile:
+                print(f"user do not have speech profile {uid} - {language} - {sample_rate}")
+                is_stopped = True
+                clean()
+                return
+
+            while websocket_active or len(segment_buffers) > 0:
+                await asyncio.sleep(3)
+
+                # Keep max 30s audio bytes
+                if len(audio_buffers) > 30 * audio_bytes_per_seconds:
+                    with lock:
+                        audio_buffers = audio_buffers[15*audio_bytes_per_seconds:]
+                        audio_bytes_pivoted_seconds = audio_bytes_pivoted_seconds+15
+
+                if len(segment_buffers) == 0:
+                    continue
+
+                # Adjust audio bytes
+                if audio_bytes_adjustment_seconds is None:
+                    words = transcribe_audio_bytes_short_dg(bytes(audio_buffers))
+                    print(words)
+                    if words and len(words) > 0:
+                        audio_bytes_adjustment_seconds = words[0]['start']
+                if transcript_segments_adjustment_seconds is None:
+                    transcript_segments_adjustment_seconds = segment_buffers[0]['start']
+
+                print(audio_bytes_adjustment_seconds, transcript_segments_adjustment_seconds)
+                if audio_bytes_adjustment_seconds is None \
+                        or transcript_segments_adjustment_seconds is None:
+                    continue
+
+                # Check if new segment, new speaker id, the user's speaker is not indentified yet
+                #   then call the speaker indentification service to ask if audio_bytes[start:+7s] is user or not
+                #     if yes then assign all segments to the user, then notify to the app as well
+                try:
+                    segments = segment_buffers.copy()
+                    segment_buffers = []
+                    segments = TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])
+                    for segment in segments:
+                        print(f"segment checks {segment}")
+                        print(checks)
+                        # if f"{segment.speaker_id}" in checks:
+                        #     continue
+                        if segment.end - segment.start < .1 or len(segment.text) < 1:
+                            continue
+                        delta_seconds = transcript_segments_adjustment_seconds - audio_bytes_adjustment_seconds
+                        frames_start = int((segment.start-delta_seconds) * audio_bytes_per_seconds) - (audio_bytes_pivoted_seconds * audio_bytes_per_seconds)
+                        frames_end = min(int((segment.end-delta_seconds) * audio_bytes_per_seconds) - (audio_bytes_pivoted_seconds * audio_bytes_per_seconds),
+                                         len(audio_buffers))
+                        print(frames_start, frames_end, delta_seconds)
+                        if frames_start < 0 or frames_end <= frames_start:
+                            continue
+                        frames_end = frames_start + ((frames_end-frames_start)//frame_size)*frame_size
+                        if frames_end - frames_start > 7 * audio_bytes_per_seconds:
+                            frames_end = frames_start + 7 * audio_bytes_per_seconds
+
+                        audio_bytes = audio_buffers[frames_start:frames_end]
+                        print(len(audio_bytes), len(audio_buffers))
+                        if len(audio_bytes) == 0:
+                            continue
+                        speakers_id = get_speakers_by_audio_bytes_short(bytes(audio_bytes), uid, language, sample_rate)
+                        print(speakers_id)
+                        if uid in speakers_id:
+                            user_speaker_id = segment.speaker_id
+                            # TODO: notify
+                            # is_stopped = True
+                            # clean()
+                            # return
+                        checks[f'{segment.speaker_id}'] = True
+                        print(checks)
+                except Exception as e:
+                    print(e)
+
+        print(f"hello speaker indentification {uid}, {language}, {sample_rate}")
+
+        # Support en, 16000
+        if language != 'en' or sample_rate != 16000:
+            clean()
+            is_stopped = True
+            return
+
+        return run, on_new_transcript_segments, on_new_audio_bytes
+
+    spk_run, spk_on_new_transcript_segments, spk_on_new_audio_bytes = create_speaker_indentification_task(uid, language, sample_rate)
+
     realtime_segment_buffers = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
         realtime_segment_buffers.extend(segments)
+        if spk_on_new_transcript_segments:
+            spk_on_new_transcript_segments(segments)
 
     soniox_socket = None
     speechmatics_socket = None
     deepgram_socket = None
     deepgram_socket2 = None
 
-    speech_profile_duration = 0
+    # speech_profile_duration = 0
     try:
-        file_path, speech_profile_duration = None, 0
+        # file_path, speech_profile_duration = None, 0
         # TODO: how bee does for recognizing other languages speech profile
-        if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
-            file_path = get_profile_audio_if_exists(uid)
-            speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
+        # if language == 'en' and (codec == 'opus' or codec == 'pcm16') and include_speech_profile:
+        #     file_path = get_profile_audio_if_exists(uid)
+        #     speech_profile_duration = AudioSegment.from_wav(file_path).duration_seconds + 5 if file_path else 0
 
         # DEEPGRAM
         if stt_service == STTService.deepgram:
+            # TODO: create speaker if needed
             deepgram_socket = await process_audio_dg(
-                stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
+                stream_transcript, language, sample_rate, 1,
             )
-            if speech_profile_duration:
-                deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
+            # deepgram_socket = await process_audio_dg(
+            #     stream_transcript, language, sample_rate, 1, preseconds=speech_profile_duration
+            # )
+            # if speech_profile_duration:
+            #     deepgram_socket2 = await process_audio_dg(stream_transcript, language, sample_rate, 1)
 
-                async def deepgram_socket_send(data):
-                    return deepgram_socket.send(data)
+            #     async def deepgram_socket_send(data):
+            #         return deepgram_socket.send(data)
 
-                await send_initial_file_path(file_path, deepgram_socket_send)
+            #     await send_initial_file_path(file_path, deepgram_socket_send)
         # SONIOX
         elif stt_service == STTService.soniox:
             soniox_socket = await process_audio_soniox(
                 stream_transcript, sample_rate, language,
                 uid if include_speech_profile else None
             )
-        # SPEECHMATICS
-        elif stt_service == STTService.speechmatics:
-            speechmatics_socket = await process_audio_speechmatics(
-                stream_transcript, sample_rate, language, preseconds=speech_profile_duration
-            )
-            if speech_profile_duration:
-                await send_initial_file_path(file_path, speechmatics_socket.send)
-                print('speech_profile speechmatics duration', speech_profile_duration, uid)
+
+        # # SPEECHMATICS
+        # elif stt_service == STTService.speechmatics:
+        #     speechmatics_socket = await process_audio_speechmatics(
+        #         stream_transcript, sample_rate, language, preseconds=speech_profile_duration
+        #     )
+        #     if speech_profile_duration:
+        #         await send_initial_file_path(file_path, speechmatics_socket.send)
+        #         print('speech_profile speechmatics duration', speech_profile_duration, uid)
 
     except Exception as e:
         print(f"Initial processing error: {e}", uid)
@@ -439,7 +582,6 @@ async def _websocket_util(
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
-
     current_memory_id = None
 
     async def stream_transcript_process():
@@ -486,13 +628,12 @@ async def _websocket_util(
 
                 # Send to external trigger
                 if transcript_send:
-                    transcript_send(segments,current_memory_id)
+                    transcript_send(segments, current_memory_id)
 
                 memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
                 current_memory_id = memory.id
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
-
 
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
@@ -522,15 +663,18 @@ async def _websocket_util(
                     await speechmatics_socket1.send(data)
 
                 if dg_socket1 is not None:
-                    elapsed_seconds = time.time() - timer_start
-                    if elapsed_seconds > speech_profile_duration or not dg_socket2:
-                        dg_socket1.send(data)
-                        if dg_socket2:
-                            print('Killing socket2', uid)
-                            dg_socket2.finish()
-                            dg_socket2 = None
-                    else:
-                        dg_socket2.send(data)
+                    if spk_on_new_audio_bytes:
+                        spk_on_new_audio_bytes(data)
+                    dg_socket1.send(data)
+                    # elapsed_seconds = time.time() - timer_start
+                    # if elapsed_seconds > speech_profile_duration or not dg_socket2:
+                    #     dg_socket1.send(data)
+                    #     if dg_socket2:
+                    #         print('Killing socket2', uid)
+                    #         dg_socket2.finish()
+                    #         dg_socket2 = None
+                    # else:
+                    #    dg_socket2.send(data)
 
                 # Send to external trigger
                 if audio_bytes_send:
@@ -593,6 +737,10 @@ async def _websocket_util(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
+        # speaker indentification
+        if spk_run:
+            speaker_indentification_tasks = [asyncio.create_task(spk_run())]
+
         # pusher
         pusher_tasks = [asyncio.create_task(pusher_connect())]
         if transcript_consume:
@@ -600,7 +748,7 @@ async def _websocket_util(
         if audio_bytes_consume:
             pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
 
-        tasks = [receive_task, stream_transcript_task, heartbeat_task] + pusher_tasks
+        tasks = [receive_task, stream_transcript_task, heartbeat_task] + speaker_indentification_tasks + pusher_tasks
         await asyncio.gather(*tasks)
 
     except Exception as e:

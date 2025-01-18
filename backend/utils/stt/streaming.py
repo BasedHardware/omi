@@ -5,7 +5,7 @@ import time
 from typing import List
 
 import websockets
-from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents, PrerecordedOptions, BufferSource, PrerecordedResponse
 from deepgram.clients.live.v1 import LiveOptions
 
 from utils.stt.soniox_util import *
@@ -14,7 +14,6 @@ headers = {
     "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
     "Content-Type": "audio/*"
 }
-
 
 async def send_initial_file_path(file_path: str, transcript_socket_async_send):
     print('send_initial_file_path')
@@ -47,6 +46,8 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'),
                           DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"}))
+
+deepgram_rest = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'))
 
 
 async def process_audio_dg(
@@ -419,3 +420,24 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
     except Exception as e:
         print(f"Exception in process_audio_speechmatics: {e}")
         raise
+
+
+def transcribe_audio_bytes_short_dg(audio_bytes: bytes):
+    response: PrerecordedResponse = deepgram_rest.listen.rest.v("1").transcribe_file(
+        BufferSource(
+            buffer=audio_bytes,
+        ),
+        PrerecordedOptions(
+            model="nova-2-general",
+            language="en",
+            channels=1,
+            sample_rate=16000,
+            encoding="linear16",
+        ),
+    )
+    if not response.results \
+            or not response.results.channels \
+            or len(response.results.channels) == 0 \
+            or len(response.results.channels[0].alternatives) == 0:
+        return []
+    return [w.to_dict() for w in response.results.channels[0].alternatives[0].words]

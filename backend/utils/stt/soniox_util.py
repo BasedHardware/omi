@@ -5,8 +5,8 @@
 #
 # import websockets
 # from pydub import AudioSegment
-# from soniox.speech_service import SpeechClient
-# from soniox.transcribe_file import transcribe_file_short, transcribe_file_async
+from soniox.speech_service import SpeechClient
+from soniox.transcribe_file import transcribe_file_short, transcribe_file_async, transcribe_bytes_short
 # from starlette.websockets import WebSocket
 #
 # from utils.endpoints import timeit
@@ -171,6 +171,25 @@ from utils.other.storage import get_profile_audio_if_exists
 #     return _get_transcript_from_result(result)
 #
 #
+
+def get_speakers_by_audio_bytes_short(audio: bytes, uid: str, language: str = 'en', sample_rate=8000) -> [str]:
+    with SpeechClient() as client:
+        result = transcribe_bytes_short(
+            audio,
+            client,
+            model=f"en_v2",
+            enable_global_speaker_diarization=True,
+            sample_rate_hertz=16000,
+            num_audio_channels=1,
+            min_num_speakers=1,
+            max_num_speakers=3,
+            enable_speaker_identification=True,
+            audio_format="pcm_s16le",
+            cand_speaker_names=[uid],
+        )
+        print(f"Text: " + "".join(word.text for word in result.words))
+        return [spk.name for spk in result.speakers]
+
 
 def set_json_speech_profiles(result):
     data = (result.stdout.decode('utf-8').replace('Listing speakers and audios.\n  ', '')
