@@ -16,7 +16,7 @@ class _BrowserPageState extends State<BrowserPage> {
   @override
   void initState() {
     super.initState();
-    final url = widget.initialUrl ?? 'https://brain.neoserver.dev';
+    final url = widget.initialUrl?.startsWith('http') == true ? widget.initialUrl! : 'https://${widget.initialUrl}';
     debugPrint('Loading URL in BrowserPage: $url');
     
     controller = WebViewController()

@@ -53,52 +53,82 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool isWebViewLoading = true;
   bool showDetails = false;
 
-  void initWebView() {
-    debugPrint('initWebView called');
-    debugPrint('app.enabled: ${app.enabled}');
-    debugPrint('app.worksExternally(): ${app.worksExternally()}');
-    debugPrint('authSteps: ${app.externalIntegration?.authSteps}');
-
+  Future<void> initWebView() async {
     if (!app.enabled || !app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true) {
-      debugPrint('Exiting initWebView - conditions not met');
       return;
     }
 
     final baseUrl = app.externalIntegration!.authSteps.first.url.trim();
     if (baseUrl.isEmpty) {
-      debugPrint('Empty URL provided');
       return;
     }
-    debugPrint('Base URL: $baseUrl');
     
     final finalUrl = baseUrl.startsWith('http') ? baseUrl : 'https://$baseUrl';
-    debugPrint('URL with protocol: $finalUrl');
-
     final uri = Uri.parse(finalUrl);
-    debugPrint('Parsed URI: $uri');
-
     final urlWithUid = uri.replace(queryParameters: {
       ...uri.queryParameters,
       'uid': SharedPreferencesUtil().uid,
     }).toString();
-    debugPrint('Final URL with UID: $urlWithUid');
 
     setState(() {
-      debugPrint('Setting isWebViewLoading to true');
       isWebViewLoading = true;
     });
 
-    debugPrint('Creating WebViewController');
     webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.grey[900]!)
+      ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
-            debugPrint('WebView started loading: $url');
-          },
-          onPageFinished: (String url) {
-            debugPrint('WebView finished loading: $url');
+          onPageFinished: (String url) async {
+            // Inject console logger and error handler
+            await webViewController?.runJavaScript('''
+              window.consoleLog = [];
+              
+              // Store original console methods
+              const originalConsole = {
+                log: console.log,
+                error: console.error,
+                warn: console.warn,
+                info: console.info
+              };
+
+              // Helper to format error stack
+              function formatError(error) {
+                return error.stack || error.message || error.toString();
+              }
+
+              // Override console methods
+              console.log = function() {
+                window.consoleLog.push(['log', ...Array.from(arguments)]);
+                originalConsole.log.apply(console, arguments);
+              };
+              console.error = function() {
+                const args = Array.from(arguments).map(arg => arg instanceof Error ? formatError(arg) : arg);
+                window.consoleLog.push(['error', ...args]);
+                originalConsole.error.apply(console, arguments);
+              };
+              console.warn = function() {
+                window.consoleLog.push(['warn', ...Array.from(arguments)]);
+                originalConsole.warn.apply(console, arguments);
+              };
+              console.info = function() {
+                window.consoleLog.push(['info', ...Array.from(arguments)]);
+                originalConsole.info.apply(console, arguments);
+              };
+
+              // Capture uncaught errors
+              window.onerror = function(msg, src, line, col, err) {
+                window.consoleLog.push(['error', msg + ' (' + src + ':' + line + ':' + col + ')']);
+                return false;
+              };
+
+              // Capture unhandled promise rejections
+              window.onunhandledrejection = function(e) {
+                window.consoleLog.push(['error', 'Unhandled Promise Rejection: ' + (e.reason || 'Unknown Error')]);
+              };
+            ''');
+
             if (mounted) {
               setState(() {
                 isWebViewLoading = false;
@@ -106,7 +136,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
             }
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('WebView error: ${error.description} (${error.errorCode})');
             if (mounted) {
               setState(() {
                 isWebViewLoading = false;
@@ -115,11 +144,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
           },
         ),
       )
-      ..loadRequest(Uri.parse(urlWithUid)).then((_) {
-        debugPrint('WebView request loaded');
-      }).catchError((error) {
-        debugPrint('Error loading WebView request: $error');
-      });
+      ..loadRequest(Uri.parse(urlWithUid));
+
+    // Enable cookie persistence
+    await WebViewCookieManager().setCookie(
+      WebViewCookie(
+        name: '.AspNetCore.Cookies',
+        value: SharedPreferencesUtil().uid,
+        domain: Uri.parse(urlWithUid).host,
+      ),
+    );
   }
 
   void checkSetupCompleted() {
@@ -211,53 +245,182 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   List<Widget> _buildAppBarActions() {
-    final List<Widget> actions = [];
+    final actions = <Widget>[];
 
-    actions.addAll([
-      // Share button - always visible
-      IconButton(
-        icon: const Icon(Icons.share),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        onPressed: () {
-          MixpanelManager().track('App Shared', properties: {'appId': app.id});
-          Share.share(
-            'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-            subject: app.name,
-          );
-        },
-      ),
-
-      // Details/WebView toggle - only when app is enabled and has WebView
-      if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true)
+    // Add WebView toggle if available
+    if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
+      actions.add(
         IconButton(
           icon: Icon(showDetails ? Icons.web : Icons.info_outline),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          onPressed: () {
-            setState(() {
-              showDetails = !showDetails;
-            });
-          },
+          onPressed: () => setState(() => showDetails = !showDetails),
         ),
+      );
+    }
 
-      // Settings button - only for app owners
-      if (context.read<AppProvider>().isAppOwner)
-        IconButton(
-          icon: const Icon(Icons.settings),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          onPressed: () async {
-            await showModalBottomSheet(
-              context: context,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
+    // Add more options menu
+    actions.add(
+      PopupMenuButton<String>(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'share',
+            child: Row(
+              children: [
+                Icon(Icons.share),
+                SizedBox(width: 8),
+                Text('Share'),
+              ],
+            ),
+          ),
+          if (context.read<AppProvider>().isAppOwner)
+            const PopupMenuItem(
+              value: 'settings',
+              child: Row(
+                children: [
+                  Icon(Icons.settings),
+                  SizedBox(width: 8),
+                  Text('Settings'),
+                ],
               ),
-              builder: (context) => ShowAppOptionsSheet(app: app),
-            );
-          },
-        ),
-    ]);
+            ),
+          if (webViewController != null)
+            const PopupMenuItem(
+              value: 'dev_logs',
+              child: Row(
+                children: [
+                  Icon(Icons.developer_mode),
+                  SizedBox(width: 8),
+                  Text('View Console Logs'),
+                ],
+              ),
+            ),
+        ],
+        onSelected: (value) async {
+          switch (value) {
+            case 'share':
+              MixpanelManager().track('App Shared', properties: {'appId': app.id});
+              Share.share(
+                'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                subject: app.name,
+              );
+              break;
+
+            case 'settings':
+              await showModalBottomSheet(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                builder: (context) => ShowAppOptionsSheet(app: app),
+              );
+              break;
+
+            case 'dev_logs':
+              if (webViewController != null) {
+                try {
+                  final result = await webViewController!.runJavaScriptReturningResult(
+                    '''
+                    (function() {
+                      if (!window.consoleLog) return 'No logs captured';
+                      return window.consoleLog.map(function(log) {
+                        var type = log[0];
+                        var messages = log.slice(1);
+                        var timestamp = new Date().toLocaleTimeString();
+                        var formattedMessages = messages.map(function(msg) {
+                          if (msg instanceof Error) return msg.stack || msg.message;
+                          if (typeof msg === 'object') return JSON.stringify(msg, null, 2);
+                          return String(msg);
+                        }).join(' ');
+                        return '[' + timestamp + '] [' + type.toUpperCase() + '] ' + formattedMessages;
+                      }).reverse().join('\\n');
+                    })()
+                    '''
+                  );
+
+                  if (!mounted) return;
+
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      child: Container(
+                        width: MediaQuery.of(context).size.width * 0.9,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Console Logs',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Container(
+                              constraints: BoxConstraints(
+                                maxHeight: MediaQuery.of(context).size.height * 0.6,
+                              ),
+                              child: SingleChildScrollView(
+                                child: SelectableText(
+                                  result?.toString()?.replaceAll('"', '') ?? 'No logs available',
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    webViewController?.runJavaScript('window.consoleLog = [];');
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text('Clear'),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Error'),
+                      content: Text('Failed to get console logs: $e'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+              break;
+          }
+        },
+      ),
+    );
 
     return actions;
   }
@@ -272,24 +435,19 @@ class _AppDetailPageState extends State<AppDetailPage> {
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: app.enabled && !showDetails && app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true
-          ? SizedBox(
-              height: MediaQuery.of(context).size.height,
-              child: Stack(
-                children: [
-                  Container(
-                    color: Colors.grey[900],
-                    child: Stack(
-                      children: [
-                        if (webViewController != null)
-                          WebViewWidget(controller: webViewController!),
-                        if (isWebViewLoading)
-                          const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+          ? SizedBox.expand(
+              child: Container(
+                color: Colors.grey[900],
+                child: Stack(
+                  children: [
+                    if (webViewController != null)
+                      WebViewWidget(controller: webViewController!),
+                    if (isWebViewLoading)
+                      const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                  ],
+                ),
               ),
             )
           : SingleChildScrollView(
