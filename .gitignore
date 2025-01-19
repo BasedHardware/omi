@@ -164,3 +164,4 @@ app/lib/env/prod_env.g.dart
 /docs/.docusaurus
 app/lib/env/env.dart
 app/setup.sh
+*.bat

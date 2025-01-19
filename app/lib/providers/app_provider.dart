@@ -47,6 +47,12 @@ class AppProvider extends BaseProvider {
         return;
       }
       
+      // Check if we're trying to pin and already have 4 pinned apps
+      if (!apps[idx].pinned && pinnedApps.length >= 4) {
+        AppSnackbar.showSnackbarError('You can only pin up to 4 apps');
+        return;
+      }
+      
       apps[idx].pinned = !apps[idx].pinned;
       // Update the app in SharedPreferences
       SharedPreferencesUtil().appsList = apps;
