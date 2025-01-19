@@ -132,8 +132,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
       if (mounted && res != null) {
+        // Preserve pinned state when updating app details
+        final wasPinned = app.pinned;
         setState(() {
           app = res;
+          app.pinned = wasPinned;
         });
         if (app.enabled) {
           initWebView();
@@ -198,6 +201,25 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   List<Widget> _buildAppBarActions() {
     final actions = <Widget>[];
+
+    // Show pin toggle if app is enabled or already pinned
+    if (app.enabled || app.pinned) {
+      actions.add(
+        Consumer<AppProvider>(
+          builder: (context, provider, _) {
+            final currentApp = provider.apps.firstWhere((a) => a.id == app.id);
+            return IconButton(
+              icon: Icon(
+                currentApp.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                color: currentApp.pinned ? Colors.deepPurple : null,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              onPressed: () => provider.toggleAppPin(app.id, context),
+            );
+          },
+        ),
+      );
+    }
 
     // Add WebView toggle if available
     if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {

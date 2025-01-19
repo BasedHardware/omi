@@ -1,7 +1,9 @@
 import 'package:collection/collection.dart';
+import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/providers/base_provider.dart';
 import 'package:friend_private/utils/alerts/app_dialog.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -34,6 +36,44 @@ class AppProvider extends BaseProvider {
 
   List<App> get userPublicApps =>
       apps.where((app) => (!app.private && app.uid == SharedPreferencesUtil().uid)).toList();
+
+  List<App> get pinnedApps => apps.where((app) => app.pinned).toList();
+
+  Future<void> toggleAppPin(String appId, BuildContext context) async {
+    var idx = apps.indexWhere((app) => app.id == appId);
+    if (idx != -1) {
+      // Only allow pinning if app is enabled
+      if (!apps[idx].pinned && !apps[idx].enabled) {
+        return;
+      }
+      
+      apps[idx].pinned = !apps[idx].pinned;
+      // Update the app in SharedPreferences
+      SharedPreferencesUtil().appsList = apps;
+      // Update filtered apps if needed
+      if (isFilterActive() || isSearchActive()) {
+        var filteredIdx = filteredApps.indexWhere((app) => app.id == appId);
+        if (filteredIdx != -1) {
+          filteredApps[filteredIdx].pinned = apps[idx].pinned;
+        }
+      }
+      notifyListeners();
+      
+      AppSnackbar.showSnackbarSuccess(
+        apps[idx].pinned ? 'App pinned successfully 📌' : 'App unpinned successfully'
+      );
+    }
+  }
+
+  // Helper method to unpin an app
+  void _unpinApp(String appId) {
+    var idx = apps.indexWhere((app) => app.id == appId);
+    if (idx != -1 && apps[idx].pinned) {
+      apps[idx].pinned = false;
+      SharedPreferencesUtil().appsList = apps;
+      notifyListeners();
+    }
+  }
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {
@@ -336,6 +376,14 @@ class AppProvider extends BaseProvider {
       await disableAppServer(appId);
       prefs.disableApp(appId);
       MixpanelManager().appDisabled(appId);
+      
+      // Unpin the app when disabling it
+      var appIndex = apps.indexWhere((app) => app.id == appId);
+      if (appIndex != -1 && apps[appIndex].pinned) {
+        apps[appIndex].pinned = false;
+        prefs.appsList = apps;
+        AppSnackbar.showSnackbarSuccess('App unpinned');
+      }
     }
     if (idx != null) {
       appLoading[idx] = false;

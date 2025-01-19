@@ -258,6 +258,14 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                     );
                   },
                 ),
+          !provider.isFilterActive() && !provider.isSearchActive() && provider.pinnedApps.isNotEmpty
+              ? SliverToBoxAdapter(
+                  child: AppSectionCard(
+                    title: 'Pinned Apps',
+                    apps: provider.pinnedApps,
+                  ),
+                )
+              : const SliverToBoxAdapter(child: SizedBox.shrink()),
           !provider.isFilterActive() && !provider.isSearchActive()
               ? SliverToBoxAdapter(
                   child: AppSectionCard(

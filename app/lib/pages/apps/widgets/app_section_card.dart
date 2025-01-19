@@ -18,42 +18,30 @@ class AppSectionCard extends StatelessWidget {
     if (apps.isEmpty) {
       return const SizedBox.shrink();
     }
-    return Container(
-      height: height ??
-          (MediaQuery.sizeOf(context).height < 680
-              ? MediaQuery.sizeOf(context).height * 0.5
-              : MediaQuery.sizeOf(context).height * 0.4),
-      margin: const EdgeInsets.only(left: 6.0, right: 6.0, top: 12, bottom: 14),
-      decoration: BoxDecoration(
-        // color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(16.0),
-      ),
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: 8.0),
+            padding: const EdgeInsets.only(left: 6.0),
             child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18)),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: GridView.builder(
-              scrollDirection: Axis.horizontal,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: MediaQuery.sizeOf(context).width < 400 ? 0.26 : 0.3,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-              ),
-              itemCount: apps.length,
-              itemBuilder: (context, index) => SectionAppItemCard(
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: apps.length,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: SectionAppItemCard(
                 app: apps[index],
                 index: index,
               ),
             ),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -76,92 +64,76 @@ class SectionAppItemCard extends StatelessWidget {
           provider.setApps();
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            // color: const Color.fromARGB(255, 25, 24, 24),
+            color: Colors.grey[900],
             borderRadius: BorderRadius.circular(12.0),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CachedNetworkImage(
                 imageUrl: app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
-                  width: MediaQuery.sizeOf(context).width * 0.12,
-                  height: MediaQuery.sizeOf(context).width * 0.12,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.rectangle,
                     borderRadius: BorderRadius.circular(8),
                     image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                   ),
                 ),
-                placeholder: (context, url) => SizedBox(
-                  width: MediaQuery.sizeOf(context).width * 0.12,
-                  height: MediaQuery.sizeOf(context).width * 0.12,
-                  child: const CircularProgressIndicator(
+                placeholder: (context, url) => const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       app.name,
                       maxLines: 1,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          fontSize: MediaQuery.sizeOf(context).width < 400 ? 14 : 16),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        app.getCategoryName(),
-                        maxLines: 2,
-                        style:
-                            TextStyle(color: Colors.grey, fontSize: MediaQuery.sizeOf(context).width < 400 ? 10 : 14),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 14,
                       ),
                     ),
-                    app.ratingAvg != null || app.installs > 0
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                app.ratingAvg != null
-                                    ? Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        children: [
-                                          Text(app.getRatingAvg()!),
-                                          const SizedBox(width: 4),
-                                          const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                                          Text('(${app.ratingCount})'),
-                                          const SizedBox(width: 16),
-                                        ],
-                                      )
-                                    : const SizedBox(),
-                                //app.isPaid
-                                //    ? Padding(
-                                //        padding: const EdgeInsets.only(top: 4.0),
-                                //        child: Text(
-                                //          app.getFormattedPrice(),
-                                //          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                //        ),
-                                //      )
-                                //    : const SizedBox(),
-                              ],
-                            ),
-                          )
-                        : Container(),
+                    const SizedBox(height: 4),
+                    Text(
+                      app.getCategoryName(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
+              if (app.ratingAvg != null) ...[
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      app.getRatingAvg()!,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.star, color: Colors.deepPurple, size: 12),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

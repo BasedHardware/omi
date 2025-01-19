@@ -27,16 +27,20 @@ class AppListItem extends StatelessWidget {
           provider.setApps();
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          margin: EdgeInsets.only(bottom: 12, top: index == 0 ? 24 : 0),
+          padding: const EdgeInsets.all(12),
+          margin: EdgeInsets.only(bottom: 8, left: 8, right: 8, top: index == 0 ? 24 : 0),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(12.0),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CachedNetworkImage(
                 imageUrl: app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.rectangle,
                     borderRadius: BorderRadius.circular(8),
@@ -44,83 +48,64 @@ class AppListItem extends StatelessWidget {
                   ),
                 ),
                 placeholder: (context, url) => const SizedBox(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
-                          child: Text(
-                            app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: app.ratingAvg != null ? 4 : 0),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        app.description.decodeString,
-                        maxLines: 2,
-                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    Text(
+                      app.name.decodeString + (app.private && showPrivateIcon ? " 🔒".decodeString : ''),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 14,
                       ),
                     ),
-                    Row(
-                      children: [
-                        app.ratingAvg != null || app.installs > 0
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    app.ratingAvg != null
-                                        ? Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Text(app.getRatingAvg()!),
-                                              const SizedBox(width: 4),
-                                              const Icon(Icons.star, color: Colors.deepPurple, size: 16),
-                                              const SizedBox(width: 4),
-                                              Text('(${app.ratingCount})'),
-                                              const SizedBox(width: 16),
-                                            ],
-                                          )
-                                        : const SizedBox(),
-                                  ],
-                                ),
-                              )
-                            : Container(),
-                        //app.isPaid
-                        //    ? Padding(
-                        //        padding: const EdgeInsets.only(top: 8),
-                        //        child: Text(
-                        //          app.getFormattedPrice(),
-                        //          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                        //        ),
-                        //      )
-                        //    : const SizedBox(),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      app.description.decodeString,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
                     ),
+                    if (app.ratingAvg != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              app.getRatingAvg()!,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.star, color: Colors.deepPurple, size: 12),
+                            const SizedBox(width: 2),
+                            Text(
+                              '(${app.ratingCount})',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
-              SizedBox(width: MediaQuery.sizeOf(context).width * 0.02),
+              const SizedBox(width: 8),
               provider.appLoading.isNotEmpty && index != -1 && provider.appLoading[index]
                   ? const Padding(
                       padding: EdgeInsets.all(10),
