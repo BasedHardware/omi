@@ -80,55 +80,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageFinished: (String url) async {
-            // Inject console logger and error handler
-            await webViewController?.runJavaScript('''
-              window.consoleLog = [];
-              
-              // Store original console methods
-              const originalConsole = {
-                log: console.log,
-                error: console.error,
-                warn: console.warn,
-                info: console.info
-              };
-
-              // Helper to format error stack
-              function formatError(error) {
-                return error.stack || error.message || error.toString();
-              }
-
-              // Override console methods
-              console.log = function() {
-                window.consoleLog.push(['log', ...Array.from(arguments)]);
-                originalConsole.log.apply(console, arguments);
-              };
-              console.error = function() {
-                const args = Array.from(arguments).map(arg => arg instanceof Error ? formatError(arg) : arg);
-                window.consoleLog.push(['error', ...args]);
-                originalConsole.error.apply(console, arguments);
-              };
-              console.warn = function() {
-                window.consoleLog.push(['warn', ...Array.from(arguments)]);
-                originalConsole.warn.apply(console, arguments);
-              };
-              console.info = function() {
-                window.consoleLog.push(['info', ...Array.from(arguments)]);
-                originalConsole.info.apply(console, arguments);
-              };
-
-              // Capture uncaught errors
-              window.onerror = function(msg, src, line, col, err) {
-                window.consoleLog.push(['error', msg + ' (' + src + ':' + line + ':' + col + ')']);
-                return false;
-              };
-
-              // Capture unhandled promise rejections
-              window.onunhandledrejection = function(e) {
-                window.consoleLog.push(['error', 'Unhandled Promise Rejection: ' + (e.reason || 'Unknown Error')]);
-              };
-            ''');
-
+          onPageFinished: (String url) {
             if (mounted) {
               setState(() {
                 isWebViewLoading = false;
@@ -284,139 +236,25 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ],
               ),
             ),
-          if (webViewController != null)
-            const PopupMenuItem(
-              value: 'dev_logs',
-              child: Row(
-                children: [
-                  Icon(Icons.developer_mode),
-                  SizedBox(width: 8),
-                  Text('View Console Logs'),
-                ],
-              ),
-            ),
         ],
         onSelected: (value) async {
-          switch (value) {
-            case 'share':
-              MixpanelManager().track('App Shared', properties: {'appId': app.id});
-              Share.share(
-                'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                subject: app.name,
-              );
-              break;
-
-            case 'settings':
-              await showModalBottomSheet(
-                context: context,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
+          if (value == 'share') {
+            MixpanelManager().track('App Shared', properties: {'appId': app.id});
+            Share.share(
+              'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+              subject: app.name,
+            );
+          } else if (value == 'settings') {
+            await showModalBottomSheet(
+              context: context,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
                 ),
-                builder: (context) => ShowAppOptionsSheet(app: app),
-              );
-              break;
-
-            case 'dev_logs':
-              if (webViewController != null) {
-                try {
-                  final result = await webViewController!.runJavaScriptReturningResult(
-                    '''
-                    (function() {
-                      if (!window.consoleLog) return 'No logs captured';
-                      return window.consoleLog.map(function(log) {
-                        var type = log[0];
-                        var messages = log.slice(1);
-                        var timestamp = new Date().toLocaleTimeString();
-                        var formattedMessages = messages.map(function(msg) {
-                          if (msg instanceof Error) return msg.stack || msg.message;
-                          if (typeof msg === 'object') return JSON.stringify(msg, null, 2);
-                          return String(msg);
-                        }).join(' ');
-                        return '[' + timestamp + '] [' + type.toUpperCase() + '] ' + formattedMessages;
-                      }).reverse().join('\\n');
-                    })()
-                    '''
-                  );
-
-                  if (!mounted) return;
-
-                  showDialog(
-                    context: context,
-                    builder: (context) => Dialog(
-                      child: Container(
-                        width: MediaQuery.of(context).size.width * 0.9,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Console Logs',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              constraints: BoxConstraints(
-                                maxHeight: MediaQuery.of(context).size.height * 0.6,
-                              ),
-                              child: SingleChildScrollView(
-                                child: SelectableText(
-                                  result?.toString()?.replaceAll('"', '') ?? 'No logs available',
-                                  style: const TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 12,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: () {
-                                    webViewController?.runJavaScript('window.consoleLog = [];');
-                                    Navigator.pop(context);
-                                  },
-                                  child: const Text('Clear'),
-                                ),
-                                const SizedBox(width: 8),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Close'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Error'),
-                      content: Text('Failed to get console logs: $e'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              }
-              break;
+              ),
+              builder: (context) => ShowAppOptionsSheet(app: app),
+            );
           }
         },
       ),
@@ -779,6 +617,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 16),
+                            RecentReviewsSection(
+                              reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                              appAuthor: app.author,
+                            ),
                           ],
                         ),
                       ),
@@ -852,5 +695,124 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
     }
     return;
+  }
+}
+
+class RecentReviewsSection extends StatelessWidget {
+  final List<AppReview> reviews;
+  final String appAuthor;
+  const RecentReviewsSection({super.key, required this.reviews, required this.appAuthor});
+
+  @override
+  Widget build(BuildContext context) {
+    if (reviews.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 12),
+        const Text(
+          'Most Recent Reviews',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        const SizedBox(height: 16),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: reviews.any((e) => e.response.isNotEmpty)
+                ? MediaQuery.of(context).size.height * 0.24
+                : (MediaQuery.of(context).size.height < 680
+                    ? MediaQuery.of(context).size.height * 0.2
+                    : MediaQuery.of(context).size.height * 0.138),
+          ),
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            shrinkWrap: true,
+            itemCount: reviews.length,
+            itemBuilder: (context, index) {
+              return Container(
+                width: reviews.length == 1
+                    ? MediaQuery.of(context).size.width * 0.84
+                    : MediaQuery.of(context).size.width * 0.78,
+                padding: const EdgeInsets.all(16.0),
+                margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 0, bottom: 6),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 25, 24, 24),
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        RatingBar.builder(
+                          initialRating: reviews[index].score.toDouble(),
+                          minRating: 1,
+                          ignoreGestures: true,
+                          direction: Axis.horizontal,
+                          allowHalfRating: true,
+                          itemCount: 5,
+                          itemSize: 20,
+                          tapOnlyMode: false,
+                          itemPadding: const EdgeInsets.symmetric(horizontal: 0),
+                          itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                          maxRating: 5.0,
+                          onRatingUpdate: (rating) {},
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          timeago.format(reviews[index].ratedAt),
+                          style: const TextStyle(color: Color.fromARGB(255, 176, 174, 174), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      reviews[index].review.length > 100
+                          ? '${reviews[index].review.characters.take(100).toString().decodeString.trim()}...'
+                          : reviews[index].review.decodeString,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    if (reviews[index].response.isNotEmpty)
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Divider(color: Color.fromARGB(255, 92, 92, 92)),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text(
+                                'Response from $appAuthor',
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                timeago.format(reviews[index].ratedAt),
+                                style: const TextStyle(color: Color.fromARGB(255, 176, 174, 174), fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            reviews[index].response.length > 100
+                                ? '${reviews[index].response.characters.take(100).toString().decodeString.trim()}...'
+                                : reviews[index].response.decodeString,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              );
+            },
+            separatorBuilder: (context, index) => const SizedBox(width: 2),
+          ),
+        ),
+      ],
+    );
   }
 }
