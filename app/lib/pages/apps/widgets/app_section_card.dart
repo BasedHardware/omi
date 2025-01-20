@@ -19,9 +19,6 @@ class AppSectionCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Take only first 4 apps
-    final displayApps = apps.take(4).toList();
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child: Column(
@@ -37,15 +34,14 @@ class AppSectionCard extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              childAspectRatio: 1.0,
+              crossAxisCount: 2,
+              childAspectRatio: 3.0,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
-              mainAxisExtent: 90,
             ),
-            itemCount: displayApps.length,
+            itemCount: apps.length,
             itemBuilder: (context, index) => SectionAppItemCard(
-              app: displayApps[index],
+              app: apps[index],
               index: index,
             ),
           ),
@@ -71,19 +67,18 @@ class SectionAppItemCard extends StatelessWidget {
           provider.setApps();
         },
         child: Container(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(10.0),
+            borderRadius: BorderRadius.circular(12.0),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Row(
             children: [
               CachedNetworkImage(
                 imageUrl: app.getImageUrl(),
                 imageBuilder: (context, imageProvider) => Container(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.rectangle,
                     borderRadius: BorderRadius.circular(8),
@@ -91,40 +86,47 @@ class SectionAppItemCard extends StatelessWidget {
                   ),
                 ),
                 placeholder: (context, url) => const SizedBox(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
-              const SizedBox(height: 4),
-              Text(
-                app.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  fontSize: 11,
-                ),
-              ),
-              if (app.ratingAvg != null) ...[
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      app.getRatingAvg()!,
-                      style: const TextStyle(fontSize: 10, color: Colors.deepPurple),
+                      app.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
                     ),
-                    const SizedBox(width: 1),
-                    const Icon(Icons.star, color: Colors.deepPurple, size: 10),
+                    if (app.ratingAvg != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            app.getRatingAvg()!,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.star, color: Colors.deepPurple, size: 12),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
-              ],
+              ),
             ],
           ),
         ),

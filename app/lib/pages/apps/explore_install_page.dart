@@ -4,6 +4,7 @@ import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
+import 'package:friend_private/pages/apps/widgets/pinned_apps_section.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
@@ -260,10 +261,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                 ),
           !provider.isFilterActive() && !provider.isSearchActive() && provider.pinnedApps.isNotEmpty
               ? SliverToBoxAdapter(
-                  child: AppSectionCard(
-                    title: 'Pinned Apps',
-                    apps: provider.pinnedApps,
-                  ),
+                  child: PinnedAppsSection(apps: provider.pinnedApps),
                 )
               : const SliverToBoxAdapter(child: SizedBox.shrink()),
           !provider.isFilterActive() && !provider.isSearchActive()
