@@ -198,8 +198,8 @@ class ServerConversation {
   }
 
   Color getTagTextColor() {
-    if (source == ConversationSource.screenpipe) return Colors.deepPurple;
-    return Colors.white;
+    if (source == ConversationSource.screenpipe) return Colors.deepPurple.shade600;
+    return Colors.white60;
   }
 
   Color getTagColor() {
