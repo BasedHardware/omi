@@ -6,7 +6,6 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/browser/page.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -49,71 +48,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _paymentCheckTimer;
   late App app;
   late bool showInstallAppConfirmation;
-  WebViewController? webViewController;
-  bool isWebViewLoading = true;
   bool showDetails = false;
 
-  Future<void> initWebView() async {
-    if (!app.enabled || !app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true) {
+  Future<void> checkSetupCompleted() async {
+    if (app.externalIntegration?.setupCompletedUrl == null) {
       return;
     }
 
-    final baseUrl = app.externalIntegration!.authSteps.first.url.trim();
-    if (baseUrl.isEmpty) {
-      return;
-    }
+    // For apps with multiple auth steps, we need to ensure all steps are completed
+    // The setupCompletedUrl should be designed to verify all required auth is done
+    bool isCompleted = await isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl);
     
-    final finalUrl = baseUrl.startsWith('http') ? baseUrl : 'https://$baseUrl';
-    final uri = Uri.parse(finalUrl);
-    final urlWithUid = uri.replace(queryParameters: {
-      ...uri.queryParameters,
-      'uid': SharedPreferencesUtil().uid,
-    }).toString();
-
-    setState(() {
-      isWebViewLoading = true;
-    });
-
-    webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.grey[900]!)
-      ..enableZoom(false)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (String url) {
-            if (mounted) {
-              setState(() {
-                isWebViewLoading = false;
-              });
-            }
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (mounted) {
-              setState(() {
-                isWebViewLoading = false;
-              });
-            }
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(urlWithUid));
-
-    // Enable cookie persistence
-    await WebViewCookieManager().setCookie(
-      WebViewCookie(
-        name: '.AspNetCore.Cookies',
-        value: SharedPreferencesUtil().uid,
-        domain: Uri.parse(urlWithUid).host,
-      ),
-    );
-  }
-
-  void checkSetupCompleted() {
-    isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
-      if (mounted) {
-        setState(() => setupCompleted = value);
+    if (mounted) {
+      final wasNotCompleted = !setupCompleted;
+      setState(() => setupCompleted = isCompleted);
+      
+      // If setup just completed, show a success message
+      if (isCompleted && wasNotCompleted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Setup completed successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
-    });
+    }
   }
 
   void setIsLoading(bool value) {
@@ -138,9 +97,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
           app = res;
           app.pinned = wasPinned;
         });
-        if (app.enabled) {
-          initWebView();
-        }
       }
       setIsLoading(false);
       if (mounted) {
@@ -191,7 +147,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
           timer.cancel();
           _paymentCheckTimer?.cancel();
-          initWebView();
         } else {
           debugPrint('Payment not made yet');
         }
@@ -217,17 +172,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
               onPressed: () => provider.toggleAppPin(app.id, context),
             );
           },
-        ),
-      );
-    }
-
-    // Add WebView toggle if available
-    if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
-      actions.add(
-        IconButton(
-          icon: Icon(showDetails ? Icons.web : Icons.info_outline),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          onPressed: () => setState(() => showDetails = !showDetails),
         ),
       );
     }
@@ -311,23 +255,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         actions: _buildAppBarActions(),
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: app.enabled && !showDetails && app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true
-          ? SizedBox.expand(
-              child: Container(
-                color: Colors.grey[900],
-                child: Stack(
-                  children: [
-                    if (webViewController != null)
-                      WebViewWidget(controller: webViewController!),
-                    if (isWebViewLoading)
-                      const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                  ],
-                ),
-              ),
-            )
-          : SingleChildScrollView(
+      body: SingleChildScrollView(
               child: Skeletonizer(
                 enabled: isLoading,
                 child: Column(
@@ -472,76 +400,220 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
                     const SizedBox(height: 24),
                     if (!app.enabled && !isLoading) ...[
-                      if (app.externalIntegration?.setupCompletedUrl?.isNotEmpty == true && app.externalIntegration?.authSteps.isNotEmpty == true)
+                      // Setup Section for External Apps
+                      if (app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(18.0),
+                          margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900,
+                            borderRadius: BorderRadius.circular(16.0),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Setup Required', style: TextStyle(fontSize: 18, color: Colors.white)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'This app requires setup before installation. Please complete the following steps:',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 16),
+                              ...app.externalIntegration!.authSteps.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final step = entry.value;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            '${index + 1}',
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              step.name.isEmpty ? 'Authorization Required' : step.name,
+                                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      AnimatedLoadingButton(
+                                        text: 'Setup',
+                                        width: 100,
+                                        onPressed: () async {
+                                          final url = step.url.trim();
+                                          final finalUrl = url.startsWith('http') ? url : 'https://$url';
+                                          final uri = Uri.parse(finalUrl);
+                                          final urlWithUid = uri.replace(queryParameters: {
+                                            ...uri.queryParameters,
+                                            'uid': SharedPreferencesUtil().uid,
+                                          });
+                                          
+                                          await launchUrl(
+                                            urlWithUid,
+                                            mode: LaunchMode.externalApplication,
+                                          );
+                                          
+                                          // Poll for setup completion
+                                          bool isComplete = false;
+                                          while (!isComplete && mounted) {
+                                            isComplete = await isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl);
+                                            if (!isComplete) {
+                                              await Future.delayed(const Duration(seconds: 2));
+                                            }
+                                          }
+                                          
+                                          if (mounted) {
+                                            await checkSetupCompleted();
+                                          }
+                                        },
+                                        color: Colors.blue,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              if (setupCompleted)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    'Setup completed successfully!',
+                                    style: TextStyle(color: Colors.green, fontSize: 16),
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              AnimatedLoadingButton(
+                                width: double.infinity,
+                                text: app.isPaid && !app.isUserPaid ? 'Subscribe' : 'Install App',
+                                onPressed: () async {
+                                  if (!setupCompleted) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (c) => getDialog(
+                                        context,
+                                        () => Navigator.pop(context),
+                                        () => Navigator.pop(context),
+                                        'Setup Required',
+                                        'Please complete the setup steps before installing the app.',
+                                        singleButton: true,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  
+                                  if (app.isPaid && !app.isUserPaid && app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                    _checkPaymentStatus(app.id);
+                                    await launchUrl(Uri.parse(app.paymentLink!));
+                                    return;
+                                  }
+                                  
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return StatefulBuilder(builder: (ctx, setState) {
+                                        return ConfirmationDialog(
+                                          title: 'Data Access Notice',
+                                          description:
+                                              'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                          checkboxText: "Don't show it again",
+                                          checkboxValue: !showInstallAppConfirmation,
+                                          updateCheckboxValue: (value) {
+                                            if (value != null) {
+                                              setState(() {
+                                                showInstallAppConfirmation = !value;
+                                                SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                              });
+                                            }
+                                          },
+                                          onConfirm: () {
+                                            _toggleApp(app.id, true);
+                                            Navigator.pop(context);
+                                          },
+                                          onCancel: () {
+                                            Navigator.pop(context);
+                                          },
+                                        );
+                                      });
+                                    },
+                                  );
+                                },
+                                color: Colors.green,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Install/Subscribe Button for non-setup apps
+                      if (!app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true)
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: AnimatedLoadingButton(
                               width: MediaQuery.of(context).size.width * 0.9,
-                              text: 'Setup App',
+                              text: app.isPaid && !app.isUserPaid ? 'Subscribe' : 'Install App',
                               onPressed: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => BrowserPage(
-                                      initialUrl: app.externalIntegration!.authSteps.first.url,
-                                    ),
-                                  ),
-                                );
-                                return;
+                                if (app.isPaid && !app.isUserPaid && app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                  _checkPaymentStatus(app.id);
+                                  await launchUrl(Uri.parse(app.paymentLink!));
+                                  return;
+                                }
+                                
+                                if (app.worksExternally()) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) {
+                                      return StatefulBuilder(builder: (ctx, setState) {
+                                        return ConfirmationDialog(
+                                          title: 'Data Access Notice',
+                                          description:
+                                              'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                          checkboxText: "Don't show it again",
+                                          checkboxValue: !showInstallAppConfirmation,
+                                          updateCheckboxValue: (value) {
+                                            if (value != null) {
+                                              setState(() {
+                                                showInstallAppConfirmation = !value;
+                                                SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                              });
+                                            }
+                                          },
+                                          onConfirm: () {
+                                            _toggleApp(app.id, true);
+                                            Navigator.pop(context);
+                                          },
+                                          onCancel: () {
+                                            Navigator.pop(context);
+                                          },
+                                        );
+                                      });
+                                    },
+                                  );
+                                  return;
+                                }
+                                
+                                await _toggleApp(app.id, true);
                               },
-                              color: Colors.blue,
+                              color: Colors.green,
                             ),
                           ),
                         ),
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: AnimatedLoadingButton(
-                            width: MediaQuery.of(context).size.width * 0.9,
-                            text: app.isPaid && !app.isUserPaid ? 'Subscribe' : 'Install App',
-                            onPressed: () async {
-                              if (app.isPaid && !app.isUserPaid && app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                _checkPaymentStatus(app.id);
-                                await launchUrl(Uri.parse(app.paymentLink!));
-                              } else if (app.worksExternally()) {
-                                showDialog(
-                                  context: context,
-                                  builder: (ctx) {
-                                    return StatefulBuilder(builder: (ctx, setState) {
-                                      return ConfirmationDialog(
-                                        title: 'Data Access Notice',
-                                        description:
-                                            'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
-                                        checkboxText: "Don't show it again",
-                                        checkboxValue: !showInstallAppConfirmation,
-                                        updateCheckboxValue: (value) {
-                                          if (value != null) {
-                                            setState(() {
-                                              showInstallAppConfirmation = !value;
-                                              SharedPreferencesUtil().showInstallAppConfirmation = !value;
-                                            });
-                                          }
-                                        },
-                                        onConfirm: () {
-                                          _toggleApp(app.id, true);
-                                          Navigator.pop(context);
-                                        },
-                                        onCancel: () {
-                                          Navigator.pop(context);
-                                        },
-                                      );
-                                    });
-                                  },
-                                );
-                              } else {
-                                await _toggleApp(app.id, true);
-                              }
-                            },
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
+
                     ],
                     if (app.enabled)
                       Center(
@@ -710,7 +782,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
             app.enabled = isEnabled;
             appLoading = false;
           });
-          initWebView();
         }
       } else {
         prefs.disableApp(appId);
@@ -721,8 +792,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
           setState(() {
             app.enabled = isEnabled;
             appLoading = false;
-            webViewController = null;
-            isWebViewLoading = true;
           });
         }
       }
