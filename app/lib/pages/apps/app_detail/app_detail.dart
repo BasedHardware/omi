@@ -232,22 +232,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
       );
     }
 
-    // Add more options menu
-    actions.add(
-      PopupMenuButton<String>(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'share',
-            child: Row(
-              children: [
-                Icon(Icons.share),
-                SizedBox(width: 8),
-                Text('Share'),
-              ],
+    // Add share/settings based on ownership
+    if (context.read<AppProvider>().isAppOwner) {
+      // Show popup menu for owners with share and settings
+      actions.add(
+        PopupMenuButton<String>(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'share',
+              child: Row(
+                children: [
+                  Icon(Icons.share),
+                  SizedBox(width: 8),
+                  Text('Share'),
+                ],
+              ),
             ),
-          ),
-          if (context.read<AppProvider>().isAppOwner)
             const PopupMenuItem(
               value: 'settings',
               child: Row(
@@ -258,29 +259,45 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 ],
               ),
             ),
-        ],
-        onSelected: (value) async {
-          if (value == 'share') {
+          ],
+          onSelected: (value) async {
+            if (value == 'share') {
+              MixpanelManager().track('App Shared', properties: {'appId': app.id});
+              Share.share(
+                'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                subject: app.name,
+              );
+            } else if (value == 'settings') {
+              await showModalBottomSheet(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                builder: (context) => ShowAppOptionsSheet(app: app),
+              );
+            }
+          },
+        ),
+      );
+    } else {
+      // Show just share button for non-owners
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.share),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          onPressed: () {
             MixpanelManager().track('App Shared', properties: {'appId': app.id});
             Share.share(
               'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
               subject: app.name,
             );
-          } else if (value == 'settings') {
-            await showModalBottomSheet(
-              context: context,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-              ),
-              builder: (context) => ShowAppOptionsSheet(app: app),
-            );
-          }
-        },
-      ),
-    );
+          },
+        ),
+      );
+    }
 
     return actions;
   }
