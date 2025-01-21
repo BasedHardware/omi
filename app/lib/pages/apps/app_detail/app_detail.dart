@@ -138,18 +138,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     bool isCompleted = await isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl);
     
     if (mounted) {
-      final wasNotCompleted = !setupCompleted;
       setState(() => setupCompleted = isCompleted);
-      
-      // Only show success message during setup (when app is not enabled)
-      if (!app.enabled && isCompleted && wasNotCompleted && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Setup completed successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     }
   }
 
@@ -610,14 +599,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   ),
                                 );
                               }).toList(),
-                              if (setupCompleted)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    'Setup completed successfully!',
-                                    style: TextStyle(color: Colors.green, fontSize: 16),
-                                  ),
-                                ),
                               const SizedBox(height: 16),
                               AnimatedLoadingButton(
                                 width: double.infinity,
