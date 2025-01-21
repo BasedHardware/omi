@@ -839,7 +839,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ],
                 ),
               ),
-            )
+              !app.isOwner(SharedPreferencesUtil().uid) && (app.enabled || app.userReview != null)
+                  ? AddReviewWidget(app: app)
+                  : const SizedBox.shrink(),
+              const SizedBox(height: 60),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

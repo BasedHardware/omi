@@ -28,7 +28,7 @@ llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
 llm_large = ChatOpenAI(model='o1-preview')
 llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
 llm_medium = ChatOpenAI(model='gpt-4o')
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True, temperature=1)
+llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 
