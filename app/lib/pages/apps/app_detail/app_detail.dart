@@ -483,7 +483,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                             await checkSetupCompleted();
                                           }
                                         },
-                                        color: Colors.blue,
+                                        color: Colors.deepPurple,
                                       ),
                                     ],
                                   ),
