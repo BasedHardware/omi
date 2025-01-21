@@ -79,23 +79,14 @@ class _SearchWidgetState extends State<SearchWidget> {
               style: const TextStyle(color: Colors.white),
             ),
           ),
-          SizedBox(
-            width: 12,
-          ),
           Consumer<ConversationProvider>(
               builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade900,
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-              ),
-              child: IconButton(
-                onPressed: convoProvider.toggleDiscardConversations,
-                icon: Icon(
-                  convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
-                  color: Colors.white,
-                  size: 20,
-                ),
+            return IconButton(
+              onPressed: convoProvider.toggleDiscardConversations,
+              icon: Icon(
+                convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
+                color: Colors.white,
+                size: 24,
               ),
             );
           }),
