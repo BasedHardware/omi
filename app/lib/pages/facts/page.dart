@@ -67,33 +67,12 @@ class _FactsPageState extends State<_FactsPage> {
     return Consumer<FactsProvider>(
       builder: (context, provider, _) {
         return PopScope(
-          canPop: provider.selectedCategory == null,
-          onPopInvoked: (didPop) {
-            if (didPop) return;
-            provider.setCategory(null);
-          },
+          canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              title: DropdownButton<String>(
-                value: value,
-                itemHeight: 48,
-                items: buildDropdownItems(provider),
-                underline: const SizedBox.shrink(),
-                onChanged: (String? val) {
-                  var cat = FactCategory.values.firstWhereOrNull((fc) => fc.toString().split(".").last == val);
-                  setState(() {
-                    if (cat == null) {
-                      value = values.first;
-                      provider.setCategory(null);
-                    } else {
-                      value = val;
-                      provider.setCategory(cat);
-                    }
-                  });
-                },
-              ),
+              title: const Text('About you'),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -114,7 +93,18 @@ class _FactsPageState extends State<_FactsPage> {
                     onRefresh: () async {
                       return await provider.loadFacts();
                     },
-                    child: _buildFactsList(provider),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        _buildCategoryChips(provider),
+                        provider.selectedCategory != null
+                            ? Expanded(
+                                child: _buildFactsList(provider),
+                              )
+                            : const SizedBox.shrink(),
+                      ],
+                    ),
                   ),
           ),
         );
@@ -306,69 +296,88 @@ class _FactsPageState extends State<_FactsPage> {
   }
 
   Widget _buildCategoryChips(FactsProvider provider) {
+    Widget buildChip(item) {
+      final category = item.item1;
+      final count = item.item2;
+      return GestureDetector(
+        onTap: () {
+          MixpanelManager().factsPageCategoryOpened(category);
+          setState(() {
+            provider.setCategory(category);
+          });
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.3),
+                spreadRadius: 1,
+                blurRadius: 3,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                provider.selectedCategory == category
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Icon(
+                          size: 16,
+                          Icons.check,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ))
+                    : const SizedBox.shrink(),
+                Text(
+                  category.toString().split('.').last[0].toUpperCase() +
+                      category.toString().split('.').last.substring(1),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.all(Radius.circular(24)),
+                  ),
+                  child: Text(
+                    count.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 0, 32, 80),
+      padding: provider.selectedCategory == null
+          ? const EdgeInsets.fromLTRB(32, 0, 32, 80)
+          : const EdgeInsets.fromLTRB(16, 32, 16, 32),
       child: Align(
         alignment: Alignment.center,
         child: Wrap(
+          direction: Axis.horizontal,
           alignment: WrapAlignment.center,
-          spacing: 32,
-          runSpacing: 16,
+          spacing: provider.selectedCategory == null ? 32 : 16,
+          runSpacing: provider.selectedCategory == null ? 16 : 16,
           children: provider.categories.map((item) {
-            final category = item.item1;
-            final count = item.item2;
-            return GestureDetector(
-              onTap: () {
-                MixpanelManager().factsPageCategoryOpened(category);
-                setState(() {
-                  provider.setCategory(category);
-                });
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.3),
-                      spreadRadius: 1,
-                      blurRadius: 3,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        category.toString().split('.').last[0].toUpperCase() +
-                            category.toString().split('.').last.substring(1),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        backgroundColor: Colors.black54,
-                        radius: 14,
-                        child: Text(
-                          count.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
+            return buildChip(item);
           }).toList(),
         ),
       ),
@@ -396,7 +405,19 @@ class _FactsPageState extends State<_FactsPage> {
               ],
             ),
           )
-        : ListView.builder(
+        : ListView.separated(
+            separatorBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                ),
+                child: Divider(
+                  color: Colors.white60,
+                  height: 1,
+                ),
+              );
+            },
             itemCount: filteredFacts.length,
             itemBuilder: (context, index) {
               Fact fact = filteredFacts[index];
@@ -417,7 +438,7 @@ class _FactsPageState extends State<_FactsPage> {
                   color: Colors.black12,
                   elevation: 0,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 16.0),
+                    padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
                     child: ListTile(
                       title: Text(fact.content.decodeString),
                       onTap: () => _showFactDialog(context, provider, fact: fact),
