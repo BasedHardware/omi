@@ -5,7 +5,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
-import 'package:friend_private/pages/browser/page.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -48,7 +48,84 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _paymentCheckTimer;
   late App app;
   late bool showInstallAppConfirmation;
+  WebViewController? webViewController;
+  bool isWebViewLoading = true;
   bool showDetails = false;
+
+  Future<void> initWebView() async {
+    if (!app.enabled || !app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true) {
+      return;
+    }
+
+    final baseUrl = app.externalIntegration!.authSteps.first.url.trim();
+    if (baseUrl.isEmpty) {
+      return;
+    }
+    
+    final finalUrl = baseUrl.startsWith('http') ? baseUrl : 'https://$baseUrl';
+    final uri = Uri.parse(finalUrl);
+    final urlWithUid = uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      'uid': SharedPreferencesUtil().uid,
+    }).toString();
+
+    setState(() {
+      isWebViewLoading = true;
+      webViewController = null;
+    });
+
+    try {
+      final controller = WebViewController();
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setBackgroundColor(Colors.grey[900]!);
+      await controller.enableZoom(false);
+      await controller.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (String url) {
+            if (mounted) {
+              setState(() {
+                isWebViewLoading = false;
+              });
+            }
+          },
+          onWebResourceError: (WebResourceError error) {
+            if (mounted) {
+              setState(() {
+                isWebViewLoading = false;
+              });
+            }
+          },
+          onNavigationRequest: (NavigationRequest request) {
+            return NavigationDecision.navigate;
+          },
+        ),
+      );
+
+      await controller.loadRequest(Uri.parse(urlWithUid));
+      await WebViewCookieManager().setCookie(
+        WebViewCookie(
+          name: '.AspNetCore.Cookies',
+          value: SharedPreferencesUtil().uid,
+          domain: Uri.parse(urlWithUid).host,
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          webViewController = controller;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error initializing WebView: $e');
+      if (mounted) {
+        setState(() {
+          isWebViewLoading = false;
+          webViewController = null;
+        });
+      }
+    }
+  }
 
   Future<void> checkSetupCompleted() async {
     if (app.externalIntegration?.setupCompletedUrl == null) {
@@ -118,6 +195,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
       }
       checkSetupCompleted();
+      if (app.enabled) {
+        initWebView();
+      }
     }
   }
 
@@ -156,6 +236,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   List<Widget> _buildAppBarActions() {
     final actions = <Widget>[];
+
+    // Add WebView toggle if available
+    if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
+      actions.add(
+        IconButton(
+          icon: Icon(showDetails ? Icons.web : Icons.info_outline),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          onPressed: () => setState(() => showDetails = !showDetails),
+        ),
+      );
+    }
 
     // Show pin toggle if app is enabled or already pinned
     if (app.enabled || app.pinned) {
@@ -255,7 +346,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
         actions: _buildAppBarActions(),
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: SingleChildScrollView(
+      body: app.enabled && !showDetails && app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true && app.externalIntegration!.authSteps.first.url.isNotEmpty
+          ? SizedBox.expand(
+              child: Container(
+                color: Colors.grey[900],
+                child: Stack(
+                  children: [
+                    if (webViewController != null)
+                      WebViewWidget(controller: webViewController!),
+                    if (isWebViewLoading)
+                      const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                  ],
+                ),
+              ),
+            )
+          : SingleChildScrollView(
               child: Skeletonizer(
                 enabled: isLoading,
                 child: Column(
@@ -401,7 +508,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     const SizedBox(height: 24),
                     if (!app.enabled && !isLoading) ...[
                       // Setup Section for External Apps
-                      if (app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true)
+                      if (app.worksExternally() && app.externalIntegration?.authSteps.isNotEmpty == true && app.externalIntegration?.setupCompletedUrl?.isNotEmpty == true)
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(18.0),
@@ -560,7 +667,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ),
 
                       // Install/Subscribe Button for non-setup apps
-                      if (!app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true)
+                      if (!app.worksExternally() || app.externalIntegration?.authSteps.isEmpty == true || app.externalIntegration?.setupCompletedUrl?.isNotEmpty != true)
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
@@ -782,6 +889,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             app.enabled = isEnabled;
             appLoading = false;
           });
+          initWebView();
         }
       } else {
         prefs.disableApp(appId);
