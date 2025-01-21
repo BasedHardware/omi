@@ -721,10 +721,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              app.private
-                  ? const SizedBox.shrink()
-                  : AppAnalyticsWidget(
-                      installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
+              // app.private
+              //     ? const SizedBox.shrink()
+              //     : AppAnalyticsWidget(
+              //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
               const SizedBox(height: 60),
             ],
           ),
