@@ -238,18 +238,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
           onPressed: () => setState(() => showDetails = !showDetails),
         ),
       );
+      actions.add(const SizedBox(width: 8));
     }
 
-    // Add WebView toggle if available
-    if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
-      actions.add(
-        IconButton(
-          icon: Icon(showDetails ? Icons.web : Icons.info_outline),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          onPressed: () => setState(() => showDetails = !showDetails),
-        ),
-      );
-    }
 
     // Show pin toggle if app is enabled or already pinned
     if (app.enabled || app.pinned) {
