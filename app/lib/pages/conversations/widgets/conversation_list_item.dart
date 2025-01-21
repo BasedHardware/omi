@@ -108,33 +108,27 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   padding: const EdgeInsetsDirectional.all(16),
                   child: Column(
                     mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _getConversationHeader(),
                       const SizedBox(height: 16),
                       widget.conversation.discarded
                           ? const SizedBox.shrink()
-                          : Text(widget.conversation.structured.getEmoji(),
-                              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600)),
-                      !widget.conversation.discarded ? const SizedBox(height: 8) : const SizedBox.shrink(),
-                      widget.conversation.discarded
-                          ? const SizedBox.shrink()
                           : Text(
                               structured.title.decodeString,
                               style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 2,
+                              maxLines: 1,
                             ),
                       widget.conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
                       widget.conversation.discarded
                           ? const SizedBox.shrink()
                           : Text(
                               structured.overview.decodeString,
-                              overflow: TextOverflow.fade,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium!
                                   .copyWith(color: Colors.grey.shade300, height: 1.3),
-                              maxLines: 3,
+                              maxLines: 2,
                             ),
                       widget.conversation.discarded
                           ? Text(
@@ -145,7 +139,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   .copyWith(color: Colors.grey.shade300, height: 1.3),
                             )
                           : const SizedBox(height: 8),
-                      _getConversationFooter(),
                     ],
                   ),
                 ),
@@ -157,79 +150,30 @@ class _ConversationListItemState extends State<ConversationListItem> {
     });
   }
 
-  _getConversationFooter() {
-    var convo = widget.conversation.structured;
-    if (convo.actionItems.isEmpty && convo.events.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12, bottom: 8, top: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          convo.actionItems.isNotEmpty
-              ? Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.task_alt_outlined,
-                        size: 14,
-                        color: Colors.white60,
-                      ),
-                      const SizedBox(
-                        width: 4,
-                      ),
-                      Text(
-                        "${convo.actionItems.where((act) => act.completed).length}/${convo.actionItems.length}",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white60,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : const SizedBox.shrink(),
-          convo.events.isNotEmpty
-              ? Row(
-                  children: [
-                    const Icon(
-                      Icons.event_outlined,
-                      size: 14,
-                      color: Colors.white60,
-                    ),
-                    const SizedBox(
-                      width: 4,
-                    ),
-                    Text(
-                      "${convo.events.length}",
-                      style: const TextStyle(fontSize: 12, color: Colors.white60),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-        ],
-      ),
-    );
-  }
-
   _getConversationHeader() {
     return Padding(
       padding: const EdgeInsets.only(left: 4.0, right: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          widget.conversation.discarded
+              ? const SizedBox.shrink()
+              : Text(widget.conversation.structured.getEmoji(),
+                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+          widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded
+              ? const SizedBox(width: 12)
+              : const SizedBox.shrink(),
           widget.conversation.structured.category.isNotEmpty
               ? Container(
                   decoration: BoxDecoration(
+                    color: widget.conversation.getTagColor(),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Text(
                     widget.conversation.getTag(),
                     style:
-                        Theme.of(context).textTheme.bodySmall!.copyWith(color: widget.conversation.getTagTextColor()),
+                        Theme.of(context).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
                     maxLines: 1,
                   ),
                 )
@@ -245,7 +189,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   )
                 : Text(
                     dateTimeFormat('MMM d, h:mm a', widget.conversation.startedAt ?? widget.conversation.createdAt),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     maxLines: 1,
                     textAlign: TextAlign.end,
                   ),
