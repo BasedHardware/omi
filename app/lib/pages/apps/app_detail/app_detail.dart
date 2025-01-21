@@ -6,6 +6,7 @@ import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -238,6 +239,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   List<Widget> _buildAppBarActions() {
     final actions = <Widget>[];
+
+    // Add WebView toggle if available
+    if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
+      actions.add(
+        IconButton(
+          icon: Icon(showDetails ? Icons.web : Icons.info_outline),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          onPressed: () => setState(() => showDetails = !showDetails),
+        ),
+      );
+    }
 
     // Add WebView toggle if available
     if (app.enabled && app.externalIntegration?.authSteps.isNotEmpty == true) {
