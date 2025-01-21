@@ -1,0 +1,12 @@
+mcuboot:
+  address: 0x0
+  size: 0x8000
+mcuboot_primary:
+  address: 0x8000
+  size: 0x40000
+mcuboot_primary_app:
+  address: 0x8000
+  size: 0x40000
+mcuboot_secondary:
+  address: 0x48000
+  size: 0x40000

@@ -92,6 +92,32 @@
         };
 };
 
+// Flash partitions for MCUBoot
+&flash0 {
+    partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            boot_partition: partition@0 {
+                    label = "mcuboot";
+                    reg = <0x0 0x8000>;
+            };
+            slot0_partition: partition@8000 {
+                    label = "image-0";
+                    reg = <0x8000 0x40000>;
+            };
+            slot1_partition: partition@48000 {
+                    label = "image-1";
+                    reg = <0x48000 0x40000>;
+            };
+            storage_partition: partition@88000 {
+                    label = "storage";
+                    reg = <0x88000 0x18000>;
+            };
+    };
+};
+
 // Fake accel
 &i2c1 {
     lsm6dsl: lsm6dsl@6b {
