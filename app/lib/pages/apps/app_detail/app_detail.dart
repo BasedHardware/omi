@@ -140,8 +140,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final wasNotCompleted = !setupCompleted;
       setState(() => setupCompleted = isCompleted);
       
-      // If setup just completed, show a success message
-      if (isCompleted && wasNotCompleted && context.mounted) {
+      // Only show success message during setup (when app is not enabled)
+      if (!app.enabled && isCompleted && wasNotCompleted && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Setup completed successfully!'),
@@ -194,7 +194,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      checkSetupCompleted();
+      if (!app.enabled) {
+        checkSetupCompleted();
+      }
       if (app.enabled) {
         initWebView();
       }
@@ -853,7 +855,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ],
                 ),
               ),
-            ),
+            )
     );
   }
 
