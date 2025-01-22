@@ -159,6 +159,7 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
 }
 
+#ifdef CONFIG_OMI_ENABLE_ACCELEROMETER
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -213,6 +214,8 @@ int accel_start()
     
     return 1;
 }
+#endif
+
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
