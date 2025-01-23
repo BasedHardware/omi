@@ -167,6 +167,15 @@ class ServerMessage {
     };
   }
 
+  bool areFilesOfSameType() {
+    if (files.isEmpty) {
+      return true;
+    }
+
+    final firstType = files.first.mimeTypeToFileType();
+    return files.every((element) => element.mimeTypeToFileType() == firstType);
+  }
+
   static ServerMessage empty({String? appId}) {
     return ServerMessage(
       '0000',

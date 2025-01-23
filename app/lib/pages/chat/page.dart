@@ -477,7 +477,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     const Text("Take a Photo", style: TextStyle(color: Colors.white)),
                                                 onTap: () {
                                                   Navigator.pop(context);
-                                                  context.read<MessageProvider>().takeImage();
+                                                  context.read<MessageProvider>().captureImage();
                                                 },
                                               ),
                                               ListTile(
@@ -577,7 +577,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-
   _sendMessageUtil(String text) async {
     var provider = context.read<MessageProvider>();
     MixpanelManager().chatMessageSent(text);
@@ -600,6 +599,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     provider.addMessage(message);
     scrollToBottom();
     textController.clear();
+    provider.clearSelectedFiles();
+    provider.clearUploadedFiles();
     provider.sendMessageStreamToServer(text, appId);
     scrollToBottom();
     provider.setSendingMessage(false);
