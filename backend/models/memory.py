@@ -31,6 +31,17 @@ class CategoryEnum(str, Enum):
     literature = 'literature'
     history = 'history'
     architecture = 'architecture'
+    # Added at 2024-01-23
+    music = 'music'
+    weather = 'weather'
+    news = 'news'
+    entertainment = 'entertainment'
+    psychology = 'psychology'
+    real = 'real'
+    design = 'design'
+    family = 'family'
+    economics = 'economics'
+    environment = 'environment'
     other = 'other'
 
 

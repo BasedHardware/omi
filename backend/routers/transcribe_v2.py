@@ -12,6 +12,7 @@ from pydub import AudioSegment
 from starlette.websockets import WebSocketState
 
 import database.memories as memories_db
+import database.users as user_db
 from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
@@ -70,7 +71,13 @@ async def _websocket_util(
     print('_websocket_util', uid, language, sample_rate, codec, include_speech_profile)
 
     if not uid or len(uid) <= 0:
-        raise HTTPException(status_code=400, detail="Invalid UID")
+        await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    # Validate user
+    if not user_db.is_exists_user(uid):
+        await websocket.close(code=1008, reason="Bad user")
+        return
 
     # Not when comes from the phone, and only Friend's with 1.0.4
     # if stt_service == STTService.soniox and language not in soniox_valid_languages:
@@ -439,7 +446,6 @@ async def _websocket_util(
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
-
     current_memory_id = None
 
     async def stream_transcript_process():
@@ -492,7 +498,6 @@ async def _websocket_util(
                 current_memory_id = memory.id
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
-
 
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
@@ -618,16 +623,16 @@ async def _websocket_util(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid)
 
-
-@router.websocket("/v2/listen")
-async def websocket_endpoint(
-        websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
-        channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
-):
-    await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
+# @deprecated
+# @router.websocket("/v2/listen")
+# async def websocket_endpoint_v2(
+#         websocket: WebSocket, uid: str, language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
+#         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
+# ):
+#     await _websocket_util(websocket, uid, language, sample_rate, codec, channels, include_speech_profile, stt_service)
 
 @router.websocket("/v3/listen")
-async def websocket_endpoint_v3(
+async def websocket_endpoint(
         websocket: WebSocket, uid: str = Depends(auth.get_current_user_uid), language: str = 'en', sample_rate: int = 8000, codec: str = 'pcm8',
         channels: int = 1, include_speech_profile: bool = True, stt_service: STTService = STTService.soniox
 ):
