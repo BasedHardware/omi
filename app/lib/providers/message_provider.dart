@@ -65,7 +65,7 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void takeImage() async {
+  void captureImage() async {
     var res = await ImagePicker().pickImage(source: ImageSource.camera);
     if (res != null) {
       selectedFiles.add(File(res.path));
@@ -77,7 +77,16 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectImage() async {
-    var res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+    if (selectedFiles.length >= 4) {
+      AppSnackbar.showSnackbarError('You can only select up to 4 images');
+      return;
+    }
+    List res = [];
+    if (4 - selectedFiles.length == 1) {
+      res = [await ImagePicker().pickImage(source: ImageSource.gallery)];
+    } else {
+      res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+    }
     if (res.isNotEmpty) {
       List<File> files = [];
       for (var r in res) {
@@ -118,6 +127,11 @@ class MessageProvider extends ChangeNotifier {
   void clearSelectedFiles() {
     selectedFiles.clear();
     selectedFileTypes.clear();
+    notifyListeners();
+  }
+
+  void clearUploadedFiles() {
+    uploadedFiles.clear();
     notifyListeners();
   }
 
