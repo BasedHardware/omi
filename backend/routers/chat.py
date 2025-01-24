@@ -99,6 +99,10 @@ def send_message(
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
+        if len(ai_message.files_id) > 0:
+            files = chat_db.get_chat_files(uid, ai_message.files_id)
+            ai_message.files = files
+
         return ai_message, ask_for_nps
 
     async def generate_stream():
@@ -196,6 +200,10 @@ def send_message_v1(
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+
+    if len(ai_message.files_id) > 0:
+        files = chat_db.get_chat_files(uid, ai_message.files_id)
+        ai_message.files = files
 
     resp = ai_message.dict()
     resp['ask_for_nps'] = ask_for_nps
