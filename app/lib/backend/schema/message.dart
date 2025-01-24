@@ -118,6 +118,7 @@ class ServerMessage {
   bool fromIntegration;
 
   List<MessageFile> files;
+  List filesId;
 
   List<MessageConversation> memories;
   bool askForNps = false;
@@ -132,8 +133,9 @@ class ServerMessage {
     this.type,
     this.appId,
     this.fromIntegration,
+    this.files,
+    this.filesId,
     this.memories, {
-    this.files = const [],
     this.askForNps = false,
   });
 
@@ -146,9 +148,10 @@ class ServerMessage {
       MessageType.valuesFromString(json['type']),
       json['plugin_id'],
       json['from_integration'] ?? false,
+      ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
+      (json['files_id'] ?? []).map((m) => m.toString()).toList(),
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? false,
-      files: ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
     );
   }
 
@@ -186,6 +189,8 @@ class ServerMessage {
       appId,
       false,
       [],
+      [],
+      [],
     );
   }
 
@@ -198,6 +203,8 @@ class ServerMessage {
       MessageType.text,
       null,
       false,
+      [],
+      [],
       [],
     );
   }

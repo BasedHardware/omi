@@ -593,15 +593,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       MessageType.text,
       appId,
       false,
+      provider.uploadedFiles,
+      provider.uploadedFiles.map((e) => e.openaiFileId).toList(),
       [],
-      files: provider.uploadedFiles,
     );
     provider.addMessage(message);
     scrollToBottom();
     textController.clear();
+    provider.sendMessageStreamToServer(text, appId);
     provider.clearSelectedFiles();
     provider.clearUploadedFiles();
-    provider.sendMessageStreamToServer(text, appId);
     scrollToBottom();
     provider.setSendingMessage(false);
   }

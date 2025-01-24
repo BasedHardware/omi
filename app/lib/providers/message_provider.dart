@@ -71,7 +71,7 @@ class MessageProvider extends ChangeNotifier {
       selectedFiles.add(File(res.path));
       selectedFileTypes.add('image');
       var index = selectedFiles.length - 1;
-      uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
+      await uploadFiles([selectedFiles[index]], appProvider?.selectedChatAppId);
       notifyListeners();
     }
   }
@@ -95,7 +95,7 @@ class MessageProvider extends ChangeNotifier {
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
         selectedFileTypes.addAll(res.map((e) => 'image'));
-        uploadFiles(files, appProvider?.selectedChatAppId);
+        await uploadFiles(files, appProvider?.selectedChatAppId);
       }
       notifyListeners();
     }
@@ -111,7 +111,7 @@ class MessageProvider extends ChangeNotifier {
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
         selectedFileTypes.addAll(res.files.map((e) => 'file'));
-        uploadFiles(files, appProvider?.selectedChatAppId);
+        await uploadFiles(files, appProvider?.selectedChatAppId);
       }
 
       notifyListeners();
@@ -135,12 +135,13 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void uploadFiles(List<File> files, String? appId) async {
+  Future<void> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setIsUploadingFiles(true);
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
+        print(uploadedFiles);
       } else {
         clearSelectedFiles();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
@@ -286,10 +287,11 @@ class MessageProvider extends ChangeNotifier {
     var message = ServerMessage.empty(appId: appId);
     messages.insert(0, message);
     notifyListeners();
+    List<String> fileIds = uploadedFiles.map((e) => e.openaiFileId).toList();
+    print(fileIds);
 
     try {
-      await for (var chunk
-          in sendMessageStreamServer(text, appId: appId, filesId: uploadedFiles.map((e) => e.openaiFileId).toList())) {
+      await for (var chunk in sendMessageStreamServer(text, appId: appId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();
@@ -326,8 +328,9 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty(appId: appId));
-    var mes =
-        await sendMessageServer(message, appId: appId, fileIds: uploadedFiles.map((e) => e.openaiFileId).toList());
+    List<String> fileIds = uploadedFiles.map((e) => e.openaiFileId).toList();
+    print(fileIds);
+    var mes = await sendMessageServer(message, appId: appId, fileIds: fileIds);
     if (messages[0].id == '0000') {
       messages[0] = mes;
     }
