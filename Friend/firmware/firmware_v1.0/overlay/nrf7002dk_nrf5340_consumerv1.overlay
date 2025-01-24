@@ -11,51 +11,29 @@
         mcuboot-led0 = &led0;
         watchdog0 = &wdt0;
     };
-};
 
-// / {
-//     aliases {
-//         led0 = &led0;
-//         led1 = &led1;
-//         led2 = &led1; // Fake led2
-//         pwm-led0 = &pwm_led0;
-//         sw0 = &button0;
-//         sw1 = &button1;
-//         bootloader-led0 = &led0;
-//         mcuboot-button0 = &button0;
-//         mcuboot-led0 = &led0;
-//         watchdog0 = &wdt0;
-//     };
-
-//     chosen {
-//         zephyr,console = &uart0;
-//     };
-// };
-
-&i2c1 {
-//     status = "okay";
-//     compatible = "nordic,nrf-twim";
-//     /delete-property/ secure-status;
-
-    lsm6dsl: lsm6dsl@6b {
-        compatible = "st,lsm6dsl";
-        reg = <0x6b>;
-        label = "LSM6DSL";
+    chosen {
+        zephyr,bt-hci-ipc = &ipc0;  // Enable BT HCI over IPC
     };
 };
 
-// &uart0 {
-//     status = "okay";
-//     current-speed = <115200>;
-//     /delete-property/ secure-status;
-// };
+&ipc0 {
+    status = "okay";
+};
 
-// &gpio0 {
-//     status = "okay";
-//     /delete-property/ secure-status;
-// };
+&pinctrl {
+    i2s0_default: i2s0_default {
+        group1 {
+            psels = <NRF_PSEL(I2S_SCK_M, 0, 12)>,    // Adjust pin numbers
+                    <NRF_PSEL(I2S_LRCK_M, 0, 13)>,   // for your specific
+                    <NRF_PSEL(I2S_SDOUT, 0, 14)>;    // board connections
+        };
+    };
+};
 
-// &gpio1 {
-//     status = "okay";
-//     /delete-property/ secure-status;
-// };
+&i2s0 {
+    status = "okay";
+    pinctrl-0 = <&i2s0_default>;
+    pinctrl-names = "default";
+    label = "I2S_0";
+};

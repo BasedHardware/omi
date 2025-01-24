@@ -19,7 +19,7 @@
 #include "storage.h"
 #include "button.h"
 #include "mic.h"
-#include "lib/battery/battery.h"
+// #include "lib/battery/battery.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
@@ -334,23 +334,23 @@ void broadcast_battery_level(struct k_work *work_item);
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item) {
-    uint16_t battery_millivolt;
-    uint8_t battery_percentage;
-    if (battery_get_millivolt(&battery_millivolt) == 0 &&
-        battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
+    // uint16_t battery_millivolt;
+    // uint8_t battery_percentage;
+    // if (battery_get_millivolt(&battery_millivolt) == 0 &&
+    //     battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
+    //     LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
-        // Use the Zephyr BAS function to set (and notify) the battery level
-        int err = bt_bas_set_battery_level(battery_percentage);
-        if (err) {
-            LOG_ERR("Error updating battery level: %d", err);
-        }
-    } else {
-        LOG_ERR("Failed to read battery level");
-    }
+    //     // Use the Zephyr BAS function to set (and notify) the battery level
+    //     int err = bt_bas_set_battery_level(battery_percentage);
+    //     if (err) {
+    //         LOG_ERR("Error updating battery level: %d", err);
+    //     }
+    // } else {
+    //     LOG_ERR("Failed to read battery level");
+    // }
 
     k_work_reschedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
 }
@@ -838,8 +838,8 @@ int transport_start()
     }
 
     int battErr = 0;
-    battErr |= battery_init();
-    battErr |= battery_charge_start();
+    // battErr |= battery_init();
+    // battErr |= battery_charge_start();
     if (battErr)
     {
         LOG_ERR("Battery init failed (err %d)", battErr);
