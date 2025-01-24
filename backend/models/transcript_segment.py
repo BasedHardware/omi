@@ -1,10 +1,12 @@
 from datetime import timedelta
 from typing import Optional, List
+import uuid
 
 from pydantic import BaseModel, Field
 
 
 class TranscriptSegment(BaseModel):
+    id: Optional[str] = str(uuid.uuid4())  # should be required
     text: str
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None

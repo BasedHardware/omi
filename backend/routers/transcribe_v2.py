@@ -237,17 +237,12 @@ async def _websocket_util(
             )
 
     def _get_or_create_in_progress_memory(segments: List[dict]):
-        # nonlocal current_memory_id
         if existing := retrieve_in_progress_memory(uid):
             memory = Memory(**existing)
-            memory.transcript_segments = TranscriptSegment.combine_segments(
-                memory.transcript_segments, [TranscriptSegment(**segment) for segment in segments]
-            )
             redis_db.set_in_progress_memory_id(uid, memory.id)
-            # current_memory_id = memory.id
             return memory
 
-        started_at = datetime.now(timezone.utc) - timedelta(seconds=segments[0]['end'] - segments[0]['start'])
+        started_at = datetime.now(timezone.utc) - timedelta(seconds=max(segments[-1]['end'] - segments[0]['start'], 0))
         memory = Memory(
             id=str(uuid.uuid4()),
             uid=uid,
@@ -256,13 +251,12 @@ async def _websocket_util(
             created_at=started_at,
             started_at=started_at,
             finished_at=datetime.now(timezone.utc),
-            transcript_segments=[TranscriptSegment(**segment) for segment in segments],
+            transcript_segments=[],
             status=MemoryStatus.in_progress,
         )
         print('_get_in_progress_memory new', memory, uid)
         memories_db.upsert_memory(uid, memory_data=memory.dict())
         redis_db.set_in_progress_memory_id(uid, memory.id)
-        # current_memory_id = memory.id
         return memory
 
     async def create_memory_on_segment_received_task(finished_at: datetime):
@@ -278,49 +272,50 @@ async def _websocket_util(
                 _trigger_create_memory_with_delay(memory_creation_timeout, finished_at))
 
     user_speaker_id = None
+    user_speaker_id_pivot_segment_id = None
+
+    def on_new_speaker_identified_segments(segment, uid):
+        nonlocal user_speaker_id, user_speaker_id_pivot_segment_id
+        # TODO: notify to the app, update is_user for memory's transcript segments
+        print(user_speaker_id)
+        print(user_speaker_id_pivot_segment_id)
+        print("---")
+        print(segment)
+        print(uid)
 
     def create_speaker_indentification_task(uid: str, language: str, sample_rate: int):
-        nonlocal websocket_active, user_speaker_id
-        is_stopped = False
+        nonlocal websocket_active, on_new_speaker_identified_segments, user_speaker_id, user_speaker_id_pivot_segment_id
         segment_buffers = []
         audio_buffers = bytearray()
-        checks = {}  # int: <id>
+        checks = {}  # int: true/false
+        ready = False
 
         audio_bytes_per_seconds: int = 32000  # sample_rate * channels * bit per sample / 8
         frame_size: int = 160
 
-        lock = threading.Lock()
-
-        def clean():
-            nonlocal segment_buffers
-            nonlocal audio_buffers
-            segment_buffers = []
-            audio_buffers = []
+        audio_bytes_lock = threading.Lock()
 
         def on_new_transcript_segments(segments):
             print("on_new_transcript_segments")
-            nonlocal segment_buffers
-            if is_stopped:
+            if not ready:
                 return
             segment_buffers.extend(segments)
 
         def on_new_audio_bytes(audio_bytes):
             nonlocal audio_buffers
-            if is_stopped:
+            if not ready:
                 return
-            with lock:
+            with audio_bytes_lock:
                 audio_buffers.extend(audio_bytes)
 
         async def run():
+            nonlocal websocket_active, on_new_speaker_identified_segments, user_speaker_id, user_speaker_id_pivot_segment_id
             nonlocal uid, language, sample_rate
-            nonlocal websocket_active, user_speaker_id
-            nonlocal is_stopped, segment_buffers, checks, audio_buffers, lock
+            nonlocal ready, segment_buffers, checks, audio_buffers, audio_bytes_lock
 
             audio_bytes_adjustment_seconds = None
             audio_bytes_pivoted_seconds = 0
             transcript_segments_adjustment_seconds = None
-
-            print(f"hello run {uid}, {language}, {sample_rate}")
 
             # Create user's speech profile
             has_speech_profile = create_user_speech_profile(uid) if uid \
@@ -328,16 +323,16 @@ async def _websocket_util(
                 and language == "en" else False
             if not has_speech_profile:
                 print(f"user do not have speech profile {uid} - {language} - {sample_rate}")
-                is_stopped = True
-                clean()
                 return
+
+            ready = True
 
             while websocket_active or len(segment_buffers) > 0:
                 await asyncio.sleep(3)
 
                 # Keep max 30s audio bytes
                 if len(audio_buffers) > 30 * audio_bytes_per_seconds:
-                    with lock:
+                    with audio_bytes_lock:
                         audio_buffers = audio_buffers[15*audio_bytes_per_seconds:]
                         audio_bytes_pivoted_seconds = audio_bytes_pivoted_seconds+15
 
@@ -362,15 +357,21 @@ async def _websocket_util(
                 #   then call the speaker indentification service to ask if audio_bytes[start:+7s] is user or not
                 #     if yes then assign all segments to the user, then notify to the app as well
                 try:
+
                     segments = segment_buffers.copy()
                     segment_buffers = []
                     segments = TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])
+
+                    # Pivot segment
+                    if user_speaker_id_pivot_segment_id:
+                        user_speaker_id_pivot_segment_id = segments[0].id
+
                     for segment in segments:
                         print(f"segment checks {segment}")
                         print(checks)
-                        # if f"{segment.speaker_id}" in checks:
-                        #     continue
-                        if segment.end - segment.start < .1 or len(segment.text) < 1:
+                        if f"{segment.speaker_id}" in checks:
+                            continue
+                        if len(segment.text.split(" ")) < 3:
                             continue
                         delta_seconds = transcript_segments_adjustment_seconds - audio_bytes_adjustment_seconds
                         frames_start = int((segment.start-delta_seconds) * audio_bytes_per_seconds) - (audio_bytes_pivoted_seconds * audio_bytes_per_seconds)
@@ -390,35 +391,34 @@ async def _websocket_util(
                         speakers_id = get_speakers_by_audio_bytes_short(bytes(audio_bytes), uid, language, sample_rate)
                         print(speakers_id)
                         if uid in speakers_id:
+                            print(uid)
+                            if user_speaker_id and user_speaker_id != segment.speaker_id:
+                                # reset
+                                del checks[f'{user_speaker_id}']
+                                user_speaker_id = None
                             user_speaker_id = segment.speaker_id
-                            # TODO: notify
-                            # is_stopped = True
-                            # clean()
-                            # return
-                        checks[f'{segment.speaker_id}'] = True
+                            on_new_speaker_identified_segments(segment, uid)
+                        else:
+                            checks[f'{segment.speaker_id}'] = True
                         print(checks)
                 except Exception as e:
                     print(e)
 
-        print(f"hello speaker indentification {uid}, {language}, {sample_rate}")
+        print(f"speaker indentification {uid}, {language}, {sample_rate}")
 
         # Support en, 16000
         if language != 'en' or sample_rate != 16000:
-            clean()
-            is_stopped = True
             return
 
         return run, on_new_transcript_segments, on_new_audio_bytes
 
-    spk_run, spk_on_new_transcript_segments, spk_on_new_audio_bytes = create_speaker_indentification_task(uid, language, sample_rate)
+    spkid_run, spkid_on_new_transcript_segments, spkid_on_new_audio_bytes = create_speaker_indentification_task(uid, language, sample_rate)
 
     realtime_segment_buffers = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
         realtime_segment_buffers.extend(segments)
-        if spk_on_new_transcript_segments:
-            spk_on_new_transcript_segments(segments)
 
     soniox_socket = None
     speechmatics_socket = None
@@ -620,20 +620,31 @@ async def _websocket_util(
                         segment["end"] -= seconds_to_trim
                         segments[i] = segment
 
-                # Combine
-                segments = [segment.dict() for segment in TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])]
+                new_segments = [segment.dict() for segment in TranscriptSegment.combine_segments([], [TranscriptSegment(**segment) for segment in segments])]
+
+                # Get the processing memory
+                memory = _get_or_create_in_progress_memory(new_segments)  # can trigger race condition? increase soniox utterance?
+                updates_idx = len(memory.transcript_segments)-1 if len(memory.transcript_segments) > 0 else 0
+                memory.transcript_segments = TranscriptSegment.combine_segments(
+                    memory.transcript_segments, [TranscriptSegment(**segment) for segment in new_segments]
+                )
+                updates_segments = [s.to_dict() for s in memory.transcript_segments[updates_idx:]]
 
                 # Send to client
-                await websocket.send_json(segments)
+                await websocket.send_json(updates_segments)
 
-                # Send to external trigger
-                if transcript_send:
-                    transcript_send(segments, current_memory_id)
-
-                memory = _get_or_create_in_progress_memory(segments)  # can trigger race condition? increase soniox utterance?
+                # Update transcript segments to the memory
                 current_memory_id = memory.id
                 memories_db.update_memory_segments(uid, memory.id, [s.dict() for s in memory.transcript_segments])
                 memories_db.update_memory_finished_at(uid, memory.id, finished_at)
+
+                # Speaker identifying, new segments only
+                if spkid_on_new_transcript_segments:
+                    spkid_on_new_transcript_segments(new_segments)
+
+                # Send to external trigger, new segments only
+                if transcript_send:
+                    transcript_send(new_segments, current_memory_id)
 
                 # threading.Thread(target=process_segments, args=(uid, segments)).start() # restore when plugins work
             except Exception as e:
@@ -663,8 +674,8 @@ async def _websocket_util(
                     await speechmatics_socket1.send(data)
 
                 if dg_socket1 is not None:
-                    if spk_on_new_audio_bytes:
-                        spk_on_new_audio_bytes(data)
+                    if spkid_on_new_audio_bytes:
+                        spkid_on_new_audio_bytes(data)
                     dg_socket1.send(data)
                     # elapsed_seconds = time.time() - timer_start
                     # if elapsed_seconds > speech_profile_duration or not dg_socket2:
@@ -737,11 +748,11 @@ async def _websocket_util(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         heartbeat_task = asyncio.create_task(send_heartbeat())
 
-        # speaker indentification
-        if spk_run:
-            speaker_indentification_tasks = [asyncio.create_task(spk_run())]
+        # Speaker indentification
+        if spkid_run:
+            speaker_indentification_tasks = [asyncio.create_task(spkid_run())]
 
-        # pusher
+        # Pusher
         pusher_tasks = [asyncio.create_task(pusher_connect())]
         if transcript_consume:
             pusher_tasks.append(asyncio.create_task(transcript_consume()))
