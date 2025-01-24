@@ -10,6 +10,7 @@ import 'package:friend_private/pages/speech_profile/user_speech_samples.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/device_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -342,8 +343,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                               context,
                                               () => Navigator.pop(context),
                                               () async {
-                                                await Intercom.instance.displayArticle(
-                                                    '9918118-updating-the-firmware-on-your-friend-device');
+                                                await IntercomManager.instance.displayFirmwareUpdateArticle();
                                               },
                                               'Device Update Required',
                                               'Your current device has an old firmware version (1.0.2). Please check our guide on how to update it.',

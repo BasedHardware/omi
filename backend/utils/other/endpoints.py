@@ -9,7 +9,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 
 def get_current_user_uid(authorization: str = Header(None)):
-    if os.getenv('ADMIN_KEY') in authorization:
+    if authorization and os.getenv('ADMIN_KEY') in authorization:
         return authorization.split(os.getenv('ADMIN_KEY'))[1]
 
     if not authorization:
