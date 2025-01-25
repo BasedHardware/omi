@@ -30,18 +30,35 @@ class MessageProvider extends ChangeNotifier {
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
+  Map<String, bool> uploadingFiles = {};
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
   }
 
-  void setHasCachedMessages(bool value) {
-    hasCachedMessages = value;
+  void setIsUploadingFiles() {
+    if (uploadingFiles.values.contains(true)) {
+      isUploadingFiles = true;
+    } else {
+      isUploadingFiles = false;
+    }
     notifyListeners();
   }
 
-  void setIsUploadingFiles(bool value) {
-    isUploadingFiles = value;
+  void setMultiUploadingFileStatus(List<String> ids, bool value) {
+    for (var id in ids) {
+      uploadingFiles[id] = value;
+    }
+    setIsUploadingFiles();
+    notifyListeners();
+  }
+
+  bool isFileUploading(String id) {
+    return uploadingFiles[id] ?? false;
+  }
+
+  void setHasCachedMessages(bool value) {
+    hasCachedMessages = value;
     notifyListeners();
   }
 
@@ -102,7 +119,10 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void selectFile() async {
-    var res = await FilePicker.platform.pickFiles(allowMultiple: true);
+    var res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: true,
+        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp']);
     if (res != null) {
       List<File> files = [];
       for (var r in res.files) {
@@ -121,6 +141,7 @@ class MessageProvider extends ChangeNotifier {
   void clearSelectedFile(int index) {
     selectedFiles.removeAt(index);
     selectedFileTypes.removeAt(index);
+    uploadedFiles.removeAt(index);
     notifyListeners();
   }
 
@@ -137,16 +158,15 @@ class MessageProvider extends ChangeNotifier {
 
   Future<void> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
-      setIsUploadingFiles(true);
+      setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
       var res = await uploadFilesServer(files, appId: appId);
       if (res != null) {
         uploadedFiles.addAll(res);
-        print(uploadedFiles);
       } else {
         clearSelectedFiles();
         AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
       }
-      setIsUploadingFiles(false);
+      setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
       notifyListeners();
     }
   }
@@ -287,9 +307,8 @@ class MessageProvider extends ChangeNotifier {
     var message = ServerMessage.empty(appId: appId);
     messages.insert(0, message);
     notifyListeners();
-    List<String> fileIds = uploadedFiles.map((e) => e.openaiFileId).toList();
-    print(fileIds);
-
+    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
+    clearSelectedFiles();
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: appId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
@@ -328,8 +347,7 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageToServer(String message, String? appId) async {
     setShowTypingIndicator(true);
     messages.insert(0, ServerMessage.empty(appId: appId));
-    List<String> fileIds = uploadedFiles.map((e) => e.openaiFileId).toList();
-    print(fileIds);
+    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     var mes = await sendMessageServer(message, appId: appId, fileIds: fileIds);
     if (messages[0].id == '0000') {
       messages[0] = mes;
