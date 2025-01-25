@@ -11,43 +11,60 @@ class FilesHandlerWidget extends StatelessWidget {
     if (message.files.isEmpty) {
       return const SizedBox.shrink();
     } else {
-      if (message.areFilesOfSameType()) {
-        if (message.files.first.mimeTypeToFileType() == 'image') {
-          return CachedNetworkImage(
-            imageUrl: message.files.first.thumbnail ?? '',
-            imageBuilder: (context, imageProvider) => Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-              ),
-              width: MediaQuery.sizeOf(context).width * 0.4,
-              height: MediaQuery.sizeOf(context).width * 0.3,
-            ),
-            placeholder: (context, url) => const SizedBox(
-              width: 48,
-              height: 48,
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-            errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.white),
-          );
-        } else {
-          return Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-              borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            width: MediaQuery.sizeOf(context).width * 0.5,
-            child: Row(
-              children: [
-                const Icon(Icons.insert_drive_file, color: Colors.white),
-                const SizedBox(width: 8),
-                Column(
+      return SizedBox(
+        width: MediaQuery.sizeOf(context).width * 0.9,
+        height: MediaQuery.sizeOf(context).height * 0.12,
+        child: ListView.separated(
+          itemCount: message.files.length,
+          shrinkWrap: true,
+          reverse: true,
+          scrollDirection: Axis.horizontal,
+          separatorBuilder: (context, index) {
+            return const SizedBox(width: 6);
+          },
+          itemBuilder: (context, index) {
+            if (message.files[index].mimeTypeToFileType() == 'image') {
+              return CachedNetworkImage(
+                imageUrl: message.files[index].thumbnail ?? '',
+                imageBuilder: (context, imageProvider) => Container(
+                  margin: const EdgeInsets.only(bottom: 6, top: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                  ),
+                  width: MediaQuery.sizeOf(context).width * 0.28,
+                  height: MediaQuery.sizeOf(context).width * 0.22,
+                ),
+                placeholder: (context, url) => SizedBox(
+                  width: MediaQuery.sizeOf(context).width * 0.28,
+                  height: MediaQuery.sizeOf(context).width * 0.22,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                ),
+                errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.white),
+              );
+            } else {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 6, top: 2),
+                width: MediaQuery.sizeOf(context).width * 0.32,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    const Icon(Icons.insert_drive_file, color: Colors.white),
+                    const SizedBox(height: 6),
                     Text(
-                      message.files.first.name,
+                      message.files[index].name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -55,13 +72,11 @@ class FilesHandlerWidget extends StatelessWidget {
                     ),
                   ],
                 ),
-              ],
-            ),
-          );
-        }
-      } else {
-        return Container();
-      }
+              );
+            }
+          },
+        ),
+      );
     }
   }
 }
