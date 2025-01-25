@@ -4,6 +4,7 @@ import 'markdown_message_widget.dart';
 
 class MessageActionMenu extends StatelessWidget {
   final Function()? onCopy;
+  final Function()? onSelectText;
   final Function()? onShare;
   final Function()? onReport;
   final String message;
@@ -11,6 +12,7 @@ class MessageActionMenu extends StatelessWidget {
   const MessageActionMenu({
     super.key,
     this.onCopy,
+    this.onSelectText,
     this.onShare,
     this.onReport,
     required this.message,
@@ -45,6 +47,11 @@ class MessageActionMenu extends StatelessWidget {
               title: 'Copy',
               icon: Icons.copy,
               onTap: onCopy,
+            ),
+            _buildActionButton(
+              title: 'Select Text',
+              icon: Icons.description_outlined,
+              onTap: onSelectText,
             ),
             _buildActionButton(
               title: 'Share',
