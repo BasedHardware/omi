@@ -225,9 +225,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   if (chatIndex != 0) message.askForNps = false;
 
                                   double bottomPadding = chatIndex == 0
-                                      ? Platform.isAndroid
-                                          ? 200
-                                          : 170
+                                      ? provider.selectedFiles.isNotEmpty
+                                          ? (Platform.isAndroid ? 200 : MediaQuery.sizeOf(context).height * 0.3)
+                                          : (Platform.isAndroid ? 200 : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;
                                   return GestureDetector(
                                     onLongPress: () {
@@ -414,9 +414,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                           ),
                                                         )
                                                       : Container(),
+                                                  if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                                    Container(
+                                                      color: Colors.black.withOpacity(0.5),
+                                                      child: const Center(
+                                                        child: SizedBox(
+                                                          width: 20,
+                                                          height: 20,
+                                                          child: CircularProgressIndicator(
+                                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
                                                   Positioned(
-                                                    top: 5,
-                                                    right: 5,
+                                                    top: 4,
+                                                    right: 4,
                                                     child: GestureDetector(
                                                       onTap: () {
                                                         provider.clearSelectedFile(idx);
@@ -538,9 +551,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     : IconButton(
                                         splashColor: Colors.transparent,
                                         splashRadius: 1,
-                                        onPressed: provider.sendingMessage
+                                        onPressed: provider.sendingMessage || provider.isUploadingFiles
                                             ? null
-                                            : () async {
+                                            : () {
                                                 String message = textController.text;
                                                 if (message.isEmpty) return;
                                                 if (connectivityProvider.isConnected) {
@@ -577,7 +590,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  _sendMessageUtil(String text) async {
+  _sendMessageUtil(String text) {
     var provider = context.read<MessageProvider>();
     MixpanelManager().chatMessageSent(text);
     provider.setSendingMessage(true);
@@ -594,7 +607,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       appId,
       false,
       provider.uploadedFiles,
-      provider.uploadedFiles.map((e) => e.openaiFileId).toList(),
+      provider.uploadedFiles.map((e) => e.id).toList(),
       [],
     );
     provider.addMessage(message);
@@ -602,7 +615,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.clear();
     provider.sendMessageStreamToServer(text, appId);
     provider.clearSelectedFiles();
-    provider.clearUploadedFiles();
     scrollToBottom();
     provider.setSendingMessage(false);
   }
