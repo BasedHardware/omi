@@ -226,8 +226,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
                                   double bottomPadding = chatIndex == 0
                                       ? provider.selectedFiles.isNotEmpty
-                                          ? (Platform.isAndroid ? 200 : MediaQuery.sizeOf(context).height * 0.3)
-                                          : (Platform.isAndroid ? 200 : MediaQuery.sizeOf(context).height * 0.19)
+                                          ? (Platform.isAndroid
+                                              ? MediaQuery.sizeOf(context).height * 0.32
+                                              : MediaQuery.sizeOf(context).height * 0.3)
+                                          : (Platform.isAndroid
+                                              ? MediaQuery.sizeOf(context).height * 0.21
+                                              : MediaQuery.sizeOf(context).height * 0.19)
                                       : 0;
                                   return GestureDetector(
                                     onLongPress: () {
