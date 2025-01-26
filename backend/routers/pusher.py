@@ -6,11 +6,13 @@ from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
+from utils.apps import is_audio_bytes_app_enabled
 from utils.plugins import trigger_realtime_integrations, trigger_realtime_audio_bytes
 from utils.webhooks import send_audio_bytes_developer_webhook, realtime_transcript_webhook, \
     get_audio_bytes_webhook_seconds
 
 router = APIRouter()
+
 
 async def _websocket_util_trigger(
         websocket: WebSocket, uid: str, sample_rate: int = 8000,
@@ -32,6 +34,7 @@ async def _websocket_util_trigger(
     # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
     audio_bytes_trigger_delay_seconds = 5
+    has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
 
     # task
     async def receive_audio_bytes():
@@ -64,13 +67,15 @@ async def _websocket_util_trigger(
                 if header_type == 101:
                     audiobuffer.extend(data[4:])
                     trigger_audiobuffer.extend(data[4:])
-                    if len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2:
+                    if has_audio_apps_enabled and len(
+                            trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2:
                         asyncio.run_coroutine_threadsafe(
                             trigger_realtime_audio_bytes(uid, sample_rate, trigger_audiobuffer.copy()), loop)
                         trigger_audiobuffer = bytearray()
                     if audio_bytes_webhook_delay_seconds and len(
                             audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2:
-                        asyncio.run_coroutine_threadsafe(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()), loop)
+                        asyncio.run_coroutine_threadsafe(
+                            send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()), loop)
                         audiobuffer = bytearray()
                     continue
 
