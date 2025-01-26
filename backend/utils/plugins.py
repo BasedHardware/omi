@@ -1,5 +1,5 @@
 import threading
-from typing import List, Optional
+from typing import List
 import os
 import requests
 import time
@@ -331,27 +331,27 @@ def _process_proactive_notification(uid: str, token: str, plugin: App, data):
 
 
 def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    plugins: List[App] = get_available_apps(uid)
-    filtered_plugins = [
-        plugin for plugin in plugins if
-        plugin.triggers_realtime_audio_bytes() and plugin.enabled and not plugin.deleted
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [
+        app for app in apps if
+        app.triggers_realtime_audio_bytes() and app.enabled and not app.deleted
     ]
-    if not filtered_plugins:
+    if not filtered_apps:
         return {}
 
     threads = []
     results = {}
 
-    def _single(plugin: App):
-        if not plugin.external_integration.webhook_url:
+    def _single(app: App):
+        if not app.external_integration.webhook_url:
             return
 
-        url = plugin.external_integration.webhook_url
+        url = app.external_integration.webhook_url
         url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
             response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
             if response.status_code != 200:
-                print('trigger_realtime_audio_bytes', plugin.id, 'status:', response.status_code, 'results:',
+                print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code, 'results:',
                       response.text[:100])
                 return
 
@@ -363,8 +363,8 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
             print(f"Plugin integration error: {e}")
             return
 
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=_single, args=(plugin,)))
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=_single, args=(app,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
