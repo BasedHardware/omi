@@ -17,6 +17,7 @@ from database import redis_db
 from database.redis_db import get_cached_user_geolocation
 from models.memory import Memory, TranscriptSegment, MemoryStatus, Structured, Geolocation
 from models.message_event import MemoryEvent, MessageEvent
+from utils.apps import is_audio_bytes_app_enabled
 from utils.memories.location import get_google_maps_location
 from utils.memories.process_memory import process_memory
 from utils.plugins import trigger_external_integrations
@@ -384,7 +385,7 @@ async def _websocket_util(
         # Audio bytes
         audio_bytes_ws = None
         audio_buffers = bytearray()
-        audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid))
+        audio_bytes_enabled = bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid)
 
         def audio_bytes_send(audio_bytes):
             nonlocal audio_buffers
@@ -432,8 +433,8 @@ async def _websocket_util(
                 pusher_ws = await connect_to_trigger_pusher(uid, sample_rate)
                 pusher_connected = True
                 transcript_ws = pusher_ws
-                # if audio_bytes_enabled:
-                audio_bytes_ws = pusher_ws
+                if audio_bytes_enabled:
+                    audio_bytes_ws = pusher_ws
             except Exception as e:
                 print(f"Exception in connect: {e}")
 
