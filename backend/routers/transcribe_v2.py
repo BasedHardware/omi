@@ -443,7 +443,7 @@ async def _websocket_util(
 
         return (connect, close,
                 transcript_send, transcript_consume,
-                audio_bytes_send, audio_bytes_consume)
+                audio_bytes_send if audio_bytes_enabled else None, audio_bytes_consume if audio_bytes_enabled else None)
 
     pusher_connect, pusher_close, transcript_send, transcript_consume, audio_bytes_send, audio_bytes_consume = create_pusher_task_handler()
 
