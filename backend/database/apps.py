@@ -1,9 +1,13 @@
 import os
+from datetime import datetime, timezone
 from typing import List
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
+from google.cloud.firestore import ArrayUnion, ArrayRemove
+
 from ulid import ULID
 
+from models.app import UsageHistoryType
 from ._client import db
 from .redis_db import get_plugin_reviews
 
@@ -52,15 +56,23 @@ def get_unapproved_public_apps_db() -> List:
     return [doc.to_dict() for doc in public_apps]
 
 
+# This returns all unapproved apps of all users including private apps
+def get_all_unapproved_apps_db() -> List:
+    filters = [FieldFilter('approved', '==', False), FieldFilter('deleted', '==', False)]
+    all_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+    return [doc.to_dict() for doc in all_apps]
+
+
 def get_public_apps_db(uid: str) -> List:
     public_plugins = db.collection('plugins_data').stream()
     data = [doc.to_dict() for doc in public_plugins]
 
-    return [plugin for plugin in data if plugin['approved'] == True or plugin['uid'] == uid]
+    return [plugin for plugin in data if plugin.get('approved') == True or plugin.get('uid') == uid]
 
 
 def get_public_approved_apps_db() -> List:
-    filters = [FieldFilter('approved', '==', True), FieldFilter('deleted', '==', False)]
+    filters = [FieldFilter('approved', '==', True), FieldFilter('private', '==', False),
+               FieldFilter('deleted', '==', False)]
     public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
 
@@ -71,6 +83,20 @@ def get_public_unapproved_apps_db(uid: str) -> List:
                FieldFilter('private', '==', False)]
     public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
     return [doc.to_dict() for doc in public_apps]
+
+
+def get_apps_for_tester_db(uid: str) -> List:
+    tester_ref = db.collection('testers').document(uid)
+    doc = tester_ref.get()
+    if doc.exists:
+        apps = doc.to_dict().get('apps', [])
+        if not apps:
+            return []
+        filters = [FieldFilter('approved', '==', False), FieldFilter('id', 'in', apps),
+                   FieldFilter('deleted', '==', False)]
+        public_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()
+        return [doc.to_dict() for doc in public_apps]
+    return []
 
 
 def add_app_to_db(app_data: dict):
@@ -110,8 +136,31 @@ def change_app_approval_status(plugin_id: str, approved: bool):
 def get_app_usage_history_db(app_id: str):
     usage = db.collection('plugins').document(app_id).collection('usage_history').stream()
     return [doc.to_dict() for doc in usage]
-  
-    
+
+
+def get_app_memory_created_integration_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_external_integration)).count().get()
+    return usage[0][0].value
+
+
+def get_app_memory_prompt_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.memory_created_prompt)).count().get()
+    return usage[0][0].value
+
+
+def get_app_chat_message_sent_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').where(
+        filter=FieldFilter('type', '==', UsageHistoryType.chat_message_sent)).count().get()
+    return usage[0][0].value
+
+
+def get_app_usage_count_db(app_id: str):
+    usage = db.collection('plugins').document(app_id).collection('usage_history').count().get()
+    return usage[0][0].value
+
+
 # ********************************
 # *********** REVIEWS ************
 # ********************************
@@ -119,3 +168,88 @@ def get_app_usage_history_db(app_id: str):
 def set_app_review_in_db(app_id: str, uid: str, review: dict):
     app_ref = db.collection('plugins_data').document(app_id).collection('reviews').document(uid)
     app_ref.set(review)
+
+
+# ********************************
+# ************ TESTER ************
+# ********************************
+
+def add_tester_db(data: dict):
+    app_ref = db.collection('testers').document(data['uid'])
+    app_ref.set(data)
+
+
+def add_app_access_for_tester_db(app_id: str, uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.update({'apps': ArrayUnion([app_id])})
+
+
+def remove_app_access_for_tester_db(app_id: str, uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.update({'apps': ArrayRemove([app_id])})
+
+
+def remove_tester_db(uid: str):
+    app_ref = db.collection('testers').document(uid)
+    app_ref.delete()
+
+
+def can_tester_access_app_db(app_id: str, uid: str) -> bool:
+    app_ref = db.collection('testers').document(uid)
+    doc = app_ref.get()
+    if doc.exists:
+        return app_id in doc.to_dict().get('apps', [])
+    return False
+
+
+def is_tester_db(uid: str) -> bool:
+    app_ref = db.collection('testers').document(uid)
+    return app_ref.get().exists
+
+
+# ********************************
+# *********** APPS USAGE *********
+# ********************************
+
+def record_app_usage(
+        uid: str, app_id: str, usage_type: UsageHistoryType, memory_id: str = None, message_id: str = None,
+        timestamp: datetime = None
+):
+    if not memory_id and not message_id:
+        raise ValueError('memory_id or message_id must be provided')
+
+    data = {
+        'uid': uid,
+        'memory_id': memory_id,
+        'message_id': message_id,
+        'timestamp': datetime.now(timezone.utc) if timestamp is None else timestamp,
+        'type': usage_type,
+    }
+
+    db.collection('plugins').document(app_id).collection('usage_history').document(memory_id or message_id).set(data)
+    return data
+
+
+# ********************************
+# *********** PERSONAS ***********
+# ********************************
+
+def delete_persona_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').document(persona_id)
+    persona_ref.update({'deleted': True})
+
+
+def get_personas_by_username_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').where('username', '==', persona_id)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    return [{**doc.to_dict(), 'doc_id': doc.id} for doc in docs]
+
+
+def get_persona_by_id_db(persona_id: str):
+    persona_ref = db.collection('plugins_data').document(persona_id)
+    doc = persona_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None

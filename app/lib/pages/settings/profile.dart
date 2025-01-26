@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
+import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 import 'delete_account.dart';
+import 'recordings_storage_permission.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,6 +21,25 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  // Future<void> _checkRecordingPermission() async {
+  //   final permission = await getStoreRecordingPermission();
+  //   if (mounted) {
+  //     setState(() {
+  //       if (permission != null) {
+  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = permission;
+  //       } else {
+  //         SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
+  //       }
+  //     });
+  //   }
+  // }
+
+  @override
+  void initState() {
+    // _checkRecordingPermission();
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -30,9 +52,15 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 4, 16),
         child: ListView(
           children: <Widget>[
-            // getItemAddOn('Identifying Others', () {
-            //   routeToPage(context, const UserPeoplePage());
-            // }, icon: Icons.people),
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              title: const Text('Identifying Others', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Tell Omi who said it 🗣️'),
+              trailing: const Icon(Icons.people, size: 20),
+              onTap: () {
+                routeToPage(context, const UserPeoplePage());
+              },
+            ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
               title: Text(
@@ -109,7 +137,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             MixpanelManager().pageOpened('Share Analytics Data Details');
                           },
                           child: const Text(
-                            'Help improve Friend by sharing anonymized analytics data',
+                            'Help improve Omi by sharing anonymized analytics data',
                             style: TextStyle(
                               color: Colors.grey,
                               fontSize: 16,
@@ -147,6 +175,61 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
+            // Padding(
+            //   padding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+            //   child: InkWell(
+            //     onTap: () {
+            //       routeToPage(context, const RecordingsStoragePermission());
+            //     },
+            //     child: Padding(
+            //       padding: const EdgeInsets.symmetric(vertical: 12.0),
+            //       child: Row(
+            //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //         children: [
+            //           Expanded(
+            //             child: GestureDetector(
+            //               onTap: () {
+            //                 routeToPage(context, const RecordingsStoragePermission());
+            //               },
+            //               child: const Text(
+            //                 'Allow Omi to store recordings of your conversations',
+            //                 style: TextStyle(
+            //                   color: Colors.grey,
+            //                   fontSize: 16,
+            //                   decoration: TextDecoration.underline,
+            //                 ),
+            //               ),
+            //             ),
+            //           ),
+            //           const SizedBox(
+            //             width: 16,
+            //           ),
+            //           Container(
+            //             decoration: BoxDecoration(
+            //               color: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+            //                   ? const Color.fromARGB(255, 150, 150, 150)
+            //                   : Colors.transparent,
+            //               border: Border.all(
+            //                 color: const Color.fromARGB(255, 150, 150, 150),
+            //                 width: 2,
+            //               ),
+            //               borderRadius: BorderRadius.circular(12),
+            //             ),
+            //             width: 22,
+            //             height: 22,
+            //             child: SharedPreferencesUtil().permissionStoreRecordingsEnabled
+            //                 ? const Icon(
+            //                     Icons.check,
+            //                     color: Colors.white,
+            //                     size: 18,
+            //                   )
+            //                 : null,
+            //           ),
+            //         ],
+            //       ),
+            //     ),
+            //   ),
+            // ),
             const SizedBox(height: 32),
             // Divider(color: Colors.grey.shade300, height: 1),
             const SizedBox(height: 24),
@@ -165,7 +248,8 @@ class _ProfilePageState extends State<ProfilePage> {
               trailing: const Icon(Icons.copy_rounded, size: 20, color: Colors.white),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
               },
             ),
             ListTile(

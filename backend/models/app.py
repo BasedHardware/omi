@@ -72,6 +72,16 @@ class App(BaseModel):
     installs: int = 0
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
+    money_made: Optional[float] = None
+    usage_count: Optional[int] = None
+    is_paid: Optional[bool] = False
+    price: Optional[float] = 0.0  # cents/100
+    payment_plan: Optional[str] = None
+    payment_product_id: Optional[str] = None
+    payment_price_id: Optional[str] = None
+    payment_link_id: Optional[str] = None
+    payment_link: Optional[str] = None
+    is_user_paid: Optional[bool] = False
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -108,6 +118,7 @@ class App(BaseModel):
 
 class UsageHistoryType(str, Enum):
     memory_created_external_integration = 'memory_created_external_integration'
+    transcript_processed_external_integration = 'transcript_processed_external_integration'
     memory_created_prompt = 'memory_created_prompt'
     chat_message_sent = 'chat_message_sent'
 

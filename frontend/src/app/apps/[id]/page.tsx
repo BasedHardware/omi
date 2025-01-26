@@ -1,236 +1,381 @@
-// import { useState, useEffect } from 'react';
-import envConfig from '@/src/constants/envConfig';
-import { Star, Download, DollarSign, Moon, Sun, ArrowLeft } from 'lucide-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/src/components/ui/card';
-import { Progress } from '@/src/components/ui/progress';
-import Link from 'next/link';
-
-import { Button } from '@/src/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/src/components/ui/dialog';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import PaidAmountDialog from '@/src/components/dashboard/paidamount';
-import { PluginStat, Plugin } from '../page';
+import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
+import { CompactPluginCard } from '../components/plugin-card/compact';
+import { ScrollableCategoryNav } from '../components/scrollable-category-nav';
+import { CategoryBreadcrumb } from '../components/category-breadcrumb';
+import { AppStats } from '../components/app-stats';
+import { AppActionButton } from '../components/app-action-button';
+import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
+import { Metadata, ResolvingMetadata } from 'next';
+import { ProductBanner } from '@/src/app/components/product-banner';
+import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
+import envConfig from '@/src/constants/envConfig';
 
-const COST_CONSTANT = 0.05;
+type Props = {
+  params: { id: string };
+};
+
+export async function generateMetadata(
+  { params }: Props,
+  parent: ResolvingMetadata,
+): Promise<Metadata> {
+  const plugin = await getAppById(params.id);
+
+  if (!plugin) {
+    return {
+      title: 'App Not Found | Omi',
+      description: 'The requested app could not be found.',
+    };
+  }
+
+  const categoryName = formatCategoryName(plugin.category);
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
+
+  return {
+    title: `${plugin.name} - ${categoryName} App | Omi`,
+    description: `${plugin.description} Available on Omi, the AI-powered wearable platform.`,
+    metadataBase: new URL(envConfig.WEB_URL),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: `${plugin.name} - ${categoryName} App`,
+      description: plugin.description,
+      images: [
+        {
+          url: plugin.image,
+          width: 1200,
+          height: 630,
+          alt: `${plugin.name} App for Omi`,
+        },
+      ],
+      url: canonicalUrl,
+      type: 'website',
+      siteName: 'Omi',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${plugin.name} - ${categoryName} App`,
+      description: plugin.description,
+      images: [plugin.image],
+      creator: '@omiHQ',
+      site: '@omiHQ',
+    },
+    other: {
+      'application-name': 'Omi',
+      'apple-itunes-app': `app-id=6502156163`,
+      'google-play-app': `app-id=com.friend.ios`,
+    },
+  };
+}
+
+// Add a separate function to handle JSON-LD
+export function generateStructuredData(plugin: Plugin, categoryName: string) {
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
+  const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  const productUrl = 'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
+
+  return {
+    __html: JSON.stringify([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: plugin.name,
+        description: plugin.description,
+        applicationCategory: categoryName,
+        operatingSystem: 'iOS, Android',
+        author: {
+          '@type': 'Person',
+          name: plugin.author,
+        },
+        datePublished: plugin.created_at,
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: plugin.rating_avg?.toFixed(1) || '0',
+          ratingCount: plugin.rating_count || 0,
+          bestRating: '5',
+          worstRating: '1',
+        },
+        applicationSuite: 'Omi',
+        requiresSubscription: false,
+        installUrl: canonicalUrl,
+        interactionStatistic: {
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/InstallAction',
+          userInteractionCount: plugin.installs,
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: 'OMI Necklace',
+        description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
+        brand: {
+          '@type': 'Brand',
+          name: 'OMI',
+        },
+        offers: {
+          '@type': 'Offer',
+          price: '69.99',
+          priceCurrency: 'USD',
+          availability: 'https://schema.org/InStock',
+          url: productUrl,
+          priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0], // Valid for 1 year
+        },
+        additionalProperty: [
+          {
+            '@type': 'PropertyValue',
+            name: 'App Store',
+            value: appStoreUrl,
+          },
+          {
+            '@type': 'PropertyValue',
+            name: 'Play Store',
+            value: playStoreUrl,
+          },
+        ],
+      },
+    ]),
+  };
+}
+
+// Helper function to format category name
+const formatCategoryName = (category: string): string => {
+  return category
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+// Helper function to determine platform and get appropriate link
+function getPlatformLink(userAgent: string) {
+  const isAndroid = /android/i.test(userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+
+  return isAndroid
+    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+    : isIOS
+    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
+    : 'https://omi.me';
+}
+
+// Helper function to format date
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
 
 export default async function PluginDetailView({ params }: { params: { id: string } }) {
-  // const [darkMode, setDarkMode] = useState(false);
-  var response = await fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`);
-  const plugins = (await response.json()) as Plugin[];
-
-  // Get params in a server component
-  const { id } = params;
-
-  const plugin = plugins.find((p) => p.id === id);
+  const plugin = await getAppById(params.id);
 
   if (!plugin) {
     throw new Error('App not found');
   }
 
-  response = await fetch("https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json");
-  const stats = (await response.json()) as PluginStat[];
-  const stat = stats.find((p) => p.id === id);
-
-  // useEffect(() => {
-  //   if (darkMode) {
-  //     document.documentElement.classList.add('dark');
-  //   } else {
-  //     document.documentElement.classList.remove('dark');
-  //   }
-  // }, [darkMode]);
+  const statsResponse = await fetch(
+    'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
+  );
+  const stats = (await statsResponse.json()) as PluginStat[];
+  const stat = stats.find((p) => p.id === params.id);
 
   const userAgent = headers().get('user-agent') || '';
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+  const link = getPlatformLink(userAgent);
 
-  const link = isAndroid
-  ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-  : isIOS
-  ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-  : 'https://omi.me';
+  // Get related apps based on category
+  const relatedApps = (await getAppsByCategory(plugin.category))
+    .filter((p) => p.id !== plugin.id)
+    .slice(0, 6);
+
+  const categoryName = formatCategoryName(plugin.category);
 
   return (
-    <div className="bg-gray-100 transition-colors duration-300 dark:bg-gray-900">
-      <div className="container mx-auto p-4">
-        <div className="mb-6 flex items-center justify-between">
-          <Link
-            href="/apps"
-            className="pt-8 flex items-center text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-white"
-          >
-            <ArrowLeft className="mr-2" />
-            Back to Apps
-          </Link>
-          {/* <button
-            variant="outline"
-            size="icon"
-            onClick={() => setDarkMode(!darkMode)}
-            className="rounded-full"
-          >
-            {darkMode ? (
-              <Sun className="h-[1.2rem] w-[1.2rem]" />
-            ) : (
-              <Moon className="h-[1.2rem] w-[1.2rem]" />
-            )}
-            <span className="sr-only">Toggle theme</span>
-          </button> */}
+    <div className="relative flex min-h-screen flex-col bg-[#0B0F17]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={generateStructuredData(plugin, categoryName)}
+      />
+      {/* Fixed Header and Navigation */}
+      <div className="fixed inset-x-0 top-[4rem] z-50 bg-[#0B0F17]">
+        <div className="border-b border-white/5 shadow-lg">
+          <div className="container mx-auto px-[1.5rem] py-[2rem]">
+            <CategoryBreadcrumb category={plugin.category} />
+          </div>
         </div>
+      </div>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <div className="mb-4 flex items-center">
-              <img
-                src={plugin.image}
-                alt={plugin.name}
-                className="mr-6 h-24 w-24 rounded-full object-cover"
-              />
-              <div>
-                <CardTitle className="mb-2 text-3xl font-bold text-gray-800 dark:text-white">
-                  {plugin.name}
-                </CardTitle>
-                <CardDescription className="text-lg text-gray-600 dark:text-gray-400">
-                  by {plugin.author}
-                </CardDescription>
+      {/* Main Content */}
+      <main className="relative z-0 mt-[10rem] flex-grow">
+        <div className="container mx-auto px-[1.5rem] pt-[2rem]">
+          {/* Hero Section */}
+          <section className="grid grid-cols-1 gap-[3rem] lg:grid-cols-5">
+            {/* Image Column - 3 columns */}
+            <div className="lg:col-span-2">
+              <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
+                <img
+                  src={plugin.image}
+                  alt={plugin.name}
+                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                />
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-6 text-gray-700 dark:text-gray-300">{plugin.description}</p>
-            <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
-                <Download className="mb-2 h-8 w-8 text-blue-500" />
-                <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  {plugin.installs.toLocaleString()}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">Installs</span>
-              </div>
-              <div className="flex flex-col items-center rounded-lg bg-white p-4 shadow dark:bg-gray-800">
-                <DollarSign className="mb-2 h-8 w-8 text-green-500" />
-                <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                  ${stat == undefined ? 0 : stat.money}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">Total Earned</span>
-              </div>
-              {/* <Dialog>
-                <DialogTrigger asChild>
-                  <div className="flex cursor-pointer flex-col items-center rounded-lg bg-white p-4 shadow transition-colors hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700">
-                    <DollarSign className="mb-2 h-8 w-8 text-purple-500" />
-                    <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                      ${plugin.comps || 0}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400">Paid Out</span>
-                  </div>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Set Paid Amount</DialogTitle>
-                    <DialogDescription>
-                      Enter the amount to be set as paid out and provide the admin key.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form action={updatePaidAmount}>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="amount" className="text-right">
-                          Amount
-                        </Label>
-                        <Input
-                          id="amount"
-                          name="amount"
-                          type="number"
-                          className="col-span-3"
-                        />
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="adminKey" className="text-right">
-                          Admin Key
-                        </Label>
-                        <Input
-                          id="adminKey"
-                          name="adminKey"
-                          type="password"
-                          className="col-span-3"
-                        />
+            {/* Content Column - 2 columns */}
+            <div className="lg:col-span-3">
+              <div className="flex h-full flex-col justify-between">
+                {/* App Info Container */}
+                <div>
+                  <h1 className="text-4xl font-bold text-white">{plugin.name}</h1>
+                  <p className="mt-[0.5rem] text-xl text-gray-400">by {plugin.author}</p>
+
+                  {/* Stats Section */}
+                  <div className="mt-[2rem] flex items-center gap-[1rem]">
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold text-yellow-400">
+                        {plugin.rating_avg?.toFixed(1)}
+                      </span>
+                      <div className="ml-[0.5rem] flex flex-col">
+                        <span className="text-yellow-400">★</span>
+                        <span className="text-sm text-gray-400">
+                          ({plugin.rating_count} reviews)
+                        </span>
                       </div>
                     </div>
-                    <DialogFooter>
-                      <Button type="submit">Set Paid Amount</Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog> */}
-              {/*<PaidAmountDialog plugin={plugin} />*/}
+                    <div className="h-8 w-px bg-white/5" />
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold text-[#6C8EEF]">
+                        {plugin.installs.toLocaleString()}
+                      </span>
+                      <span className="ml-2 text-sm text-gray-400">downloads</span>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="mt-8">
+                    <AppActionButton
+                      link={link}
+                      className="max-w-[200px] rounded-xl transition-all duration-300 hover:translate-y-[-2px]"
+                    />
+                    {/* Store Buttons */}
+                    <div className="mt-4 flex items-center gap-4">
+                      <a
+                        href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-transform duration-300 hover:scale-105"
+                      >
+                        <img
+                          src="/app-store-badge.svg"
+                          alt="Download on the App Store"
+                          className="h-[40px]"
+                        />
+                      </a>
+                      <a
+                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-transform duration-300 hover:scale-105"
+                      >
+                        <img
+                          src="/google-play-badge.png"
+                          alt="Get it on Google Play"
+                          className="h-[40px]"
+                        />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <Button className="w-full bg-black text-white hover:bg-gray-800" asChild>
-              <Link href={link}>
-                Try it
-              </Link>
-            </Button>
-            <div className="mb-2 flex items-center">
-              <Star className="mr-2 h-6 w-6 text-yellow-400" />
-              <span className="mr-2 text-2xl font-bold text-gray-800 dark:text-white">
-                {(plugin.rating_avg ?? 0).toFixed(1)}
-              </span>
-              <span className="text-gray-600 dark:text-gray-400">
-                ({plugin.rating_count} ratings)
-              </span>
+          </section>
+
+          {/* Product Banner */}
+          <section className="mt-12">
+            <ProductBanner
+              variant="detail"
+              appName={plugin.name}
+              category={categoryName}
+            />
+          </section>
+
+          {/* About Section */}
+          <section className="mt-16">
+            <h2 className="text-2xl font-bold text-white">About</h2>
+            <div className="mt-4">
+              <p className="text-lg leading-relaxed text-gray-300">
+                {plugin.description}
+              </p>
             </div>
-            <Progress value={plugin.rating_avg * 20} className="mb-6 h-2" />
-          </CardContent>
-        </Card>
-      </div>
+          </section>
+
+          {/* Additional Details Section */}
+          <section className="mt-16">
+            <h2 className="mb-6 text-2xl font-bold text-white">Additional Details</h2>
+            <div className="grid gap-8 sm:grid-cols-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Created</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">
+                  {formatDate(plugin.created_at)}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Creator</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">{plugin.author}</div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Category</div>
+                </div>
+                <div className="mt-1 pl-7 text-base text-white">{categoryName}</div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Puzzle className="h-5 w-5 text-gray-400" />
+                  <div className="text-sm font-medium text-gray-400">Capabilities</div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 pl-7">
+                  {Array.from(plugin.capabilities).map((cap) => (
+                    <span
+                      key={cap}
+                      className="rounded-full bg-[#1A1F2E] px-3 py-1 text-sm text-white"
+                    >
+                      {cap}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Related Apps Section */}
+          <section className="mt-16 pb-12">
+            <h2 className="mb-8 text-2xl font-bold text-white">
+              More {categoryName} Apps
+            </h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {relatedApps.map((app, index) => (
+                <CompactPluginCard
+                  key={app.id}
+                  plugin={app}
+                  stat={stats.find((s) => s.id === app.id)}
+                  index={index + 1}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   );
 }
-
-// import { revalidatePath } from 'next/cache';
-
-// async function updatePaidAmount(formData: FormData) {
-//   'use server';
-
-//   const amount = formData.get('amount') as string;
-//   const adminKey = formData.get('adminKey') as string;
-//   const pluginId = formData.get('pluginId') as string;
-
-//   try {
-//     const response = await fetch('http://0.0.0.0:8000/v1/plugins/report-comp', {
-//       method: 'POST',
-//       headers: {
-//         'Content-Type': 'application/json',
-//         Authorization: `Bearer ${adminKey}`,
-//       },
-//       body: JSON.stringify({
-//         plugin_id: pluginId,
-//         comp_count: parseInt(amount, 10),
-//       }),
-//     });
-//     if (!response.ok) {
-//       if (response.status === 401) {
-//         return { success: false, error: 'Unauthorized. Please check your admin key.' };
-//       }
-//       throw new Error('Failed to update paid amount');
-//     }
-
-//     // revalidatePath(`/dashboard/${pluginId}`);
-//     return { success: true };
-//   } catch (error) {
-//     console.error('Error updating paid amount:', error);
-//     return { success: false, error: 'Failed to update paid amount' };
-//   }
-// }

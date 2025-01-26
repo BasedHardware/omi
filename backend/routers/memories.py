@@ -7,6 +7,7 @@ from models.memory import *
 from routers.speech_profile import expand_speech_profile
 from routers.transcribe_v2 import retrieve_in_progress_memory
 from utils.memories.process_memory import process_memory
+from utils.memories.search import search_memories
 from utils.other import endpoints as auth
 from utils.other.storage import get_memory_recording_if_exists, \
     delete_additional_profile_audio, delete_speech_sample_for_people
@@ -68,9 +69,9 @@ def reprocess_memory(
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
-def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", uid: str = Depends(auth.get_current_user_uid)):
+def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset, statuses)
-    return memories_db.get_memories(uid, limit, offset, include_discarded=True,
+    return memories_db.get_memories(uid, limit, offset, include_discarded=include_discarded,
                                     statuses=statuses.split(",") if len(statuses) > 0 else [])
 
 
@@ -201,16 +202,86 @@ def set_assignee_memory_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
-    segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
+    # thinh's note: disabled for now
+    # segment_words = len(memory.transcript_segments[segment_idx].text.split(' '))
+    # # TODO: can do this async
+    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
+    #     person_id = value if assign_type == 'person_id' else None
+    #     expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    # else:
+    #     path = f'{memory_id}_segment_{segment_idx}.wav'
+    #     delete_additional_profile_audio(uid, path)
+    #     delete_speech_sample_for_people(uid, path)
 
-    # TODO: can do this async
-    if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-        person_id = value if assign_type == 'person_id' else None
-        expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    return memory
+
+
+@router.patch('/v1/memories/{memory_id}/assign-speaker/{speaker_id}', response_model=Memory, tags=['memories'])
+def set_assignee_memory_segment(
+        memory_id: str, speaker_id: int, assign_type: str, value: Optional[str] = None,
+        use_for_speech_training: bool = True, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Another complex endpoint.
+
+    Modify the assignee of all segments in the transcript of a memory with the given speaker_id.
+    But,
+    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
+
+    Speech training of whom?
+
+    If `assign_type` is 'is_user', the segment will be used for the user speech training.
+    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
+
+    What is required for a segment to be used for speech training?
+    1. The segment must have more than 5 words.
+    2. The memory audio file should be already stored in the user's bucket.
+
+    :return: The updated memory.
+    """
+    print('set_assignee_memory_segment', memory_id, speaker_id, assign_type, value, use_for_speech_training, uid)
+    memory = _get_memory_by_id(uid, memory_id)
+    memory = Memory(**memory)
+
+    if value == 'null':
+        value = None
+
+    is_unassigning = value is None or value is False
+
+    if assign_type == 'is_user':
+        for segment in memory.transcript_segments:
+            if segment.speaker_id == speaker_id:
+                segment.is_user = bool(value) if value is not None else False
+                segment.person_id = None
+    elif assign_type == 'person_id':
+        for segment in memory.transcript_segments:
+            if segment.speaker_id == speaker_id:
+                print(segment.speaker_id, speaker_id, value)
+                segment.is_user = False
+                segment.person_id = value
     else:
-        path = f'{memory_id}_segment_{segment_idx}.wav'
-        delete_additional_profile_audio(uid, path)
-        delete_speech_sample_for_people(uid, path)
+        print(assign_type)
+        raise HTTPException(status_code=400, detail="Invalid assign type")
+
+    memories_db.update_memory_segments(uid, memory_id, [segment.dict() for segment in memory.transcript_segments])
+    # This will be used when we setup recording for memories, not used for now
+    # get the segment with the most words with the speaker_id
+    # segment_idx = 0
+    # segment_words = 0
+    # for segment in memory.transcript_segments:
+    #     if segment.speaker == speaker_id:
+    #         if len(segment.text.split(' ')) > segment_words:
+    #             segment_words = len(segment.text.split(' '))
+    #             if segment_words > 5:
+    #                 segment_idx = segment.idx
+    #
+    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
+    #     person_id = value if assign_type == 'person_id' else None
+    #     expand_speech_profile(memory_id, uid, segment_idx, assign_type, person_id)
+    # else:
+    #     path = f'{memory_id}_segment_{segment_idx}.wav'
+    #     delete_additional_profile_audio(uid, path)
+    #     delete_speech_sample_for_people(uid, path)
 
     return memory
 
@@ -257,14 +328,19 @@ def get_shared_memory_by_id(memory_id: str):
 def get_public_memories(offset: int = 0, limit: int = 1000):
     memories = redis_db.get_public_memories()
     data = []
-    for memory_id in memories:
-        uid = redis_db.get_memory_uid(memory_id)
-        if not uid:
-            continue
-        data.append([uid, memory_id])
+
+    memory_uids = redis_db.get_memory_uids(memories)
+
+    data = [[uid, memory_id] for memory_id, uid in memory_uids.items() if uid]
     # TODO: sort in some way to have proper pagination
 
     memories = memories_db.run_get_public_memories(data[offset:offset + limit])
     for memory in memories:
         memory['geolocation'] = None
     return memories
+
+
+@router.post("/v1/memories/search", response_model=dict, tags=['memories'])
+def search_memories_endpoint(search_request: SearchRequest, uid: str = Depends(auth.get_current_user_uid)):
+    return search_memories(query=search_request.query, page=search_request.page,
+                           per_page=search_request.per_page, uid=uid, include_discarded=search_request.include_discarded)

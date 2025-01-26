@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 
 class DeviceAnimationWidget extends StatefulWidget {
   final bool animatedBackground;
@@ -43,14 +44,14 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
           alignment: Alignment.center,
           children: [
             Image.asset(
-              "assets/images/stars.png",
+              Assets.images.stars.path,
             ),
             widget.animatedBackground
                 ? AnimatedBuilder(
                     animation: _animation,
                     builder: (context, child) {
                       return Image.asset(
-                        "assets/images/blob.png",
+                        Assets.images.blob.path,
                         height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) *
                             widget.sizeMultiplier *
                             _animation.value,
@@ -63,7 +64,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                 : Container(),
             // Image.asset("assets/images/blob.png"),
             Image.asset(
-              "assets/images/herologo.png",
+              Assets.images.herologo.path,
               height: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
               width: (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier,
             )

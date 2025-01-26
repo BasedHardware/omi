@@ -25,12 +25,13 @@ dependencies:
   lottie: ^3.1.2
   expandable_text: ^2.3.0
   flutter_native_splash: ^2.4.0
-  flutter_svg: ^2.0.10+1
   gradient_borders: ^1.0.1
   visibility_detector: ^0.4.0+2
   flutter_rating_bar: ^4.0.1
   sign_in_button: ^3.2.0
   dotted_border: ^2.1.0
+  skeletonizer: ^1.4.2
+  shimmer: ^3.0.0
 
   # Firebase
   firebase_core: 3.3.0
@@ -42,7 +43,7 @@ dependencies:
   mixpanel_flutter: ^2.2.0
 
   # Utils
-  collection: 1.18.0
+  collection: ^1.18.0
   equatable: 2.0.5
   flutter_blue_plus: 1.33.6
   http: ^1.2.1
@@ -73,7 +74,7 @@ dependencies:
   flutter_background_service_platform_interface: 5.1.1
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
-  growthbook_sdk_flutter: ^3.9.2
+  growthbook_sdk_flutter: 3.9.2
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1
@@ -96,6 +97,7 @@ dependencies:
   image_picker: ^1.1.2
   timeago: ^3.7.0
   app_links: ^6.3.2
+  flutter_svg: ^2.0.16
 
 
 dependency_overrides:
@@ -135,6 +137,7 @@ dev_dependencies:
   envied_generator: ^0.5.4+1
   build_runner: ^2.4.11
   flutter_flavorizr: ^2.2.3
+  flutter_gen_runner: ^5.8.0
 
 
 flutter_launcher_icons:
@@ -152,7 +155,6 @@ flutter:
     - assets/images/blob.png
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/images/backbutton.svg
     - assets/fonts/
     - assets/images/
     - assets/lottie_animations/
@@ -183,6 +185,20 @@ flutter:
         - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
           weight: 900
           style: italic
+
+flutter_gen:
+  output: lib/gen/
+  class_name: Assets
+  integrations:
+  flutter_svg: true
+  flare_flutter: true
+  rive: true
+  lottie: true
+  gen_package_path: true
+  ignore_resolution: true
+  omit_path_levels: 3
+  format_dart_code: false
+  
 
 flutter_native_splash:
   background_image: "assets/images/splash.png"

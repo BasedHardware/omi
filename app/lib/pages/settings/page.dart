@@ -26,6 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool devModeEnabled;
   String? version;
   String? buildVersion;
+  bool isTester = false;
 
   @override
   void initState() {
@@ -100,18 +101,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.help_outline_outlined,
                 ),
                 const SizedBox(height: 20),
-                // getItemAddOn2(
-                //   'Plugins',
-                //   () => routeToPage(context, const PluginsPage()),
-                //   icon: Icons.integration_instructions,
-                // ),
-                // const SizedBox(height: 8),
-                // getItemAddOn2(
-                //   'Calendar Integration',
-                //   () => routeToPage(context, const CalendarPage()),
-                //   icon: Icons.calendar_month,
-                // ),
-                // const SizedBox(height: 20),
                 getItemAddOn2(
                   'About Omi',
                   () => routeToPage(context, const AboutOmiPage()),

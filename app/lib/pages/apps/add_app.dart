@@ -4,9 +4,9 @@ import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
-import 'package:friend_private/widgets/gradient_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -37,9 +37,10 @@ class _AddAppPageState extends State<AddAppPage> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: const Text('Submit Your App'),
+          title: const Text('Submit App'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
+        extendBody: true,
         body: provider.isLoading || provider.isSubmitting
             ? Center(
                 child: Column(
@@ -60,187 +61,303 @@ class _AddAppPageState extends State<AddAppPage> {
                   ],
                 ),
               )
-            : SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Form(
-                    key: provider.formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            MixpanelManager().pageOpened('App Submission Help');
-                            launchUrl(Uri.parse('https://omi.me/apps/introduction'));
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12.0),
-                            margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 12, bottom: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
-                              borderRadius: BorderRadius.circular(16.0),
-                            ),
-                            child: const ListTile(
-                              title: Text(
-                                'Want to build an app but not sure where to begin? Click here!',
-                                textAlign: TextAlign.center,
+            : GestureDetector(
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                },
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Form(
+                      key: provider.formKey,
+                      onChanged: () {
+                        provider.checkValidity();
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              MixpanelManager().pageOpened('App Submission Help');
+                              launchUrl(Uri.parse('https://omi.me/apps/introduction'));
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(12.0),
+                              margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 12, bottom: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade900,
+                                borderRadius: BorderRadius.circular(16.0),
+                              ),
+                              child: const ListTile(
+                                title: Text(
+                                  'Want to build an app but not sure where to begin? Click here!',
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(
-                          height: 12,
-                        ),
-                        const Text(
-                          'App Capabilities',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                        const SizedBox(height: 60, child: CapabilitiesChipsWidget()),
-                        const SizedBox(
-                          height: 18,
-                        ),
-                        AppMetadataWidget(
-                          pickImage: () async {
-                            await provider.pickImage();
-                          },
-                          appNameController: provider.appNameController,
-                          appDescriptionController: provider.appDescriptionController,
-                          creatorNameController: provider.creatorNameController,
-                          creatorEmailController: provider.creatorEmailController,
-                          categories: provider.categories,
-                          setAppCategory: provider.setAppCategory,
-                          imageFile: provider.imageFile,
-                        ),
-                        const SizedBox(
-                          height: 30,
-                        ),
-                        if (provider.capabilitySelected())
+                          const SizedBox(
+                            height: 18,
+                          ),
+                          AppMetadataWidget(
+                            pickImage: () async {
+                              await provider.pickImage();
+                            },
+                            generatingDescription: provider.isGenratingDescription,
+                            allowPaidApps: provider.allowPaidApps,
+                            appPricing: provider.isPaid ? 'Paid' : 'Free',
+                            appNameController: provider.appNameController,
+                            appDescriptionController: provider.appDescriptionController,
+                            creatorNameController: provider.creatorNameController,
+                            creatorEmailController: provider.creatorEmailController,
+                            categories: provider.categories,
+                            setAppCategory: provider.setAppCategory,
+                            imageFile: provider.imageFile,
+                            category: provider.mapCategoryIdToName(provider.appCategory),
+                          ),
+                          provider.isPaid
+                              ? PaymentDetailsWidget(
+                                  appPricingController: provider.priceController,
+                                  paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
+                                )
+                              : const SizedBox.shrink(),
+                          const SizedBox(
+                            height: 12,
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Text(
+                                    'App Capabilities',
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                  ),
+                                ),
+                                const SizedBox(
+                                  height: 10,
+                                ),
+                                const SizedBox(height: 48, child: CapabilitiesChipsWidget()),
+                              ],
+                            ),
+                          ),
+                          if (provider.isCapabilitySelectedById('chat') ||
+                              provider.isCapabilitySelectedById('memories'))
+                            Column(
+                              children: [
+                                const SizedBox(
+                                  height: 12,
+                                ),
+                                GestureDetector(
+                                  onTap: () {
+                                    FocusScope.of(context).unfocus();
+                                  },
+                                  child: Form(
+                                    key: provider.promptKey,
+                                    onChanged: () {
+                                      provider.checkValidity();
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade900,
+                                        borderRadius: BorderRadius.circular(12.0),
+                                      ),
+                                      padding: const EdgeInsets.all(14.0),
+                                      child: Column(
+                                        children: [
+                                          if (provider.isCapabilitySelectedById('chat'))
+                                            PromptTextField(
+                                              controller: provider.chatPromptController,
+                                              label: 'Chat Prompt',
+                                              hint:
+                                                  'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                            ),
+                                          if (provider.isCapabilitySelectedById('memories') &&
+                                              provider.isCapabilitySelectedById('chat'))
+                                            const SizedBox(
+                                              height: 20,
+                                            ),
+                                          if (provider.isCapabilitySelectedById('memories'))
+                                            PromptTextField(
+                                              controller: provider.conversationPromptController,
+                                              label: 'Conversation Prompt',
+                                              hint:
+                                                  'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const ExternalTriggerFieldsWidget(),
+                          if (provider.isCapabilitySelectedById('proactive_notification'))
+                            Column(
+                              children: [
+                                const SizedBox(
+                                  height: 12,
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade900,
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  padding: const EdgeInsets.all(14.0),
+                                  width: double.infinity,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: Text(
+                                          'Notification Scopes',
+                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                        ),
+                                      ),
+                                      const SizedBox(
+                                        height: 10,
+                                      ),
+                                      const SizedBox(height: 48, child: NotificationScopesChipsWidget()),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(
+                            height: 22,
+                          ),
                           const Text(
-                            'App Specific Details',
+                            'App Privacy',
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
-                        if (provider.isCapabilitySelectedById('chat'))
                           const SizedBox(
-                            height: 20,
+                            height: 8,
                           ),
-                        if (provider.isCapabilitySelectedById('chat'))
-                          PromptTextField(
-                            controller: provider.chatPromptController,
-                            label: 'Chat Prompt',
-                            icon: Icons.chat,
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: provider.makeAppPublic,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    provider.setIsPrivate(value);
+                                  }
+                                },
+                                shape: const CircleBorder(),
+                              ),
+                              SizedBox(
+                                width: MediaQuery.of(context).size.width * 0.7,
+                                child: const Text("Make my app public"),
+                              ),
+                            ],
                           ),
-                        if (provider.isCapabilitySelectedById('memories'))
-                          const SizedBox(
-                            height: 24,
-                          ),
-                        if (provider.isCapabilitySelectedById('memories'))
-                          PromptTextField(
-                            controller: provider.memoryPromptController,
-                            label: 'Memory Prompt',
-                            icon: Icons.memory,
-                          ),
-                        const ExternalTriggerFieldsWidget(),
-                        if (provider.capabilitySelected())
                           const SizedBox(
                             height: 30,
                           ),
-                        const NotificationScopesChipsWidget(),
-                        const Text(
-                          'App Privacy',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                        const SizedBox(
-                          height: 8,
-                        ),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: provider.makeAppPublic,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  provider.setIsPrivate(value);
-                                }
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: provider.termsAgreed,
+                                onChanged: provider.setTermsAgreed,
+                                shape: const CircleBorder(),
+                              ),
+                              SizedBox(
+                                width: MediaQuery.of(context).size.width * 0.78,
+                                child: const Text(
+                                    "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(
+                            height: 90,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        bottomNavigationBar: (provider.isLoading || provider.isSubmitting)
+            ? null
+            : Container(
+                padding: const EdgeInsets.only(left: 30.0, right: 30, bottom: 50, top: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12.0),
+                  color: Colors.grey.shade900,
+                  gradient: LinearGradient(
+                    colors: [Colors.black, Colors.black.withOpacity(0)],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                  ),
+                ),
+                child: GestureDetector(
+                  onTap: !provider.isValid
+                      ? null
+                      : () {
+                          var isValid = provider.validateForm();
+                          if (isValid) {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) {
+                                return ConfirmationDialog(
+                                  title: 'Submit App?',
+                                  description: provider.makeAppPublic
+                                      ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
+                                      : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
+                                  checkboxText: "Don't show it again",
+                                  checkboxValue: !showSubmitAppConfirmation,
+                                  updateCheckboxValue: (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        showSubmitAppConfirmation = !value;
+                                      });
+                                    }
+                                  },
+                                  onConfirm: () async {
+                                    if (provider.makeAppPublic) {
+                                      MixpanelManager().publicAppSubmitted({
+                                        'app_name': provider.appNameController.text,
+                                        'app_category': provider.appCategory,
+                                        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                        'is_paid': provider.isPaid,
+                                      });
+                                    } else {
+                                      MixpanelManager().privateAppSubmitted({
+                                        'app_name': provider.appNameController.text,
+                                        'app_category': provider.appCategory,
+                                        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                                        'is_paid': provider.isPaid,
+                                      });
+                                    }
+                                    SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+                                    Navigator.pop(context);
+                                    await provider.submitApp();
+                                  },
+                                  onCancel: () {
+                                    Navigator.pop(context);
+                                  },
+                                );
                               },
-                            ),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.80,
-                              child: const Text("Make my app public"),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(
-                          height: 30,
-                        ),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: provider.termsAgreed,
-                              onChanged: provider.setTermsAgreed,
-                            ),
-                            SizedBox(
-                              width: MediaQuery.of(context).size.width * 0.80,
-                              child: const Text(
-                                  "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(
-                          height: 12,
-                        ),
-                        GradientButton(
-                          title: 'Submit App',
-                          onPressed: () {
-                            var isValid = provider.validateForm();
-                            if (isValid) {
-                              showDialog(
-                                context: context,
-                                builder: (ctx) {
-                                  return ConfirmationDialog(
-                                    title: 'Submit App?',
-                                    description: provider.makeAppPublic
-                                        ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
-                                        : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
-                                    checkboxText: "Don't show it again",
-                                    checkboxValue: !showSubmitAppConfirmation,
-                                    updateCheckboxValue: (value) {
-                                      if (value != null) {
-                                        setState(() {
-                                          showSubmitAppConfirmation = !value;
-                                        });
-                                      }
-                                    },
-                                    onConfirm: () async {
-                                      if (provider.makeAppPublic) {
-                                        MixpanelManager().publicAppSubmitted({
-                                          'app_name': provider.appNameController.text,
-                                          'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                        });
-                                      } else {
-                                        MixpanelManager().privateAppSubmitted({
-                                          'app_name': provider.appNameController.text,
-                                          'app_category': provider.appCategory,
-                                          'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                        });
-                                      }
-                                      SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-                                      Navigator.pop(context);
-                                      await provider.submitApp();
-                                    },
-                                    onCancel: () {
-                                      Navigator.pop(context);
-                                    },
-                                  );
-                                },
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(
-                          height: 30,
-                        ),
-                      ],
+                            );
+                          }
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.all(12.0),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.0),
+                      color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                    ),
+                    child: const Text(
+                      'Submit App',
+                      style: TextStyle(color: Colors.black, fontSize: 16),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),

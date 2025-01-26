@@ -5,6 +5,12 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db, document_id_from_seed
 
 
+def is_exists_user(uid: str):
+    user_ref = db.collection('users').document(uid)
+    if not user_ref.get().exists:
+        return False
+    return True
+
 def get_user_store_recording_permission(uid: str):
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()
@@ -104,8 +110,8 @@ def get_memory_summary_rating_score(memory_id: str):
     return None
 
 
-def get_all_ratings():
-    ratings = db.collection('analytics').where('type', '==', 'memory_summary').stream()
+def get_all_ratings(rating_type: str = 'memory_summary'):
+    ratings = db.collection('analytics').where('type', '==', rating_type).stream()
     return [rating.to_dict() for rating in ratings]
 
 

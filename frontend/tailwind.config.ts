@@ -8,9 +8,21 @@ const config: Config = {
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
+    screens: {
+      xs: '375px',
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+    },
     extend: {
       colors: {
         'bg-color': '#181818',
+      },
+      spacing: {
+        'header-height': 'clamp(3.5rem, 8vh, 5rem)',
+        'banner-height': 'clamp(4rem, 10vh, 6rem)',
+        'nav-height': 'clamp(2.5rem, 6vh, 3.5rem)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -28,26 +40,33 @@ const config: Config = {
           '100%': { opacity: '1', transform: 'translateX(0)' },
         },
         'accordion-down': {
-          from: {
-            height: '0',
-          },
-          to: {
-            height: 'var(--radix-accordion-content-height)',
-          },
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
         },
         'accordion-up': {
-          from: {
-            height: 'var(--radix-accordion-content-height)',
-          },
-          to: {
-            height: '0',
-          },
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        slideOutBottom: {
+          '0%': { transform: 'translateY(0)', opacity: '1' },
+          '100%': { transform: 'translateY(1rem)', opacity: '0' },
+        },
+        slideInBottom: {
+          '0%': { transform: 'translateY(1rem)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        heightAuto: {
+          '0%': { height: '0' },
+          '100%': { height: 'auto' },
         },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         slideRightAndFade: 'slideRightAndFade 300ms cubic-bezier(0.16, 0, 0.13, 1)',
+        slideOutBottom: 'slideOutBottom 0.3s ease-in-out forwards',
+        slideInBottom: 'slideInBottom 0.3s ease-in-out',
+        heightAuto: 'heightAuto 0.3s ease-in-out',
       },
     },
   },

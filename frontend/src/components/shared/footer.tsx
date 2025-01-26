@@ -3,7 +3,7 @@ import Image from 'next/image';
 
 export default function Footer() {
   return (
-    <footer className="footer w-full border-t border-solid border-zinc-800 bg-black/5 px-4 py-12 text-white md:px-12">
+    <footer className="footer w-full border-t border-solid border-zinc-800 bg-[#0B0F17] px-4 py-12 text-white md:px-12">
       <div className="mx-auto flex max-w-screen-xl flex-wrap justify-between gap-12">
         <div>
           <Image
@@ -71,6 +71,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/openglass'}
                 target="_blank"
+                rel="noreferrer"
               >
                 OpenGlass
               </a>
@@ -80,6 +81,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/'}
                 target="_blank"
+                rel="noreferrer"
               >
                 Friend
               </a>
@@ -89,6 +91,7 @@ export default function Footer() {
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
                 href={'https://www.omi.me/pages/friend-dev'}
                 target="_blank"
+                rel="noreferrer"
               >
                 Friend DEV KIT
               </a>

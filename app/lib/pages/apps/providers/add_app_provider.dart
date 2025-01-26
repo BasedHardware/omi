@@ -16,13 +16,17 @@ class AddAppProvider extends ChangeNotifier {
   AppProvider? appProvider;
 
   GlobalKey<FormState> formKey = GlobalKey<FormState>();
+  GlobalKey<FormState> metadataKey = GlobalKey<FormState>();
+  GlobalKey<FormState> externalIntegrationKey = GlobalKey<FormState>();
+  GlobalKey<FormState> promptKey = GlobalKey<FormState>();
+  GlobalKey<FormState> pricingKey = GlobalKey<FormState>();
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
   TextEditingController creatorNameController = TextEditingController();
   TextEditingController creatorEmailController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
-  TextEditingController memoryPromptController = TextEditingController();
+  TextEditingController conversationPromptController = TextEditingController();
   String? appCategory;
 
 // Trigger Event
@@ -31,6 +35,13 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController setupCompletedController = TextEditingController();
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
+
+  // Pricing
+  TextEditingController priceController = TextEditingController();
+  String? selectePaymentPlan;
+  bool isPaid = false;
+
+  List<PaymentPlan> paymentPlans = [];
 
   bool termsAgreed = false;
 
@@ -48,6 +59,10 @@ class AddAppProvider extends ChangeNotifier {
   bool isLoading = false;
   bool isUpdating = false;
   bool isSubmitting = false;
+  bool isValid = false;
+  bool isGenratingDescription = false;
+
+  bool allowPaidApps = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
@@ -61,6 +76,9 @@ class AddAppProvider extends ChangeNotifier {
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
@@ -68,6 +86,15 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsLoading(bool loading) {
     isLoading = loading;
+    notifyListeners();
+  }
+
+  void setIsPaid(bool paid) {
+    if (!paid) {
+      priceController.clear();
+      selectePaymentPlan = null;
+    }
+    isPaid = paid;
     notifyListeners();
   }
 
@@ -89,13 +116,19 @@ class AddAppProvider extends ChangeNotifier {
     if (categories.isEmpty) {
       await getCategories();
     }
+    if (paymentPlans.isEmpty) {
+      await getPaymentPlans();
+    }
     setAppCategory(app.category);
+    setPaymentPlan(app.paymentPlan);
+    isPaid = app.isPaid;
     termsAgreed = true;
     updateAppId = app.id;
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
     creatorNameController.text = app.author.decodeString;
+    priceController.text = app.price.toString();
     creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
@@ -111,9 +144,14 @@ class AddAppProvider extends ChangeNotifier {
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
     }
-    if (app.memoryPrompt != null) {
-      memoryPromptController.text = app.memoryPrompt!.decodeString;
+    if (app.conversationPrompt != null) {
+      conversationPromptController.text = app.conversationPrompt!.decodeString;
     }
+    if (app.proactiveNotification != null) {
+      selectedScopes = app.getNotificationScopesFromIds(
+          capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
+    }
+    isValid = false;
     setIsLoading(false);
     notifyListeners();
   }
@@ -124,12 +162,16 @@ class AddAppProvider extends ChangeNotifier {
     creatorNameController.clear();
     creatorEmailController.clear();
     chatPromptController.clear();
-    memoryPromptController.clear();
+    conversationPromptController.clear();
     triggerEvent = null;
+    isPaid = false;
+    selectePaymentPlan = null;
     webhookUrlController.clear();
     setupCompletedController.clear();
     instructionsController.clear();
     authUrlController.clear();
+    priceController.clear();
+    selectePaymentPlan = null;
     termsAgreed = false;
     makeAppPublic = false;
     appCategory = null;
@@ -140,10 +182,49 @@ class AddAppProvider extends ChangeNotifier {
     selectedCapabilities.clear();
   }
 
+  void setPaymentPlan(String? plan) {
+    if (plan == null) {
+      return;
+    }
+    selectePaymentPlan = plan;
+    notifyListeners();
+  }
+
+  Future<void> getPaymentPlans() async {
+    paymentPlans = await getPaymentPlansServer();
+    if (paymentPlans.isNotEmpty) {
+      allowPaidApps = true;
+    } else {
+      allowPaidApps = false;
+    }
+    notifyListeners();
+  }
+
   Future<void> getCategories() async {
     categories = await getAppCategories();
     appProvider!.categories = categories;
     notifyListeners();
+  }
+
+  String mapCategoryIdToName(String? id) {
+    if (id == null) {
+      return '';
+    }
+    return categories.firstWhere((element) => element.id == id).title;
+  }
+
+  String? mapTriggerEventIdToName(String? id) {
+    if (id == null) {
+      return null;
+    }
+    return getTriggerEvents().firstWhere((element) => element.id == id).title;
+  }
+
+  String? mapPaymentPlanIdToName(String? id) {
+    if (id == null) {
+      return null;
+    }
+    return paymentPlans.firstWhere((element) => element.id == id).title;
   }
 
   Future<void> getAppCapabilities() async {
@@ -191,19 +272,87 @@ class AddAppProvider extends ChangeNotifier {
     if (chatPromptController.text != app.chatPrompt) {
       return true;
     }
-    if (memoryPromptController.text != app.memoryPrompt) {
+    if (conversationPromptController.text != app.conversationPrompt) {
       return true;
     }
     return false;
   }
 
+  void checkValidity() {
+    isValid = isFormValid();
+    notifyListeners();
+  }
+
+  bool isFormValid() {
+    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null && termsAgreed) {
+      if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
+        bool isValid = false;
+        for (var capability in selectedCapabilities) {
+          if (capability.id == 'external_integration') {
+            if (triggerEvent == null) {
+              isValid = false;
+            } else {
+              isValid = true;
+            }
+            if (externalIntegrationKey.currentState != null) {
+              isValid = externalIntegrationKey.currentState!.validate();
+            } else {
+              isValid = false;
+            }
+          }
+          if (capability.id == 'chat') {
+            isValid = chatPromptController.text.isNotEmpty;
+          }
+          if (capability.id == 'memories') {
+            isValid = conversationPromptController.text.isNotEmpty;
+          }
+          if (capability.id == 'proactive_notification') {
+            isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
+          }
+        }
+        if (isPaid) {
+          isValid = formKey.currentState!.validate() && selectePaymentPlan != null;
+        }
+        return isValid;
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
   bool validateForm() {
     if (formKey.currentState!.validate()) {
+      if (promptKey.currentState != null) {
+        if (!promptKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (metadataKey.currentState != null) {
+        if (!metadataKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (externalIntegrationKey.currentState != null) {
+        if (!externalIntegrationKey.currentState!.validate()) {
+          return false;
+        }
+      }
+      if (pricingKey.currentState != null) {
+        if (!pricingKey.currentState!.validate()) {
+          return false;
+        }
+      }
       if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'proactive_notification') {
         if (selectedScopes.isEmpty) {
           AppSnackbar.showSnackbarError('Please select one more core capability for your app to proceed');
           return false;
         }
+      }
+      if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
+        AppSnackbar.showSnackbarError('Please select a payment plan and enter a price for your app');
+        return false;
       }
       if (!termsAgreed) {
         AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
@@ -225,7 +374,7 @@ class AddAppProvider extends ChangeNotifier {
           }
         }
         if (capability.title == 'memories') {
-          if (memoryPromptController.text.isEmpty) {
+          if (conversationPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError('Please enter a memory prompt for your app');
             return false;
           }
@@ -269,6 +418,9 @@ class AddAppProvider extends ChangeNotifier {
       'category': appCategory,
       'private': !makeAppPublic,
       'id': updateAppId,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -291,7 +443,7 @@ class AddAppProvider extends ChangeNotifier {
         data['chat_prompt'] = chatPromptController.text;
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = memoryPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text;
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
@@ -310,6 +462,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
     }
+    checkValidity();
     setIsUpdating(false);
   }
 
@@ -325,6 +478,9 @@ class AddAppProvider extends ChangeNotifier {
       'uid': SharedPreferencesUtil().uid,
       'category': appCategory,
       'private': !makeAppPublic,
+      'is_paid': isPaid,
+      'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
+      'payment_plan': selectePaymentPlan,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -347,7 +503,7 @@ class AddAppProvider extends ChangeNotifier {
         data['chat_prompt'] = chatPromptController.text;
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = memoryPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text;
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
@@ -364,6 +520,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       AppSnackbar.showSnackbarError('Failed to submit app. Please try again later');
     }
+    checkValidity();
     setIsSubmitting(false);
   }
 
@@ -380,6 +537,7 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
       }
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -397,6 +555,7 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
       }
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -406,6 +565,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       selectedCapabilities.add(capability);
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -419,6 +579,7 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       selectedScopes.add(scope);
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -467,6 +628,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     termsAgreed = agreed;
+    checkValidity();
     notifyListeners();
   }
 
@@ -483,6 +645,21 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     appCategory = category;
+    checkValidity();
+    notifyListeners();
+  }
+
+  Future<void> generateDescription() async {
+    setIsGenratingDescription(true);
+    var res = await getGenratedDescription(appNameController.text, appDescriptionController.text);
+    appDescriptionController.text = res.decodeString;
+    checkValidity();
+    setIsGenratingDescription(false);
+    notifyListeners();
+  }
+
+  void setIsGenratingDescription(bool genrating) {
+    isGenratingDescription = genrating;
     notifyListeners();
   }
 }

@@ -12,14 +12,14 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.plugins import record_plugin_usage
+from database.apps import record_app_usage
 from database.vector_db import upsert_vector2, update_vector_metadata
-from models.app import App
+from models.app import App, UsageHistoryType
 from models.facts import FactDB
 from models.memory import *
-from models.plugin import Plugin, UsageHistoryType
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
+from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
@@ -27,7 +27,6 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
-from utils.plugins import get_plugins_data, get_plugins_data_from_db
 from utils.retrieval.rag import retrieve_rag_memory_context
 from utils.webhooks import memory_created_webhook
 
@@ -103,20 +102,20 @@ def _get_memory_obj(uid: str, structured: Structured, memory: Union[Memory, Crea
     return memory
 
 
-def _trigger_plugins(uid: str, memory: Memory, is_reprocess: bool = False):
-    plugins: List[App] = get_available_apps(uid)
-    filtered_plugins = [plugin for plugin in plugins if plugin.works_with_memories() and plugin.enabled]
+def _trigger_apps(uid: str, memory: Memory, is_reprocess: bool = False):
+    apps: List[App] = get_available_apps(uid)
+    filtered_apps = [app for app in apps if app.works_with_memories() and app.enabled]
     memory.plugins_results = []
     threads = []
 
-    def execute_plugin(plugin):
-        if result := get_plugin_result(memory.get_transcript(False), plugin).strip():
-            memory.plugins_results.append(PluginResult(plugin_id=plugin.id, content=result))
+    def execute_app(app):
+        if result := get_plugin_result(memory.get_transcript(False), app).strip():
+            memory.plugins_results.append(PluginResult(plugin_id=app.id, content=result))
             if not is_reprocess:
-                record_plugin_usage(uid, plugin.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
+                record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, memory_id=memory.id)
 
-    for plugin in filtered_plugins:
-        threads.append(threading.Thread(target=execute_plugin, args=(plugin,)))
+    for app in filtered_apps:
+        threads.append(threading.Thread(target=execute_app, args=(app,)))
 
     [t.start() for t in threads]
     [t.join() for t in threads]
@@ -130,7 +129,28 @@ def _extract_facts(uid: str, memory: Memory):
     for fact in new_facts:
         parsed_facts.append(FactDB.from_fact(fact, uid, memory.id, memory.structured.category))
         print('_extract_facts:', fact.category.value.upper(), '|', fact.content)
+    if len(parsed_facts) == 0:
+        return
+
     facts_db.save_facts(uid, [fact.dict() for fact in parsed_facts])
+
+    # send notification
+    # token = notification_db.get_token_only(uid)
+    # if token and len(token) > 0:
+    #    send_new_facts_notification(token, parsed_facts)
+
+def send_new_facts_notification(token: str, facts: [FactDB]):
+    facts_str = ", ".join([fact.content for fact in facts])
+    message = f"New facts {facts_str}"
+    ai_message = NotificationMessage(
+        text=message,
+        from_integration='false',
+        type='text',
+        notification_type='new_fact',
+        navigate_to="/facts",
+    )
+
+    send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
 def _extract_trends(memory: Memory):
@@ -143,7 +163,8 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
     vector = generate_embedding(str(memory.structured)) if not update_only else None
 
     segments = [t.dict() for t in memory.transcript_segments]
-    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments)
+    tz = notification_db.get_user_time_zone(uid)
+    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments, tz)
     metadata['created_at'] = int(memory.created_at.timestamp())
     if not update_only:
         print('save_structured_vector creating vector')
@@ -161,7 +182,7 @@ def process_memory(
     memory = _get_memory_obj(uid, structured, memory)
 
     if not discarded:
-        _trigger_plugins(uid, memory, is_reprocess=is_reprocess)
+        _trigger_apps(uid, memory, is_reprocess=is_reprocess)
         threading.Thread(target=save_structured_vector, args=(uid, memory,)).start() if not is_reprocess else None
         threading.Thread(target=_extract_facts, args=(uid, memory)).start()
 
@@ -317,7 +338,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     print(f"Emotion Uid: {uid} {emotion}")
 
     # Ask llms about notification content
-    title = "Omi"
+    title = "omi"
     context_str, _ = retrieve_rag_memory_context(uid, memory)
 
     response: str = obtain_emotional_message(uid, memory, context_str, emotion)
