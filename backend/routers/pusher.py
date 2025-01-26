@@ -31,6 +31,7 @@ async def _websocket_util_trigger(
 
     # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
+    audio_bytes_trigger_delay_seconds = 5
 
     # task
     async def receive_audio_bytes():
@@ -63,7 +64,7 @@ async def _websocket_util_trigger(
                 if header_type == 101:
                     audiobuffer.extend(data[4:])
                     trigger_audiobuffer.extend(data[4:])
-                    if len(trigger_audiobuffer) > sample_rate * 30 * 2:
+                    if len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2:
                         asyncio.run_coroutine_threadsafe(
                             trigger_realtime_audio_bytes(uid, sample_rate, trigger_audiobuffer.copy()), loop)
                         trigger_audiobuffer = bytearray()
