@@ -18,7 +18,7 @@ class AppProvider extends BaseProvider {
 
   List<bool> appLoading = [];
 
-  String selectedChatAppId = 'no_selected';
+  String selectedChatAppId = "";
 
   bool isAppOwner = false;
   bool appPublicToggled = false;
@@ -48,6 +48,18 @@ class AppProvider extends BaseProvider {
       return app;
     }
     return app;
+  }
+
+  Future<App?> getAppDetails(String id) async {
+    var app = await getAppDetailsServer(id);
+    if (app != null) {
+      var oldApp = apps.where((element) => element.id == id).first;
+      var idx = apps.indexOf(oldApp);
+      apps[idx] = App.fromJson(app);
+      notifyListeners();
+      return apps[idx];
+    }
+    return null;
   }
 
   void updateInstalledAppsOptionSelected(bool value) {
@@ -173,12 +185,7 @@ class AppProvider extends BaseProvider {
   }
 
   void setSelectedChatAppId(String? appId) {
-    if (appId == null) {
-      selectedChatAppId = SharedPreferencesUtil().selectedChatAppId;
-    } else {
-      selectedChatAppId = appId;
-      SharedPreferencesUtil().selectedChatAppId = appId;
-    }
+    selectedChatAppId = appId ?? "";
     notifyListeners();
   }
 
@@ -334,6 +341,7 @@ class AppProvider extends BaseProvider {
       appLoading[idx] = false;
     }
     apps = SharedPreferencesUtil().appsList;
+    filterApps();
     notifyListeners();
   }
 

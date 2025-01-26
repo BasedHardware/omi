@@ -5,22 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/geolocation.dart';
 import 'package:friend_private/main.dart';
+import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/chat/page.dart';
+import 'package:friend_private/pages/conversations/conversations_page.dart';
+import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
-import 'package:friend_private/pages/memories/page.dart';
-import 'package:friend_private/pages/apps/page.dart';
 import 'package:friend_private/pages/settings/page.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart' as mp;
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
@@ -33,18 +34,20 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import '../conversations/sync_page.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
-  final bool openAppFromNotification;
-  const HomePageWrapper({super.key, this.openAppFromNotification = false});
+  final String? navigateToRoute;
+  const HomePageWrapper({super.key, this.navigateToRoute});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
-  late bool _openAppFromNotification;
+  String? _navigateToRoute;
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -59,25 +62,29 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         SharedPreferencesUtil().locationEnabled = await Permission.location.isGranted;
         AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
       }
-      context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
-      await context.read<mp.MemoryProvider>().getInitialMemories();
+      if (mounted) {
+        context.read<DeviceProvider>().periodicConnect('coming from HomePageWrapper');
+      }
+      if (mounted) {
+        await context.read<ConversationProvider>().getInitialConversations();
+      }
       if (mounted) {
         context.read<AppProvider>().setSelectedChatAppId(null);
       }
     });
-    _openAppFromNotification = widget.openAppFromNotification;
+    _navigateToRoute = widget.navigateToRoute;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(openAppFromNotification: _openAppFromNotification);
+    return HomePage(navigateToRoute: _navigateToRoute);
   }
 }
 
 class HomePage extends StatefulWidget {
-  final bool openAppFromNotification;
-  const HomePage({super.key, this.openAppFromNotification = false});
+  final String? navigateToRoute;
+  const HomePage({super.key, this.navigateToRoute});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -104,6 +111,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       event = 'App is paused';
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
+
+      // Reload convos
+      if (mounted) {
+        debugPrint('Reload convos');
+        Provider.of<ConversationProvider>(context, listen: false).fetchNewConversations();
+      }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {
@@ -116,7 +129,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   ///Screens with respect to subpage
-  final Map<String, Widget> screensWithRespectToPath = {'/settings': const SettingsPage()};
+  final Map<String, Widget> screensWithRespectToPath = {
+    '/settings': const SettingsPage(),
+    '/facts': const FactsPage(),
+  };
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
@@ -137,51 +153,100 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     SharedPreferencesUtil().onboardingCompleted = true;
-    if (widget.openAppFromNotification) {
-      context.read<HomeProvider>().selectedIndex = SharedPreferencesUtil().pageToShowFromNotification;
-      _controller = PageController(initialPage: SharedPreferencesUtil().pageToShowFromNotification);
-      if (SharedPreferencesUtil().pageToShowFromNotification == 1) {
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await context.read<MessageProvider>().refreshMessages();
-        });
+
+    // Navigate uri
+    Uri? navigateToUri;
+    var pageAlias = "home";
+    var homePageIdx = 0;
+    String? detailPageId;
+    if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
+      navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
+      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      var segments = navigateToUri?.pathSegments ?? [];
+      if (segments.isNotEmpty) {
+        pageAlias = segments[0];
       }
-      SharedPreferencesUtil().pageToShowFromNotification = 0;
-    } else {
-      _controller = PageController();
+      if (segments.length > 1) {
+        detailPageId = segments[1];
+      }
+
+      switch (pageAlias) {
+        case "memories":
+          homePageIdx = 0;
+          break;
+        case "chat":
+          homePageIdx = 1;
+        case "apps":
+          homePageIdx = 2;
+          break;
+      }
     }
+
+    // Home controler
+    _controller = PageController(initialPage: homePageIdx);
+    context.read<HomeProvider>().selectedIndex = homePageIdx;
+    context.read<HomeProvider>().onSelectedIndexChanged = (index) {
+      _controller?.animateToPage(index, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+    };
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _initiateApps();
+
       // ForegroundUtil.requestPermissions();
       await ForegroundUtil.initializeForegroundService();
       ForegroundUtil.startForegroundTask();
       if (mounted) {
-        await context.read<HomeProvider>().setUserPeople();
+        await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
+      }
+      if (mounted) {
+        await Provider.of<CaptureProvider>(context, listen: false)
+            .streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+      }
 
-        // Start stream recording
-        if (mounted) {
-          await Provider.of<CaptureProvider>(context, listen: false)
-              .streamDeviceRecording(device: context.read<DeviceProvider>().connectedDevice);
-        }
+      // Navigate
+      switch (pageAlias) {
+        case "chat":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
+            if (mounted) {
+              var appProvider = Provider.of<AppProvider>(context, listen: false);
+              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+              App? selectedApp;
+              if (appId.isNotEmpty) {
+                selectedApp = await appProvider.getAppFromId(appId);
+              }
+              appProvider.setSelectedChatAppId(appId);
+              await messageProvider.refreshMessages();
+              if (messageProvider.messages.isEmpty) {
+                messageProvider.sendInitialAppMessage(selectedApp);
+              }
+            }
+          } else {
+            if (mounted) {
+              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
+            }
+          }
+          break;
+        case "settings":
+          MyApp.navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => const SettingsPage(),
+            ),
+          );
+          break;
+        case "facts":
+          MyApp.navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (context) => const FactsPage(),
+            ),
+          );
+          break;
+        default:
       }
     });
 
-    // _migrationScripts(); not for now, we don't have scripts
-    // authenticateGCP();
-
     _listenToMessagesFromNotification();
-    if (SharedPreferencesUtil().subPageToShowFromNotification != '') {
-      final subPageRoute = SharedPreferencesUtil().subPageToShowFromNotification;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        MyApp.navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (context) => screensWithRespectToPath[subPageRoute] as Widget,
-          ),
-        );
-      });
-      SharedPreferencesUtil().subPageToShowFromNotification = '';
-    }
     super.initState();
 
     // After init
@@ -190,8 +255,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _listenToMessagesFromNotification() {
     NotificationService.instance.listenForServerMessages.listen((message) {
-      context.read<MessageProvider>().addMessage(message);
-      // chatPageKey.currentState?.scrollToBottom();
+      if (mounted) {
+        var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
+        if (selectedApp == null || message.appId == selectedApp.id) {
+          Provider.of<MessageProvider>(context, listen: false).addMessage(message);
+        }
+        // chatPageKey.currentState?.scrollToBottom();
+      }
     });
   }
 
@@ -252,8 +322,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
-                    if (ctx.read<mp.MemoryProvider>().memories.isEmpty) {
-                      await ctx.read<mp.MemoryProvider>().getInitialMemories();
+                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
+                      await ctx.read<ConversationProvider>().getInitialConversations();
                     }
                     if (ctx.read<MessageProvider>().messages.isEmpty) {
                       await ctx.read<MessageProvider>().refreshMessages();
@@ -269,7 +339,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: DefaultTabController(
             length: 3,
-            initialIndex: SharedPreferencesUtil().pageToShowFromNotification,
+            initialIndex: _controller?.initialPage ?? 0,
             child: GestureDetector(
               onTap: () {
                 primaryFocus?.unfocus();
@@ -283,7 +353,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       controller: _controller,
                       physics: const NeverScrollableScrollPhysics(),
                       children: const [
-                        MemoriesPage(),
+                        ConversationsPage(),
                         ChatPage(),
                         AppsPage(),
                       ],
@@ -292,14 +362,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   Consumer<HomeProvider>(
                     builder: (context, home, child) {
                       if (home.chatFieldFocusNode.hasFocus ||
-                          home.memoryFieldFocusNode.hasFocus ||
+                          home.convoSearchFieldFocusNode.hasFocus ||
                           home.appsSearchFieldFocusNode.hasFocus) {
                         return const SizedBox.shrink();
                       } else {
                         return Align(
                           alignment: Alignment.bottomCenter,
                           child: Container(
-                            margin: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+                            margin: const EdgeInsets.fromLTRB(20, 16, 20, 42),
                             decoration: const BoxDecoration(
                               color: Colors.black,
                               borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -315,10 +385,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               shape: BoxShape.rectangle,
                             ),
                             child: TabBar(
-                              padding: const EdgeInsets.only(top: 4, bottom: 4),
+                              labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
+                              indicatorPadding: EdgeInsets.zero,
                               onTap: (index) {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
+                                if (home.selectedIndex == index) {
+                                  return;
+                                }
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
@@ -327,10 +401,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               tabs: [
                                 Tab(
                                   child: Text(
-                                    'Memories',
+                                    'Home',
                                     style: TextStyle(
                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -339,7 +413,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Chat',
                                     style: TextStyle(
                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -348,7 +422,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     'Apps',
                                     style: TextStyle(
                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 14 : 16,
+                                      fontSize: MediaQuery.sizeOf(context).width < 410 ? 13 : 15,
                                     ),
                                   ),
                                 ),
@@ -359,36 +433,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       }
                     },
                   ),
-                  if (scriptsInProgress)
-                    Center(
-                      child: Container(
-                        height: 150,
-                        width: 250,
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                            SizedBox(height: 16),
-                            Center(
-                                child: Text(
-                              'Running migration, please wait! 🚨',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                              textAlign: TextAlign.center,
-                            )),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -401,14 +445,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const BatteryInfoWidget(),
+                Consumer<HomeProvider>(builder: (context, provider, child) {
+                  if (provider.selectedIndex == 0) {
+                    return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
+                      if (convoProvider.missingWalsInSeconds >= 120) {
+                        return GestureDetector(
+                          onTap: () {
+                            routeToPage(context, const SyncPage());
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: const Icon(Icons.download, color: Colors.white, size: 24),
+                          ),
+                        );
+                      } else {
+                        return const SizedBox.shrink();
+                      }
+                    });
+                  } else {
+                    return const SizedBox.shrink();
+                  }
+                }),
                 Consumer<HomeProvider>(
                   builder: (context, provider, child) {
                     if (provider.selectedIndex == 1) {
-                      return const ChatAppsDropdownWidget();
+                      return ChatAppsDropdownWidget(
+                        controller: _controller,
+                      );
                     } else if (provider.selectedIndex == 2) {
-                      return const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18));
+                      return Padding(
+                        padding: EdgeInsets.only(right: MediaQuery.sizeOf(context).width * 0.16),
+                        child: const Text('Apps', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      );
                     } else {
-                      return Flexible(
+                      return Expanded(
                         child: Row(
                           children: [
                             const Spacer(),
@@ -416,7 +486,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               recordingLanguage: provider.recordingLanguage,
                               setRecordingLanguage: (language) {
                                 provider.setRecordingLanguage(language);
-
                                 // Notify capture provider
                                 if (context.mounted) {
                                   context.read<CaptureProvider>().onRecordProfileSettingChanged();
@@ -430,44 +499,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-                Row(
-                  children: [
-                    Consumer2<MemoryProvider, HomeProvider>(builder: (context, memoryProvider, home, child) {
-                      if (home.selectedIndex != 0 ||
-                          !memoryProvider.hasNonDiscardedMemories ||
-                          memoryProvider.isLoadingMemories) {
-                        return const SizedBox.shrink();
-                      }
-                      return IconButton(
-                          onPressed: memoryProvider.toggleDiscardMemories,
-                          icon: Icon(
-                            SharedPreferencesUtil().showDiscardedMemories
-                                ? Icons.filter_list_off_sharp
-                                : Icons.filter_list,
-                            color: Colors.white,
-                            size: 24,
-                          ));
-                    }),
-                    IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.white, size: 30),
-                      onPressed: () async {
-                        MixpanelManager().pageOpened('Settings');
-                        String language = SharedPreferencesUtil().recordingsLanguage;
-                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                        await routeToPage(context, const SettingsPage());
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white, size: 30),
+                  onPressed: () async {
+                    MixpanelManager().pageOpened('Settings');
+                    String language = SharedPreferencesUtil().recordingsLanguage;
+                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                    await routeToPage(context, const SettingsPage());
 
-                        if (language != SharedPreferencesUtil().recordingsLanguage ||
-                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                )
+                    if (language != SharedPreferencesUtil().recordingsLanguage ||
+                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                      if (context.mounted) {
+                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                      }
+                    }
+                  },
+                ),
               ],
             ),
             elevation: 0,
@@ -482,6 +531,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ForegroundUtil.stopForegroundTask();
+    _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 }

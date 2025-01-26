@@ -156,7 +156,7 @@ static uint8_t parse_storage_command(void *buf,uint16_t len)
     {
         size = ((uint8_t*)buf)[2] <<24 |((uint8_t*)buf)[3] << 16 | ((uint8_t*)buf)[4] << 8 | ((uint8_t*)buf)[5];
     }
-    printk("command successful: command: %d file: %d size: %d \n",command,file_num,size);
+    LOG_PRINTK("command successful: command: %d file: %d size: %d \n",command,file_num,size);
 
     if (file_num == 0) 
     {
@@ -257,7 +257,7 @@ static ssize_t storage_write_handler(struct bt_conn *conn, const struct bt_gatt_
 //     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
 //     if (err) 
 //     {
-//         printk("error writing to gatt: %d\n",err);
+//         LOG_PRINTK("error writing to gatt: %d\n",err);
 //     }
 //     else 
 //     {
@@ -274,13 +274,13 @@ static void write_to_gatt(struct bt_conn *conn) { //unsafe. designed for max spe
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size);
     if (err) 
     {
-        printk("error writing to gatt: %d\n",err);
+        LOG_PRINTK("error writing to gatt: %d\n",err);
     }
     else 
     {
     remaining_length = remaining_length - SD_BLE_SIZE;
     }
-    // printk("wrote to gatt %d\n",err);
+    // LOG_PRINTK("wrote to gatt %d\n",err);
 }
 
 void storage_write(void) 
@@ -304,7 +304,7 @@ void storage_write(void)
         
         if (err) 
         {
-            printk("error clearing\n");
+            LOG_PRINTK("error clearing\n");
         }
         else 
         {
@@ -331,7 +331,7 @@ void storage_write(void)
     }
     if (heartbeat_count == MAX_HEARTBEAT_FRAMES)
     {
-        printk("no heartbeat sent\n");
+        LOG_PRINTK("no heartbeat sent\n");
         save_offset(offset);
         // k_yield();
         // continue;
@@ -348,7 +348,7 @@ void storage_write(void)
             continue;
             // k_yield();
         }
-        // printk("remaining length: %d\n",remaining_length);
+        // LOG_PRINTK("remaining length: %d\n",remaining_length);
 
         write_to_gatt(conn);
         heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
@@ -362,7 +362,7 @@ void storage_write(void)
             }
             else
             {
-                printk("done. attempting to download more files\n");
+                LOG_PRINTK("done. attempting to download more files\n");
                 uint8_t stop_result[1] = {100};
                 int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result,1);
                 k_sleep(K_MSEC(10));

@@ -49,7 +49,9 @@ class Structured {
         if (event.isEmpty) continue;
         structured.events.add(Event(
           event['title'],
-          DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
+          (event['startsAt'] ?? event['start']) is int
+              ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
+              : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
           event['duration'],
           description: event['description'] ?? '',
           created: event['created'] ?? false,
@@ -144,16 +146,16 @@ class Event {
   }
 }
 
-class MemoryPhoto {
+class ConversationPhoto {
   int id = 0;
 
   String base64;
   String description;
 
-  MemoryPhoto(this.base64, this.description, {this.id = 0});
+  ConversationPhoto(this.base64, this.description, {this.id = 0});
 
-  factory MemoryPhoto.fromJson(Map<String, dynamic> json) {
-    return MemoryPhoto(json['base64'], json['description']);
+  factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
+    return ConversationPhoto(json['base64'], json['description']);
   }
 
   toJson() {

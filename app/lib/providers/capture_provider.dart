@@ -1,18 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
+import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/backend/schema/message_event.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/devices.dart';
 import 'package:friend_private/services/notifications.dart';
@@ -22,25 +25,28 @@ import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/enums.dart';
+import 'package:friend_private/utils/file.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctipSegmentSocketServiceListener {
-  MemoryProvider? memoryProvider;
+  ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   TranscriptSegmentSocketService? _socket;
   SdCardSocketService sdCardSocket = SdCardSocketService();
   Timer? _keepAliveTimer;
 
   // In progress memory
-  ServerMemory? _inProgressMemory;
+  ServerConversation? _inProgressConversation;
 
-  ServerMemory? get inProgressMemory => _inProgressMemory;
+  ServerConversation? get inProgressConversation => _inProgressConversation;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -60,8 +66,8 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  void updateProviderInstances(MemoryProvider? mp, MessageProvider? p) {
-    memoryProvider = mp;
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? p) {
+    conversationProvider = cp;
     messageProvider = p;
     notifyListeners();
   }
@@ -75,6 +81,10 @@ class CaptureProvider extends ChangeNotifier
 
   get bleBytesStream => _bleBytesStream;
 
+  StreamSubscription? _bleButtonStream;
+  DateTime? _voiceCommandSession;
+  List<List<int>> _commandBytes = [];
+
   StreamSubscription? _storageStream;
 
   get storageStream => _storageStream;
@@ -87,8 +97,10 @@ class CaptureProvider extends ChangeNotifier
 
   bool get recordingDeviceServiceReady => _recordingDevice != null || recordingState == RecordingState.record;
 
+  bool get havingRecordingDevice => _recordingDevice != null;
+
   // -----------------------
-  // Memory creation variables
+  // Conversation creation variables
   String conversationId = const Uuid().v4();
 
   void setHasTranscripts(bool value) {
@@ -96,9 +108,9 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void setMemoryCreating(bool value) {
-    debugPrint('set memory creating $value');
-    // memoryCreating = value;
+  void setConversationCreating(bool value) {
+    debugPrint('set Conversation creating $value');
+    // ConversationCreating = value;
     notifyListeners();
   }
 
@@ -148,18 +160,77 @@ class CaptureProvider extends ChangeNotifier
     String language = SharedPreferencesUtil().recordingsLanguage;
     _socket = await ServiceManager.instance()
         .socket
-        .memory(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force);
     if (_socket == null) {
       _startKeepAliveServices();
-      debugPrint("Can not create new memory socket");
+      debugPrint("Can not create new conversation socket");
       return;
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
 
-    _loadInProgressMemory();
+    _loadInProgressConversation();
 
     notifyListeners();
+  }
+
+  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    if (data.isEmpty) {
+      debugPrint("voice frames is empty");
+      return;
+    }
+
+    await messageProvider?.sendVoiceMessageStreamToServer(data, onFirstChunkRecived: () {
+      _playSpeakerHaptic(deviceId, 2);
+    });
+  }
+
+  // Just incase the ble connection get loss
+  void _watchVoiceCommands(String deviceId, DateTime session) {
+    Timer.periodic(const Duration(seconds: 3), (t) async {
+      debugPrint("voice command watch");
+      if (session != _voiceCommandSession) {
+        t.cancel();
+        return;
+      }
+      var value = await _getBleButtonState(deviceId);
+      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("watch device button ${buttonState}");
+
+      // Force process
+      if (buttonState == 5 && session == _voiceCommandSession) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(deviceId, data);
+      }
+    });
+  }
+
+  Future streamButton(String deviceId) async {
+    debugPrint('streamButton in capture_provider');
+    _bleButtonStream?.cancel();
+    _bleButtonStream = await _getBleButtonListener(deviceId, onButtonReceived: (List<int> value) {
+      if (value.isEmpty) return;
+      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
+      debugPrint("device button ${buttonState}");
+
+      // start long press
+      if (buttonState == 3 && _voiceCommandSession == null) {
+        _voiceCommandSession = DateTime.now();
+        _commandBytes = [];
+        _watchVoiceCommands(deviceId, _voiceCommandSession!);
+        _playSpeakerHaptic(deviceId, 1);
+      }
+
+      // release
+      if (buttonState == 5 && _voiceCommandSession != null) {
+        _voiceCommandSession = null; // end session
+        var data = List<List<int>>.from(_commandBytes);
+        _commandBytes = [];
+        _processVoiceCommandBytes(deviceId, data);
+      }
+    });
   }
 
   Future streamAudioToWs(String id, BleAudioCodec codec) async {
@@ -167,6 +238,11 @@ class CaptureProvider extends ChangeNotifier
     _bleBytesStream?.cancel();
     _bleBytesStream = await _getBleAudioBytesListener(id, onAudioBytesReceived: (List<int> value) {
       if (value.isEmpty) return;
+
+      // command button triggered
+      if (_voiceCommandSession != null) {
+        _commandBytes.add(value.sublist(3));
+      }
 
       // support: opus codec, 1m from the first device connectes
       var deviceFirstConnectedAt = _deviceService.getFirstConnectedAt();
@@ -207,7 +283,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _cleanupCurrentState() {
     closeBleStream();
-    cancelMemoryCreationTimer();
+    cancelConversationCreationTimer();
   }
 
   // TODO: use connection directly
@@ -217,6 +293,14 @@ class CaptureProvider extends ChangeNotifier
       return BleAudioCodec.pcm8;
     }
     return connection.getAudioCodec();
+  }
+
+  Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return false;
+    }
+    return connection.performPlayToSpeakerHaptic(level);
   }
 
   Future<StreamSubscription?> _getBleStorageBytesListener(
@@ -239,6 +323,25 @@ class CaptureProvider extends ChangeNotifier
       return Future.value(null);
     }
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+  }
+
+  Future<StreamSubscription?> _getBleButtonListener(
+    String deviceId, {
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    return connection.getBleButtonListener(onButtonReceived: onButtonReceived);
+  }
+
+  Future<List<int>> _getBleButtonState(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) {
+      return Future.value(<int>[]);
+    }
+    return connection.getBleButtonState();
   }
 
   Future<bool> _recheckCodecChange() async {
@@ -274,6 +377,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Why is the _recordingDevice null at this point?
     if (_recordingDevice != null) {
+      await streamButton(_recordingDevice!.id);
       await streamAudioToWs(_recordingDevice!.id, codec);
     } else {
       // Is the app in foreground when this happens?
@@ -295,7 +399,7 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void cancelMemoryCreationTimer() {
+  void cancelConversationCreationTimer() {
     notifyListeners();
   }
 
@@ -360,8 +464,8 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = false;
     debugPrint('[Provider] Socket is closed');
 
-    // Wait for in process memory or reset
-    if (inProgressMemory == null) {
+    // Wait for in process Conversation or reset
+    if (inProgressConversation == null) {
       _resetStateVariables();
     }
 
@@ -399,11 +503,11 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void _loadInProgressMemory() async {
-    var memories = await getMemories(statuses: [MemoryStatus.in_progress], limit: 1);
-    _inProgressMemory = memories.isNotEmpty ? memories.first : null;
-    if (_inProgressMemory != null) {
-      segments = _inProgressMemory!.transcriptSegments;
+  void _loadInProgressConversation() async {
+    var memories = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    _inProgressConversation = memories.isNotEmpty ? memories.first : null;
+    if (_inProgressConversation != null) {
+      segments = _inProgressConversation!.transcriptSegments;
       setHasTranscripts(segments.isNotEmpty);
     }
     notifyListeners();
@@ -411,52 +515,53 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onMessageEventReceived(ServerMessageEvent event) {
-    if (event.type == MessageEventType.memoryProcessingStarted) {
-      if (event.memory == null) {
+    if (event.type == MessageEventType.conversationProcessingStarted) {
+      if (event.conversation == null) {
         debugPrint("Memory data not received in event. Content is: $event");
         return;
       }
-      memoryProvider!.addProcessingMemory(event.memory!);
+      conversationProvider!.addProcessingConversation(event.conversation!);
       _resetStateVariables();
       return;
     }
 
-    if (event.type == MessageEventType.memoryCreated) {
-      if (event.memory == null) {
-        debugPrint("Memory data not received in event. Content is: $event");
+    if (event.type == MessageEventType.conversationCreated) {
+      if (event.conversation == null) {
+        debugPrint("Conversation data not received in event. Content is: $event");
         return;
       }
-      event.memory!.isNew = true;
-      memoryProvider!.removeProcessingMemory(event.memory!.id);
-      _processMemoryCreated(event.memory, event.messages ?? []);
+      event.conversation!.isNew = true;
+      conversationProvider!.removeProcessingConversation(event.conversation!.id);
+      _processConversationCreated(event.conversation, event.messages ?? []);
       return;
     }
   }
 
-  Future<void> forceProcessingCurrentMemory() async {
+  Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
-    memoryProvider!.addProcessingMemory(
-      ServerMemory(id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: MemoryStatus.processing),
+    conversationProvider!.addProcessingConversation(
+      ServerConversation(
+          id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
-    processInProgressMemory().then((result) {
-      if (result == null || result.memory == null) {
+    processInProgressConversation().then((result) {
+      if (result == null || result.conversation == null) {
         _initiateWebsocket();
-        memoryProvider!.removeProcessingMemory('0');
+        conversationProvider!.removeProcessingConversation('0');
         return;
       }
-      memoryProvider!.removeProcessingMemory('0');
-      result.memory!.isNew = true;
-      _processMemoryCreated(result.memory, result.messages);
+      conversationProvider!.removeProcessingConversation('0');
+      result.conversation!.isNew = true;
+      _processConversationCreated(result.conversation, result.messages);
       _initiateWebsocket();
     });
 
     return;
   }
 
-  Future<void> _processMemoryCreated(ServerMemory? memory, List<ServerMessage> messages) async {
-    if (memory == null) return;
-    memoryProvider?.upsertMemory(memory);
-    MixpanelManager().memoryCreated(memory);
+  Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
+    if (conversation == null) return;
+    conversationProvider?.upsertConversation(conversation);
+    MixpanelManager().conversationCreated(conversation);
   }
 
   @override
@@ -466,7 +571,7 @@ class CaptureProvider extends ChangeNotifier
     if (segments.isEmpty) {
       debugPrint('newSegments: ${newSegments.last}');
       FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
-      _loadInProgressMemory();
+      _loadInProgressConversation();
     }
     TranscriptSegment.combineSegments(segments, newSegments);
     hasTranscripts = true;
@@ -617,7 +722,7 @@ class CaptureProvider extends ChangeNotifier
       //replace
       onMessageReceived: () {
         debugPrint('onMessageReceived');
-        memoryProvider?.getMemoriesFromServer();
+        conversationProvider?.getConversationsFromServer();
         notifyListeners();
         _notifySdCardComplete();
         return;
@@ -629,7 +734,7 @@ class CaptureProvider extends ChangeNotifier
       await sdCardSocket.setupSdCardWebSocket(
         onMessageReceived: () {
           debugPrint('onMessageReceived');
-          memoryProvider?.getMoreMemoriesFromServer();
+          conversationProvider?.getMoreConversationsFromServer();
           _notifySdCardComplete();
 
           return;
@@ -693,7 +798,7 @@ class CaptureProvider extends ChangeNotifier
           sdCardSocket.attemptReconnection(
             onMessageReceived: () {
               debugPrint('onMessageReceived');
-              memoryProvider?.getMoreMemoriesFromServer();
+              conversationProvider?.getMoreConversationsFromServer();
               _notifySdCardComplete();
               return;
             },

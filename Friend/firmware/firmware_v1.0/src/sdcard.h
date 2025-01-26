@@ -98,4 +98,6 @@ int get_offset();
 
 void sd_on();
 void sd_off();
+
+bool is_sd_on();
 #endif

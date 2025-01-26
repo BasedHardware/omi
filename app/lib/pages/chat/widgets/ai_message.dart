@@ -4,22 +4,25 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:friend_private/backend/http/api/memories.dart';
+import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/memory.dart';
+import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/widgets/typing_indicator.dart';
-import 'package:friend_private/pages/memory_detail/memory_detail_provider.dart';
-import 'package:friend_private/pages/memory_detail/page.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/conversation_detail/page.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/memory_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
+import 'markdown_message_widget.dart';
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -27,7 +30,7 @@ class AIMessage extends StatefulWidget {
   final Function(String) sendMessage;
   final bool displayOptions;
   final App? appSender;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final Function(int) setMessageNps;
 
   const AIMessage({
@@ -35,7 +38,7 @@ class AIMessage extends StatefulWidget {
     required this.message,
     required this.sendMessage,
     required this.displayOptions,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.setMessageNps,
     this.appSender,
     this.showTypingIndicator = false,
@@ -46,11 +49,11 @@ class AIMessage extends StatefulWidget {
 }
 
 class _AIMessageState extends State<AIMessage> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.message.memories.length, false);
+    conversationDetailLoading = List.filled(widget.message.memories.length, false);
     super.initState();
   }
 
@@ -72,12 +75,12 @@ class _AIMessageState extends State<AIMessage> {
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               )
             : Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   image: DecorationImage(
-                    image: AssetImage("assets/images/background.png"),
+                    image: AssetImage(Assets.images.background.path),
                     fit: BoxFit.cover,
                   ),
-                  borderRadius: BorderRadius.all(Radius.circular(16.0)),
+                  borderRadius: const BorderRadius.all(Radius.circular(16.0)),
                 ),
                 height: 32,
                 width: 32,
@@ -85,7 +88,7 @@ class _AIMessageState extends State<AIMessage> {
                   alignment: Alignment.center,
                   children: [
                     Image.asset(
-                      "assets/images/herologo.png",
+                      Assets.images.herologo.path,
                       height: 24,
                       width: 24,
                     ),
@@ -94,21 +97,14 @@ class _AIMessageState extends State<AIMessage> {
               ),
         const SizedBox(width: 16.0),
         Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 6),
-              buildMessageWidget(
-                widget.message,
-                widget.sendMessage,
-                widget.showTypingIndicator,
-                widget.displayOptions,
-                widget.appSender,
-                widget.updateMemory,
-                widget.setMessageNps,
-              ),
-            ],
+          child: buildMessageWidget(
+            widget.message,
+            widget.sendMessage,
+            widget.showTypingIndicator,
+            widget.displayOptions,
+            widget.appSender,
+            widget.updateConversation,
+            widget.setMessageNps,
           ),
         ),
       ],
@@ -122,18 +118,18 @@ Widget buildMessageWidget(
   bool showTypingIndicator,
   bool displayOptions,
   App? appSender,
-  Function(ServerMemory) updateMemory,
+  Function(ServerConversation) updateConversation,
   Function(int) sendMessageNps,
 ) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeString,
-      updateMemory: updateMemory,
-      message: message,
-      setMessageNps: sendMessageNps,
-    );
+        showTypingIndicator: showTypingIndicator,
+        messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
+        messageText: message.isEmpty ? '...' : message.text.decodeString,
+        updateConversation: updateConversation,
+        message: message,
+        setMessageNps: sendMessageNps,
+        date: message.createdAt);
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
@@ -146,37 +142,13 @@ Widget buildMessageWidget(
   } else {
     return NormalMessageWidget(
       showTypingIndicator: showTypingIndicator,
+      thinkings: message.thinkings,
       messageText: message.text.decodeString,
       message: message,
       setMessageNps: sendMessageNps,
+      createdAt: message.createdAt,
     );
   }
-}
-
-Widget _getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.3);
-  return MarkdownBody(
-    shrinkWrap: true,
-    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style,
-      p: style,
-      blockquote: style.copyWith(
-        backgroundColor: Colors.transparent,
-        color: Colors.black,
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: Colors.grey.shade800,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      code: style.copyWith(
-        backgroundColor: Colors.transparent,
-        decoration: TextDecoration.none,
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    data: content,
-  );
 }
 
 Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
@@ -194,14 +166,14 @@ Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) 
             setMessageNps(0);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.red),
+          icon: const Icon(Icons.thumb_down_alt_outlined, size: 20, color: Colors.grey),
         ),
         IconButton(
           onPressed: () {
             setMessageNps(1);
             AppSnackbar.showSnackbar('Thank you for your feedback!');
           },
-          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.green),
+          icon: const Icon(Icons.thumb_up_alt_outlined, size: 20, color: Colors.grey),
         ),
       ],
     ),
@@ -220,24 +192,18 @@ class InitialMessageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SelectionArea(
-            child: showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, messageText)
-            // AutoSizeText(
-            //         messageText,
-            // style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            // ),
-            ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, messageText),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -273,20 +239,18 @@ class DaySummaryWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
-                  ],
-                )
-              : daySummaryMessagesList(messageText),
-        ),
+        showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : daySummaryMessagesList(messageText),
       ],
     );
   }
@@ -351,8 +315,10 @@ class DaySummaryWidget extends StatelessWidget {
 class NormalMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
+  final List<String> thinkings;
   final ServerMessage message;
   final Function(int) setMessageNps;
+  final DateTime createdAt;
 
   const NormalMessageWidget({
     super.key,
@@ -360,34 +326,79 @@ class NormalMessageWidget extends StatelessWidget {
     required this.messageText,
     required this.message,
     required this.setMessageNps,
+    required this.createdAt,
+    this.thinkings = const [],
   });
 
   @override
   Widget build(BuildContext context) {
+    var previousThinkingText = message.thinkings.length > 1
+        ? message.thinkings
+            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
+    var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        SelectionArea(
-          child: showTypingIndicator
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
+        showTypingIndicator && messageText.isEmpty
+            ? Container(
+                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+                child: Row(
                   children: [
-                    SizedBox(width: 4),
-                    TypingIndicator(),
-                    Spacer(),
+                    thinkingText != null
+                        ? Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                previousThinkingText != null
+                                    ? Text(
+                                        overflow: TextOverflow.fade,
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        previousThinkingText,
+                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
+                                      )
+                                    : const SizedBox.shrink(),
+                                Shimmer.fromColors(
+                                  baseColor: Colors.white,
+                                  highlightColor: Colors.grey,
+                                  child: Text(
+                                    overflow: TextOverflow.fade,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    thinkingText,
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  ),
+                                )
+                              ],
+                            ),
+                          )
+                        : const SizedBox(
+                            height: 16,
+                            child: TypingIndicator(),
+                          ),
                   ],
-                )
-              : _getMarkdownWidget(context, messageText),
-          // AutoSizeText(
-          //         messageText,
-          //         // : utf8.decode(widget.message.text.codeUnits),
-          //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-          //       ),
-        ),
+                ))
+            : const SizedBox.shrink(),
+        !(showTypingIndicator && messageText.isEmpty)
+            ? Container(
+                margin: const EdgeInsets.only(bottom: 4.0),
+                child: Text(
+                  formatChatTimestamp(createdAt),
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 12,
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
+        messageText.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, messageText),
         _getNpsWidget(context, message, setMessageNps),
-        CopyButton(messageText: messageText),
       ],
     );
   }
@@ -395,20 +406,22 @@ class NormalMessageWidget extends StatelessWidget {
 
 class MemoriesMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
-  final List<MessageMemory> messageMemories;
+  final List<MessageConversation> messageMemories;
   final String messageText;
-  final Function(ServerMemory) updateMemory;
+  final Function(ServerConversation) updateConversation;
   final ServerMessage message;
   final Function(int) setMessageNps;
+  final DateTime date;
 
   const MemoriesMessageWidget({
     super.key,
     required this.showTypingIndicator,
     required this.messageMemories,
     required this.messageText,
-    required this.updateMemory,
+    required this.updateConversation,
     required this.message,
     required this.setMessageNps,
+    required this.date,
   });
 
   @override
@@ -416,37 +429,41 @@ class MemoriesMessageWidget extends StatefulWidget {
 }
 
 class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
-  late List<bool> memoryDetailLoading;
+  late List<bool> conversationDetailLoading;
 
   @override
   void initState() {
-    memoryDetailLoading = List.filled(widget.messageMemories.length, false);
+    conversationDetailLoading = List.filled(widget.messageMemories.length, false);
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SelectionArea(
-            child: widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 4),
-                      TypingIndicator(),
-                      Spacer(),
-                    ],
-                  )
-                : _getMarkdownWidget(context, widget.messageText)
-            // AutoSizeText(
-            //         widget.messageText,
-            //         style: TextStyle(fontSize: 15.0, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-            //       ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Text(
+            formatChatTimestamp(widget.date),
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
             ),
-        CopyButton(messageText: widget.messageText),
+          ),
+        ),
+        widget.showTypingIndicator
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  SizedBox(width: 4),
+                  TypingIndicator(),
+                  Spacer(),
+                ],
+              )
+            : getMarkdownWidget(context, widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
@@ -455,52 +472,52 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
               onTap: () async {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
-                  var memProvider = Provider.of<MemoryProvider>(context, listen: false);
+                  var memProvider = Provider.of<ConversationProvider>(context, listen: false);
                   var idx = -1;
                   var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedMemories[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
 
                   if (idx != -1) {
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
-                    var m = memProvider.groupedMemories[date]![idx];
-                    MixpanelManager().chatMessageMemoryClicked(m);
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
+                    var m = memProvider.groupedConversations[date]![idx];
+                    MixpanelManager().chatMessageConversationClicked(m);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );
                   } else {
-                    if (memoryDetailLoading[data.$1]) return;
-                    setState(() => memoryDetailLoading[data.$1] = true);
-                    ServerMemory? m = await getMemoryById(data.$2.id);
+                    if (conversationDetailLoading[data.$1]) return;
+                    setState(() => conversationDetailLoading[data.$1] = true);
+                    ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
-                    (idx, date) = memProvider.addMemoryWithDateGrouped(m);
-                    MixpanelManager().chatMessageMemoryClicked(m);
-                    setState(() => memoryDetailLoading[data.$1] = false);
-                    context.read<MemoryDetailProvider>().updateMemory(idx, date);
+                    (idx, date) = memProvider.addConversationWithDateGrouped(m);
+                    MixpanelManager().chatMessageConversationClicked(m);
+                    setState(() => conversationDetailLoading[data.$1] = false);
+                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (c) => MemoryDetailPage(
-                          memory: m,
+                        builder: (c) => ConversationDetailPage(
+                          conversation: m,
                         ),
                       ),
                     );
-                    if (SharedPreferencesUtil().modifiedMemoryDetails?.id == m.id) {
-                      ServerMemory modifiedDetails = SharedPreferencesUtil().modifiedMemoryDetails!;
-                      widget.updateMemory(SharedPreferencesUtil().modifiedMemoryDetails!);
-                      var copy = List<MessageMemory>.from(widget.messageMemories);
-                      copy[data.$1] = MessageMemory(
+                    if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
+                      ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
+                      widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
+                      var copy = List<MessageConversation>.from(widget.messageMemories);
+                      copy[data.$1] = MessageConversation(
                           modifiedDetails.id,
                           modifiedDetails.createdAt,
-                          MessageMemoryStructured(
+                          MessageConversationStructured(
                             modifiedDetails.structured.title,
                             modifiedDetails.structured.emoji,
                           ));
                       widget.messageMemories.clear();
                       widget.messageMemories.addAll(copy);
-                      SharedPreferencesUtil().modifiedMemoryDetails = null;
+                      SharedPreferencesUtil().modifiedConversationDetails = null;
                       setState(() {});
                     }
                   }
@@ -531,7 +548,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    memoryDetailLoading[data.$1]
+                    conversationDetailLoading[data.$1]
                         ? const SizedBox(
                             height: 24,
                             width: 24,
@@ -561,13 +578,18 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
 class CopyButton extends StatelessWidget {
   final String messageText;
+  final bool isUserMessage;
 
-  const CopyButton({super.key, required this.messageText});
+  const CopyButton({
+    super.key,
+    required this.messageText,
+    this.isUserMessage = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 6.0, 0.0, 0.0),
+      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8, 0.0, 0.0),
       child: InkWell(
         splashColor: Colors.transparent,
         focusColor: Colors.transparent,
@@ -578,7 +600,7 @@ class CopyButton extends StatelessWidget {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Response copied to clipboard.',
+                'Message copied to clipboard.',
                 style: TextStyle(
                   color: Color.fromARGB(255, 255, 255, 255),
                   fontSize: 12.0,
@@ -590,6 +612,7 @@ class CopyButton extends StatelessWidget {
         },
         child: Row(
           mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: isUserMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
@@ -600,8 +623,11 @@ class CopyButton extends StatelessWidget {
               ),
             ),
             Text(
-              'Copy response',
+              'Copy message',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(
+              width: 8,
             ),
           ],
         ),

@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/person.dart';
 import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -12,8 +15,8 @@ class TranscriptWidget extends StatefulWidget {
   final bool topMargin;
   final bool separator;
   final bool canDisplaySeconds;
-  final bool isMemoryDetail;
-  final Function(int)? editSegment;
+  final bool isConversationDetail;
+  final Function(int, int)? editSegment;
 
   const TranscriptWidget({
     super.key,
@@ -22,7 +25,7 @@ class TranscriptWidget extends StatefulWidget {
     this.topMargin = true,
     this.separator = true,
     this.canDisplaySeconds = true,
-    this.isMemoryDetail = false,
+    this.isConversationDetail = false,
     this.editSegment,
   });
 
@@ -57,20 +60,20 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
-                // onTap: () {
-                //   widget.editSegment?.call(idx - 1);
-                //   MixpanelManager().assignSheetOpened();
-                // },
+                onTap: () {
+                  widget.editSegment?.call(idx - 1, data.speakerId);
+                  MixpanelManager().assignSheetOpened();
+                },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Image.asset(
                       data.isUser
-                          ? 'assets/images/speaker_0_icon.png'
+                          ? Assets.images.speaker0Icon.path
                           : person != null
                               ? speakerImagePath[person.colorIdx!]
-                              : 'assets/images/speaker_1_icon.png',
+                              : Assets.images.speaker1Icon.path,
                       width: 26,
                       height: 26,
                     ),
@@ -165,5 +168,22 @@ String tryDecodingText(String text) {
     return utf8.decode(text.toString().codeUnits);
   } catch (e) {
     return text;
+  }
+}
+
+String formatChatTimestamp(DateTime dateTime) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+  if (messageDate == today) {
+    // Today, show time only
+    return dateTimeFormat('h:mm a', dateTime);
+  } else if (messageDate == today.subtract(const Duration(days: 1))) {
+    // Yesterday
+    return 'Yesterday ${dateTimeFormat('h:mm a', dateTime)}';
+  } else {
+    // Other days
+    return dateTimeFormat('MMM d, h:mm a', dateTime);
   }
 }
