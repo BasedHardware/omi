@@ -93,12 +93,70 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
     return messages
 
 
+def get_messages_by_date(
+        uid: str, date: datetime, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
+):
+    # Convert date to start and end of day in UTC
+    start_date = datetime.combine(date, datetime.min.time()).replace(tzinfo=timezone.utc)
+    end_date = datetime.combine(date, datetime.max.time()).replace(tzinfo=timezone.utc)
+    
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
+    
+    # Add date range filter
+    query = query.where(filter=FieldFilter('created_at', '>=', start_date))
+    query = query.where(filter=FieldFilter('created_at', '<=', end_date))
+    
+    # Add plugin filter if specified
+    if plugin_id:
+        query = query.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    
+    # Add pagination
+    query = query.limit(limit).offset(offset)
+    
+    messages = []
+    memories_id = set()
+
+    # Fetch messages and collect memory IDs
+    for doc in query.stream():
+        message = doc.to_dict()
+        if message.get('deleted') is True:
+            continue
+        messages.append(message)
+        memories_id.update(message.get('memories_id', []))
+
+    if not include_memories:
+        return messages
+
+    # Fetch memories if needed
+    memories = {}
+    memories_ref = user_ref.collection('memories')
+    doc_refs = [memories_ref.document(str(memory_id)) for memory_id in memories_id]
+    docs = db.get_all(doc_refs)
+    for doc in docs:
+        if doc.exists:
+            memory = doc.to_dict()
+            memories[memory['id']] = memory
+
+    # Attach memories to messages
+    for message in messages:
+        message['memories'] = [
+            memories[memory_id] for memory_id in message.get('memories_id', []) if memory_id in memories
+        ]
+
+    return messages
+
+
 @timeit
 def get_messages(
         uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
-        # include_plugin_id_filter: bool = True,
+        date: Optional[datetime] = None,
 ):
-    print('get_messages', uid, limit, offset, plugin_id, include_memories)
+    print('get_messages', uid, limit, offset, plugin_id, include_memories, date)
+    
+    if date:
+        return get_messages_by_date(uid, date, limit, offset, include_memories, plugin_id)
+    
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')

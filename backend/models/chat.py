@@ -105,5 +105,15 @@ class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
 
 
+class MessageFilter(BaseModel):
+    date: Optional[str] = None
+    plugin_id: Optional[str] = None
+
+
+class MessagesResponse(BaseModel):
+    messages: List[Message]
+    total_count: int = 0
+
+
 class SendMessageRequest(BaseModel):
     text: str

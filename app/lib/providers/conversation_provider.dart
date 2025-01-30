@@ -43,6 +43,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   bool isFetchingConversations = false;
   List<SyncedConversationPointer> syncedConversationsPointers = [];
 
+  DateTime? selectedDate;
+
   ConversationProvider() {
     _wal.subscribe(this, this);
     _preload();
@@ -580,5 +582,31 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   void setIsFetchingConversations(bool value) {
     isFetchingConversations = value;
     notifyListeners();
+  }
+
+  Future<void> filterConversationsByDate(DateTime? date) async {
+    selectedDate = date;
+    if (date == null) {
+      // Reset to show all conversations
+      groupConversationsByDate();
+      notifyListeners();
+      return;
+    }
+
+    setIsFetchingConversations(true);
+    try {
+      final dateStr = date.toIso8601String().split('T')[0];
+      final response = await getConversationsByDate(dateStr);
+      searchedConversations = response;
+      groupSearchConvosByDate();
+    } finally {
+      setIsFetchingConversations(false);
+      notifyListeners();
+    }
+  }
+
+  void clearDateFilter() {
+    selectedDate = null;
+    filterConversationsByDate(null);
   }
 }

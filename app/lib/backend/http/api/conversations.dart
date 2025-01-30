@@ -380,3 +380,18 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   }
   return (<ServerConversation>[], 0, 0);
 }
+
+Future<List<ServerConversation>> getConversationsByDate(String date) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/memories/by-date/$date',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => ServerConversation.fromJson(json)).toList();
+  }
+  return [];
+}

@@ -84,19 +84,62 @@ class _SearchWidgetState extends State<SearchWidget> {
           ),
           Consumer<ConversationProvider>(
               builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade900,
-                borderRadius: const BorderRadius.all(Radius.circular(16)),
-              ),
-              child: IconButton(
-                onPressed: convoProvider.toggleDiscardConversations,
-                icon: Icon(
-                  convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
-                  color: Colors.white,
-                  size: 20,
+            return Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: const BorderRadius.all(Radius.circular(16)),
+                  ),
+                  child: IconButton(
+                    onPressed: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: convoProvider.selectedDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.dark(
+                                primary: Colors.white,
+                                onPrimary: Colors.black,
+                                surface: Colors.grey.shade900,
+                                onSurface: Colors.white,
+                              ),
+                              dialogBackgroundColor: Colors.grey.shade900,
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        await convoProvider.filterConversationsByDate(picked);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.calendar_today,
+                      color: convoProvider.selectedDate != null ? Colors.white : Colors.white60,
+                      size: 20,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: const BorderRadius.all(Radius.circular(16)),
+                  ),
+                  child: IconButton(
+                    onPressed: convoProvider.toggleDiscardConversations,
+                    icon: Icon(
+                      convoProvider.showDiscardedConversations ? Icons.filter_alt_off_sharp : Icons.filter_alt_sharp,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             );
           }),
         ],
