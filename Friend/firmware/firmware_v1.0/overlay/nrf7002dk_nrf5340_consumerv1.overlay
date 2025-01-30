@@ -12,14 +12,14 @@
         watchdog0 = &wdt0;
     };
 
-    chosen {
-        zephyr,bt-hci-ipc = &ipc0;  // Enable BT HCI over IPC
-    };
+    // chosen {
+    //     zephyr,bt-hci-ipc = &ipc0;  // Enable BT HCI over IPC
+    // };
 };
 
-&ipc0 {
-    status = "okay";
-};
+// &ipc0 {
+//     status = "okay";
+// };
 
 &pinctrl {
     i2s0_default: i2s0_default {
