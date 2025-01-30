@@ -2,7 +2,7 @@
 
 # **omi**
 
-Meet Omi, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
+Meet Omi, the world’s leading open-source AI wearable that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
 
 ![Omi](https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59)
