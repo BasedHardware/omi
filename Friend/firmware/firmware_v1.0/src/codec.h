@@ -1,19 +1,9 @@
 #ifndef CODEC_H
 #define CODEC_H
-
-#include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <zephyr/sys/ring_buffer.h>
-
-// Expose codec ring buffer for voice interaction
-extern struct ring_buf codec_ring_buf;
-
-// Voice mode functions
-void set_voice_mode(bool enabled);
+#include <zephyr/kernel.h>
 
 // Callback
-typedef void (*codec_callback)(uint8_t *data, size_t size);
+typedef void (*codec_callback)(uint8_t *data, size_t len);
 void set_codec_callback(codec_callback callback);
 
 // Integration

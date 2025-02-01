@@ -62,21 +62,6 @@ static uint8_t m_opus_encoder[OPUS_ENCODER_SIZE];
 static OpusEncoder *const m_opus_state = (OpusEncoder *)m_opus_encoder;
 #endif
 
-// Add voice mode configuration
-static bool voice_mode = false;
-
-void set_voice_mode(bool enabled) {
-    voice_mode = enabled;
-    if (enabled) {
-        // Configure OPUS for voice settings
-        opus_encoder_ctl(m_opus_state, OPUS_SET_BITRATE(24000));
-        opus_encoder_ctl(m_opus_state, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-    } else {
-        // Restore normal settings
-        opus_encoder_ctl(m_opus_state, OPUS_SET_BITRATE(CODEC_OPUS_BITRATE));
-    }
-}
-
 void codec_entry()
 {
 
@@ -87,7 +72,7 @@ void codec_entry()
         // Check if we have enough data
         if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2)
         {
-            // printk("waiting on data....\n");
+            // LOG_PRINTK("waiting on data....\n");
             k_sleep(K_MSEC(10));
             continue;
         }

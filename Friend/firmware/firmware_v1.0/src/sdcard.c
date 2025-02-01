@@ -31,6 +31,8 @@ uint32_t file_num_array[2];
 
 static const char *disk_mount_pt = "/SD:/";
 
+bool sd_enabled = false;
+
 int mount_sd_card(void)
 {
     //initialize the sd card enable pin (v2)
@@ -49,6 +51,7 @@ int mount_sd_card(void)
 		LOG_ERR("Error setting up SD Pin");
         return -1;
 	}
+    sd_enabled = true;
     //initialize the sd card
     const char *disk_pdrv = "SD";  
 	int err = disk_access_init(disk_pdrv); 
@@ -217,11 +220,11 @@ int read_audio_data(uint8_t *buf, int amount,int offset)
 	int rc = fs_open(&read_file, read_buffer, FS_O_READ | FS_O_RDWR);
     rc = fs_seek(&read_file,offset,FS_SEEK_SET);
     rc = fs_read(&read_file, temp_ptr, amount);
-    // printk("read data :");
+    // LOG_PRINTK("read data :");
     // for (int i = 0; i < amount;i++) {
-    //     printk("%d ",temp_ptr[i]);
+    //     LOG_PRINTK("%d ",temp_ptr[i]);
     // }
-    // printk("\n");
+    // LOG_PRINTK("\n");
   	fs_close(&read_file);
 
     return rc;
@@ -229,14 +232,12 @@ int read_audio_data(uint8_t *buf, int amount,int offset)
 
 int write_to_file(uint8_t *data,uint32_t length)
 {
-
     struct fs_file_t write_file;
 	fs_file_t_init(&write_file);
     uint8_t *write_ptr = data;
    	fs_open(&write_file, write_buffer , FS_O_WRITE | FS_O_APPEND);
 	fs_write(&write_file, write_ptr, length);
     fs_close(&write_file);
-
     return 0;
 }
     
@@ -336,7 +337,7 @@ int delete_audio_file(uint8_t num)
     int res = fs_unlink(current_full_path);
     if (res) 
     {
-        printk("error deleting file in delete\n");
+        LOG_PRINTK("error deleting file in delete\n");
         return -1;
     }
 
@@ -359,7 +360,7 @@ int clear_audio_directory()
         k_msleep(10);
         if (res) 
         {
-            printk("error on %d\n",i);
+            LOG_PRINTK("error on %d\n",i);
             return -1;
         }  
     }
@@ -445,4 +446,22 @@ int get_offset()
     fs_close(&read_file);
 
     return offset_ptr[0];
+}
+
+void sd_off()
+ {
+//    gpio_pin_set_dt(&sd_en_gpio_pin, 0);  
+    sd_enabled = false; 
+}
+
+
+void sd_on()
+{
+//    gpio_pin_set_dt(&sd_en_gpio_pin, 1);  
+    sd_enabled = true; 
+}
+
+bool is_sd_on()
+{
+    return sd_enabled;
 }

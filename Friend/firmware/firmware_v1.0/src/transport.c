@@ -15,22 +15,15 @@
 #include "utils.h"
 // #include "nfc.h"
 #include "speaker.h"
-#include "button.h"
 #include "sdcard.h"
 #include "storage.h"
 #include "button.h"
+#include "mic.h"
 #include "lib/battery/battery.h"
 // #include "friend.h"
-#include "mic.h"
-#include "codec.h"
-#include <errno.h>
-
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define STREAM_BUFFER_SIZE 8192
-static uint8_t stream_buffer[STREAM_BUFFER_SIZE];
-static size_t stream_buffer_pos = 0;
-
+#define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
 extern uint8_t file_count;
@@ -42,6 +35,7 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
+struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
 
@@ -52,10 +46,6 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 
 static void dfu_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t dfu_control_point_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
-
-static ssize_t voice_interaction_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags);
-static const char *phy2str(uint8_t phy);
-
 
 //
 // Service and Characteristic
@@ -71,47 +61,16 @@ static struct bt_uuid_128 audio_characteristic_data_uuid = BT_UUID_INIT_128(BT_U
 static struct bt_uuid_128 audio_characteristic_format_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10002, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 audio_characteristic_speaker_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
-static struct bt_uuid_128 voice_interaction_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10004, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-static struct bt_uuid_128 voice_interaction_rx_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10005, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
-        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_READ,
-        audio_data_read_characteristic,
-        NULL,
-        NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler,
-        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid,
-        BT_GATT_CHRC_READ,
-        BT_GATT_PERM_READ,
-        audio_codec_read_characteristic,
-        NULL,
-        NULL),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_READ, audio_data_read_characteristic, NULL, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_format_uuid.uuid, BT_GATT_CHRC_READ, BT_GATT_PERM_READ, audio_codec_read_characteristic, NULL, NULL),
 #ifdef CONFIG_ENABLE_SPEAKER
-    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
-        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_WRITE,
-        NULL,
-        audio_data_write_handler,
-        NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler,
-        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid, BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_WRITE, NULL, audio_data_write_handler, NULL),
+    BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
 #endif
-
-    BT_GATT_CHARACTERISTIC(&voice_interaction_uuid.uuid,
-        BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_READ,
-        NULL, NULL, NULL),
-    BT_GATT_CCC(audio_ccc_config_changed_handler,
-        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-
-    BT_GATT_CHARACTERISTIC(&voice_interaction_rx_uuid.uuid,
-        BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
-        BT_GATT_PERM_WRITE,
-        NULL, voice_interaction_write_handler, NULL),
+    
 };
 
 static struct bt_gatt_service audio_service = BT_GATT_SERVICE(audio_service_attr);
@@ -132,15 +91,6 @@ static struct bt_gatt_service dfu_service = BT_GATT_SERVICE(dfu_service_attr);
 //Acceleration data
 //this code activates the onboard accelerometer. some cute ideas may include shaking the necklace to color strobe
 //
-struct sensors {
-    struct sensor_value a_x;
-    struct sensor_value a_y;
-    struct sensor_value a_z;
-    struct sensor_value g_x;
-    struct sensor_value g_y;
-    struct sensor_value g_z;
-};
-
 static struct sensors mega_sensor;
 static struct device *lsm6dsl_dev;
 //Arbritrary uuid, feel free to change
@@ -173,14 +123,14 @@ K_WORK_DELAYABLE_DEFINE(accel_work, broadcast_accel);
 void broadcast_accel(struct k_work *work_item) {
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_X, &mega_sensor.a_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Y, &mega_sensor.a_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_ACCEL_Z, &mega_sensor.a_z);
 
     sensor_sample_fetch_chan(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
-	sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_X, &mega_sensor.g_x);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Y, &mega_sensor.g_y);
+    sensor_channel_get(lsm6dsl_dev, SENSOR_CHAN_GYRO_Z, &mega_sensor.g_z);
 
    //only time mega sensor is changed is through here (hopefully),  so no chance of race condition
     int err = bt_gatt_notify(current_connection, &accel_service.attrs[1], &mega_sensor, sizeof(mega_sensor));
@@ -191,6 +141,7 @@ void broadcast_accel(struct k_work *work_item) {
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 
+struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value) 
@@ -208,7 +159,6 @@ static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
         LOG_ERR("Invalid CCC value: %u", value);
     }
 }
-
 int accel_start() 
 {
     struct sensor_value odr_attr;
@@ -218,31 +168,48 @@ int accel_start()
     {
         LOG_ERR("Could not get LSM6DSL device");
         return 0;
-	}
+    }
     if (!device_is_ready(lsm6dsl_dev)) 
     {
-		LOG_ERR("LSM6DSL: not ready");
-		return 0;
-	}
-    odr_attr.val1 = 52;
-	odr_attr.val2 = 0;
+        LOG_ERR("LSM6DSL: not ready");
+        return 0;
+    }
+    odr_attr.val1 = 10;
+    odr_attr.val2 = 0;
 
-    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+
+
+    if (gpio_is_ready_dt(&accel_gpio_pin)) 
     {
-	    LOG_ERR("Cannot set sampling frequency for Accelerometer.");
-		return 0;
-	}
+        LOG_PRINTK("Speaker Pin ready\n");
+    }
+    else 
+    {
+        LOG_PRINTK("Error setting up speaker Pin\n");
+        return -1;
+    }
+    if (gpio_pin_configure_dt(&accel_gpio_pin, GPIO_OUTPUT_INACTIVE) < 0) 
+    {
+        LOG_PRINTK("Error setting up Haptic Pin\n");
+        return -1;
+    }
+    gpio_pin_set_dt(&accel_gpio_pin, 1);
+    if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_ACCEL_XYZ,
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) 
+    {
+        LOG_ERR("Cannot set sampling frequency for Accelerometer.");
+        return 0;
+    }
     if (sensor_attr_set(lsm6dsl_dev, SENSOR_CHAN_GYRO_XYZ,
-		SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-	    LOG_ERR("Cannot set sampling frequency for gyro.");
-	    return 0;
-	}
+        SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+        LOG_ERR("Cannot set sampling frequency for gyro.");
+        return 0;
+    }
     if (sensor_sample_fetch(lsm6dsl_dev) < 0) 
     {
         LOG_ERR("Sensor sample update error");
         return 0;
-	}
+    }
 
     LOG_INF("Accelerometer is ready for use \n");
     
@@ -252,7 +219,7 @@ int accel_start()
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, "Friend", sizeof("Friend") - 1),
+    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
 // Scan response data
@@ -362,7 +329,7 @@ void broadcast_battery_level(struct k_work *work_item) {
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
 
-        LOG_INF("Battery at %d mV (capacity %d%%)", battery_millivolt, battery_percentage);
+        LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
 
         // Use the Zephyr BAS function to set (and notify) the battery level
@@ -402,9 +369,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     LOG_DBG("TX PHY %s, RX PHY %s", phy2str(info.le.phy->tx_phy), phy2str(info.le.phy->rx_phy));
     LOG_DBG("LE data len updated: TX (len: %d time: %d) RX (len: %d time: %d)", info.le.data_len->tx_max_len, info.le.data_len->tx_max_time, info.le.data_len->rx_max_len, info.le.data_len->rx_max_time);
 
-    k_work_schedule(&battery_work, K_MSEC(BATTERY_REFRESH_INTERVAL));
+    k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 
-	is_connected = true;
+    is_connected = true;
 
     // // Put NFC to sleep when Bluetooth is connected
     // nfc_sleep();
@@ -424,8 +391,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     current_connection = NULL;
     current_mtu = 0;
 
-	// // restart NFC
-	// nfc_wake();
+    // // restart NFC
+    // nfc_wake();
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -441,7 +408,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval,
                               uint16_t latency, uint16_t timeout)
 {
     LOG_INF("Connection parameters updated.");
-	LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
+    LOG_DBG("[ interval: %d, latency: %d, timeout: %d ]", interval, latency, timeout);
 }
 
 static void _le_phy_updated(struct bt_conn *conn,
@@ -520,7 +487,7 @@ static bool read_from_tx_queue()
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    // printk("tx_buffer_size %d\n",tx_buffer_size);
+    // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -557,7 +524,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        // printk("sent %d bytes \n",tx_buffer_size);
+        // LOG_PRINTK("sent %d bytes \n",tx_buffer_size);
 
         offset += packet_size;
         index++;
@@ -592,6 +559,7 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
+static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void) 
 // {
@@ -659,16 +627,17 @@ bool write_to_storage(void) {//max possible packing
     return true;
 }
 
-extern bool is_off;
+static bool use_storage = true;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
-
+static int recent_file_size_updated = 0;
+static uint8_t heartbeat_count = 0;
 void update_file_size() 
 {
     file_num_array[0] = get_file_size(1);
     file_num_array[1] = get_offset();
-    // printk("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // printk("offset for file count %d %d\n",file_count,file_num_array[1]);
+    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
+    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
 }
 
 void pusher(void)
@@ -679,92 +648,124 @@ void pusher(void)
         //
         // Load current connection
         //
-        if(!is_off)
+        struct bt_conn *conn = current_connection;
+        //updating the most recent file size is expensive!
+        static bool file_size_updated = true;
+        static bool connection_was_true = false;
+        if (conn && !connection_was_true) 
         {
-            struct bt_conn *conn = current_connection;
-            //updating the most recent file size is expensive!
-            static bool file_size_updated = true;
-            static bool connection_was_true = false;
-            if (conn && !connection_was_true) 
-            {
-                k_msleep(100);
-                file_size_updated = false;
-                connection_was_true = true;
-            } 
-            else if (!conn) 
-            {
-                connection_was_true = false;
-            }
-            if (!file_size_updated) 
-            {
-                printk("updating file size\n");
-                update_file_size();
-                file_size_updated = true;
-            }
-            if (conn)
-            {
-                conn = bt_conn_ref(conn);
-            }
-            bool valid = true;
-            if (current_mtu < MINIMAL_PACKET_SIZE)
-            {
-                valid = false;
-            }
-            else if (!conn)
-            {
-                valid = false;
-            }
-            else
-            {
-                valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-            }
+            k_msleep(100);
+            file_size_updated = false;
+            connection_was_true = true;
+        } 
+        else if (!conn) 
+        {
+            connection_was_true = false;
+        }
+        if (!file_size_updated) 
+        {
+            LOG_PRINTK("updating file size\n");
+            update_file_size();
             
-            if (!valid  && !storage_is_on) 
-            {
-                bool result = write_to_storage();
-                if (result)
-                {
-    
-                }
-                else 
-                {
+            file_size_updated = true;
+        }
+        if (conn)
+        {
+            conn = bt_conn_ref(conn);
+        }
+        bool valid = true;
+        if (current_mtu < MINIMAL_PACKET_SIZE)
+        {
+            valid = false;
+        }
+        else if (!conn)
+        {
+            valid = false;
+        }
+        else
+        {
+            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+        }
         
-                }
-            }    
-            if (valid)
+        if (!valid  && !storage_is_on) 
+        {
+            bool result = false;
+            if (file_num_array[1] < MAX_STORAGE_BYTES)
             {
-                bool sent = push_to_gatt(conn);
-                if (!sent)
+                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+                if(is_sd_on()) 
                 {
-                    // k_sleep(K_MSEC(50));
+                    result = write_to_storage();
                 }
+                k_mutex_unlock(&write_sdcard_mutex);
             }
-            if (conn)
+            if (result)
             {
-                bt_conn_unref(conn);
+             heartbeat_count++;
+             if (heartbeat_count == 255)
+             {
+                update_file_size();
+                heartbeat_count = 0;
+                LOG_PRINTK("drawing\n");
+             }
+            }
+            else 
+            {
+    
+            }
+        }    
+        if (valid)
+        {
+            bool sent = push_to_gatt(conn);
+            if (!sent)
+            {
+                // k_sleep(K_MSEC(50));
             }
         }
+        if (conn)
+        {
+            bt_conn_unref(conn);
+        }
 
-      k_yield();
+        k_yield();
     }
 }
 extern struct bt_gatt_service storage_service;
 //
 // Public functions
 //
+int bt_off()
+{
+   bt_disable();
+   int err = bt_le_adv_stop();
+   if (err)
+   {
+       LOG_PRINTK("Failed to stop Bluetooth %d\n",err);
+   }
+   k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+   sd_off();
+   k_mutex_unlock(&write_sdcard_mutex);
+   mic_off();
+   //everything else off
+
+
+   return 0;
+}
 int bt_on()
 {
-    int err = bt_enable(NULL);
-    if (err) {
-        return err;
-    }
-    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    return err;
+   int err = bt_enable(NULL);
+   bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+   bt_gatt_service_register(&storage_service);
+   sd_on();
+   mic_on();
+
+   return 0;
 }
 
 //periodic advertising
 int transport_start()
 {
+    k_mutex_init(&write_sdcard_mutex);
     // Configure callbacks
     bt_conn_cb_register(&_callback_references);
 
@@ -803,12 +804,10 @@ int transport_start()
         LOG_ERR("Speaker failed to start");
         return 0;
     }
-    else
-    {
-        LOG_INF("Speaker initialized");
-    }
+    LOG_INF("Speaker initialized");
+    register_speaker_service();
 
-    play_boot_sound();
+
 #endif
     // Start advertising
 
@@ -828,16 +827,16 @@ int transport_start()
     }
 
     int battErr = 0;
-	battErr |= battery_init();
-	battErr |= battery_charge_start();
-	if (battErr)
-	{
-		LOG_ERR("Battery init failed (err %d)", battErr);
-	}
-	else
-	{
-		LOG_INF("Battery initialized");
-	}
+    battErr |= battery_init();
+    battErr |= battery_charge_start();
+    if (battErr)
+    {
+        LOG_ERR("Battery init failed (err %d)", battErr);
+    }
+    else
+    {
+        LOG_INF("Battery initialized");
+    }
 
     // friend_init();
 
@@ -855,146 +854,15 @@ struct bt_conn *get_current_connection()
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    if (voice_interaction_active) {
-        return handle_voice_data(buffer, size);
-    }
-
-    if (is_off) {
-        LOG_WRN("Device is off, cannot broadcast audio");
-        return -EPERM;
-    }
-
-    // Normal audio handling
-    LOG_DBG("Broadcasting normal audio data: %d bytes", size);
-    while (!write_to_tx_queue(buffer, size)) {
+    while (!write_to_tx_queue(buffer, size))
+    {
         k_sleep(K_MSEC(1));
     }
     return 0;
 }
 
-static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
-                                             const struct bt_gatt_attr *attr,
-                                             const void *buf,
-                                             uint16_t len,
-                                             uint16_t offset,
-                                             uint8_t flags) {
-    if (!is_off) {
-        LOG_INF("Received voice response data: %d bytes", len);
-        if (len == 4) {
-            // This is the size packet
-            uint32_t size = *((uint32_t *)buf);
-            LOG_INF("Expected voice response size: %d bytes", size);
-            return len;
-        }
 
-        // Process audio data
-        LOG_INF("Processing audio chunk of %d bytes", len);
-        uint16_t result = speak_stream(len, buf);
-        LOG_INF("Processed %d bytes", result);
-        return result;
-    }
-    LOG_WRN("Device is off, ignoring voice data");
-    return len;
-}
-
-bool voice_interaction_active = false;
-
-static atomic_t voice_state = ATOMIC_INIT(0);
-
-void start_voice_interaction(void) {
-    if (is_off || !current_connection) {
-        LOG_ERR("Cannot start voice interaction - device off or not connected");
-        return;
-    }
-
-    // Use atomic operation to prevent race conditions
-    if (!atomic_cas(&voice_state, 0, 1)) {
-        LOG_WRN("Voice interaction already active");
-        return;
-    }
-
-    LOG_INF("Starting voice interaction");
-
-    // Stop any ongoing audio processing
-    storage_is_on = false;
-
-    // Clear buffers
-    ring_buf_reset(&ring_buf);
-
-    // Configure mic first
-    int err = mic_configure_for_voice();
-    if (err) {
-        LOG_ERR("Failed to configure mic: %d", err);
-        atomic_clear(&voice_state);
-        return;
-    }
-
-    // Start mic last after everything is configured
-    voice_interaction_active = true;
-    err = mic_start();
-    if (err) {
-        LOG_ERR("Failed to start mic: %d", err);
-        voice_interaction_active = false;
-        atomic_clear(&voice_state);
-        return;
-    }
-
-    LOG_INF("Voice interaction started successfully");
-}
-
-void stop_voice_interaction(void) {
-    if (!atomic_cas(&voice_state, 1, 0)) {
-        LOG_WRN("Voice interaction not active");
-        return;
-    }
-
-    LOG_INF("Stopping voice interaction");
-
-    // Stop voice mode first
-    voice_interaction_active = false;
-
-    // Reset mic
-    mic_start();
-
-    // Clear buffers
-    ring_buf_reset(&ring_buf);
-
-    // Resume normal operation last
-    storage_is_on = true;
-
-    LOG_INF("Voice interaction stopped");
-}
-
-int handle_voice_data(uint8_t *data, size_t len) {
-    if (!atomic_get(&voice_state)) {
-        LOG_WRN("Voice interaction not active");
-        return -EPERM;
-    }
-
-    if (!current_connection) {
-        LOG_ERR("No BLE connection");
-        return -ENOTCONN;
-    }
-
-    // Use voice interaction characteristic
-    int err = bt_gatt_notify(current_connection, &audio_service.attrs[6],
-                            data, len);
-    if (err) {
-        LOG_ERR("Failed to send voice data: %d", err);
-    }
-    return err;
-}
-
-static const char *phy2str(uint8_t phy)
+void accel_off()
 {
-    switch (phy) {
-    case BT_GAP_LE_PHY_1M:
-        return "1M";
-    case BT_GAP_LE_PHY_2M:
-        return "2M";
-    case BT_GAP_LE_PHY_CODED:
-        return "Coded";
-    default:
-        return "Unknown";
-    }
+    gpio_pin_set_dt(&accel_gpio_pin, 0);
 }
