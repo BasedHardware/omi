@@ -1,11 +1,14 @@
-from urllib.parse import urljoin
-
 from fastapi import Request, Header, HTTPException, APIRouter, Depends
 import stripe
+
+from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id
 from utils import stripe as stripe_utils
 from utils.apps import paid_app
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
+
+from utils.stripe import create_connect_account, refresh_connect_account_link, check_connect_account_onboarding_status, \
+    is_onboarding_complete
 
 router = APIRouter()
 
@@ -39,87 +42,51 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-
 @router.post("/v1/stripe/create-connect-account")
-async def create_connect_account(request: Request):
+async def create_connect_account_endpoint(request: Request, uid: str = Depends(auth.get_current_user_uid)):
     """
     Create a Stripe Connect account and return the account creation response
     """
     try:
+        account_id = get_stripe_connect_account_id(uid)
         base_url = str(request.base_url).rstrip('/')
 
-        account = stripe.Account.create(
-            controller={
-                "stripe_dashboard": {
-                    "type": "express",
-                },
-                "fees": {
-                    "payer": "application"
-                },
-                "losses": {
-                    "payments": "application"
-                },
-            },
-            settings={
-                "payouts": {
-                    "schedule": {
-                        "interval": "monthly",
-                        "monthly_anchor": 2
-                    },
-                },
-            }
-        )
+        if account_id:
+            account = refresh_connect_account_link(account_id, base_url)
+        else:
+            account = create_connect_account(base_url)
+            set_stripe_connect_account_id(uid, account['account_id'])
 
-        # Generate the onboarding URL with dynamic return and refresh URLs
-        account_links = stripe.AccountLink.create(
-            account=account.id,
-            refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),
-            return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),
-            type="account_onboarding",
-        )
+        return account
 
-        return {
-            "account_id": account.id,
-            "url": account_links.url
-        }
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/v1/stripe/onboarding-status/{account_id}")
-async def check_onboarding_status(account_id: str):
+@router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
+async def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """
     Check the onboarding status of a Connect account
     """
     try:
-        account = stripe.Account.retrieve(account_id)
-        return {
-            "charges_enabled": account.charges_enabled,
-            "payouts_enabled": account.payouts_enabled,
-            "details_submitted": account.details_submitted,
-            "capabilities": account.capabilities
-        }
+        account_id = get_stripe_connect_account_id(uid)
+        if not account_id:
+            return {"onboarding_complete": False}
+        return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/v1/stripe/refresh/{account_id}")
-async def refresh_account_link(account_id: str):
+async def refresh_account_link_endpoint(request: Request, account_id: str,
+                                        uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate a fresh account link if the previous one expired
     """
     try:
         base_url = str(request.base_url).rstrip('/')
-        account_link = stripe.AccountLink.create(
-            account=account_id,
-            refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account.id}"),
-            return_url=urljoin(base_url, f"/v1/stripe/return/{account.id}"),
-            type="account_onboarding",
-        )
-        return {
-            "account_id": account.id,
-            "url": account_links.url
-        }
+        account = refresh_connect_account_link(account_id, base_url)
+        return account
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
