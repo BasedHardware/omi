@@ -19,8 +19,7 @@ class LiteCaptureWidget extends StatefulWidget {
   State<LiteCaptureWidget> createState() => LiteCaptureWidgetState();
 }
 
-class LiteCaptureWidgetState extends State<LiteCaptureWidget>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+class LiteCaptureWidgetState extends State<LiteCaptureWidget> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -31,7 +30,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
   @override
   void initState() {
     WavBytesUtil.clearTempWavFiles();
-    WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       if (context.read<DeviceProvider>().connectedDevice != null) {
         context.read<OnboardingProvider>().stopScanDevices();
@@ -45,12 +43,6 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget>
     });
 
     super.initState();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {

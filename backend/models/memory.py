@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional, Dict
 
@@ -31,6 +31,17 @@ class CategoryEnum(str, Enum):
     literature = 'literature'
     history = 'history'
     architecture = 'architecture'
+    # Added at 2024-01-23
+    music = 'music'
+    weather = 'weather'
+    news = 'news'
+    entertainment = 'entertainment'
+    psychology = 'psychology'
+    real = 'real'
+    design = 'design'
+    family = 'family'
+    economics = 'economics'
+    environment = 'environment'
     other = 'other'
 
 
@@ -176,14 +187,7 @@ class Memory(BaseModel):
         for i, memory in enumerate(memories):
             if isinstance(memory, dict):
                 memory = Memory(**memory)
-            formatted_date = memory.created_at.strftime("%d %b, at %H:%M")
-            if use_transcript:
-                memory_str = (f"Memory #{i + 1}\n"
-                              f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
-                              f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
-                result.append(memory_str.strip())
-                continue
-
+            formatted_date = memory.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
             memory_str = (f"Memory #{i + 1}\n"
                           f"{formatted_date} ({str(memory.structured.category.value).capitalize()})\n"
                           f"{str(memory.structured.title).capitalize()}\n"
@@ -193,6 +197,15 @@ class Memory(BaseModel):
                 memory_str += "Action Items:\n"
                 for item in memory.structured.action_items:
                     memory_str += f"- {item.description}\n"
+
+            if memory.structured.events:
+                memory_str += "Events:\n"
+                for event in memory.structured.events:
+                    memory_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+
+            if use_transcript:
+                memory_str += (f"\nTranscript:\n{memory.get_transcript(include_timestamps=False)}\n")
+
             result.append(memory_str.strip())
 
         return "\n\n---------------------\n\n".join(result).strip()
@@ -266,3 +279,10 @@ class SetMemoryActionItemsStateRequest(BaseModel):
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool
+
+
+class SearchRequest(BaseModel):
+    query: str
+    page: Optional[int] = 1
+    per_page: Optional[int] = 10
+    include_discarded: Optional[bool] = True

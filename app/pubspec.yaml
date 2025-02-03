@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.47+176
+version: 1.0.53+216
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -31,6 +31,7 @@ dependencies:
   sign_in_button: ^3.2.0
   dotted_border: ^2.1.0
   skeletonizer: ^1.4.2
+  shimmer: ^3.0.0
 
   # Firebase
   firebase_core: 3.3.0
@@ -42,7 +43,7 @@ dependencies:
   mixpanel_flutter: ^2.2.0
 
   # Utils
-  collection: 1.18.0
+  collection: ^1.18.0
   equatable: 2.0.5
   flutter_blue_plus: 1.33.6
   http: ^1.2.1
@@ -73,7 +74,7 @@ dependencies:
   flutter_background_service_platform_interface: 5.1.1
   opus_flutter: ^3.0.3
   opus_dart: ^3.0.1
-  growthbook_sdk_flutter: ^3.9.2
+  growthbook_sdk_flutter: 3.9.2
   manage_calendar_events: ^2.0.3
   flutter_timezone: ^2.0.0
   sign_in_with_apple: ^6.1.1

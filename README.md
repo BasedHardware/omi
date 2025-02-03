@@ -1,11 +1,11 @@
 <div align="center">
 
-# **Omi (prev. Friend)**
+# **omi**
 
-Meet Omi, the world’s leading open-source AI wearables that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
+Meet Omi, the world’s leading open-source AI wearable that revolutionize how you capture and manage conversations. Simply connect Omi to your mobile device and enjoy automatic, high-quality
 transcriptions of meetings, chats, and voice memos wherever you are.
 
-![Omi](https://github.com/user-attachments/assets/0c757e55-c030-4ae7-a15b-7218950c8ba0)
+![Omi](https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59)
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/omi) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
@@ -37,7 +37,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [App setup](https://docs.omi.me/docs/get_started/Setup/)
+- [App setup](https://docs.omi.me/docs/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)

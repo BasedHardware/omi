@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List
@@ -7,7 +8,7 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
-    update_app_in_db
+    update_app_in_db, get_audio_apps_count
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -16,6 +17,9 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     get_multiple_apps_enabled_count_cache, set_user_paid_app, get_user_paid_app
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils import stripe
+
+MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
+    'MARKETPLACE_APP_REVIEWERS') else []
 
 
 # ********************************
@@ -126,7 +130,7 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
+    if app['private'] and app['uid'] != uid and not is_tester(uid):
         return None
     set_app_cache_by_id(app_id, app)
     return app
@@ -143,9 +147,10 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     reviews = get_plugin_reviews(app['id'])
     sorted_reviews = reviews.values()
     rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-    app['reviews'] = []
+    app['reviews'] = [details for details in reviews.values() if details['review']]
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
+    app['user_review'] = reviews.get(uid)
 
     # enabled
     user_enabled = set(get_enabled_plugins(uid))
@@ -153,7 +158,7 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
 
     # install
     plugins_install = get_plugins_installs_count([app['id']])
-    app['installs'] = plugins_install.get(app['id'],0)
+    app['installs'] = plugins_install.get(app['id'], 0)
     return app
 
 
@@ -282,7 +287,9 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
 
     return money
 
-def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str, previous_price: float | None = None):
+
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str,
+                            previous_price: float | None = None):
     if not is_paid_app:
         print(f"App is not a paid app, app_id: {app_id}")
         return None
@@ -314,7 +321,7 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
             app.payment_product_id = payment_product.id
 
         # price
-        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price*100))
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price * 100))
         app.payment_price_id = payment_price.id
 
         # payment link
@@ -326,9 +333,32 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
     update_app_in_db(app.dict())
     return app
 
+
 def get_is_user_paid_app(app_id: str, uid: str):
+    if uid in MarketplaceAppReviewUIDs:
+        return True
     return get_user_paid_app(app_id, uid) is not None
 
+
+def is_permit_payment_plan_get(uid: str):
+    if uid in MarketplaceAppReviewUIDs:
+        return False
+
+    return True
+
+
 def paid_app(app_id: str, uid: str):
-    expired_seconds = 60*60*24*30  # 30 days
+    expired_seconds = 60 * 60 * 24 * 30  # 30 days
     set_user_paid_app(app_id, uid, expired_seconds)
+
+
+def is_audio_bytes_app_enabled(uid: str):
+    enabled_apps = get_enabled_plugins(uid)
+    # https://firebase.google.com/docs/firestore/query-data/queries#in_and_array-contains-any
+    limit = 30
+    enabled_apps = list(set(enabled_apps))
+    for i in range(0, len(enabled_apps), limit):
+        audio_apps_count = get_audio_apps_count(enabled_apps[i:i+limit])
+        if audio_apps_count > 0:
+            return True
+    return False

@@ -1,4 +1,5 @@
 *.env
+.env*
 *__pycache__/
 *venv/
 libraries/
@@ -107,7 +108,8 @@ src/recordings
 **/step-versions/
 
 # vscode configuration
-.vscode/
+/.vscode/
+!app/.vscode/launch.json
 !.vscode/extensions.json
 
 # test output
@@ -159,3 +161,4 @@ app/lib/env/prod_env.g.dart
 /backend/scripts/stt/pretrained_models
 /backend/scripts/stt/results
 /backend/scripts/stt/diarization.json
+/docs/.docusaurus

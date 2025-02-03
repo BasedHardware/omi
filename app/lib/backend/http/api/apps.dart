@@ -341,7 +341,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
 
 Future<List<PaymentPlan>> getPaymentPlansServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/app/payment-plans',
+    url: '${Env.apiBaseUrl}v1/app/plans',
     headers: {},
     body: '',
     method: 'GET',
@@ -354,5 +354,23 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return [];
+  }
+}
+
+Future<String> getGenratedDescription(String name, String description) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-description',
+    headers: {},
+    body: jsonEncode({'name': name, 'description': description}),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return '';
+    log('getGenratedDescription: ${response.body}');
+    return jsonDecode(response.body)['description'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return '';
   }
 }

@@ -15,7 +15,9 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
-    add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app
+    add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
+    is_permit_payment_plan_get
+from utils.llm import generate_description
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -59,6 +61,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             if data.get('payment_plan') is None:
                 raise HTTPException(status_code=422, detail='Payment plan is required')
     if external_integration := data.get('external_integration'):
+        external_integration['webhook_url'] = external_integration['webhook_url'].strip()
         if external_integration.get('triggers_on') is None:
             raise HTTPException(status_code=422, detail='Triggers on is required')
         # check if setup_instructions_file_path is a single url or a just a string of text
@@ -316,6 +319,7 @@ def get_plugin_capabilities():
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Memories', 'id': 'memories'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
+            {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
             {'title': 'Transcript Processed', 'id': 'transcript_processed'},
         ]},
@@ -328,11 +332,33 @@ def get_plugin_capabilities():
     ]
 
 
+# @deprecated
 @router.get('/v1/app/payment-plans', tags=['v1'])
-def get_payment_plans():
+def get_payment_plans_v1():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
+
+
+@router.get('/v1/app/plans', tags=['v1'])
+def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
+    if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
+        return []
+    return [
+        {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
+    ]
+
+
+@router.post('/v1/app/generate-description', tags=['v1'])
+def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    if data['name'] == '':
+        raise HTTPException(status_code=422, detail='App Name is required')
+    if data['description'] == '':
+        raise HTTPException(status_code=422, detail='App Description is required')
+    desc = generate_description(data['name'], data['description'])
+    return {
+        'description': desc,
+    }
 
 
 # ******************************************************

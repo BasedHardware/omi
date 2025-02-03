@@ -58,6 +58,9 @@ class AddAppProvider extends ChangeNotifier {
   bool isUpdating = false;
   bool isSubmitting = false;
   bool isValid = false;
+  bool isGenratingDescription = false;
+
+  bool allowPaidApps = false;
 
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
@@ -181,6 +184,11 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> getPaymentPlans() async {
     paymentPlans = await getPaymentPlansServer();
+    if (paymentPlans.isNotEmpty) {
+      allowPaidApps = true;
+    } else {
+      allowPaidApps = false;
+    }
     notifyListeners();
   }
 
@@ -623,6 +631,20 @@ class AddAppProvider extends ChangeNotifier {
     }
     appCategory = category;
     checkValidity();
+    notifyListeners();
+  }
+
+  Future<void> generateDescription() async {
+    setIsGenratingDescription(true);
+    var res = await getGenratedDescription(appNameController.text, appDescriptionController.text);
+    appDescriptionController.text = res.decodeString;
+    checkValidity();
+    setIsGenratingDescription(false);
+    notifyListeners();
+  }
+
+  void setIsGenratingDescription(bool genrating) {
+    isGenratingDescription = genrating;
     notifyListeners();
   }
 }

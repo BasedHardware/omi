@@ -3,6 +3,8 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/pages/capture/widgets/widgets.dart';
 import 'package:friend_private/pages/conversations/widgets/local_sync.dart';
 import 'package:friend_private/pages/conversations/widgets/processing_capture.dart';
+import 'package:friend_private/pages/conversations/widgets/search_result_header_widget.dart';
+import 'package:friend_private/pages/conversations/widgets/search_widget.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -49,8 +51,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SizedBox(height: 26)),
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            const SliverToBoxAdapter(child: LocalSyncWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SearchWidget()),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
               const SliverToBoxAdapter(
@@ -78,7 +83,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
                     if (index == convoProvider.groupedConversations.length) {
-                      print('loading more conversations');
+                      debugPrint('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return const Center(
                           child: Padding(
@@ -93,8 +98,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       return VisibilityDetector(
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
-                          if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
-                            convoProvider.getMoreConversationsFromServer();
+                          var provider = Provider.of<ConversationProvider>(context, listen: false);
+                          if (provider.previousQuery.isNotEmpty) {
+                            if (visibilityInfo.visibleFraction > 0 &&
+                                !provider.isLoadingConversations &&
+                                (provider.totalSearchPages > provider.currentSearchPage)) {
+                              provider.searchMoreConversations();
+                            }
+                          } else {
+                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                              convoProvider.getMoreConversationsFromServer();
+                            }
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
@@ -102,20 +116,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     } else {
                       var date = convoProvider.groupedConversations.keys.elementAt(index);
                       List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
-                      bool hasDiscarded = memoriesForDate.any((element) => element.discarded);
-                      bool hasNonDiscarded = memoriesForDate.any((element) => !element.discarded);
-
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (index == 0) const SizedBox(height: 16),
+                          if (index == 0) const SizedBox(height: 10),
                           ConversationsGroupWidget(
                             isFirst: index == 0,
                             conversations: memoriesForDate,
                             date: date,
-                            hasNonDiscardedMemories: hasNonDiscarded,
-                            showDiscardedMemories: convoProvider.showDiscardedConversations,
-                            hasDiscardedMemories: hasDiscarded,
                           ),
                         ],
                       );

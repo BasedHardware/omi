@@ -34,8 +34,12 @@ class IntercomManager {
     }
   }
 
+  Future displayEarnMoneyArticle() async {
+    return await intercom.displayArticle('10401566-build-publish-and-earn-with-omi-apps');
+  }
+
   Future displayFirmwareUpdateArticle() async {
-    return await intercom.displayArticle('9918118-updating-your-friend-device-firmware');
+    return await intercom.displayArticle('9995941-updating-your-devkit2-firmware');
   }
 
   Future logEvent(String eventName, {Map<String, dynamic>? metaData}) async {
@@ -64,7 +68,6 @@ class IntercomManager {
       'Calendar Enabled': _preferences.calendarEnabled,
       'Recordings Language': _preferences.recordingsLanguage,
       'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
-      'GCP Integration Set': _preferences.gcpCredentials.isNotEmpty && _preferences.gcpBucketName.isNotEmpty,
     });
   }
 }

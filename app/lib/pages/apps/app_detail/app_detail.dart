@@ -2,10 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:flutter_svg/svg.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:friend_private/pages/apps/app_detail/widgets/add_review_widget.dart';
 import 'package:friend_private/pages/apps/markdown_viewer.dart';
@@ -16,6 +14,7 @@ import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +25,7 @@ import 'dart:async';
 
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
+import 'widgets/app_analytics_widget.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -44,10 +44,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool setupCompleted = false;
   bool appLoading = false;
   bool isLoading = false;
-  double moneyMade = 0.0;
-  int usageCount = 0;
   Timer? _paymentCheckTimer;
   late App app;
+  late bool showInstallAppConfirmation;
 
   checkSetupCompleted() {
     // TODO: move check to backend
@@ -67,30 +66,30 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     app = widget.app;
+    showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
       setState(() {
         if (res != null) {
           app = res;
-          moneyMade = res.moneyMade ?? 0.0;
-          usageCount = res.usageCount ?? 0;
         }
       });
       setIsLoading(false);
-
       context.read<AppProvider>().checkIsAppOwner(app.uid);
       context.read<AppProvider>().setIsAppPublicToggled(!app.private);
     });
     if (app.worksExternally()) {
       if (app.externalIntegration!.setupInstructionsFilePath.isNotEmpty) {
-        getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
-          value = value.replaceAll(
-            '](assets/',
-            '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-          );
-          setState(() => instructionsMarkdown = value);
-        });
+        if (app.externalIntegration!.setupInstructionsFilePath.contains('raw.githubusercontent.com')) {
+          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath).then((value) {
+            value = value.replaceAll(
+              '](assets/',
+              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+            );
+            setState(() => instructionsMarkdown = value);
+          });
+        }
       }
       checkSetupCompleted();
     }
@@ -137,7 +136,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
     bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath.isNotEmpty == true;
     bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
     int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -411,7 +409,41 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 child: AnimatedLoadingButton(
                                   width: MediaQuery.of(context).size.width * 0.9,
                                   text: 'Install App',
-                                  onPressed: () => _toggleApp(app.id, true),
+                                  onPressed: () async {
+                                    if (app.worksExternally()) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) {
+                                          return StatefulBuilder(builder: (ctx, setState) {
+                                            return ConfirmationDialog(
+                                              title: 'Data Access Notice',
+                                              description:
+                                                  'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                              checkboxText: "Don't show it again",
+                                              checkboxValue: !showInstallAppConfirmation,
+                                              updateCheckboxValue: (value) {
+                                                if (value != null) {
+                                                  setState(() {
+                                                    showInstallAppConfirmation = !value;
+                                                    SharedPreferencesUtil().showInstallAppConfirmation = !value;
+                                                  });
+                                                }
+                                              },
+                                              onConfirm: () {
+                                                _toggleApp(app.id, true);
+                                                Navigator.pop(context);
+                                              },
+                                              onCancel: () {
+                                                Navigator.pop(context);
+                                              },
+                                            );
+                                          });
+                                        },
+                                      );
+                                    } else {
+                                      _toggleApp(app.id, true);
+                                    }
+                                  },
                                   color: Colors.green,
                                 ),
                               ),
@@ -689,64 +721,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   : const SizedBox.shrink(),
               // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
               // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-              app.private
-                  ? const SizedBox.shrink()
-                  : Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16.0),
-                      margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
-                        borderRadius: BorderRadius.circular(16.0),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('App Analytics', style: TextStyle(color: Colors.white, fontSize: 16)),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        usageCount.toString(),
-                                        style: const TextStyle(color: Colors.white, fontSize: 30),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Times Used', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                                ],
-                              ),
-                              const Spacer(flex: 2),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        "\$$moneyMade",
-                                        style: const TextStyle(color: Colors.white, fontSize: 28),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text('Money Earned', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-                                ],
-                              ),
-                              const Spacer(flex: 2),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+              // app.private
+              //     ? const SizedBox.shrink()
+              //     : AppAnalyticsWidget(
+              //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
               const SizedBox(height: 60),
             ],
           ),
@@ -817,7 +795,9 @@ class RecentReviewsSection extends StatelessWidget {
           constraints: BoxConstraints(
             maxHeight: reviews.any((e) => e.response.isNotEmpty)
                 ? MediaQuery.of(context).size.height * 0.24
-                : MediaQuery.of(context).size.height * 0.138,
+                : (MediaQuery.of(context).size.height < 680
+                    ? MediaQuery.of(context).size.height * 0.2
+                    : MediaQuery.of(context).size.height * 0.138),
           ),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,

@@ -150,7 +150,7 @@ def send_new_facts_notification(token: str, facts: [FactDB]):
         navigate_to="/facts",
     )
 
-    send_notification(token, "Omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
 def _extract_trends(memory: Memory):
@@ -163,7 +163,8 @@ def save_structured_vector(uid: str, memory: Memory, update_only: bool = False):
     vector = generate_embedding(str(memory.structured)) if not update_only else None
 
     segments = [t.dict() for t in memory.transcript_segments]
-    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments)
+    tz = notification_db.get_user_time_zone(uid)
+    metadata = retrieve_metadata_fields_from_transcript(uid, memory.created_at, segments, tz)
     metadata['created_at'] = int(memory.created_at.timestamp())
     if not update_only:
         print('save_structured_vector creating vector')
@@ -337,7 +338,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     print(f"Emotion Uid: {uid} {emotion}")
 
     # Ask llms about notification content
-    title = "Omi"
+    title = "omi"
     context_str, _ = retrieve_rag_memory_context(uid, memory)
 
     response: str = obtain_emotional_message(uid, memory, context_str, emotion)
