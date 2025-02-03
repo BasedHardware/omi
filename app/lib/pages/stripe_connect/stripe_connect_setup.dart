@@ -20,10 +20,20 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
   late Timer _pollTimer;
   bool _isOnboardingComplete = false;
   bool _isPolling = false;
+  bool _isInitialLoading = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      var res = await isStripeOnboardingComplete();
+      if (mounted) {
+        setState(() {
+          _isOnboardingComplete = res;
+          _isInitialLoading = false;
+        });
+      }
+    });
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -35,15 +45,28 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       _isPolling = true;
     });
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      var res = await isStripeOnboardingComplete();
-      setState(() {
-        _isOnboardingComplete = res;
-      });
-
+      await checkOnboardingStatus();
       if (_isOnboardingComplete) {
         timer.cancel();
+        _stopPolling();
       }
     });
+  }
+
+  Future checkOnboardingStatus() async {
+    var res = await isStripeOnboardingComplete();
+    setState(() {
+      _isOnboardingComplete = res;
+    });
+  }
+
+  void _stopPolling() {
+    if (mounted) {
+      setState(() {
+        _isPolling = false;
+      });
+      _pollTimer.cancel();
+    }
   }
 
   void _onboardingComplete() {
@@ -69,202 +92,241 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
         backgroundColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isInitialLoading ? null : () => Navigator.pop(context),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(
-                  width: 18,
-                ),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
+      body: _isInitialLoading
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 44),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(width: 18),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Image.asset(
+                          Assets.images.herologo.path,
+                          width: 26,
+                          color: Colors.black,
+                        ),
+                      ),
+                      Transform.translate(
+                        offset: const Offset(-18, 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF635BFF),
+                            shape: BoxShape.circle,
+                          ),
+                          child: SvgPicture.asset(
+                            Assets.images.stripeLogo,
+                            width: 40,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Image.asset(
-                    Assets.images.herologo.path,
-                    width: 26,
-                    color: Colors.black,
+                  const SizedBox(height: 48),
+                  AnimatedBuilder(
+                    animation: _pulseController,
+                    builder: (context, child) {
+                      return Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF635BFF),
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF635BFF).withOpacity(0.5),
+                              blurRadius: 15 * _pulseController.value,
+                              spreadRadius: 8 * _pulseController.value,
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.sync,
+                            color: Color(0xFF635BFF),
+                            size: 30,
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-                Transform.translate(
-                  offset: const Offset(-18, 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF635BFF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: SvgPicture.asset(
-                      Assets.images.stripeLogo,
-                      width: 40,
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Checking Stripe Status',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            if (!_isPolling && !_isOnboardingComplete) ...[
-              const Text(
-                'Get paid for your app sales through Stripe',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 48),
-              _buildFeatureRow(
-                icon: Icons.payments_rounded,
-                title: 'Monthly payouts',
-                description: 'Receive monthly payments directly to your account when you reach \$10 in earnings',
-              ),
-              const SizedBox(height: 24),
-              _buildFeatureRow(
-                icon: Icons.shield_outlined,
-                title: 'Secure and reliable',
-                description: 'Stripe ensures safe and timely transfers of your app revenue',
-              ),
-              const Spacer(),
-              Text(
-                'By clicking on "Connect Now" you agree to the',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
-              GestureDetector(
-                onTap: () {
-                  launchUrl(Uri.parse('https://stripe.com/connect-account/legal'));
-                },
-                child: const Text(
-                  'Stripe Connected Account Agreement',
-                  style: TextStyle(
-                    color: Color(0xFF635BFF),
-                    fontSize: 14,
+                  const SizedBox(height: 12),
+                  Text(
+                    'Please wait while we verify your Stripe account status',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[400],
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  Spacer(),
+                ],
               ),
-              const SizedBox(height: 18),
-              AnimatedLoadingButton(
-                text: "Connect Now",
-                loaderColor: Colors.black,
-                onPressed: () async {
-                  var res = await getStripeAccountLink();
-                  if (res != null) {
-                    await launchUrl(Uri.parse(res['url']));
-                    _startPolling();
-                  } else {
-                    AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
-                  }
-                },
-                color: Colors.white,
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.black,
-                ),
-                width: MediaQuery.of(context).size.width * 0.8,
-              ),
-            ],
-            if (_isPolling && !_isOnboardingComplete) ...[
-              const SizedBox(height: 48),
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFF635BFF),
-                        width: 3,
+            )
+          : Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(
+                        width: 18,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF635BFF).withOpacity(0.5),
-                          blurRadius: 20 * _pulseController.value,
-                          spreadRadius: 10 * _pulseController.value,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.sync,
-                        color: Color(0xFF635BFF),
-                        size: 40,
+                        child: Image.asset(
+                          Assets.images.herologo.path,
+                          width: 26,
+                          color: Colors.black,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 48),
-              const Text(
-                'Connecting your Stripe account',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[400],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (!_isPolling && _isOnboardingComplete) ...[
-              const SizedBox(height: 48),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF635BFF).withOpacity(0.15),
-                      Colors.purple.shade900.withOpacity(0.1),
+                      Transform.translate(
+                        offset: const Offset(-18, 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF635BFF),
+                            shape: BoxShape.circle,
+                          ),
+                          child: SvgPicture.asset(
+                            Assets.images.stripeLogo,
+                            width: 40,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
                     ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF635BFF).withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF635BFF).withOpacity(0.1),
-                        shape: BoxShape.circle,
+                  const SizedBox(height: 32),
+                  if (!_isPolling && !_isOnboardingComplete) ...[
+                    const Text(
+                      'Get paid for your app sales through Stripe',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      child: const Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: Color(0xFF635BFF),
-                        size: 48,
-                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 48),
+                    _buildFeatureRow(
+                      icon: Icons.payments_rounded,
+                      title: 'Monthly payouts',
+                      description: 'Receive monthly payments directly to your account when you reach \$10 in earnings',
                     ),
                     const SizedBox(height: 24),
+                    _buildFeatureRow(
+                      icon: Icons.shield_outlined,
+                      title: 'Secure and reliable',
+                      description: 'Stripe ensures safe and timely transfers of your app revenue',
+                    ),
+                    const Spacer(),
+                    Text(
+                      'By clicking on "Connect Now" you agree to the',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: () {
+                        launchUrl(Uri.parse('https://stripe.com/connect-account/legal'));
+                      },
+                      child: const Text(
+                        'Stripe Connected Account Agreement',
+                        style: TextStyle(
+                          color: Color(0xFF635BFF),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    AnimatedLoadingButton(
+                      text: "Connect Now",
+                      loaderColor: Colors.black,
+                      onPressed: () async {
+                        var res = await getStripeAccountLink();
+                        if (res != null) {
+                          _startPolling();
+                          await launchUrl(Uri.parse(res['url']));
+                        } else {
+                          AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
+                        }
+                      },
+                      color: Colors.white,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black,
+                      ),
+                      width: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                  ],
+                  if (_isPolling && !_isOnboardingComplete) ...[
+                    const SizedBox(height: 48),
+                    AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        return Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF635BFF),
+                              width: 3,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF635BFF).withOpacity(0.5),
+                                blurRadius: 20 * _pulseController.value,
+                                spreadRadius: 10 * _pulseController.value,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.sync,
+                              color: Color(0xFF635BFF),
+                              size: 40,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 48),
                     const Text(
-                      '🎉 Successfully Connected!',
+                      'Connecting your Stripe account',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -274,36 +336,116 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.',
+                      'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey[400],
-                        height: 1.5,
                       ),
                       textAlign: TextAlign.center,
                     ),
+                    const Spacer(),
+                    AnimatedLoadingButton(
+                      text: "Failed? Try Again",
+                      onPressed: () async {
+                        var res = await getStripeAccountLink();
+                        if (res != null) {
+                          _startPolling();
+                          await launchUrl(Uri.parse(res['url']));
+                        } else {
+                          AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
+                        }
+                      },
+                      color: Colors.white,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black,
+                      ),
+                      width: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                    TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: Text(
+                          "I'll do it later",
+                          style: TextStyle(color: Colors.grey[400]),
+                        )),
                   ],
-                ),
+                  if (!_isPolling && _isOnboardingComplete) ...[
+                    const SizedBox(height: 48),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF635BFF).withOpacity(0.15),
+                            Colors.purple.shade900.withOpacity(0.1),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF635BFF).withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF635BFF).withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_circle_outline_rounded,
+                              color: Color(0xFF635BFF),
+                              size: 48,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Successfully Connected! 🎉',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[400],
+                              height: 1.5,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    AnimatedLoadingButton(
+                      text: "Done",
+                      onPressed: () async {
+                        _onboardingComplete();
+                      },
+                      color: Colors.white,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
+                      width: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                  ],
+                  const SizedBox(height: 36),
+                ],
               ),
-              const SizedBox(height: 48),
-              AnimatedLoadingButton(
-                text: "Done",
-                onPressed: () async {
-                  _onboardingComplete();
-                },
-                color: const Color(0xFF635BFF),
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-                width: MediaQuery.of(context).size.width * 0.8,
-              ),
-            ],
-            const SizedBox(height: 36),
-          ],
-        ),
-      ),
+            ),
     );
   }
 
