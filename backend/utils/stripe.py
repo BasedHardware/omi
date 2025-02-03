@@ -61,7 +61,7 @@ def parse_event(payload, sig_header):
     )
 
 
-def create_connect_account(base_url: str):
+def create_connect_account(base_url: str, uid: str):
     account = stripe.Account.create(
         controller={
             "stripe_dashboard": {
@@ -73,6 +73,9 @@ def create_connect_account(base_url: str):
             "losses": {
                 "payments": "application"
             },
+        },
+        metadata={
+            "uid": uid,
         },
         settings={
             "payouts": {

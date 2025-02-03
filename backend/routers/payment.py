@@ -54,7 +54,7 @@ async def create_connect_account_endpoint(request: Request, uid: str = Depends(a
         if account_id:
             account = refresh_connect_account_link(account_id, base_url)
         else:
-            account = create_connect_account(base_url)
+            account = create_connect_account(base_url, uid)
             set_stripe_connect_account_id(uid, account['account_id'])
 
         return account
