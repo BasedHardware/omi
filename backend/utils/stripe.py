@@ -6,6 +6,8 @@ import stripe
 stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
+omi_marketplace_fee = 8  # 8% fee to cover the stripe fees otherwise we will be burning money for each transaction
+
 
 def create_product(name: str, description: str, image: str):
     """Create a new product in Stripe."""
@@ -24,18 +26,27 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
         unit_amount=amount_in_cents,
         currency=currency,
         product=product_id,
-        recurring={'interval': 'month'},
+        recurring={'interval': 'month'}
     )
     return price
 
 
-def create_app_payment_link(price_id: str, app_id: str):
+def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):
     """Create a payment link for the specified price."""
     payment_link = stripe.PaymentLink.create(
         line_items=[{
             'price': price_id,
             'quantity': 1,
         }],
+        transfer_data={
+            'destination': stripe_acc_id,
+        },
+        subscription_data={
+            'metadata': {
+                'app_id': app_id
+            }
+        },
+        application_fee_percent=omi_marketplace_fee,
         metadata={
             'app_id': app_id
         },
@@ -99,15 +110,6 @@ def refresh_connect_account_link(account_id: str, base_url: str):
         "url": account_link.url
     }
 
-
-def check_connect_account_onboarding_status(account_id: str):
-    account = stripe.Account.retrieve(account_id)
-    return {
-        "charges_enabled": account.charges_enabled,
-        "payouts_enabled": account.payouts_enabled,
-        "details_submitted": account.details_submitted,
-        "capabilities": account.capabilities
-    }
 
 
 def is_onboarding_complete(account_id: str):

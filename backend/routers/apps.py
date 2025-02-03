@@ -12,6 +12,7 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
     decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
+from database.users import get_stripe_connect_account_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
@@ -22,6 +23,7 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo
+from utils.stripe import is_onboarding_complete
 
 router = APIRouter()
 
@@ -52,6 +54,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         data['is_paid'] = False
     else:
         if data['is_paid'] is True:
+            stripe_acc_id = get_stripe_connect_account_id(uid)
+            if stripe_acc_id:
+                if not is_onboarding_complete(stripe_acc_id):
+                    raise HTTPException(status_code=422, detail='Please connect your Stripe account first')
             if data.get('price') is None:
                 raise HTTPException(status_code=422, detail='App price is required')
             if data.get('price') < 0.0:
@@ -82,7 +88,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # payment link
     app = App(**data)
-    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan)
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok'}
 
@@ -92,6 +98,11 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     plugin = get_available_app_by_id(app_id, uid)
+    if plugin['is_paid']:
+        stripe_acc_id = get_stripe_connect_account_id(uid)
+        if stripe_acc_id:
+            if not is_onboarding_complete(stripe_acc_id):
+                raise HTTPException(status_code=422, detail='Please connect your Stripe account first before making the app paid')
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
     if plugin['uid'] != uid:
@@ -109,7 +120,7 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), data.get('uid'),
                             previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):

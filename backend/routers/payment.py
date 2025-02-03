@@ -7,7 +7,7 @@ from utils.apps import paid_app
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
-from utils.stripe import create_connect_account, refresh_connect_account_link, check_connect_account_onboarding_status, \
+from utils.stripe import create_connect_account, refresh_connect_account_link, \
     is_onboarding_complete
 
 router = APIRouter()
@@ -96,50 +96,60 @@ async def stripe_return(account_id: str):
     """
     Handle the return flow from Stripe Connect account creation
     """
-    html_content = """
+    onboarding_complete = is_onboarding_complete(account_id)
+    title = "Stripe Account Setup Complete" if onboarding_complete else "Stripe Account Setup Incomplete"
+    message_class = "" if onboarding_complete else "error"
+    message = "Your Stripe account has been successfully set up with Omi AI. You can now start receiving payments." if onboarding_complete \
+        else "The account setup process was not completed. Please try again in a few minutes. If the issue persists, contact support."
+
+    html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <title>Return to App</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {
+            body {{                
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
-                height: 100vh;
+                min-height: 100vh;
                 margin: 0;
+                padding: 20px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            }
-            .heading {
-                font-size: 24px;
+                box-sizing: border-box;
+            }}
+            .heading {{
+                font-size: clamp(20px, 5vw, 24px);
                 font-weight: bold;
                 margin-bottom: 20px;
                 color: #333;
                 text-align: center;
-            }
-            .button {
-                background-color: #4CAF50;
-                border: none;
-                color: white;
-                padding: 15px 32px;
+            }}
+            .message {{
+                font-size: clamp(14px, 4vw, 16px);
+                color: #666;
                 text-align: center;
-                text-decoration: none;
-                display: inline-block;
-                font-size: 16px;
-                margin: 4px 2px;
-                cursor: pointer;
-                border-radius: 4px;
-                transition: background-color 0.3s;
-            }
-            .button:hover {
-                background-color: #45a049;
-            }
+                margin-bottom: 30px;
+                max-width: 600px;
+                line-height: 1.5;
+            }}
+            .close-instruction {{
+                font-size: clamp(14px, 4vw, 16px);
+                color: #4CAF50;
+                text-align: center;
+                margin-top: 20px;
+            }}
+            .error {{
+                color: #d32f2f;
+            }}
         </style>
     </head>
     <body>
-        <h1 class="heading">Stripe Account Setup Complete with Omi AI</h1>
-        <a href="/" class="button">Return to App</a>
+        <h1 class="heading">{title}</h1>
+        <p class="message {message_class}">{message}</p>
+        <p class="close-instruction">You can now close this window and return to the app</p>
     </body>
     </html>
     """
