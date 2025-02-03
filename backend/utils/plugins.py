@@ -350,15 +350,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
         url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
             response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
-            if response.status_code != 200:
-                print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code, 'results:',
-                      response.text[:100])
-                return
-
-            response_data = response.json()
-            if not response_data:
-                return
-
+            print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code)
         except Exception as e:
             print(f"Plugin integration error: {e}")
             return
