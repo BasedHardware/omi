@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
 import 'package:friend_private/pages/speech_profile/page.dart';
+import 'package:friend_private/pages/stripe_connect/stripe_connect_setup.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 import 'delete_account.dart';
-import 'recordings_storage_permission.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -83,6 +82,16 @@ class _ProfilePageState extends State<ProfilePage> {
               onTap: () {
                 routeToPage(context, const SpeechProfilePage());
                 MixpanelManager().pageOpened('Profile Speech Profile');
+              },
+            ),
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              title: const Text('Payment Method', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Connect stripe to receive payments'),
+              trailing: const Icon(Icons.attach_money_outlined, size: 20),
+              onTap: () {
+                routeToPage(context, const StripeConnectSetup());
+                MixpanelManager().pageOpened('Profile Connect Stripe');
               },
             ),
             ListTile(
