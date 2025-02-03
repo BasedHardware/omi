@@ -341,5 +341,11 @@ def paid_app(app_id: str, uid: str):
 
 def is_audio_bytes_app_enabled(uid: str):
     enabled_apps = get_enabled_plugins(uid)
-    audio_apps_count = get_audio_apps_count(enabled_apps)
-    return audio_apps_count > 0
+    # https://firebase.google.com/docs/firestore/query-data/queries#in_and_array-contains-any
+    limit = 30
+    enabled_apps = list(set(enabled_apps))
+    for i in range(0, len(enabled_apps), limit):
+        audio_apps_count = get_audio_apps_count(enabled_apps[i:i+limit])
+        if audio_apps_count > 0:
+            return True
+    return False
