@@ -8,14 +8,14 @@ import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class StripeCOnnectSetup extends StatefulWidget {
-  const StripeCOnnectSetup({super.key});
+class StripeConnectSetup extends StatefulWidget {
+  const StripeConnectSetup({super.key});
 
   @override
-  State<StripeCOnnectSetup> createState() => _StripeCOnnectSetupState();
+  State<StripeConnectSetup> createState() => _StripeConnectSetupState();
 }
 
-class _StripeCOnnectSetupState extends State<StripeCOnnectSetup> with SingleTickerProviderStateMixin {
+class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Timer _pollTimer;
   bool _isOnboardingComplete = false;
