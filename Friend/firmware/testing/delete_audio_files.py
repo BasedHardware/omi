@@ -39,7 +39,7 @@ async def main():
                                   print('valid response. deleting more')
                                   count = count+1
                                   command = bytearray([1,count ,0,0,0,0])
-                                  print('attemptign to delete ',count)
+                                  print('attempting to delete ',count)
                                   await client.write_gatt_char(storage_uuid, command, response=True)
  
 
@@ -50,7 +50,7 @@ async def main():
                 await asyncio.sleep(1)
                 command = bytearray([1,file_num ,0,0,0,0])
                 await client.write_gatt_char(storage_uuid, command, response=True)
-                print('attemptign to delete ',count)
+                print('attempting to delete ',count)
                 await asyncio.sleep(1)   
                 while True:
                     await asyncio.sleep(1)
