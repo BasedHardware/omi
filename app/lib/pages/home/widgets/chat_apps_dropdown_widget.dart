@@ -75,16 +75,21 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 }
 
                 // clear chat
-                if (val == 'clear_chat') {
+                if (val == 'new_chat') {
                   showDialog(
                     context: context,
                     builder: (ctx) {
                       return getDialog(context, () {
                         Navigator.of(context).pop();
                       }, () {
-                        context.read<MessageProvider>().clearChat();
+                        context.read<MessageProvider>().createNewChat();
+
+                        var app = provider.getSelectedApp();
+                        if (context.read<MessageProvider>().messages.isEmpty) {
+                          context.read<MessageProvider>().sendInitialAppMessage(app);
+                        }
                         Navigator.of(context).pop();
-                      }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
+                      }, "New Chat", "Start a new chat session?");
                     },
                   );
                   return;
@@ -174,17 +179,17 @@ class ChatAppsDropdownWidget extends StatelessWidget {
     var items = [
           const PopupMenuItem<String>(
             height: 40,
-            value: 'clear_chat',
+            value: 'new_chat', 
             child: Padding(
               padding: EdgeInsets.only(left: 32),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+                  Text('New Chat', style: TextStyle(color: Colors.white, fontSize: 16)),
                   SizedBox(
                     width: 24,
-                    child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
+                    child: Icon(Icons.add_circle_outline, color: Colors.white, size: 16),
                   ),
                 ],
               ),
@@ -206,14 +211,14 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 24,
                   child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -231,7 +236,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
           )
         ] +
         [
-          PopupMenuItem<String>(
+          const PopupMenuItem<String>(
             height: 1,
             child: Divider(
               height: 1,
@@ -250,9 +255,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        const Text(
                           "Omi",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                         ),
                         selectedApp == null
                             ? const SizedBox(
