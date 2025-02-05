@@ -54,10 +54,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         data['is_paid'] = False
     else:
         if data['is_paid'] is True:
-            stripe_acc_id = get_stripe_connect_account_id(uid)
-            if stripe_acc_id:
-                if not is_onboarding_complete(stripe_acc_id):
-                    raise HTTPException(status_code=422, detail='Please connect your Stripe account first')
             if data.get('price') is None:
                 raise HTTPException(status_code=422, detail='App price is required')
             if data.get('price') < 0.0:
@@ -98,11 +94,6 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
                uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
     plugin = get_available_app_by_id(app_id, uid)
-    if plugin['is_paid']:
-        stripe_acc_id = get_stripe_connect_account_id(uid)
-        if stripe_acc_id:
-            if not is_onboarding_complete(stripe_acc_id):
-                raise HTTPException(status_code=422, detail='Please connect your Stripe account first before making the app paid')
     if not plugin:
         raise HTTPException(status_code=404, detail='App not found')
     if plugin['uid'] != uid:
