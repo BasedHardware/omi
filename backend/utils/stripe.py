@@ -6,8 +6,6 @@ import stripe
 stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 
-omi_marketplace_fee = 10  # 10% fee to cover the stripe fees otherwise we will be burning money for each transaction
-
 
 def create_product(name: str, description: str, image: str):
     """Create a new product in Stripe."""
@@ -46,7 +44,6 @@ def create_app_payment_link(price_id: str, app_id: str, stripe_acc_id: str):
                 'app_id': app_id
             }
         },
-        application_fee_percent=omi_marketplace_fee,
         metadata={
             'app_id': app_id
         },
