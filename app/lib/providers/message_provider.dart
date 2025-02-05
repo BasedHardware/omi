@@ -4,13 +4,19 @@ import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/backend/schema/chat_session.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/file.dart';
+import 'package:friend_private/utils/logger.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
+
+  List<ChatSession> _chatSessions = [];
+  String? _currentSessionId;
+  bool _isLoadingSessions = false;
 
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
@@ -19,6 +25,13 @@ class MessageProvider extends ChangeNotifier {
   bool sendingMessage = false;
 
   String firstTimeLoadingText = '';
+
+  List<ChatSession> get chatSessions => _chatSessions;
+  String? get currentSessionId => _currentSessionId;
+  bool get isLoadingSessions => _isLoadingSessions;
+  ChatSession? get currentSession => _currentSessionId != null 
+      ? _chatSessions.firstWhereOrNull((s) => s.id == _currentSessionId)
+      : null;
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
@@ -54,21 +67,39 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false}) async {
-    setLoadingMessages(true);
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-    }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-    if (messages.isEmpty) {
-      messages = SharedPreferencesUtil().cachedMessages;
-    } else {
+ Future refreshMessages({bool dropdownSelected = false}) async {
+  if (_currentSessionId == null) return;
+  
+  setLoadingMessages(true);
+  
+  // Check for cached messages for this session
+  if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
+    setHasCachedMessages(true);
+  }
+
+  try {
+    // Get messages for current session
+    final sessionMessages = await getSessionMessagesServer(_currentSessionId!);
+    
+    if (sessionMessages.isNotEmpty) {
+      messages = sessionMessages;
       SharedPreferencesUtil().cachedMessages = messages;
       setHasCachedMessages(true);
+    } else if (messages.isEmpty) {
+      // If no server messages, use cached messages
+      messages = SharedPreferencesUtil().cachedMessages;
     }
+  } catch (e) {
+    Logger.error('Error refreshing session messages: $e');
+    // On error, fall back to cached messages
+    if (messages.isEmpty) {
+      messages = SharedPreferencesUtil().cachedMessages;
+    }
+  } finally {
     setLoadingMessages(false);
     notifyListeners();
   }
+}
 
   void setMessagesFromCache() {
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
@@ -183,13 +214,19 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text, String? appId) async {
+    if (_currentSessionId == null) {
+      await createNewChat();
+    }
+  
     setShowTypingIndicator(true);
     var message = ServerMessage.empty(appId: appId);
     messages.insert(0, message);
     notifyListeners();
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: appId)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: appId, sessionId: _currentSessionId)) {
+        debugPrint('Received chunk type: ${chunk.type}');
+        
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();
@@ -244,5 +281,106 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  }
+
+  Future<void> loadChatSessions() async {
+    _isLoadingSessions = true;
+    notifyListeners();
+
+    try {
+      final sessions = await getChatSessionsServer();
+      _chatSessions = sessions;
+
+      // If no current session, set to most recent
+      if (_currentSessionId == null && sessions.isNotEmpty) {
+        _currentSessionId = sessions.first.id;
+      }
+    } catch (e) {
+      Logger.error('Error loading chat sessions: $e');
+    } finally {
+      _isLoadingSessions = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> createNewChat() async {
+    try {
+      final newSession = await createChatSessionServer(
+        pluginId: appProvider?.selectedChatAppId
+      );
+      
+      if (newSession != null) {
+        _chatSessions.insert(0, newSession);
+        _currentSessionId = newSession.id;
+        messages.clear(); // Clear current messages
+        notifyListeners();
+      }
+    } catch (e) {
+      Logger.error('Error creating new chat: $e');
+    }
+  }
+
+  Future<void> loadChatSession(String sessionId) async {
+    if (sessionId == _currentSessionId) return;
+
+    setHasCachedMessages(false);
+    setLoadingMessages(true);
+
+    if(isLoadingMessages) {
+      firstTimeLoadingText = 'Loading your chat...';
+    }
+
+    try {
+      _currentSessionId = sessionId;
+      messages = await getSessionMessagesServer(sessionId) ?? [];
+      SharedPreferencesUtil().cachedMessages = messages;
+      setHasCachedMessages(true);
+    } catch (e) {
+      Logger.error('Error loading chat session: $e');
+    } finally {
+      setLoadingMessages(false);
+      setHasCachedMessages(true);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteChatSession(String sessionId) async {
+    try {
+      final success = await deleteChatSessionServer(sessionId);
+      
+      if (success) {
+        _chatSessions.removeWhere((s) => s.id == sessionId);
+        
+        // If current session was deleted, switch to most recent
+        if (sessionId == _currentSessionId && _chatSessions.isNotEmpty) {
+          await loadChatSession(_chatSessions.first.id);
+        } else if (_chatSessions.isEmpty) {
+          _currentSessionId = null;
+          messages.clear();
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      Logger.error('Error deleting chat session: $e');
+    }
+  }
+
+  Future<void> renameChatSession(String sessionId, String newName) async {
+    try {
+      final updatedSession = await updateChatSessionServer(
+        sessionId, 
+        {'title': newName}
+      );
+      
+      if (updatedSession != null) {
+        final index = _chatSessions.indexWhere((s) => s.id == sessionId);
+        if (index != -1) {
+          _chatSessions[index] = updatedSession;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      Logger.error('Error renaming chat session: $e');
+    }
   }
 }
