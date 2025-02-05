@@ -4,6 +4,19 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+class ChatSession(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    user_id: str
+    plugin_id: Optional[str] = None
+    is_active: bool = True
+    message_count: int = 0
+
+class ChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class MessageSender(str, Enum):
     ai = 'ai'
