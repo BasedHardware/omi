@@ -308,6 +308,7 @@ class MessageProvider extends ChangeNotifier {
     messages.insert(0, message);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
+    SharedPreferencesUtil().fileIdsList = fileIds;
     clearSelectedFiles();
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: appId, filesId: fileIds)) {
