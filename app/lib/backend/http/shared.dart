@@ -38,8 +38,9 @@ Future<String> getAuthHeader() async {
 Future<http.Response?> makeApiCall({
   required String url,
   required Map<String, String> headers,
-  required String body,
   required String method,
+  String body = '',
+  Map<String, String>? queryParams
 }) async {
   try {
     // var startTime = DateTime.now();
@@ -49,6 +50,12 @@ Future<http.Response?> makeApiCall({
       debugPrint('No internet connection, aborting $method $url');
       return null;
     }
+
+    var uri = Uri.parse(url);
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
     if (url.contains(Env.apiBaseUrl!)) {
       headers['Authorization'] = await getAuthHeader();
       // headers['Authorization'] = ''; // set admin key + uid here for testing
@@ -56,7 +63,7 @@ Future<http.Response?> makeApiCall({
 
     final client = http.Client();
 
-    http.Response? response = await _performRequest(client, url, headers, body, method);
+    http.Response? response = await _performRequest(client, uri.toString(), headers, body, method);
     if (response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       // Refresh the token
