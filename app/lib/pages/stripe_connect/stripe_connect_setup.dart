@@ -55,9 +55,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
 
   Future checkOnboardingStatus() async {
     var res = await isStripeOnboardingComplete();
-    setState(() {
-      _isOnboardingComplete = res;
-    });
+    if (mounted) {
+      setState(() {
+        _isOnboardingComplete = res;
+      });
+    }
   }
 
   void _stopPolling() {
