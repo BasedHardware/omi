@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/http/api/stripe_connect.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/providers/app_provider.dart';
@@ -65,8 +64,6 @@ class AddAppProvider extends ChangeNotifier {
 
   bool allowPaidApps = false;
 
-  bool isStripeConnected = false;
-
   void setAppProvider(AppProvider provider) {
     appProvider = provider;
   }
@@ -84,7 +81,6 @@ class AddAppProvider extends ChangeNotifier {
     }
     creatorNameController.text = SharedPreferencesUtil().givenName;
     creatorEmailController.text = SharedPreferencesUtil().email;
-    getStripeOnboardingStatus();
     setIsLoading(false);
   }
 
@@ -201,11 +197,6 @@ class AddAppProvider extends ChangeNotifier {
     } else {
       allowPaidApps = false;
     }
-    notifyListeners();
-  }
-
-  Future<void> getStripeOnboardingStatus() async {
-    isStripeConnected = await isStripeOnboardingComplete();
     notifyListeners();
   }
 
@@ -417,12 +408,6 @@ class AddAppProvider extends ChangeNotifier {
   Future<void> updateApp() async {
     setIsUpdating(true);
 
-    if (!isStripeConnected && isPaid) {
-      AppSnackbar.showSnackbarError('Please connect your stripe account to submit paid apps');
-      setIsUpdating(false);
-      return;
-    }
-
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
@@ -484,12 +469,6 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> submitApp() async {
     setIsSubmitting(true);
-
-    if (!isStripeConnected && isPaid) {
-      AppSnackbar.showSnackbarError('Please connect your stripe account to submit paid apps');
-      setIsUpdating(false);
-      return;
-    }
 
     Map<String, dynamic> data = {
       'name': appNameController.text,
