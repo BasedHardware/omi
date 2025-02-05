@@ -304,9 +304,6 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
     # create recurring payment link
     if payment_plan == 'monthly_recurring':
         stripe_acc_id = get_stripe_connect_account_id(uid)
-        if not stripe_acc_id:
-            print(f"Stripe Connect account not found, app_id: {app_id}")
-            return app
 
         # product
         if not app.payment_product_id:
