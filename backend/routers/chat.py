@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory
+from models.chat import ChatSession, ChatSessionUpdate, Message, MessageType, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
@@ -312,3 +312,110 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+@router.post('/v1/sessions', tags=['chat'], response_model=ChatSession)
+def create_session(
+    plugin_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Create a new chat session"""
+    session_id = chat_db.create_chat_session(uid, plugin_id)
+    return chat_db.get_chat_session(uid, session_id)
+
+@router.get('/v1/sessions', tags=['chat'], response_model=List[ChatSession])
+def get_sessions(
+    plugin_id: Optional[str] = None,
+    limit: int = 20,
+    offset: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Get user's chat sessions"""
+    return chat_db.get_chat_sessions(uid, plugin_id, limit, offset)
+
+@router.patch('/v1/sessions/{session_id}', tags=['chat'], response_model=ChatSession)
+def update_session(
+    session_id: str,
+    updates: ChatSessionUpdate,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Update chat session details"""
+    chat_db.update_chat_session(session_id, updates)
+    return chat_db.get_chat_session(uid, session_id)
+
+@router.delete('/v1/sessions/{session_id}', tags=['chat'])
+def delete_session(
+    session_id: str,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Delete a chat session"""
+    chat_db.delete_chat_session(session_id, uid)
+    return {"message": "Session deleted"}
+
+@router.post('/v1/sessions/{session_id}/messages', tags=['chat'], response_model=Message)
+def send_session_message(
+    session_id: str,
+    data: SendMessageRequest,
+    plugin_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Send a message in a specific chat session"""
+    if plugin_id in ['null', '']:
+        plugin_id = None
+    
+    message = Message(
+        id=str(uuid.uuid4()),
+        text=data.text,
+        created_at=datetime.now(timezone.utc),
+        sender=MessageSender.human,
+        plugin_id=plugin_id,
+        type=MessageType.text
+    )
+
+    chat_db.add_message_with_session(uid, session_id, message.dict())
+
+    app = get_available_app_by_id(plugin_id, uid) if plugin_id else None
+    app = App(**app) if app else None
+
+    messages = list(reversed([
+        Message(**msg) for msg in
+        chat_db.get_session_messages(session_id, limit=10)
+    ]))
+
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)
+
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=response,
+        created_at=datetime.now(timezone.utc),
+        sender=MessageSender.ai,
+        plugin_id=plugin_id,
+        type=MessageType.text,
+        memories_id=[m.id for m in memories[:5]] if memories else [],
+        memories=memories[:5] if memories else []
+    )
+
+    chat_db.add_message_with_session(uid, session_id, ai_message.dict())
+
+    if plugin_id:
+        record_app_usage(uid, plugin_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+
+    resp = ai_message.dict()
+    resp['ask_for_nps'] = ask_for_nps
+    return Message(**resp)
+
+@router.get('/v1/sessions/{session_id}/messages', tags=['chat'], response_model=List[Message])
+def get_session_messages_endpoint(
+    session_id: str,
+    before: Optional[datetime] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Get messages from a specific chat session"""
+    messages = chat_db.get_session_messages(
+        session_id,
+        before_timestamp=before,
+        include_memories=True
+    )
+
+    if not messages:
+        return [initial_message_util(uid)]
+    return messages
