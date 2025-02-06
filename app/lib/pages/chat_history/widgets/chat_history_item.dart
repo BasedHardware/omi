@@ -42,7 +42,7 @@ class ChatHistoryItem extends StatelessWidget {
               child: Icon(
                 Icons.edit,
                 size: 16,
-                color: Colors.white38,
+                color: Colors.white,
               ),
             ),
           ),
@@ -56,7 +56,7 @@ class ChatHistoryItem extends StatelessWidget {
               child: Icon(
                 Icons.delete_outline,
                 size: 16,
-                color: Colors.white38,
+                color: Colors.red,
               ),
             ),
           ),
