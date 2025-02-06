@@ -55,6 +55,7 @@ class FileChatTool:
     def __init__(self) -> None:
         self.thread = None
         self.assistant = None
+        self.file_ids = []
 
     def upload(self, file_path) -> dict:
         result = {}
@@ -91,6 +92,12 @@ class FileChatTool:
         self.create_assistant()
         answer = self.ask_stream(uid, question, file_ids, callback)
         return answer
+
+    def add_files(self, file_ids):
+        self.file_ids.extend(file_ids)
+
+    def retrieve_new_file(self, file_ids) -> List:
+        return list(set(file_ids) - set(self.file_ids))
 
     def create_thread(self):
         if self.thread:
@@ -213,4 +220,5 @@ class FileChatTool:
         if self.assistant:
             openai.beta.assistants.delete(self.assistant.id)
             self.assistant = None
+        self.file_ids = []
 

@@ -25,7 +25,7 @@ from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 
 router = APIRouter()
-
+fc = FileChatTool()
 
 def filter_messages(messages, plugin_id):
     print('filter_messages', len(messages), plugin_id)
@@ -50,7 +50,12 @@ def send_message(
         plugin_id=plugin_id
     )
     if data.file_ids is not None:
-        message.files_id = data.file_ids
+        new_file_ids = fc.retrieve_new_file(data.file_ids)
+        if len(new_file_ids) > 0:
+            message.files_id = new_file_ids
+            fc.add_files(new_file_ids)
+        message.reference_files_id = data.file_ids
+
 
     chat_db.add_message(uid, message.dict())
 
@@ -91,17 +96,13 @@ def send_message(
             type='text',
             memories_id=memories_id,
         )
-        if len(message.files_id) > 0:
-            ai_message.files_id = message.files_id
+        if len(message.reference_files_id) > 0:
+            ai_message.reference_files_id = message.reference_files_id
 
         chat_db.add_message(uid, ai_message.dict())
         ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
-        if len(ai_message.files_id) > 0:
-            files = chat_db.get_chat_files(uid, ai_message.files_id)
-            ai_message.files = files
 
         return ai_message, ask_for_nps
 
@@ -155,7 +156,11 @@ def send_message_v1(
         plugin_id=plugin_id
     )
     if data.file_ids is not None:
-        message.files_id = data.file_ids
+        new_file_ids = fc.retrieve_new_file(data.file_ids)
+        if len(new_file_ids) > 0:
+            message.files_id = new_file_ids
+            fc.add_files(new_file_ids)
+        message.reference_files_id = data.file_ids
 
     chat_db.add_message(uid, message.dict())
 
@@ -192,8 +197,8 @@ def send_message_v1(
         type='text',
         memories_id=memories_id,
     )
-    if data.file_ids is not None:
-        ai_message.files_id = data.file_ids
+    if message.reference_files_id is not None:
+        ai_message.reference_files_id = message.reference_files_id
 
 
     chat_db.add_message(uid, ai_message.dict())
@@ -201,9 +206,6 @@ def send_message_v1(
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-    if len(ai_message.files_id) > 0:
-        files = chat_db.get_chat_files(uid, ai_message.files_id)
-        ai_message.files = files
 
     resp = ai_message.dict()
     resp['ask_for_nps'] = ask_for_nps
