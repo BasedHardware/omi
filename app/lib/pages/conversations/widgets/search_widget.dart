@@ -3,6 +3,7 @@ import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
+import 'calendar.dart'; // Relative path import
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -79,6 +80,10 @@ class _SearchWidgetState extends State<SearchWidget> {
               style: const TextStyle(color: Colors.white),
             ),
           ),
+          const SizedBox(
+            width: 12,
+          ),
+          const CalendarIconButton(),
           const SizedBox(
             width: 12,
           ),
