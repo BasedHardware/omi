@@ -18,60 +18,74 @@ class ChatHistoryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      title: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-            Text(
-              session.name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          const SizedBox(width: 4),
-          // Edit button
-          InkWell(
-            onTap: () => _showRenameDialog(context),
-            borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(4.0),
-              child: Icon(
-                Icons.edit,
-                size: 16,
-                color: Colors.white,
-              ),
+  onTap: onTap,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  title: Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Expanded(
+        child: Text(
+          session.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      const SizedBox(width: 8),
+      // Edit button
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: InkWell(
+          onTap: () => _showRenameDialog(context),
+          borderRadius: BorderRadius.circular(8),
+          child: const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Icon(
+              Icons.edit_outlined,
+              size: 20,
+              color: Colors.white70,
             ),
           ),
-          const SizedBox(width: 4),
-          // Delete button
-          InkWell(
-            onTap: () => _showDeleteConfirmation(context),
-            borderRadius: BorderRadius.circular(12),
-            child: const Padding(
-              padding: EdgeInsets.all(4.0),
-              child: Icon(
-                Icons.delete_outline,
-                size: 16,
-                color: Colors.red,
-              ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      // Delete button
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: InkWell(
+          onTap: () => _showDeleteConfirmation(context),
+          borderRadius: BorderRadius.circular(8),
+          child: const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Icon(
+              Icons.delete_outline,
+              size: 20,
+              color: Colors.red,
             ),
           ),
-        ],
+        ),
       ),
-      subtitle: Text(
-        _formatDate(session.lastMessageDate),
-        style: TextStyle(color: Colors.grey[400]),
-      ),
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        color: Colors.white60,
-        size: 16,
-      ),
-    );
+    ],
+  ),
+  subtitle: Text(
+    _formatDate(session.lastMessageDate),
+    style: TextStyle(color: Colors.grey[400]),
+  ),
+  trailing: const Icon(
+    Icons.arrow_forward_ios,
+    color: Colors.white60,
+    size: 16,
+  ),
+);
   }
 
   Future<void> _showDeleteConfirmation(BuildContext context) async {
@@ -79,7 +93,7 @@ class ChatHistoryItem extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
           title: const Text(
             'Delete Chat',
             style: TextStyle(color: Colors.white),
