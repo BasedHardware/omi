@@ -57,7 +57,8 @@ class Message(BaseModel):
     deleted: bool = False
     reported: bool = False
     report_reason: Optional[str] = None
-    files_id: List[str] = []
+    files_id: List[str] = [] # file attached with message
+    reference_files_id: List[str] = [] # related files with message
     files: List[FileChat] = []
 
     @staticmethod
@@ -121,7 +122,7 @@ class Message(BaseModel):
         return '\n'.join(formatted_messages)
 
     def is_message_with_file(self):
-        return len(self.files_id) > 0
+        return len(self.reference_files_id) > 0
 
 
 class ResponseMessage(Message):

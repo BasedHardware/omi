@@ -310,10 +310,10 @@ def file_chat_question(state: GraphState):
 
     streaming = state.get("streaming")
     if streaming:
-        answer = fc_tool.process_chat_with_file_stream(uid, question, last_message.files_id, callback= state.get('callback'))
+        answer = fc_tool.process_chat_with_file_stream(uid, question,last_message.reference_files_id, callback= state.get('callback'))
         return {'answer': answer, 'ask_for_nps': True}
 
-    answer = fc_tool.process_chat_with_file(uid, question , last_message.files_id)
+    answer = fc_tool.process_chat_with_file(uid, question ,last_message.reference_files_id)
     return {'answer': answer, 'ask_for_nps': True}
 
 
