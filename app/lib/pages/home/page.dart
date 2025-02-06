@@ -388,7 +388,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             child: TabBar(
                               labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
                               indicatorPadding: EdgeInsets.zero,
-                              onTap: (index) {
+                              onTap: (index) async {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 if (home.selectedIndex == index) {
@@ -397,6 +397,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+
+
+                                if (index == 1) { // Chat tab index
+                                  if (mounted) {
+                                    final messageProvider = context.read<MessageProvider>();
+                                    final appProvider = context.read<AppProvider>();
+                                    
+                                    // Refresh messages first
+                                    await messageProvider.refreshMessages();
+                                    
+                                    // Send initial message if needed
+                                    if (messageProvider.messages.isEmpty) {
+                                      final selectedApp = appProvider.getSelectedApp();
+                                      await messageProvider.sendInitialAppMessage(selectedApp);
+                                    }
+                                  }
+                                }
                               },
                               indicatorColor: Colors.transparent,
                               tabs: [

@@ -10,15 +10,21 @@ class NewChatButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Consumer<AppProvider>(builder: (context, provider, child) {
-        return ElevatedButton(
+      child: ElevatedButton(
         onPressed: () async {
-          await context.read<MessageProvider>().createNewChat();
-          var app = provider.getSelectedApp();
-          if (context.read<MessageProvider>().messages.isEmpty) {
-            context.read<MessageProvider>().sendInitialAppMessage(app);
-          }
+          final messageProvider = context.read<MessageProvider>();
+          final appProvider = context.read<AppProvider>();
+
+
+          messageProvider.createNewChat();
           Navigator.pop(context);
+
+          await messageProvider.refreshMessages();
+          
+          if (messageProvider.messages.isEmpty) {
+            final selectedApp = appProvider.getSelectedApp();
+            await messageProvider.sendInitialAppMessage(selectedApp);
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).primaryColor,
@@ -42,8 +48,7 @@ class NewChatButton extends StatelessWidget {
             ),
           ],
         ),
-        );
-      }) ,
-    );
+        )
+      );
   }
 }

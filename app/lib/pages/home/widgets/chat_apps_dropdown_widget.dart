@@ -81,14 +81,20 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                     builder: (ctx) {
                       return getDialog(context, () {
                         Navigator.of(context).pop();
-                      }, () {
-                        context.read<MessageProvider>().createNewChat();
+                      }, () async {
+                        final messageProvider = context.read<MessageProvider>();
+                        final appProvider = context.read<AppProvider>();
 
-                        var app = provider.getSelectedApp();
-                        if (context.read<MessageProvider>().messages.isEmpty) {
-                          context.read<MessageProvider>().sendInitialAppMessage(app);
-                        }
+
+                        messageProvider.createNewChat();
                         Navigator.of(context).pop();
+
+                        await messageProvider.refreshMessages();
+                        
+                        if (messageProvider.messages.isEmpty) {
+                          final selectedApp = appProvider.getSelectedApp();
+                          await messageProvider.sendInitialAppMessage(selectedApp);
+                        }
                       }, "New Chat", "Start a new chat session?");
                     },
                   );
