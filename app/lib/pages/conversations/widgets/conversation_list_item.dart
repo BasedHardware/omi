@@ -5,9 +5,11 @@ import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/conversation_detail/page.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
@@ -98,11 +100,61 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   color: Colors.red,
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
-                onDismissed: (direction) {
+                confirmDismiss: (direction) {
+                  final connectivityProvider =
+                      Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (connectivityProvider.isConnected) {
+                    return showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () => Navigator.pop(context, true),
+                        'Delete Conversation?',
+                        'Are you sure you want to delete this conversation? This action cannot be undone.',
+                        okButtonText: 'Confirm',
+                      ),
+                    );
+                  } else {
+                    return showDialog(
+                      builder: (c) => getDialog(
+                          context,
+                          () => Navigator.pop(context),
+                          () => Navigator.pop(context),
+                          'Unable to Delete Conversation',
+                          'Please check your internet connection and try again.',
+                          singleButton: true,
+                          okButtonText: 'OK'),
+                      context: context,
+                    );
+                  }
+                },
+                onDismissed: (direction) async {
                   var conversation = widget.conversation;
                   var conversationIdx = widget.conversationIdx;
-                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                  provider.deleteConversationOnServer(conversation.id);
+                  provider.deleteConversationLocally(
+                      conversation, conversationIdx, widget.date);
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Conversation deleted.',
+                          style: TextStyle(
+                            color: Color.fromARGB(255, 255, 255, 255),
+                          ),
+                        ),
+                        duration: const Duration(seconds: 3),
+                        action: SnackBarAction(
+                          label: 'Undo',
+                          textColor: const Color.fromARGB(255, 255, 255, 255),
+                          onPressed: () {
+                            provider.undoDeletedConversation(
+                                conversation, conversationIdx, widget.date);
+                          },
+                        ),
+                      ),
+                    );
                 },
                 child: Padding(
                   padding: const EdgeInsetsDirectional.all(16),
