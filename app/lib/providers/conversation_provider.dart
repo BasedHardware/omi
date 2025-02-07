@@ -397,6 +397,7 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   @override
   void dispose() {
     _processingConversationWatchTimer?.cancel();
+    _selectedDate = null;
     _wal.unsubscribe(this);
     super.dispose();
   }
@@ -581,4 +582,43 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     isFetchingConversations = value;
     notifyListeners();
   }
+
+  DateTime? _selectedDate; // Store the selected date
+  DateTime? get selectedDate => _selectedDate;
+
+  void selectDate(DateTime? date) {
+    _selectedDate = date;
+    filterConversationsByDate();
+    notifyListeners();
+  }
+
+  void filterConversationsByDate() {
+    groupedConversations = {}; // Clear existing groups
+
+    if (_selectedDate == null) {
+      // Show all conversations if no date is selected.  Restore the previous view
+      if (previousQuery.isNotEmpty) {
+        groupSearchConvosByDate();
+      } else {
+        groupConversationsByDate();
+      }
+      return;
+    }
+    for (var conversation in _filterOutConvos(conversations)) {
+      var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+      if (date == _selectedDate) {
+        if (!groupedConversations.containsKey(date)) {
+          groupedConversations[date] = [];
+        }
+        groupedConversations[date]?.add(conversation);
+      }
+    }
+    // Sort
+    for (final date in groupedConversations.keys) {
+      groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+
+    notifyListeners();
+  }
+
 }
