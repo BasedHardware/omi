@@ -1,7 +1,8 @@
 from fastapi import Request, Header, HTTPException, APIRouter, Depends
 import stripe
 
-from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id
+from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id, set_paypal_payment_details, \
+    get_default_payment_method, set_default_payment_method, get_paypal_payment_details
 from utils import stripe as stripe_utils
 from utils.apps import paid_app
 from utils.other import endpoints as auth
@@ -38,6 +39,20 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
         # paid
         paid_app(app_id, uid)
+
+    if event['type'] == 'account.updated':
+        # this event occurs for the connected account, check if the account is fully onboarded to set default method
+        account = event['data']['object']
+        if account['charges_enabled'] and account['details_submitted']:
+            # account is fully onboarded
+            uid = account['metadata']['uid']
+            if get_default_payment_method(uid) is None:
+                set_default_payment_method(uid, 'stripe')
+
+    # TODO: handle this event to link transfers?
+    if event['type'] == 'transfer.created':
+        transfer = event['data']['object']
+        print(transfer)
 
     return {"status": "success"}
 
@@ -154,3 +169,42 @@ async def stripe_return(account_id: str):
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+@router.post("/v1/paypal/payment-details")
+def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Save PayPal payment details (email and paypal.me link)
+    """
+    try:
+        paypalme_url = data.get('paypalme_url')
+        if paypalme_url and not paypalme_url.startswith('http'):
+            paypalme_url = 'https://' + paypalme_url
+        data['paypalme_url'] = paypalme_url
+        set_paypal_payment_details(uid, data)
+        if get_default_payment_method(uid) is None:
+            set_default_payment_method(uid, 'paypal')
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/v1/payment-methods/status")
+def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the statuses of the payment methods for the user"""
+    default_payment_method = get_default_payment_method(uid)
+
+    # Check Stripe status
+    stripe_account_id = get_stripe_connect_account_id(uid)
+    stripe_status = 'not_connected'
+    if stripe_account_id:
+        stripe_status = 'connected' if is_onboarding_complete(stripe_account_id) else 'incomplete'
+
+    # Check PayPal status
+    paypal_status = 'connected' if get_paypal_payment_details(uid) else 'not_connected'
+
+    return {
+        "stripe": stripe_status,
+        "paypal": paypal_status,
+        "default": default_payment_method
+    }
