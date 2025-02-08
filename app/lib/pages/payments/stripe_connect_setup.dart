@@ -217,6 +217,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                     }
                   },
                   color: Colors.white,
+                  loaderColor: Colors.black,
                   textStyle: const TextStyle(
                     fontSize: 16,
                     color: Colors.black,
