@@ -56,10 +56,10 @@ const config = {
     ({
       image: 'images/logo.png',
       navbar: {
-        title: '',
         logo: {
           alt: 'Omi Logo',
           src: 'images/logo.png',
+          srcDark: "images/logowhite.png",
         },
         items: [
           {
