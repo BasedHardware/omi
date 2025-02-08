@@ -4,6 +4,8 @@ import 'package:friend_private/pages/payments/payment_method_provider.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
+import '../../utils/other/validators.dart';
+
 class PaypalSetupPage extends StatefulWidget {
   const PaypalSetupPage({
     super.key,
@@ -48,11 +50,14 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
     if (value == null || value.isEmpty) {
       return 'Please enter your PayPal.me link';
     }
-    if (value.toLowerCase().startsWith('http')) {
-      return 'Do not include http or https in the link';
+    if (value.toLowerCase().startsWith('http') || value.toLowerCase().startsWith('www')) {
+      return 'Do not include http or https or www in the link';
     }
     if (!value.toLowerCase().startsWith('paypal.me/')) {
       return 'Please enter a valid PayPal.me link';
+    }
+    if (!isValidPayPalMeUrl(value)) {
+      return 'Please enter a valid paypal.me link';
     }
     return null;
   }

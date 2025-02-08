@@ -177,7 +177,10 @@ def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_
     Save PayPal payment details (email and paypal.me link)
     """
     try:
-        paypalme_url = data.get('paypalme_url')
+        if 'email' not in data or 'paypalme_url' not in data:
+            raise HTTPException(status_code=400, detail="Email and PayPal.me URL are required")
+        paypalme_url = data.get('paypalme_url').lower()
+        data['email'] = data.get('email').lower()
         if paypalme_url and not paypalme_url.startswith('http'):
             paypalme_url = 'https://' + paypalme_url
         data['paypalme_url'] = paypalme_url
