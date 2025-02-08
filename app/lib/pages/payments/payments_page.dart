@@ -65,7 +65,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
-          title: const Text('Payment Methods', style: TextStyle(color: Colors.white)),
+          title: const Text('Payments', style: TextStyle(color: Colors.white)),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.pop(context),
