@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/payments/payment_method_provider.dart';
 import 'package:friend_private/pages/payments/stripe_connect_setup.dart';
 import 'package:friend_private/pages/payments/widgets/payment_method_card.dart';
-import 'package:friend_private/pages/payments/widgets/paypal_setup_page.dart';
+import 'package:friend_private/pages/payments/paypal_setup_page.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 import 'models/payment_method_config.dart';
 
@@ -59,83 +60,83 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text(
-          'Payment Methods',
-          style: TextStyle(color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Selected Payment Method',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Consumer<PaymentMethodProvider>(
-                builder: (context, provider, child) {
-                  final activeMethod = provider.activeMethod;
-                  final hasActiveMethod = activeMethod != null;
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                      if (hasActiveMethod) ...[
-                        _buildActiveMethodCard(activeMethod, provider),
-                        const SizedBox(height: 24)
-                      ],
-                      const Text(
-                        'Available Payment Methods',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ..._buildOtherMethodCards(provider, activeMethod),
-                    ],
-                  );
-                },
-              ),
-            ],
+    return Consumer<PaymentMethodProvider>(builder: (context, provider, child) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          title: const Text('Payment Methods', style: TextStyle(color: Colors.white)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-      ),
-    );
+        body: Skeletonizer(
+          enabled: provider.isLoading,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Selected Payment Method',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Consumer<PaymentMethodProvider>(
+                    builder: (context, provider, child) {
+                      final activeMethod = provider.activeMethod;
+                      final hasActiveMethod = activeMethod != null;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
+                          if (hasActiveMethod) ...[
+                            _buildActiveMethodCard(activeMethod, provider),
+                            const SizedBox(height: 24)
+                          ],
+                          const Text(
+                            'Available Payment Methods',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ..._buildOtherMethodCards(provider, activeMethod),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   Widget _buildActiveMethodCard(PaymentMethodType method, PaymentMethodProvider provider) {
     final config = method == PaymentMethodType.stripe
         ? PaymentMethodConfig.stripe(
             onManageTap: () {
-              routeToPage(context, StripeConnectSetup());
+              routeToPage(context, const StripeConnectSetup());
             },
-            onSetActiveTap: () => provider.setActiveMethod(null),
             isActive: true,
             isConnected: true,
           )
         : PaymentMethodConfig.paypal(
             onManageTap: () {
-              routeToPage(context, PaypalSetupPage());
+              routeToPage(context, const PaypalSetupPage());
             },
-            onSetActiveTap: () => provider.setActiveMethod(null),
             isActive: true,
             isConnected: true,
           );
@@ -158,9 +159,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.stripe(
             onManageTap: () {
-              routeToPage(context, StripeConnectSetup());
+              routeToPage(context, const StripeConnectSetup());
             },
-            onSetActiveTap: () {},
+            onSetActiveTap: () {
+              provider.setActiveMethod(PaymentMethodType.stripe);
+            },
             isConnected: true,
             isActive: false,
           ),
@@ -170,9 +173,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.paypal(
             onManageTap: () {
-              routeToPage(context, PaypalSetupPage());
+              routeToPage(context, const PaypalSetupPage());
             },
-            onSetActiveTap: () {},
+            onSetActiveTap: () {
+              provider.setActiveMethod(PaymentMethodType.paypal);
+            },
             isConnected: true,
             isActive: false,
           ),
@@ -182,7 +187,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.stripe(
             onManageTap: () {
-              routeToPage(context, StripeConnectSetup());
+              routeToPage(context, const StripeConnectSetup());
             },
             isConnected: false,
           ),
@@ -192,7 +197,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.paypal(
             onManageTap: () {
-              routeToPage(context, PaypalSetupPage());
+              routeToPage(context, const PaypalSetupPage());
             },
             isConnected: false,
           ),
