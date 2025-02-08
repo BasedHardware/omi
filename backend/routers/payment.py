@@ -189,6 +189,18 @@ def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/v1/paypal/payment-details")
+def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get the PayPal payment details for the user
+    """
+    details = get_paypal_payment_details(uid)
+    # remove the starting https:// from the paypalme_url
+    if details:
+        details['paypalme_url'] = details.get('paypalme_url', '').replace('https://', '')
+    return details
+
+
 @router.get("/v1/payment-methods/status")
 def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the statuses of the payment methods for the user"""
@@ -208,3 +220,13 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
         "paypal": paypal_status,
         "default": default_payment_method
     }
+
+
+@router.post("/v1/payment-methods/default")
+def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """Set the default payment method for the user"""
+    method = data.get('method')
+    if method not in ['stripe', 'paypal']:
+        raise HTTPException(status_code=400, detail="Invalid method")
+    set_default_payment_method(uid, method)
+    return {"status": "success"}

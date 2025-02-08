@@ -5,15 +5,8 @@ import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
 class PaypalSetupPage extends StatefulWidget {
-  final VoidCallback? onSetupComplete;
-  final String? existingEmail;
-  final String? existingPaypalMeLink;
-
   const PaypalSetupPage({
     super.key,
-    this.onSetupComplete,
-    this.existingEmail,
-    this.existingPaypalMeLink,
   });
 
   @override
@@ -31,14 +24,14 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.existingEmail != null) {
-      _emailController.text = widget.existingEmail!;
-      _isComplete = true;
-    }
-    if (widget.existingPaypalMeLink != null) {
-      _paypalMeLinkController.text = widget.existingPaypalMeLink!;
-      _isComplete = true;
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = context.read<PaymentMethodProvider>();
+      if (provider.paypalDetails != null) {
+        _emailController.text = provider.paypalDetails!.email;
+        _paypalMeLinkController.text = provider.paypalDetails!.link;
+        setState(() => _isComplete = true);
+      }
+    });
   }
 
   String? _validateEmail(String? value) {
@@ -54,6 +47,9 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
   String? _validatePaypalMeLink(String? value) {
     if (value == null || value.isEmpty) {
       return 'Please enter your PayPal.me link';
+    }
+    if (value.toLowerCase().startsWith('http')) {
+      return 'Do not include http or https in the link';
     }
     if (!value.toLowerCase().startsWith('paypal.me/')) {
       return 'Please enter a valid PayPal.me link';
@@ -264,19 +260,18 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
               setState(() => _isLoading = true);
 
               await context.read<PaymentMethodProvider>().connectPayPal(
-                    _emailController.text,
-                    _paypalMeLinkController.text,
+                    _emailController.text.trim(),
+                    _paypalMeLinkController.text.trim(),
                   );
 
               setState(() {
                 _isLoading = false;
                 _isComplete = true;
               });
-
-              widget.onSetupComplete?.call();
             }
           },
           text: _isComplete ? 'Update PayPal Details' : 'Save PayPal Details',
+          loaderColor: Colors.black,
           width: MediaQuery.of(context).size.width * 0.8,
           textStyle: const TextStyle(
             color: Colors.black,

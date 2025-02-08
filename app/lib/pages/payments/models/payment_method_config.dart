@@ -65,3 +65,24 @@ class PaymentMethodConfig {
     );
   }
 }
+
+class PayPalDetails {
+  final String email;
+  final String link;
+
+  PayPalDetails({required this.email, required this.link});
+
+  Map<String, dynamic> toJson() {
+    return {
+      'email': email,
+      'paypalme_url': link,
+    };
+  }
+
+  factory PayPalDetails.fromJson(Map<String, dynamic> json) {
+    return PayPalDetails(
+      email: json['email'],
+      link: json['paypalme_url'],
+    );
+  }
+}
