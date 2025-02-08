@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:sign_in_button/sign_in_button.dart';
@@ -39,18 +38,25 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              !Platform.isIOS
-                  ? SignInButton(
-                      Buttons.google,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
-                    )
-                  : SignInWithAppleButton(
-                      style: SignInWithAppleButtonStyle.whiteOutlined,
-                      onPressed: () => provider.onAppleSignIn(widget.onSignIn),
-                      height: 52,
-                    ),
+              SizedBox(
+                height: 52,
+                child: SignInButton(
+                  Buttons.google,
+                  padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
+                ),
+              ),
+              if (Platform.isIOS) ...[
+                const SizedBox(height: 16),
+                SignInWithAppleButton(
+                  style: SignInWithAppleButtonStyle.whiteOutlined,
+                  onPressed: () => provider.onAppleSignIn(widget.onSignIn),
+                  height: 52,
+                ),
+              ],
               const SizedBox(height: 16),
               RichText(
                 textAlign: TextAlign.center,
