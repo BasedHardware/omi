@@ -135,23 +135,23 @@ def set_chat_message_rating_score(uid: str, message_id: str, value: int):
 def get_stripe_connect_account_id(uid: str):
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()
-    return user_data.get('stripe_connect_account_id', None)
+    return user_data.get('stripe_account_id', None)
 
 
 def set_stripe_connect_account_id(uid: str, account_id: str):
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'stripe_connect_account_id': account_id})
+    user_ref.update({'stripe_account_id': account_id})
 
 
 def set_paypal_payment_details(uid: str, data: dict):
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'paypal_payment_details': data})
+    user_ref.update({'paypal_details': data})
 
 
 def get_paypal_payment_details(uid: str):
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()
-    return user_data.get('paypal_payment_details', None)
+    return user_data.get('paypal_details', None)
 
 
 def set_default_payment_method(uid: str, payment_method_id: str):
