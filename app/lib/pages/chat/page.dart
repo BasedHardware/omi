@@ -598,28 +598,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     var provider = context.read<MessageProvider>();
     MixpanelManager().chatMessageSent(text);
     provider.setSendingMessage(true);
-    String? appId = provider.appProvider?.selectedChatAppId;
-    if (appId == 'no_selected') {
-      appId = null;
-    }
-    var message = ServerMessage(
-      const Uuid().v4(),
-      DateTime.now(),
-      text,
-      MessageSender.human,
-      MessageType.text,
-      appId,
-      false,
-      provider.uploadedFiles,
-      provider.uploadedFiles.map((e) => e.id).toList(),
-      [],
-    );
-    provider.addMessage(message);
+    provider.addMessageLocally(text);
     scrollToBottom();
     textController.clear();
-    provider.sendMessageStreamToServer(text, appId);
+    provider.sendMessageStreamToServer(text);
     provider.clearSelectedFiles();
-    scrollToBottom();
     provider.setSendingMessage(false);
   }
 

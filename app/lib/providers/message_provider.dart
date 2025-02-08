@@ -13,6 +13,7 @@ import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:friend_private/utils/file.dart';
+import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
@@ -234,6 +235,31 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addMessageLocally(String messageText) {
+    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
+    var appId = appProvider?.selectedChatAppId;
+    if (appId == 'no_selected') {
+      appId = null;
+    }
+    var message = ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      messageText,
+      MessageSender.human,
+      MessageType.text,
+      appId,
+      false,
+      List.from(uploadedFiles),
+      fileIds,
+      [],
+    );
+    if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
+      return;
+    }
+    messages.insert(0, message);
+    notifyListeners();
+  }
+
   void addMessage(ServerMessage message) {
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
@@ -302,16 +328,21 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text, String? appId) async {
+  Future sendMessageStreamToServer(String text) async {
     setShowTypingIndicator(true);
+    var appId = appProvider?.selectedChatAppId;
+    if (appId == 'no_selected') {
+      appId = null;
+    }
     var message = ServerMessage.empty(appId: appId);
     messages.insert(0, message);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     SharedPreferencesUtil().fileIdsList = fileIds;
     clearSelectedFiles();
+    clearUploadedFiles();
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: appId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: appProvider?.selectedChatAppId, filesId: fileIds)) {
         if (chunk.type == MessageChunkType.think) {
           message.thinkings.add(chunk.text);
           notifyListeners();
