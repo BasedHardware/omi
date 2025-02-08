@@ -51,7 +51,7 @@ class AppAnalyticsWidget extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart, width: 20)),
+                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icChart.path, width: 20)),
                       const SizedBox(width: 8),
                       Text(
                         installs.toString(),
@@ -69,7 +69,7 @@ class AppAnalyticsWidget extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar, width: 20)),
+                      Skeleton.shade(child: SvgPicture.asset(Assets.images.icDollar.path, width: 20)),
                       const SizedBox(width: 8),
                       Text(
                         "\$$moneyMade",
