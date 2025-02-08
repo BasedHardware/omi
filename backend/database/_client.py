@@ -19,10 +19,22 @@ def get_users_uid():
     return [str(doc.id) for doc in users_ref.stream()]
 
 
-
-
 def document_id_from_seed(seed: str) -> uuid.UUID:
     """Avoid repeating the same data"""
     seed_hash = hashlib.sha256(seed.encode('utf-8')).digest()
     generated_uuid = uuid.UUID(bytes=seed_hash[:16], version=4)
     return str(generated_uuid)
+
+
+# Initialize Typesense client
+import typesense
+
+typesense_client = typesense.Client({
+    'nodes': [{
+        'host': os.getenv('TYPESENSE_HOST'),
+        'port': os.getenv('TYPESENSE_PORT'),
+        'protocol': os.getenv('TYPESENSE_PROTOCOL')
+    }],
+    'api_key': os.getenv('TYPESENSE_API_KEY'),
+    'connection_timeout_seconds': 2
+})

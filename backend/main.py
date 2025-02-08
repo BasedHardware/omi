@@ -82,7 +82,7 @@ for path in paths:
 #     joined = []
 #     for speaker in diarization:
 #         if not joined:
-#             joined.append(speaker)
+             joined.append(speaker)
 #         else:
 #             if speaker['speaker'] == joined[-1]['speaker']:
 #                 joined[-1]['end'] = speaker['end']
@@ -104,3 +104,16 @@ for path in paths:
 
 # opuslib not found? brew install opus &
 # DYLD_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_LIBRARY_PATH
+
+# Initialize Typesense client
+import typesense
+
+typesense_client = typesense.Client({
+    'nodes': [{
+        'host': os.getenv('TYPESENSE_HOST'),
+        'port': os.getenv('TYPESENSE_PORT'),
+        'protocol': os.getenv('TYPESENSE_PROTOCOL')
+    }],
+    'api_key': os.getenv('TYPESENSE_API_KEY'),
+    'connection_timeout_seconds': 2
+})

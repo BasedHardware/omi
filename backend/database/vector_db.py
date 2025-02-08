@@ -5,6 +5,9 @@ from datetime import datetime, timezone, timedelta
 from typing import List
 
 from pinecone import Pinecone
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import numpy as np
 
 from models.memory import Memory
 from utils.llm import embeddings
@@ -134,3 +137,31 @@ def delete_vector(memory_id: str):
     # TODO: does this work?
     result = index.delete(ids=[memory_id], namespace="ns1")
     print('delete_vector', result)
+
+
+def apply_pca(vectors: List[List[float]], n_components: int = 50) -> List[List[float]]:
+    pca = PCA(n_components=n_components)
+    reduced_vectors = pca.fit_transform(vectors)
+    return reduced_vectors.tolist()
+
+
+def apply_tsne(vectors: List[List[float]], n_components: int = 2) -> List[List[float]]:
+    tsne = TSNE(n_components=n_components)
+    reduced_vectors = tsne.fit_transform(vectors)
+    return reduced_vectors.tolist()
+
+
+def quantize_vectors(vectors: List[List[float]], n_clusters: int = 256) -> List[List[float]]:
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(vectors)
+    quantized_vectors = kmeans.cluster_centers_
+    return quantized_vectors.tolist()
+
+
+def approximate_nearest_neighbors(vectors: List[List[float]], query_vector: List[float], k: int = 5) -> List[int]:
+    from sklearn.neighbors import NearestNeighbors
+    nn = NearestNeighbors(n_neighbors=k, algorithm='auto')
+    nn.fit(vectors)
+    distances, indices = nn.kneighbors([query_vector])
+    return indices[0].tolist()

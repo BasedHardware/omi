@@ -429,3 +429,21 @@ def get_proactive_noti_sent_at(uid: str, plugin_id: str):
 
 def get_proactive_noti_sent_at_ttl(uid: str, plugin_id: str):
     return r.ttl(f'{uid}:{plugin_id}:proactive_noti_sent_at')
+
+
+# Caching mechanisms for frequently accessed memory data
+
+def cache_memory_data(uid: str, memory_id: str, data: dict, ttl: int = 60 * 60):
+    r.set(f'memories:{uid}:{memory_id}', json.dumps(data, default=str))
+    r.expire(f'memories:{uid}:{memory_id}', ttl)
+
+
+def get_cached_memory_data(uid: str, memory_id: str) -> dict:
+    data = r.get(f'memories:{uid}:{memory_id}')
+    if not data:
+        return None
+    return json.loads(data)
+
+
+def delete_cached_memory_data(uid: str, memory_id: str):
+    r.delete(f'memories:{uid}:{memory_id}')

@@ -344,4 +344,65 @@ def get_closest_memory_to_timestamps(
     print('get_closest_memory_to_timestamps closest_memory:', closest_memory['id'])
     return closest_memory
 
-# get_closest_memory_to_timestamps('yOnlnL4a3CYHe6Zlfotrngz9T3w2', 1728236993, 1728237005)
+
+# ********************************
+# ********** BATCH OPERATIONS *************
+# ********************************
+
+def batch_upsert_memories(uid: str, memories_data: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    batch = db.batch()
+    for memory_data in memories_data:
+        if 'audio_base64_url' in memory_data:
+            del memory_data['audio_base64_url']
+        if 'photos' in memory_data:
+            del memory_data['photos']
+        memory_ref = user_ref.collection('memories').document(memory_data['id'])
+        batch.set(memory_ref, memory_data)
+    batch.commit()
+
+
+def batch_retrieve_memories(uid: str, memory_ids: List[str]):
+    user_ref = db.collection('users').document(uid)
+    memories_ref = user_ref.collection('memories')
+    doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
+    docs = db.get_all(doc_refs)
+    return [doc.to_dict() for doc in docs if doc.exists]
+
+
+def batch_update_memories(uid: str, memories_data: List[dict]):
+    user_ref = db.collection('users').document(uid)
+    batch = db.batch()
+    for memory_data in memories_data:
+        memory_ref = user_ref.collection('memories').document(memory_data['id'])
+        batch.update(memory_ref, memory_data)
+    batch.commit()
+
+
+def batch_delete_memories(uid: str, memory_ids: List[str]):
+    user_ref = db.collection('users').document(uid)
+    batch = db.batch()
+    for memory_id in memory_ids:
+        memory_ref = user_ref.collection('memories').document(memory_id)
+        batch.update(memory_ref, {'deleted': True})
+    batch.commit()
+
+
+def parallel_batch_upsert_memories(uid: str, memories_data: List[dict]):
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, batch_upsert_memories, uid, memories_data)
+
+
+def parallel_batch_retrieve_memories(uid: str, memory_ids: List[str]):
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, batch_retrieve_memories, uid, memory_ids)
+
+
+def parallel_batch_update_memories(uid: str, memories_data: List[dict]):
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, batch_update_memories, uid, memories_data)
+
+
+def parallel_batch_delete_memories(uid: str, memory_ids: List[str]):
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, batch_delete_memories, uid, memory_ids)

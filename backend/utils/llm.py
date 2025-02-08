@@ -797,7 +797,7 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
 
     # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_prompt = """
-    You MUST cite the most relevant converstations(memories) that answer the question. \
+    You MUST cite the most relevant <memories> that answer the question. \
     You MUST ADHERE to the following instructions for citing coverstations(memories).
      - Cite in memories using [index] at the end of sentences when needed, for example "You discussed optimizing firmware with your teammate yesterday[1][2]".
      - NO SPACE between the last word and the citation.
@@ -1919,3 +1919,15 @@ def generate_description(app_name: str, description: str) -> str:
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+
+# **********************************************
+# ************* VECTOR QUANTIZATION **************
+# **********************************************
+
+def quantize_vectors(vectors: List[List[float]], n_clusters: int = 256) -> List[List[float]]:
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(vectors)
+    quantized_vectors = kmeans.cluster_centers_
+    return quantized_vectors.tolist()
