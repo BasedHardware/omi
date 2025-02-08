@@ -60,6 +60,7 @@ const config = {
         logo: {
           alt: 'Omi Logo',
           src: 'images/logo.png',
+          srcDark: "img/logowhite.png",
         },
         items: [
           {
