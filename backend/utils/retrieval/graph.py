@@ -134,13 +134,17 @@ def no_context_conversation(state: GraphState):
         # state['callback'].put_thought_nowait("Reasoning")
         answer: str = answer_simple_message_stream(
             state.get("uid"), state.get("messages"),
+            state.get("plugin_selected"),
             callbacks=[state.get('callback')]
         )
         return {"answer": answer, "ask_for_nps": False}
 
     # no streaming
-    return {"answer": answer_simple_message(state.get("uid"), state.get("messages")), "ask_for_nps": False}
-
+    answer: str = answer_simple_message(
+        state.get("uid"), state.get("messages"),
+        state.get("plugin_selected"),
+    )
+    return {"answer": answer, "ask_for_nps": False}
 
 def omi_question(state: GraphState):
     print("no_context_omi_question node")
@@ -323,7 +327,7 @@ graph_stream = workflow.compile()
 def execute_graph_chat(
     uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
-    print('execute_graph_chat plugin    :', plugin)
+    print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
@@ -335,7 +339,7 @@ def execute_graph_chat(
 async def execute_graph_chat_stream(
     uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {},
 ) -> AsyncGenerator[str, None]:
-    print('execute_graph_chat_stream plugin: ', plugin)
+    print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
