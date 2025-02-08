@@ -8,7 +8,7 @@ class FilesHandlerWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.files.isEmpty) {
+    if (message.files.isEmpty || message.filesId.isEmpty) {
       return const SizedBox.shrink();
     } else {
       return SizedBox(
