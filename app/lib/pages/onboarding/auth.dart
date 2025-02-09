@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:sign_in_button/sign_in_button.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -38,24 +37,41 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              SizedBox(
-                height: 52,
-                child: SignInButton(
+              SignInButton(
                   Buttons.google,
                   padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                   onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
-                ),
               ),
               if (Platform.isIOS) ...[
                 const SizedBox(height: 16),
-                SignInWithAppleButton(
-                  style: SignInWithAppleButtonStyle.whiteOutlined,
-                  onPressed: () => provider.onAppleSignIn(widget.onSignIn),
-                  height: 52,
+                const Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.white)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'OR',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Divider(color: Colors.white)),
+                  ],
                 ),
+                const SizedBox(height: 16),
+                SignInButton(
+                  Buttons.apple,
+                  padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  onPressed: () => provider.onAppleSignIn(widget.onSignIn),
+              ),
               ],
               const SizedBox(height: 16),
               RichText(
