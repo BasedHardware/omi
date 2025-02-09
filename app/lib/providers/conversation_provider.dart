@@ -617,7 +617,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     for (final date in groupedConversations.keys) {
       groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
-
     notifyListeners();
   }
 
