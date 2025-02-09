@@ -15,7 +15,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 <h3>
 
-[Homepage](https://omi.me/) | [Documentation](https://docs.omi.me/) | [Buy Assembled Device](https://omi.me)
+[Homepage](https://omi.me/) | [Documentation](https://docs.omi.me/) | [Buy Assembled Device](https://www.omi.me/products/omi-dev-kit-2)
 
 </h3>
 
