@@ -1,10 +1,3 @@
-/**
- * @fileoverview Home Page Component for OMI Personas
- * @description Main page component that handles persona creation, listing, and search functionality
- * @author OMI Team
- * @license MIT
- */
-
 'use client';
 
 import { SetStateAction, useEffect, useState } from 'react';
@@ -91,8 +84,8 @@ export default function HomePage() {
 
   const handleCreatePersona = () => {
     const handlers = [
-      fetchLinkedinProfile,
       fetchTwitterProfile,
+      fetchLinkedinProfile,
       // Add new handlers here
     ];
 
@@ -313,24 +306,18 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
 
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
-      toast.error('Failed to fetch Twitter profile');
       return false;
     } finally {
       setIsCreating(false);
     }
   };
 
-  /**
- * LinkedIn Profile Integration
- * @description Fetches and processes LinkedIn profiles for persona creation
- * @param {string} linkedinHandle - LinkedIn username to fetch
- * @returns {Promise<boolean>} Success status of profile creation
- */
+  
   const fetchLinkedinProfile = async (linkedinHandle: string) => {
     if (!linkedinHandle) return false;
-
+    
     const cleanHandle = linkedinHandle.replace('@', '');
-
+    
     setIsCreating(true);
     try {
       const q = query(
@@ -338,7 +325,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         where('username', '==', cleanHandle.toLowerCase())
       );
       const querySnapshot = await getDocs(q);
-
+      
       if (!querySnapshot.empty) {
         const existingDoc = querySnapshot.docs[0];
         toast.success('Profile already exists, redirecting...');
@@ -346,31 +333,35 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         return true;
       }
 
-      const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/?username=${cleanHandle}`, {
+      const encodedHandle = encodeURIComponent(cleanHandle);
+      
+      const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`, {
         headers: {
           'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
           'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
         },
       });
-      console.log('LinkedIn Profile Response:', profileResponse);
+      
       if (!profileResponse.ok) {
         return false;
       }
-      console.log('LinkedIn Profile Response 2:', profileResponse);
+
       const profileData: LinkedinProfile = await profileResponse.json();
 
-      if (!profileData || !profileData.firstName) {
+      if (!profileData || !profileData.data.firstName) {
         return false;
       }
 
-      const formattedAvatarUrl = profileData.profilePicture;
-      const fullName = `${profileData.firstName} ${profileData.lastName}`;
-      const headline = profileData.headline;
-      const summary = profileData.summary;
-      const positions = profileData.position.map(pos => `${pos.title} at ${pos.companyName} (${pos.start.year} - ${pos.end.year})`).join(', ');
-      const skills = Array.isArray(profileData.skills) ? profileData.skills.map(skill => skill.name).join(', ') : 'No skills available';
+      const formattedAvatarUrl = profileData.data.profilePicture;
+      const fullName = `${profileData.data.firstName} ${profileData.data.lastName}`;
+      const headline = profileData.data.headline;
+      const summary = profileData.data.summary;
+      const positions = profileData.data.position.map(pos => `${pos.title} at ${pos.companyName} (${pos.start.year} - ${pos.end.year})`).join(', ');
+      const skills = Array.isArray(profileData.data.skills) ? profileData.data.skills.map(skill => skill.name).join(', ') : 'No skills available';
+      const recentPosts = profileData.posts.map(post => post.text).join('\n');
 
-      const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}`;
+      const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}\n\nRecent Posts:\n${recentPosts}`;
+      console.log('Enhanced description:', enhancedDesc);
 
       const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
 
@@ -405,10 +396,11 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           profile: summary,
           desc: enhancedDesc,
           name: fullName,
-          sub_count: profileData.sub_count || 0,
+          sub_count: profileData.follower || 0,
           category: 'linkedin',
           created_at: createdAtFormatted,
           chat_prompt: fullChatPrompt,
+          connection_count: profileData.connection,
         });
 
         toast.success('Profile saved successfully!');
@@ -423,7 +415,6 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
     } catch (error) {
       console.error('Error fetching LinkedIn profile:', error);
-      toast.error('Failed to fetch LinkedIn profile');
       return false;
     } finally {
       setIsCreating(false);
