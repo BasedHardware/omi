@@ -6,6 +6,8 @@ Meet Omi, the world’s leading open-source AI wearable that captures conversati
 transcriptions of meetings, chats, and voice memos wherever you are.
 
 ![Omi](https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59)
+![CleanShot 2025-02-08 at 18 22 23](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
+
 
 [![Discord Follow](https://dcbadge.vercel.app/api/server/ZutWMTJnwA?style=flat)](https://discord.gg/omi) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
