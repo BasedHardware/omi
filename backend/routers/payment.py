@@ -40,6 +40,20 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         # paid
         paid_app(app_id, uid)
 
+    return {"status": "success"}
+
+
+@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
+async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
+    payload = await request.body()
+
+    try:
+        event = stripe_utils.parse_connect_event(payload, stripe_signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
     if event['type'] == 'account.updated':
         # this event occurs for the connected account, check if the account is fully onboarded to set default method
         account = event['data']['object']
@@ -50,9 +64,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 set_default_payment_method(uid, 'stripe')
 
     # TODO: handle this event to link transfers?
-    if event['type'] == 'transfer.created':
-        transfer = event['data']['object']
-        print(transfer)
+    # if event['type'] == 'transfer.created':
+    #     transfer = event['data']['object']
 
     return {"status": "success"}
 

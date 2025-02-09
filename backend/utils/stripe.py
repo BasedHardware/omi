@@ -5,6 +5,7 @@ import stripe
 
 stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+connect_secret = os.getenv('STRIPE_CONNECT_WEBHOOK_SECRET')
 
 
 def create_product(name: str, description: str, image: str):
@@ -55,6 +56,13 @@ def parse_event(payload, sig_header):
     """Parse the Stripe event."""
     return stripe.Webhook.construct_event(
         payload, sig_header, endpoint_secret
+    )
+
+
+def parse_connect_event(payload, sig_header):
+    """Parse the Stripe Connect event."""
+    return stripe.Webhook.construct_event(
+        payload, sig_header, connect_secret
     )
 
 
@@ -109,7 +117,6 @@ def refresh_connect_account_link(account_id: str, base_url: str):
         "account_id": account_id,
         "url": account_link.url
     }
-
 
 
 def is_onboarding_complete(account_id: str):
