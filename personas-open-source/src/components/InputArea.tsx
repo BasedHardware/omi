@@ -1,6 +1,24 @@
+/**
+ * @fileoverview InputArea Component for OMI Personas
+ * @description Renders the input field and button for creating new AI personas
+ * @author HarshithSunku
+ * @license MIT
+ */
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
+/**
+ * InputArea Component
+ * 
+ * @component
+ * @description Renders an input field for social media handles and a create button
+ * @param {Object} props - Component props
+ * @param {string} props.handle - Current input value
+ * @param {Function} props.handleInputChange - Input change handler
+ * @param {Function} props.handleCreatePersona - Create persona button click handler
+ * @param {boolean} props.isCreating - Loading state for persona creation
+ * @returns {JSX.Element} Rendered InputArea component
+ */
 interface InputAreaProps {
   handle: string;
   handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;

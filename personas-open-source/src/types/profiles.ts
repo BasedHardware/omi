@@ -1,4 +1,14 @@
+/**
+ * @fileoverview Type definitions for social media profiles and chatbots
+ * @description Contains type interfaces for Twitter profiles, LinkedIn profiles, and chatbot data
+ * @author HarshithSunku
+ * @license MIT
+ */
 
+/**
+ * Chatbot type definition
+ * @description Represents a chatbot persona created from social media profiles
+ */
 export type Chatbot = {
   id: string;
   username?: string;
@@ -13,6 +23,10 @@ export type Chatbot = {
   connection_count?: number;
 };
 
+/**
+ * Twitter Profile type definition
+ * @description Represents Twitter user profile data
+ */
 export type TwitterProfile = {
   profile: string;
   rest_id: string;
@@ -24,6 +38,14 @@ export type TwitterProfile = {
   id: string;
 };
 
+/**
+ * LinkedIn Profile type definition
+ * @description Represents comprehensive LinkedIn user profile and posts data
+ * @property {number} connection - Number of LinkedIn connections 
+ * @property {Object} data - Core profile information including personal details, experience, education
+ * @property {number} follower - Number of LinkedIn followers
+ * @property {Array} posts - Array of LinkedIn posts with engagement metrics
+ */
 export type LinkedinProfile = {
   connection: number;
   data: {

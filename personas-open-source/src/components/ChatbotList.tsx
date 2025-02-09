@@ -1,8 +1,27 @@
+/**
+ * @fileoverview ChatbotList Component for OMI Personas
+ * @description Renders a searchable list of chatbot personas created from social media profiles
+ * @author HarshithSunku
+ * @license MIT
+ */
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { BadgeCheck, Search } from 'lucide-react';
 import { FaLinkedin } from 'react-icons/fa';
 
+/**
+ * ChatbotList Component
+ * 
+ * @component
+ * @param {Object} props - Component props
+ * @param {Array<Chatbot>} props.chatbots - Array of chatbot objects to display
+ * @param {string} props.searchQuery - Current search query string
+ * @param {Function} props.setSearchQuery - Function to update search query
+ * @param {Function} props.handleChatbotClick - Click handler for chatbot selection
+ * @param {boolean} props.hasMore - Flag indicating if more chatbots can be loaded
+ * @param {React.RefObject} props.ref - Ref for infinite scroll functionality
+ * @returns {JSX.Element} Rendered ChatbotList component
+ */
 export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatbotClick, hasMore, ref }) => (
   <div className="w-full max-w-3xl">
     <div className="relative mb-6">

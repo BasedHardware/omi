@@ -1,5 +1,18 @@
+/**
+ * @fileoverview Header Component for OMI Personas
+ * @description Renders the application header with logo and CTA button
+ * @author HarshithSunku
+ * @license MIT
+ */
 import Link from 'next/link';
 
+/**
+ * Header Component
+ * 
+ * @component
+ * @description Renders the main navigation header with OMI logo and call-to-action button
+ * @returns {JSX.Element} Rendered Header component
+ */
 export const Header = () => (
   <div className="p-4 border-b border-zinc-800">
     <div className="flex items-center justify-between max-w-3xl mx-auto">
