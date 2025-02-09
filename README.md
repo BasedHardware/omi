@@ -52,8 +52,8 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Contributions
 
 * Check out our [contributions guide](https://docs.omi.me/docs/developer/Contribution/).
-* Check out the [current tasks](https://github.com/BasedHardware/Omi/issues).
-* Earn from contributing! Check the [paid bounties 🤑](https://github.com/BasedHardware/Omi/issues?q=is:open+is:issue+label:%22Paid+Bounty+%F0%9F%92%B0%22).
+* Earn from contributing! Check the [paid bounties 🤑](https://omi.me/bounties).
+* Check out the [current issues](https://github.com/BasedHardware/Omi/issues).
 * Join the [Discord](https://discord.gg/omi).
 * Build your own [Plugins/Integrations](https://docs.omi.me/docs/developer/apps/Introduction).
 
