@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from modal import Image, App, asgi_app, Secret
 from routers import workflow, chat, firmware, plugins, memories, transcribe_v2, notifications, \
-    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, apps, custom_auth, payment
+    speech_profile, agents, facts, users, processing_memories, trends, sdcard, sync, apps, custom_auth, payment, persona
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -39,6 +39,8 @@ app.include_router(apps.router)
 app.include_router(custom_auth.router)
 
 app.include_router(payment.router)
+
+app.include_router(persona.router)
 
 modal_app = App(
     name='backend',

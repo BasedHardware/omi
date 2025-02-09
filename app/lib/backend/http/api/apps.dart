@@ -380,3 +380,33 @@ Future<String> getGenratedDescription(String name, String description) async {
     return '';
   }
 }
+
+Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/persona'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  print(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      if (response.body.isNotEmpty) {
+        return false;
+      } else {
+        return false;
+      }
+    }
+  } catch (e) {
+    debugPrint('An error occurred createPersonaApp: $e');
+    return false;
+  }
+}
