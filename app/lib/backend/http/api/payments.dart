@@ -8,7 +8,7 @@ import 'package:friend_private/utils/logger.dart';
 Future<Map<String, dynamic>?> getStripeAccountLink() async {
   try {
     var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/stripe/create-connect-account',
+      url: '${Env.apiBaseUrl}v1/stripe/connect-accounts',
       headers: {},
       body: '',
       method: 'POST',

@@ -57,7 +57,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post("/v1/stripe/create-connect-account")
+@router.post("/v1/stripe/connect-accounts")
 async def create_connect_account_endpoint(request: Request, uid: str = Depends(auth.get_current_user_uid)):
     """
     Create a Stripe Connect account and return the account creation response
