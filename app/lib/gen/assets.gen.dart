@@ -182,7 +182,8 @@ class $AssetsImagesGen {
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
   /// File path: assets/images/stripe_logo.svg
-  String get stripeLogo => 'assets/images/stripe_logo.svg';
+  SvgGenImage get stripeLogo =>
+      const SvgGenImage('assets/images/stripe_logo.svg');
 
   /// List of all assets
   List<dynamic> get values => [
