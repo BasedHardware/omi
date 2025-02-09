@@ -43,11 +43,11 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
-- [App setup](https://docs.omi.me/docs/developer/AppSetup)
+- [omi mobile App setup](https://docs.omi.me/docs/developer/AppSetup)
 - [Buying Guide](https://docs.omi.me/docs/assembly/Buying_Guide/)
 - [Build the device](https://docs.omi.me/docs/assembly/Build_the_device/)
 - [Install firmware](https://docs.omi.me/docs/get_started/Flash_device/)
-- [3rd Party Integrations](https://docs.omi.me/docs/developer/apps/Introduction).
+- [Create your own app in 1 minute](https://docs.omi.me/docs/developer/apps/Introduction).
 
 ## Contributions
 
