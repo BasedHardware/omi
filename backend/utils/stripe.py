@@ -111,7 +111,6 @@ def refresh_connect_account_link(account_id: str, base_url: str):
     }
 
 
-
 def is_onboarding_complete(account_id: str):
     account = stripe.Account.retrieve(account_id)
     return account.charges_enabled and account.payouts_enabled and account.details_submitted

@@ -37,6 +37,13 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             raise HTTPException(status_code=400, detail="Invalid client")
         uid = client_reference_id[4:]
 
+        if session.get("subscription"):
+            subscription_id = session["subscription"]
+            stripe.Subscription.modify(
+                subscription_id,
+                metadata={"uid": uid, "app_id": app_id}
+            )
+
         # paid
         paid_app(app_id, uid)
 
