@@ -157,7 +157,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   }
 }
 
-Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
+Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
@@ -172,14 +172,18 @@ Future<bool> submitAppServer(File file, Map<String, dynamic> appData) async {
 
     if (response.statusCode == 200) {
       debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
-      return true;
+      return (true, '');
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
-      return false;
+      if (response.body.isNotEmpty) {
+        return (false, jsonDecode(response.body)['detail'] as String);
+      } else {
+        return (false, 'Failed to submit app. Please try again later');
+      }
     }
   } catch (e) {
     debugPrint('An error occurred submitAppServer: $e');
-    return false;
+    return (false, 'Failed to submit app. Please try again later');
   }
 }
 

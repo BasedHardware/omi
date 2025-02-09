@@ -33,6 +33,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/pages/payments/payment_method_provider.dart';
 import 'package:friend_private/providers/speech_profile_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/services/services.dart';
@@ -203,6 +204,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, AddAppProvider? previous) =>
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
+          ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

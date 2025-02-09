@@ -107,7 +107,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     MixpanelManager().appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
-      setState(() => appLoading = true);
+      if (mounted) {
+        setState(() => appLoading = true);
+      }
+
       var details = await getAppDetailsServer(appId);
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);

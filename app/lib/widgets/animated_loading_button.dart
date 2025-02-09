@@ -30,13 +30,17 @@ class _AnimatedLoadingButtonState extends State<AnimatedLoadingButton> {
   bool _isLoading = false;
 
   void _handleOnPressed() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     await widget.onPressed();
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
