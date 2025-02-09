@@ -181,6 +181,9 @@ class $AssetsImagesGen {
   /// File path: assets/images/stars.png
   AssetGenImage get stars => const AssetGenImage('assets/images/stars.png');
 
+  /// File path: assets/images/stripe_logo.svg
+  String get stripeLogo => 'assets/images/stripe_logo.svg';
+
   /// List of all assets
   List<dynamic> get values => [
         aiMagic,
@@ -211,7 +214,8 @@ class $AssetsImagesGen {
         splashIconV2,
         splashV1,
         splashV2,
-        stars
+        stars,
+        stripeLogo
       ];
 }
 

@@ -407,6 +407,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> updateApp() async {
     setIsUpdating(true);
+
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
@@ -468,6 +469,7 @@ class AddAppProvider extends ChangeNotifier {
 
   Future<void> submitApp() async {
     setIsSubmitting(true);
+
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
@@ -513,12 +515,12 @@ class AddAppProvider extends ChangeNotifier {
       }
     }
     var res = await submitAppServer(imageFile!, data);
-    if (res) {
+    if (res.$1) {
       AppSnackbar.showSnackbarSuccess('App submitted successfully 🚀');
       appProvider!.getApps();
       clear();
     } else {
-      AppSnackbar.showSnackbarError('Failed to submit app. Please try again later');
+      AppSnackbar.showSnackbarError(res.$2);
     }
     checkValidity();
     setIsSubmitting(false);
