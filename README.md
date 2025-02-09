@@ -34,6 +34,12 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 [//]: # (- **Wearable Design**: Experience unparalleled convenience with ergonomic and lightweight design, perfect for everyday wear.)
 
+## In this repo:
+
+- [omi device](https://github.com/BasedHardware/omi/tree/main/Friend)
+- [mobile app](https://github.com/BasedHardware/omi/tree/main/app)
+- [ai personas (web)](https://github.com/BasedHardware/omi/tree/main/personas-open-source)
+
 ## Documentation:
 
 - [Introduction](https://docs.omi.me/)
