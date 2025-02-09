@@ -1,5 +1,18 @@
+/**
+ * @fileoverview Footer Component for OMI Personas
+ * @description Renders the application footer with copyright and legal links
+ * @author HarshithSunku
+ * @license MIT
+ */
 import { Button } from '@/components/ui/button';
 
+/**
+ * Footer Component
+ * 
+ * @component
+ * @description Renders a footer with copyright notice and legal links
+ * @returns {JSX.Element} Rendered Footer component
+ */
 export const Footer = () => (
   <footer className="max-w-4xl mx-auto px-4 py-4">
     <div className="flex flex-col sm:flex-row justify-between text-xs text-zinc-400">
