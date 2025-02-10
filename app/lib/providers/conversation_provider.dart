@@ -93,6 +93,39 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
+  DateTime? selectedDate;
+  List<ServerConversation> dateFilteredConversations = [];
+  int currentDateSearchPage = 1;
+  int totalDateSearchPages = 1;
+
+  void selectDate(DateTime date) async {
+    selectedDate = date;
+    currentDateSearchPage = 0;
+    await _fetchConversationsByDate();
+    notifyListeners();
+  }
+
+  Future<void> _fetchConversationsByDate() async {
+    if (selectedDate == null) {
+      dateFilteredConversations = [];
+      return;
+    }
+
+    setIsFetchingConversations(true);
+    var (convos, current, total) = await searchConversationsByDateServer(
+      selectedDate!,
+      includeDiscarded: showDiscardedConversations,
+      page: currentDateSearchPage,
+    );
+
+    dateFilteredConversations = convos;
+    currentDateSearchPage = current;
+    totalDateSearchPages = total;
+    groupSearchConvosByDate();
+    setIsFetchingConversations(false);
+    notifyListeners();
+  }
+
   Future<void> searchMoreConversations() async {
     if (totalSearchPages < currentSearchPage + 1) {
       return;
@@ -397,7 +430,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
   @override
   void dispose() {
     _processingConversationWatchTimer?.cancel();
-    _selectedDate = null;
     _wal.unsubscribe(this);
     super.dispose();
   }
@@ -580,43 +612,6 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
 
   void setIsFetchingConversations(bool value) {
     isFetchingConversations = value;
-    notifyListeners();
-  }
-
-  DateTime? _selectedDate; // Store the selected date
-  DateTime? get selectedDate => _selectedDate;
-
-  void selectDate(DateTime? date) {
-    _selectedDate = date;
-    filterConversationsByDate();
-    notifyListeners();
-  }
-
-  void filterConversationsByDate() {
-    groupedConversations = {}; // Clear existing groups
-
-    if (_selectedDate == null) {
-      // Show all conversations if no date is selected.  Restore the previous view
-      if (previousQuery.isNotEmpty) {
-        groupSearchConvosByDate();
-      } else {
-        groupConversationsByDate();
-      }
-      return;
-    }
-    for (var conversation in _filterOutConvos(conversations)) {
-      var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
-      if (date == _selectedDate) {
-        if (!groupedConversations.containsKey(date)) {
-          groupedConversations[date] = [];
-        }
-        groupedConversations[date]?.add(conversation);
-      }
-    }
-    // Sort
-    for (final date in groupedConversations.keys) {
-      groupedConversations[date]?.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    }
     notifyListeners();
   }
 
