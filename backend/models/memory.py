@@ -286,3 +286,9 @@ class SearchRequest(BaseModel):
     page: Optional[int] = 1
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
+
+class DateRequest(BaseModel):
+    date: datetime
+    page: Optional[int] = 1
+    per_page: Optional[int] = 10
+    include_discarded: Optional[bool] = True
