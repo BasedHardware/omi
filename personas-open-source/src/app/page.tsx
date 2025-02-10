@@ -66,6 +66,54 @@ const fetchTwitterTimeline = async (screenname: string) => {
   }
 };
 
+const PlatformSelectionModal = ({
+  isOpen,
+  onClose,
+  platforms,
+  onSelect,
+  mode,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  platforms: { twitter: boolean; linkedin: boolean };
+  onSelect: (platform: 'twitter' | 'linkedin') => void;
+  mode: 'create' | 'add';
+}) => (
+  <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
+    <div className="bg-zinc-900 p-6 rounded-lg max-w-md w-full">
+      <h2 className="text-xl font-bold mb-4">
+        {mode === 'create' ? 'Select Platform' : 'Add Additional Profile'}
+      </h2>
+      <p className="text-zinc-400 mb-6">
+        {mode === 'create'
+          ? 'This handle is available on multiple platforms. Which one would you like to use?'
+          : 'We found an additional profile for this handle. Would you like to add it?'}
+      </p>
+      <div className="space-y-4">
+        {platforms.twitter && (
+          <button
+            onClick={() => onSelect('twitter')}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
+          >
+            Twitter Profile
+          </button>
+        )}
+        {platforms.linkedin && (
+          <button
+            onClick={() => onSelect('linkedin')}
+            className="w-full flex items-center justify-center gap-2 bg-[#0077b5] hover:bg-[#006399] text-white py-2 rounded-lg"
+          >
+            LinkedIn Profile
+          </button>
+        )}
+        <button onClick={onClose} className="w-full text-zinc-400 hover:text-white">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 export default function HomePage() {
   const router = useRouter();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
@@ -77,38 +125,68 @@ export default function HomePage() {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const { ref, inView } = useInView();
   const [handle, setHandle] = useState('');
+  //modal state variables
+  const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const [pendingCleanHandle, setPendingCleanHandle] = useState<string | null>(null);
+  const [availablePlatforms] = useState({ twitter: true, linkedin: true });
+  const [platformSelectionMode] = useState<'create' | 'add'>('create');
 
   const handleInputChange = (e: { target: { value: SetStateAction<string>; }; }) => {
     setHandle(e.target.value);
   };
 
-  const handleCreatePersona = () => {
-    const handlers = [
-      fetchTwitterProfile,
-      fetchLinkedinProfile,
-      // Add new handlers here
-    ];
+  //Twitter-specific redirection function
+  const redirectToTwitterChat = (id: string) => {
+    router.push(`/twitter-chat?id=${encodeURIComponent(id)}`);
+  };
 
-    let successCount = 0;
-    let totalHandlers = handlers.length;
+  //function to retrieve the document id from Firestore.
+  const getProfileDocId = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
+    const q = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('category', '==', category)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.empty ? null : querySnapshot.docs[0].id;
+  };
 
-    const checkForErrors = () => {
-      if (successCount === 0) {
+  //handleCreatePersona function using redirectToChat in all cases.
+  const handleCreatePersona = async () => {
+    const cleanHandle = handle.replace('@', '');
+    const twitterResult = await fetchTwitterProfile(handle);
+    const linkedinResult = await fetchLinkedinProfile(handle);
+    let docId: string | null = null;
+
+    if (twitterResult && !linkedinResult) {
+      docId = await getProfileDocId(cleanHandle, 'twitter');
+    } else if (linkedinResult && !twitterResult) {
+      docId = await getProfileDocId(cleanHandle, 'linkedin');
+    } else if (twitterResult && linkedinResult) {
+      setPendingCleanHandle(cleanHandle);
+      setShowPlatformModal(true);
+      return;
+    }
+    
+    if (docId) {
+      redirectToChat(docId);
+    } else {
+      toast.error('No profiles found for the given handle.');
+    }
+  };
+
+  //handler for modal selection.
+  const handlePlatformSelect = async (platform: 'twitter' | 'linkedin') => {
+    if (pendingCleanHandle) {
+      const docId = await getProfileDocId(pendingCleanHandle, platform);
+      if (docId) {
+        redirectToChat(docId);
+      } else {
         toast.error('No profiles found for the given handle.');
       }
-    };
-
-    handlers.forEach(handler => {
-      handler(handle).then(success => {
-        if (success) {
-          successCount++;
-        }
-        totalHandlers--;
-        if (totalHandlers === 0) {
-          checkForErrors();
-        }
-      });
-    });
+    }
+    setShowPlatformModal(false);
+    setPendingCleanHandle(null);
   };
 
   const BOTS_PER_PAGE = 50;
@@ -218,53 +296,45 @@ export default function HomePage() {
     (bot.username && bot.username.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const redirectToChat = (id: string) => {
+    router.push(`/chat?id=${encodeURIComponent(id)}`);
+  };
+
+  const checkExistingProfile = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<boolean> => {
+    const q = query(
+      collection(db, 'plugins_data'),
+      where('username', '==', cleanHandle.toLowerCase()),
+      where('category', '==', category)
+    );
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      toast.success('Profile already exists.');
+      return true;
+    }
+    return false;
+  };
+
   const fetchTwitterProfile = async (twitterHandle: string) => {
     if (!twitterHandle) return false;
-
     const cleanHandle = twitterHandle.replace('@', '');
-
     setIsCreating(true);
     try {
-      const q = query(
-        collection(db, 'plugins_data'),
-        where('username', '==', cleanHandle.toLowerCase())
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const existingDoc = querySnapshot.docs[0];
-        toast.success('Profile already exists, redirecting...');
-        router.push(`/chat?id=${existingDoc.id}`);
-        return true;
-      }
-
+      if (await checkExistingProfile(cleanHandle, 'twitter')) return true;
       const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_RAPIDAPI_HOST}/screenname.php?screenname=${cleanHandle}`, {
         headers: {
           'x-rapidapi-key': process.env.NEXT_PUBLIC_RAPIDAPI_KEY!,
           'x-rapidapi-host': process.env.NEXT_PUBLIC_RAPIDAPI_HOST!,
         },
       });
-
-      if (!profileResponse.ok) {
-        return false;
-      }
-
+      if (!profileResponse.ok) return false;
       const profileData: TwitterProfile = await profileResponse.json();
-
-      if (!profileData || !profileData.name) {
-        return false;
-      }
-
+      if (!profileData || !profileData.name) return false;
       const recentTweets = await fetchTwitterTimeline(cleanHandle);
-
       const formattedAvatarUrl = formatTwitterAvatarUrl(profileData.avatar);
-
       const enhancedDesc = `${profileData.desc || 'No description available'}\n\nHere are my recent tweets:\n${recentTweets.join('\n')}`;
-
       const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
-
       const fullChatPrompt = `You are ${profileData.name} AI, you must personify ${profileData.name} as well as you can.
-
+      
 Style:
 - Interactive highly opinionated messages and questions.
 - Reference your tweets naturally
@@ -278,8 +348,6 @@ Rules:
 ${extraPromptRules}
 
 Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
-
-
       try {
         const createdAtFormatted = formatDate(new Date().toISOString());
         const docRef = await addDoc(collection(db, 'plugins_data'), {
@@ -293,17 +361,13 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
           created_at: createdAtFormatted,
           chat_prompt: fullChatPrompt,
         });
-
         toast.success('Profile saved successfully!');
-
-        router.push(`/chat?id=${docRef.id}`);
         return true;
       } catch (firebaseError) {
         console.error('Firebase error:', firebaseError);
         toast.error('Failed to save profile');
         return false;
       }
-
     } catch (error) {
       console.error('Error fetching Twitter profile:', error);
       return false;
@@ -312,86 +376,45 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
     }
   };
 
-  
   const fetchLinkedinProfile = async (linkedinHandle: string) => {
-    console.log('Starting LinkedIn profile fetch for handle:', linkedinHandle);
-    
-    if (!linkedinHandle) {
-      console.log('No LinkedIn handle provided, returning false');
-      return false;
-    }
-    
+    if (!linkedinHandle) return false;
     const cleanHandle = linkedinHandle.replace('@', '');
-    console.log('Cleaned handle:', cleanHandle);
-    
     setIsCreating(true);
     try {
-      const q = query(
-        collection(db, 'plugins_data'),
-        where('username', '==', cleanHandle.toLowerCase())
-      );
-           
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        const existingDoc = querySnapshot.docs[0];
-        toast.success('Profile already exists, redirecting...');
-        router.push(`/chat?id=${existingDoc.id}`);
-        return true;
-      }
-
+      if (await checkExistingProfile(cleanHandle, 'linkedin')) return true;
       const encodedHandle = encodeURIComponent(cleanHandle);
-      
       const profileResponse = await fetch(`https://${process.env.NEXT_PUBLIC_LINKEDIN_API_HOST}/profile-data-connection-count-posts?username=${encodedHandle}`, {
         headers: {
           'x-rapidapi-key': process.env.NEXT_PUBLIC_LINKEDIN_API_KEY!,
           'x-rapidapi-host': process.env.NEXT_PUBLIC_LINKEDIN_API_HOST!,
         },
       });
-      
-      if (!profileResponse.ok) {
-        console.log('API response not ok:', profileResponse.status, profileResponse.statusText);
-        return false;
-      }
-
-      
+      if (!profileResponse.ok) return false;
       const profileData: LinkedinProfile = await profileResponse.json();
-
-      if (!profileData || !profileData.data.firstName) {
-        console.log('Invalid profile data received');
-        return false;
-      }
-
+      if (!profileData || !profileData?.data?.firstName) return false;
       const formattedAvatarUrl = profileData?.data?.profilePicture || '/omi-avatar.svg';
       const fullName = `${profileData?.data?.firstName || ''} ${profileData?.data?.lastName || ''}`.trim();
       const headline = profileData?.data?.headline || 'No headline available';
       const summary = profileData?.data?.summary || 'No summary available';
-      
-      const positions = Array.isArray(profileData?.data?.position) 
+      const positions = Array.isArray(profileData?.data?.position)
         ? profileData.data.position.map(pos => {
             const title = pos?.title || 'Unknown Title';
             const company = pos?.companyName || 'Unknown Company';
             const startYear = pos?.start?.year || 'N/A';
             const endYear = pos?.end?.year || 'Present';
             return `${title} at ${company} (${startYear} - ${endYear})`;
-          }).join(', ') 
+          }).join(', ')
         : 'No positions available';
-
-      const skills = Array.isArray(profileData?.data?.skills) 
-        ? profileData.data.skills.map(skill => skill?.name || '').filter(Boolean).join(', ') 
+      const skills = Array.isArray(profileData?.data?.skills)
+        ? profileData.data.skills.map(skill => skill?.name || '').filter(Boolean).join(', ')
         : 'No skills available';
-
-      const recentPosts = Array.isArray(profileData?.posts) 
+      const recentPosts = Array.isArray(profileData?.posts)
         ? profileData.posts.map(post => post?.text || '').filter(Boolean).join('\n')
         : 'No recent posts available';
-
       const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}\n\nRecent Posts:\n${recentPosts}`;
-      console.log('Enhanced description:', enhancedDesc);
-
       const extraPromptRules = process.env.NEXT_PUBLIC_EXTRA_PROMPT_RULES ?? "";
-
       const fullChatPrompt = `You are ${fullName}, an AI persona. Here is some information about you:
-
+      
 Name: ${fullName}
 Headline: ${headline}
 Summary: ${summary}
@@ -411,8 +434,6 @@ Rules:
 ${extraPromptRules}
 
 Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial.`;
-
-
       try {
         const createdAtFormatted = formatDate(new Date().toISOString());
         const docRef = await addDoc(collection(db, 'plugins_data'), {
@@ -427,22 +448,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
           chat_prompt: fullChatPrompt,
           connection_count: profileData.connection,
         });
-
         toast.success('Profile saved successfully!');
-
-        router.push(`/chat?id=${docRef.id}`);
         return true;
       } catch (firebaseError) {
         console.error('Firebase error:', firebaseError);
         toast.error('Failed to save profile');
         return false;
       }
-
     } catch (error) {
       console.error('Error fetching LinkedIn profile:', error);
       return false;
     } finally {
-      console.log('Finishing LinkedIn profile fetch');
       setIsCreating(false);
     }
   };
@@ -469,6 +485,17 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         )}
       </div>
       <Footer />
+      {/* Render the modal */}
+      <PlatformSelectionModal
+        isOpen={showPlatformModal}
+        onClose={() => {
+          setShowPlatformModal(false);
+          setPendingCleanHandle(null);
+        }}
+        platforms={availablePlatforms}
+        onSelect={handlePlatformSelect}
+        mode={platformSelectionMode}
+      />
     </div>
   );
 }
