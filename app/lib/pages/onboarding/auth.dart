@@ -37,15 +37,15 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              SignInButton(
-                  Buttons.google,
-                  padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 8),
+              if (Platform.isIOS) ...[
+                SignInButton(
+                  Buttons.apple,
+                  padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
-              ),
-              if (Platform.isIOS) ...[
+                  onPressed: () => provider.onAppleSignIn(widget.onSignIn),
+                ),
                 const SizedBox(height: 16),
                 const Row(
                   children: [
@@ -64,15 +64,15 @@ class _AuthComponentState extends State<AuthComponent> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                SignInButton(
-                  Buttons.apple,
+              ],
+              SignInButton(
+                  Buttons.google,
                   padding: const EdgeInsets.symmetric(horizontal: 58, vertical: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  onPressed: () => provider.onAppleSignIn(widget.onSignIn),
+                  onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
               ),
-              ],
               const SizedBox(height: 16),
               RichText(
                 textAlign: TextAlign.center,
