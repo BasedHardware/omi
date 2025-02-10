@@ -413,11 +413,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
       ServerConversation conversation, int index, DateTime date) {
     if (conversations.firstWhereIndexedOrNull((i, e) => e.id == conversation.id) == null) {
         conversations.add(conversation);
-    }
-    if (groupedConversations.containsKey(date)) {
-      groupedConversations[date]!.insert(index, conversation);
-    } else {
-      groupedConversations[date] = [conversation];
+        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _groupConversationsByDateWithoutNotify();
     }
     memoriesToDelete.remove(conversation.id);
     deleteTimestamps.remove(conversation.id);

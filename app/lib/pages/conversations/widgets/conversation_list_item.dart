@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/structured.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
@@ -9,6 +10,7 @@ import 'package:friend_private/providers/connectivity_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +36,13 @@ class ConversationListItem extends StatefulWidget {
 class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
+  late bool showDeleteConfirmation;
+
+  @override
+  void initState() {
+    super.initState();
+    showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+  }
 
   @override
   void dispose() {
@@ -101,20 +110,38 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 confirmDismiss: (direction) {
+                  if (!showDeleteConfirmation) return Future.value(true);
                   final connectivityProvider =
                       Provider.of<ConnectivityProvider>(context, listen: false);
                   if (connectivityProvider.isConnected) {
                     return showDialog(
                       context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context),
-                        () => Navigator.pop(context, true),
-                        'Delete Conversation?',
-                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                        okButtonText: 'Confirm',
-                      ),
-                    );
+                      builder: (context) {
+                        return StatefulBuilder(
+                          builder: (context, setState) {
+                            return ConfirmationDialog(
+                              title: "Delete Conversation?",
+                              description:
+                                  "Are you sure you want to delete this conversation? This action cannot be undone.",
+                              checkboxValue: !showDeleteConfirmation,
+                              checkboxText: "Don't ask me again",
+                              updateCheckboxValue: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    showDeleteConfirmation = !value;
+                                  });
+                                }
+                              },
+                              onCancel: () => Navigator.of(context).pop(),
+                              onConfirm: () {
+                                SharedPreferencesUtil().showConversationDeleteConfirmation =
+                                    showDeleteConfirmation;
+                                return Navigator.pop(context, true);
+                              },
+                            );
+                          },
+                      );
+                    });
                   } else {
                     return showDialog(
                       builder: (c) => getDialog(
