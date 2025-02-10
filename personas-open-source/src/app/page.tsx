@@ -314,9 +314,15 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
 
   
   const fetchLinkedinProfile = async (linkedinHandle: string) => {
-    if (!linkedinHandle) return false;
+    console.log('Starting LinkedIn profile fetch for handle:', linkedinHandle);
+    
+    if (!linkedinHandle) {
+      console.log('No LinkedIn handle provided, returning false');
+      return false;
+    }
     
     const cleanHandle = linkedinHandle.replace('@', '');
+    console.log('Cleaned handle:', cleanHandle);
     
     setIsCreating(true);
     try {
@@ -324,6 +330,7 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
         collection(db, 'plugins_data'),
         where('username', '==', cleanHandle.toLowerCase())
       );
+           
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
@@ -343,22 +350,40 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       });
       
       if (!profileResponse.ok) {
+        console.log('API response not ok:', profileResponse.status, profileResponse.statusText);
         return false;
       }
 
+      
       const profileData: LinkedinProfile = await profileResponse.json();
 
       if (!profileData || !profileData.data.firstName) {
+        console.log('Invalid profile data received');
         return false;
       }
 
-      const formattedAvatarUrl = profileData.data.profilePicture;
-      const fullName = `${profileData.data.firstName} ${profileData.data.lastName}`;
-      const headline = profileData.data.headline;
-      const summary = profileData.data.summary;
-      const positions = profileData.data.position.map(pos => `${pos.title} at ${pos.companyName} (${pos.start.year} - ${pos.end.year})`).join(', ');
-      const skills = Array.isArray(profileData.data.skills) ? profileData.data.skills.map(skill => skill.name).join(', ') : 'No skills available';
-      const recentPosts = profileData.posts.map(post => post.text).join('\n');
+      const formattedAvatarUrl = profileData?.data?.profilePicture || '/omi-avatar.svg';
+      const fullName = `${profileData?.data?.firstName || ''} ${profileData?.data?.lastName || ''}`.trim();
+      const headline = profileData?.data?.headline || 'No headline available';
+      const summary = profileData?.data?.summary || 'No summary available';
+      
+      const positions = Array.isArray(profileData?.data?.position) 
+        ? profileData.data.position.map(pos => {
+            const title = pos?.title || 'Unknown Title';
+            const company = pos?.companyName || 'Unknown Company';
+            const startYear = pos?.start?.year || 'N/A';
+            const endYear = pos?.end?.year || 'Present';
+            return `${title} at ${company} (${startYear} - ${endYear})`;
+          }).join(', ') 
+        : 'No positions available';
+
+      const skills = Array.isArray(profileData?.data?.skills) 
+        ? profileData.data.skills.map(skill => skill?.name || '').filter(Boolean).join(', ') 
+        : 'No skills available';
+
+      const recentPosts = Array.isArray(profileData?.posts) 
+        ? profileData.posts.map(post => post?.text || '').filter(Boolean).join('\n')
+        : 'No recent posts available';
 
       const enhancedDesc = `${summary}\n\nPositions: ${positions}\n\nSkills: ${skills}\n\nRecent Posts:\n${recentPosts}`;
       console.log('Enhanced description:', enhancedDesc);
@@ -417,6 +442,7 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       console.error('Error fetching LinkedIn profile:', error);
       return false;
     } finally {
+      console.log('Finishing LinkedIn profile fetch');
       setIsCreating(false);
     }
   };
