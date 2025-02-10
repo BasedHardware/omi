@@ -2,11 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
-import 'package:sign_in_button/sign_in_button.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -38,19 +37,65 @@ class _AuthComponentState extends State<AuthComponent> {
                       : null,
                 ),
               ),
-              SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              !Platform.isIOS
-                  ? SignInButton(
-                      Buttons.google,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      onPressed: () => provider.onGoogleSignIn(widget.onSignIn),
-                    )
-                  : SignInWithAppleButton(
-                      style: SignInWithAppleButtonStyle.whiteOutlined,
-                      onPressed: () => provider.onAppleSignIn(widget.onSignIn),
-                      height: 52,
+              SizedBox(
+                  height:
+                      MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
+              CustomSignInButton(
+                assetPath: Assets.images.googleLogo.path,
+                title: "Sign in with Google",
+                onTap: () => provider.onGoogleSignIn(widget.onSignIn),
+              ),
+              if (Platform.isIOS) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xfff1f1f1).withOpacity(0),
+                              const Color(0xfff1f1f1).withOpacity(0.7),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'OR',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xfff1f1f1).withOpacity(0.7),
+                              const Color(0xfff1f1f1).withOpacity(0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                CustomSignInButton(
+                  assetPath: Assets.images.appleLogo.path,
+                  title: "Sign in with Apple",
+                  onTap: () => provider.onAppleSignIn(widget.onSignIn),
+                ),
+              ],
               const SizedBox(height: 16),
               RichText(
                 textAlign: TextAlign.center,
@@ -60,14 +105,18 @@ class _AuthComponentState extends State<AuthComponent> {
                     const TextSpan(text: 'By Signing in, you agree to our\n'),
                     TextSpan(
                       text: 'Terms of service',
-                      style: const TextStyle(decoration: TextDecoration.underline),
-                      recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
+                      style:
+                          const TextStyle(decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = provider.openTermsOfService,
                     ),
                     const TextSpan(text: ' and '),
                     TextSpan(
                       text: 'Privacy Policy',
-                      style: const TextStyle(decoration: TextDecoration.underline),
-                      recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
+                      style:
+                          const TextStyle(decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = provider.openPrivacyPolicy,
                     ),
                   ],
                 ),
