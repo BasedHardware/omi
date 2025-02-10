@@ -1,6 +1,10 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
+// Add new constants
+#define AUDIO_CHUNK_MINUTES 5
+#define AUDIO_CHUNK_SECONDS (AUDIO_CHUNK_MINUTES * 60)
+
 /**
  * @brief Mount the SD Card. Initializes the audio files 
  *
