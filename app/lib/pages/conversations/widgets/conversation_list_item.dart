@@ -176,8 +176,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           label: 'Undo',
                           textColor: const Color.fromARGB(255, 255, 255, 255),
                           onPressed: () {
-                            provider.undoDeletedConversation(
-                                conversation, conversationIdx, widget.date);
+                            provider.undoDeletedConversation(conversation);
                           },
                         ),
                       ),

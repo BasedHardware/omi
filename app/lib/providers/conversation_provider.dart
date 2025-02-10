@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -409,9 +408,8 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     }
   }
 
-  void undoDeletedConversation(
-      ServerConversation conversation, int index, DateTime date) {
-    if (conversations.firstWhereIndexedOrNull((i, e) => e.id == conversation.id) == null) {
+  void undoDeletedConversation(ServerConversation conversation) {
+    if (!conversations.any((e) => e.id == conversation.id)) {
         conversations.add(conversation);
         conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _groupConversationsByDateWithoutNotify();
