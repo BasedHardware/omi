@@ -22,15 +22,5 @@ Future<void> saveFcmTokenServer(
   }
 }
 
-Future<void> low_battery_noti(
-    {required String uid, required int batteryLevel}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}/v1/firmware/battery-alert',
-    headers: {'Content-Type': 'application/json'},
-    method: 'GET',
-    queryParameters: {
-      'battery_percentage': batteryLevel.toString(),
-      'uid': uid,
-    },
-  );
-}
+
+ 

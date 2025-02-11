@@ -72,17 +72,6 @@ async def get_latest_version(device: int):
         }
 
 
-@router.get("/v1/firmware/battery-alert")
-async def notify_low_batter(battery_percentage: int, uid: str):
-
-    if battery_percentage < 20:
-        token = get_token_only(uid)
-        if token:
-            send_notification(token, 'Charge your OMI necklace🪫!','Your OMI necklace is running low on battery. Please charge it to avoid any interruptions.')
-    
-    return {'status': 'ok'}
-
-
 
 def extract_key_value_pairs(markdown_content):
     key_value_pattern = re.compile(r'<!-- KEY_VALUE_START\s*(.*?)\s*KEY_VALUE_END -->', re.DOTALL)
