@@ -69,27 +69,15 @@ def reprocess_memory(
 
 
 @router.get('/v1/memories', response_model=List[Memory], tags=['memories'])
-def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True, segment_limit: int = None, uid: str = Depends(auth.get_current_user_uid)):
+def get_memories(limit: int = 100, offset: int = 0, statuses: str = "", include_discarded: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_memories', uid, limit, offset, statuses)
-    memories = memories_db.get_memories(uid, limit, offset, include_discarded=include_discarded,
+    return memories_db.get_memories(uid, limit, offset, include_discarded=include_discarded,
                                     statuses=statuses.split(",") if len(statuses) > 0 else [])
-    if segment_limit is not None:
-        for memory in memories:
-            memory["transcript_segments"] = memory.get("transcript_segments", [])[:segment_limit]
-    return memories
+
 
 @router.get("/v1/memories/{memory_id}", response_model=Memory, tags=['memories'])
 def get_memory_by_id(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return _get_memory_by_id(uid, memory_id)
-
-@router.get("/v1/memories/{memory_id}/transcript_segments", response_model=List[TranscriptSegment], tags=['memories'])
-def get_transcript_segments_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid), limit: int = None, offset: int = 0):
-    memory = _get_memory_by_id(uid, memory_id)
-    transcript_segments = memory["transcript_segments"]
-    if limit is not None:
-        transcript_segments = transcript_segments[offset:limit+offset]
-    return transcript_segments
-
 
 
 @router.patch("/v1/memories/{memory_id}/title", tags=['memories'])

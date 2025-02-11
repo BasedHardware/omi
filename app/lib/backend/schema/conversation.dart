@@ -221,10 +221,6 @@ class ServerConversation {
       return transcript;
     }
   }
-
-  void addTranscriptSegments(List<TranscriptSegment> newSegments) {
-    transcriptSegments.addAll(newSegments);
-  }
 }
 
 class SyncLocalFilesResponse {

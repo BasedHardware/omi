@@ -41,12 +41,9 @@ Future<List<ServerConversation>> getConversations(
     int offset = 0,
     List<ConversationStatus> statuses = const [],
     bool includeDiscarded = true}) async {
-
-  int segmentLimit = 50;
-
-   var response = await makeApiCall(
+  var response = await makeApiCall(
       url:
-          '${Env.apiBaseUrl}v1/memories?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}&segment_limit=$segmentLimit',
+          '${Env.apiBaseUrl}v1/memories?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}',
       headers: {},
       method: 'GET',
       body: '');
@@ -57,59 +54,10 @@ Future<List<ServerConversation>> getConversations(
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     debugPrint('getMemories length: ${memories.length}');
-
-    for (var memory in memories) {
-      if (memory.transcriptSegments.length < segmentLimit) {
-        continue;
-      }
-      // Get all transcript segments for this memory, with paging
-      List<TranscriptSegment> allSegments = [];
-      int segmentOffset = memory.transcriptSegments.length;
-
-      while (true) {
-        var segments = await getTranscriptSegmentsForConversation(memory.id, segmentLimit, offset:segmentOffset);
-        if (segments.isEmpty) break;
-
-        allSegments.addAll(segments);
-        segmentOffset += segmentLimit;
-      }
-      memory.addTranscriptSegments(allSegments);
-    }
-
     return memories;
   } else {
     debugPrint('getMemories error ${response.statusCode}');
   }
-  return [];
-}
-
-
-Future<List<TranscriptSegment>> getTranscriptSegmentsForConversation(String conversationId, int? limit, {int offset = 0}) async {
-  var url = '${Env.apiBaseUrl}v1/memories/$conversationId/transcript_segments';
-  if (limit != null) {
-    url += '?limit=$limit&offset=$offset';
-  }
-
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'GET',
-    body: ''
-  );
-
-  if (response == null) return [];
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var segments = (jsonDecode(body) as List<dynamic>).map((segment) {
-      return TranscriptSegment.fromJson(segment);
-    }).toList();
-
-    return segments;
-  } else {
-    debugPrint('getTranscriptSegmentsForConversation error ${response.statusCode}');
-  }
-
   return [];
 }
 
