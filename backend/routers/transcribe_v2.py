@@ -554,7 +554,7 @@ async def _websocket_util(
 
     # heart beat
     started_at = time.time()
-    timeout_seconds = 420  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
+    timeout_seconds = os.getenv('WS_TIMEOUT', 420)  # 7m # Soft timeout, should < MODAL_TIME_OUT - 3m
     has_timeout = os.getenv('NO_SOCKET_TIMEOUT') is None
 
     async def send_heartbeat():
@@ -574,7 +574,7 @@ async def _websocket_util(
                 if not has_timeout:
                     continue
 
-                if time.time() - started_at >= timeout_seconds:
+                if time.time() - started_at >= float(timeout_seconds):
                     print(f"Session timeout is hit by soft timeout {timeout_seconds}", uid)
                     websocket_close_code = 1001
                     websocket_active = False
