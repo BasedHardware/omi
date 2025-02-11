@@ -12,7 +12,12 @@ api_key = "your_openaikey_here"
 
 print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
 
-client = OpenAI(api_key=api_key)
+#client = OpenAI(api_key=api_key)
+#replaced to targon, free inference
+client = OpenAI(
+    base_url="https://api.targon.com/v1",
+    api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+)
 
 app = Flask(__name__)
 
@@ -47,7 +52,8 @@ def analyze_drinking_intent(text):
         logger.info(f"API key check (last 4 chars): {key_preview}")
         
         response = client.chat.completions.create(
-            model="gpt-4",
+            #model="gpt-4",
+            model="NousResearch/Meta-Llama-3.1-8B-Instruct",
             messages=[
                 {"role": "system", "content": "You are an AI that analyzes conversations to detect if someone is planning to drink alcohol. Respond with 'YES' if you detect intent to drink alcohol, and 'NO' if you don't."},
                 {"role": "user", "content": f"Analyze this conversation for intent to drink alcohol: {text}"}

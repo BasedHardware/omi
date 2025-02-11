@@ -5,7 +5,17 @@ from models import Memory, EndpointResponse
 from utils import num_tokens_from_string
 
 router = APIRouter()
-chat = ChatOpenAI(model='gpt-4o', temperature=0)
+#chat = ChatOpenAI(model='gpt-4o', temperature=0)
+# replaced with LLM powered from Targon: free open source models hosted at fast TPS
+chat = ChatOpenAI(
+    model="NousResearch/Meta-Llama-3.1-8B-Instruct",
+    api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+    base_url="https://api.targon.com/v1",
+    temperature=0,
+    #max_tokens=None,
+    #timeout=None,
+    #max_retries=2,
+)
 
 
 @router.post('/conversation-feedback', tags=['memory-created-example'], response_model=EndpointResponse)

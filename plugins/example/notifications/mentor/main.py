@@ -30,7 +30,13 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client (updated initialization)
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+#replaced to targon, free inference
+client = OpenAI(
+    base_url="https://api.targon.com/v1",
+    api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+)
+
 if not os.getenv('OPENAI_API_KEY'):
     logger.error("OPENAI_API_KEY not found in environment variables")
     raise ValueError("OPENAI_API_KEY environment variable is required")
@@ -92,7 +98,8 @@ def extract_topics(discussion_text: str) -> list:
     """Extract topics from the discussion using OpenAI"""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            #model="gpt-4",
+            model= "NousResearch/Meta-Llama-3.1-8B-Instruct",
             messages=[
                 {"role": "system", "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]"},
                 {"role": "user", "content": f"Extract all topics from this conversation:\n{discussion_text}"}

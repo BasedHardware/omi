@@ -14,7 +14,12 @@ api_key = "PASTE_OPENAI_KEY_HERE"
 
 print(f"API key loaded (last 4 chars): ...{api_key[-4:]}")
 
-client = OpenAI(api_key=api_key)
+#client = OpenAI(api_key=api_key)
+#replaced to targon, free inference
+client = OpenAI(
+    base_url="https://api.targon.com/v1",
+    api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+)
 
 app = Flask(__name__)
 
@@ -89,7 +94,9 @@ def get_openai_response(text):
         logger.info(f"Sending question to OpenAI: {text}")
         
         response = client.chat.completions.create(
-            model="gpt-4",
+            #model="gpt-4",
+            model= "NousResearch/Meta-Llama-3.1-8B-Instruct",
+
             messages=[
                 {"role": "system", "content": "You are Omi, a helpful AI assistant. Provide clear, concise, and friendly responses."},
                 {"role": "user", "content": text}

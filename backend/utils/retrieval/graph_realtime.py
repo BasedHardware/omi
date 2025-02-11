@@ -22,8 +22,17 @@ from models.memory import Memory
 from utils.llm import select_structured_filters, generate_embedding, extract_question_from_transcript, \
     provide_advice_message
 
-model = ChatOpenAI(model='gpt-4o-mini')
-
+# model = ChatOpenAI(model='gpt-4o-mini')
+# replaced with LLM powered from Targon: free open source models hosted at fast TPS
+model = ChatOpenAI(
+    model="NousResearch/Meta-Llama-3.1-8B-Instruct",
+    api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+    base_url="https://api.targon.com/v1",
+    #temperature=.7,
+    #max_tokens=None,
+    #timeout=None,
+    #max_retries=2,
+)
 
 class StructuredFilters(TypedDict):
     topics: List[str]

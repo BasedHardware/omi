@@ -83,15 +83,19 @@ export async function describeImage(imagePath: string) {
 
 export async function gptRequest(systemPrompt: string, userPrompt: string) {
     try {
-        const response = await axios.post("https://api.openai.com/v1/chat/completions", {
-            model: "gpt-4o",
+        //replaced with targon for free inference
+
+        // const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+        const response = await axios.post("https://api.targon.com/v1/chat/completions", {
+            model: "NousResearch/Meta-Llama-3.1-8B-Instruct",
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt },
             ],
         }, {
             headers: {
-                'Authorization': `Bearer ${keys.openai}`,  // Replace YOUR_API_KEY with your actual OpenAI API key
+                //'Authorization': `Bearer ${keys.openai}`,  // Replace YOUR_API_KEY with your actual OpenAI API key
+                'Authorization': `Bearer sn4_wr157wetp4eqj1ty1iqq9rht0yqk`,  //just put in api key raw bc its free on targon anywa
                 'Content-Type': 'application/json'
             },
         });
@@ -118,7 +122,7 @@ console.info(gptRequest(
                 ONLY use the information in the description of the images to answer the question.
                 BE concise and specific.
             `
-        ,
-            'where is the person?'
+    ,
+    'where is the person?'
 
 ))

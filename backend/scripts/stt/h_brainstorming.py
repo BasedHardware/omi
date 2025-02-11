@@ -58,7 +58,14 @@ def execute_groq():
 @timeit
 def diarization(content: str):
     # client = OpenAI()
-    client = Groq()
+    #client = Groq()
+
+    #replaced to targon, free inference
+    client = OpenAI(
+        base_url="https://api.targon.com/v1",
+        api_key="sn4_wr157wetp4eqj1ty1iqq9rht0yqk", #we dont care abt exposing api key here as its free inference anyway (doesnt cost or rate limit)
+    )
+
     system_prompt = '''You are a helpful assistant for correcting transcriptions of conversations.\
     Correct any spelling discrepancies in the transcribed text, add necessary punctuation such as periods, commas, \
     and capitalization, and most important differentiate contextually within the multiple speakers in the conversation.
@@ -75,7 +82,8 @@ def diarization(content: str):
 
     response = client.chat.completions.create(
         # model="gpt-4o",
-        model="llama3-70b-8192",
+        #model="llama3-70b-8192",
+        model = 'NousResearch/Hermes-3-Llama-3.1-70B',
         temperature=0,
         messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": content}]
     )
