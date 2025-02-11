@@ -36,13 +36,6 @@ class ConversationListItem extends StatefulWidget {
 class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
-  late bool showDeleteConfirmation;
-
-  @override
-  void initState() {
-    super.initState();
-    showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-  }
 
   @override
   void dispose() {
@@ -110,6 +103,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 confirmDismiss: (direction) {
+                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
                   if (!showDeleteConfirmation) return Future.value(true);
                   final connectivityProvider =
                       Provider.of<ConnectivityProvider>(context, listen: false);
