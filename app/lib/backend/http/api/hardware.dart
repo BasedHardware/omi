@@ -22,5 +22,3 @@ Future<void> saveFcmTokenServer(
   }
 }
 
-
- 

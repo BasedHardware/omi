@@ -12,6 +12,8 @@ import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier
     implements IDeviceServiceSubsciption {
+
+    
   CaptureProvider? captureProvider;
 
   bool isConnecting = false;
@@ -23,6 +25,7 @@ class DeviceProvider extends ChangeNotifier
   int batteryLevel = -1;
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
+  bool lowBatteryNotified = false;
 
   Timer? _disconnectNotificationTimer;
 
@@ -106,7 +109,21 @@ class DeviceProvider extends ChangeNotifier
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
-        // call teh low_battery_noti function in hardware.dart referecing the backend  firmware.py @router.get("/v1/firmware/battery-alert")
+
+        if (batteryLevel < 20) {
+          if (!lowBatteryNotified) {
+            NotificationService.instance.createNotification(
+              title: 'Charge your OMI necklace🪫!',
+              body: 'Your OMI necklace is running low on battery. Please charge it to avoid any interruptions.',
+            );
+            lowBatteryNotified = true;
+          }
+        } else {
+          // Reset flag when battery charges above 20%
+          lowBatteryNotified = false;
+        }
+
+        notifyListeners();
       },
     );
     notifyListeners();
