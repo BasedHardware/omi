@@ -3,6 +3,7 @@ import 'package:friend_private/pages/payments/payment_method_provider.dart';
 import 'package:friend_private/pages/payments/stripe_connect_setup.dart';
 import 'package:friend_private/pages/payments/widgets/payment_method_card.dart';
 import 'package:friend_private/pages/payments/paypal_setup_page.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -159,10 +160,12 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.stripe(
             onManageTap: () {
+              MixpanelManager().track('Manage Stripe');
               routeToPage(context, const StripeConnectSetup());
             },
             onSetActiveTap: () {
               provider.setActiveMethod(PaymentMethodType.stripe);
+              MixpanelManager().track('Set Stripe as active');
             },
             isConnected: true,
             isActive: false,
@@ -173,10 +176,12 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.paypal(
             onManageTap: () {
+              MixpanelManager().track('Manage PayPal');
               routeToPage(context, const PaypalSetupPage());
             },
             onSetActiveTap: () {
               provider.setActiveMethod(PaymentMethodType.paypal);
+              MixpanelManager().track('Set PayPal as active');
             },
             isConnected: true,
             isActive: false,
@@ -187,6 +192,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.stripe(
             onManageTap: () {
+              MixpanelManager().track('Manage Stripe');
               routeToPage(context, const StripeConnectSetup());
             },
             isConnected: false,
@@ -197,6 +203,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         (
           PaymentMethodConfig.paypal(
             onManageTap: () {
+              MixpanelManager().track('Manage PayPal');
               routeToPage(context, const PaypalSetupPage());
             },
             isConnected: false,
