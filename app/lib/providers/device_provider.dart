@@ -10,7 +10,8 @@ import 'package:friend_private/services/services.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
-class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
+class DeviceProvider extends ChangeNotifier
+    implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
 
   bool isConnecting = false;
@@ -44,10 +45,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+      if (pairedDevice?.firmwareRevision != null &&
+          pairedDevice?.firmwareRevision != 'Unknown') {
         return;
       }
-      var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+      var connection = await ServiceManager.instance()
+          .device
+          .ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice!.getDeviceInfo(connection);
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
@@ -66,16 +70,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     void Function(int)? onBatteryLevelChange,
   }) async {
     {
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection =
+          await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
         return Future.value(null);
       }
-      return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
+      return connection.getBleBatteryLevelListener(
+          onBatteryLevelChange: onBatteryLevelChange);
     }
   }
 
   Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection =
+        await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return [];
     }
@@ -87,7 +94,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (deviceId.isEmpty) {
       return null;
     }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection =
+        await ServiceManager.instance().device.ensureConnection(deviceId);
     return connection?.device;
   }
 
@@ -98,6 +106,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
+        // call teh low_battery_noti function in hardware.dart referecing the backend  firmware.py @router.get("/v1/firmware/battery-alert")
       },
     );
     notifyListeners();
@@ -106,7 +115,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future periodicConnect(String printer) async {
     debugPrint("period connect");
     _reconnectionTimer?.cancel();
-    _reconnectionTimer = Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
+    _reconnectionTimer =
+        Timer.periodic(Duration(seconds: connectionCheckSeconds), (t) async {
       debugPrint("period connect...");
       print(printer);
       print('seconds: $connectionCheckSeconds');
@@ -115,7 +125,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         return;
       }
-      print("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      print(
+          "isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
       if ((!isConnected && connectedDevice == null)) {
         if (isConnecting) {
           return;
@@ -127,7 +138,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future<BtDevice?> _scanAndConnectDevice({bool autoConnect = true, bool timeout = false}) async {
+  Future<BtDevice?> _scanAndConnectDevice(
+      {bool autoConnect = true, bool timeout = false}) async {
     var device = await _getConnectedDevice();
     if (device != null) {
       return device;
@@ -136,7 +148,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     int timeoutCounter = 0;
     while (true) {
       if (timeout && timeoutCounter >= 10) return null;
-      await ServiceManager.instance().device.discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
+      await ServiceManager.instance()
+          .device
+          .discover(desirableDeviceId: SharedPreferencesUtil().btDevice.id);
       if (connectedDevice != null) {
         return connectedDevice;
       }
@@ -270,11 +284,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   @override
-  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) async {
-    debugPrint("provider > device connection state changed...${deviceId}...${state}...${connectedDevice?.id}");
+  void onDeviceConnectionStateChanged(
+      String deviceId, DeviceConnectionState state) async {
+    debugPrint(
+        "provider > device connection state changed...${deviceId}...${state}...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
-        var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+        var connection =
+            await ServiceManager.instance().device.ensureConnection(deviceId);
         if (connection == null) {
           return;
         }
