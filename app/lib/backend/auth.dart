@@ -172,6 +172,17 @@ Future<String?> getIdToken() async {
   }
 }
 
+Future refreshUid() async {
+  var user = FirebaseAuth.instance.currentUser;
+  if (user != null) {
+    SharedPreferencesUtil().uid = user.uid;
+  } else {
+    debugPrint('User signed out or token expired: $e');
+    Logger.handle(e, null, message: 'Please sign in again to continue using the app.');
+    await signOut();
+  }
+}
+
 Future<void> signOut() async {
   await FirebaseAuth.instance.signOut();
   try {
