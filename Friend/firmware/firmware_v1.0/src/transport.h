@@ -40,4 +40,8 @@ void accel_off();
 
 void speak_stream(uint8_t* data, uint16_t length);
 
+void led_on(void);
+void led_off(void);
+void speaker_play(uint8_t *audio_data, uint32_t audio_length);
+
 #endif
