@@ -96,7 +96,8 @@ static ssize_t voice_control_write_handler(struct bt_conn *conn,
 static bool header_received = false;
 static uint32_t expected_length = 0;
 static uint32_t audio_buffer_index = 0;
-#define AUDIO_BUFFER_SIZE 65536
+#define MAX_NOTIFY_RETRIES 10
+#define AUDIO_BUFFER_SIZE 16384  // 16KB instead of 64KB
 static uint8_t audio_buffer[AUDIO_BUFFER_SIZE];
 
 static struct bt_gatt_attr audio_service_attr[] = {
@@ -683,7 +684,6 @@ static bool push_to_gatt(struct bt_conn *conn)
     // Read data from ring buffer
     if (!read_from_tx_queue())
     {
-
         return false;
     }
 
@@ -700,31 +700,36 @@ static bool push_to_gatt(struct bt_conn *conn)
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
         memcpy(pusher_temp_data + NET_BUFFER_HEADER_SIZE, buffer + offset, packet_size);
-        // LOG_PRINTK("sent %d bytes \n",tx_buffer_size);
 
         offset += packet_size;
         index++;
 
+        // Add retry counter and limit
+        int retry = 0;
         while (true)
         {
-            // Try send notification
-            int err = bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+            int err = bt_gatt_notify(conn, &audio_service.attrs[1],
+                                   pusher_temp_data,
+                                   packet_size + NET_BUFFER_HEADER_SIZE);
 
-            // Log failure
-            if (err)
-            {
+            if (err) {
                 LOG_DBG("bt_gatt_notify failed (err %d)", err);
-                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
-                k_sleep(K_MSEC(1));
-            }
+                LOG_DBG("MTU: %d, packet_size: %d",
+                        current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
 
-            // Try to send more data if possible
-            if (err == -EAGAIN || err == -ENOMEM)
-            {
-                continue;
+                if (err == -EAGAIN || err == -ENOMEM) {
+                    retry++;
+                    if (retry > MAX_NOTIFY_RETRIES) {
+                        LOG_ERR("Max notification retries exceeded, dropping packet");
+                        break;  // Exit retry loop, packet dropped
+                    }
+                    k_sleep(K_MSEC(5));  // Add small delay between retries
+                    continue;
+                }
+                // Non-retry error
+                return false;
             }
-
-            // Break if success
+            // Success
             break;
         }
     }
@@ -820,13 +825,10 @@ void pusher(void)
     k_msleep(500);
     while (1)
     {
-        //
-        // Load current connection
-        //
         struct bt_conn *conn = current_connection;
-        //updating the most recent file size is expensive!
         static bool file_size_updated = true;
         static bool connection_was_true = false;
+
         if (conn && !connection_was_true)
         {
             k_msleep(100);
@@ -836,7 +838,10 @@ void pusher(void)
         else if (!conn)
         {
             connection_was_true = false;
+            k_sleep(K_MSEC(100));  // Add sleep when no connection
+            continue;
         }
+
         if (!file_size_updated)
         {
             LOG_PRINTK("updating file size\n");
@@ -862,7 +867,7 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
 
-        if (!valid  && !storage_is_on)
+        if (!valid && !storage_is_on)
         {
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES)
@@ -874,19 +879,8 @@ void pusher(void)
                 }
                 k_mutex_unlock(&write_sdcard_mutex);
             }
-            if (result)
-            {
-             heartbeat_count++;
-             if (heartbeat_count == 255)
-             {
-                update_file_size();
-                heartbeat_count = 0;
-                LOG_PRINTK("drawing\n");
-             }
-            }
-            else
-            {
-
+            if (!result) {
+                k_sleep(K_MSEC(10));  // Add small sleep if no work done
             }
         }
         if (valid)
@@ -1047,19 +1041,26 @@ void accel_off()
 
 // Updated implementation of speak_stream()
 void speak_stream(uint8_t* data, uint16_t length) {
-    // If header has not yet been received, expect the 4-byte header.
     if (!header_received) {
         if (length < 4) {
             LOG_DBG("Received packet too small for header (%d bytes)", length);
             return;
         }
-        // Read the header (expected total length) in little-endian format.
         expected_length = *((uint32_t*)data);
+
+        // Check if expected length exceeds buffer capacity
+        if (expected_length > AUDIO_BUFFER_SIZE) {
+            LOG_ERR("Expected audio length %d exceeds buffer size %d",
+                    expected_length, AUDIO_BUFFER_SIZE);
+            header_received = false;
+            return;
+        }
+
         LOG_DBG("Received header. Expecting %d bytes of audio data", expected_length);
         header_received = true;
         audio_buffer_index = 0;
-        led_on(); // Turn on LED to indicate streaming started.
-        // If there is any extra data beyond the header, append it.
+        led_on();
+
         if (length > 4) {
             uint16_t extra = length - 4;
             if (audio_buffer_index + extra <= AUDIO_BUFFER_SIZE) {
@@ -1070,18 +1071,21 @@ void speak_stream(uint8_t* data, uint16_t length) {
         return;
     }
 
-    // Append the incoming data chunk to our audio buffer.
-    if (audio_buffer_index + length <= AUDIO_BUFFER_SIZE) {
-        memcpy(audio_buffer + audio_buffer_index, data, length);
-        audio_buffer_index += length;
+    // Check buffer capacity before appending data
+    if (audio_buffer_index + length > AUDIO_BUFFER_SIZE) {
+        LOG_ERR("Buffer overflow prevented. Current: %d, Adding: %d, Max: %d",
+                audio_buffer_index, length, AUDIO_BUFFER_SIZE);
+        header_received = false;
+        return;
     }
 
-    // If complete audio stream received, process it.
+    memcpy(audio_buffer + audio_buffer_index, data, length);
+    audio_buffer_index += length;
+
     if (audio_buffer_index >= expected_length) {
         LOG_INF("Audio stream complete (%d bytes). Playing audio...", audio_buffer_index);
-        led_off(); // Turn off LED to signal end of stream.
+        led_off();
         speaker_play(audio_buffer, audio_buffer_index);
-        // Reset variables for next stream.
         header_received = false;
         expected_length = 0;
         audio_buffer_index = 0;

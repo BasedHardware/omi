@@ -34,8 +34,8 @@ BUTTON_RELEASE = 5
 
 # Audio settings
 MAX_ALLOWED_SAMPLES = 50000
-GAIN = 5
-PACKET_SIZE = 320  # Match the firmware's chunk size
+GAIN = 3  # Reduce gain to prevent audio clipping
+PACKET_SIZE = 160
 
 VOICE_CHAR_UUID = "19B10005-E8F2-537E-4F6C-D104768A1214"  # Matching firmware's voice response characteristic.
 
@@ -156,14 +156,18 @@ class VoiceInteractionClient:
                 size_bytes = len(audio_bytes).to_bytes(4, byteorder='little')
                 logging.info("Sending audio header: total_size=%d bytes", len(audio_bytes))
                 await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, size_bytes, response=False)
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)
 
                 # Send audio data in chunks (using response=False)
                 for i in range(0, len(audio_bytes), PACKET_SIZE):
                     chunk = audio_bytes[i:i + PACKET_SIZE]
                     await self.client.write_gatt_char(VOICE_INTERACTION_RX_UUID, chunk, response=False)
                     logging.debug("Sent chunk of %d bytes", len(chunk))
-                    await asyncio.sleep(0.02)  # Give more time between chunks
+                    await asyncio.sleep(0.01)  # Faster sends, but still paced
+
+                    # Add extra delay every N chunks to prevent buffer overflow
+                    if i % (PACKET_SIZE * 8) == 0:
+                        await asyncio.sleep(0.02)
 
             except Exception as e:
                 print(f"Error sending audio response: {e}")
