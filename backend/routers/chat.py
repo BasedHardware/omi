@@ -13,7 +13,7 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, FileChat
+from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, FileChat
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
@@ -43,6 +43,15 @@ def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
+    # get chat session
+    chat_session = chat_db.get_chat_session(uid)
+    if chat_session is None:
+        cs = ChatSession(
+            id=str(uuid.uuid4()),
+            created_at=datetime.now(timezone.utc),
+        )
+        chat_session = chat_db.add_chat_session(uid, cs.dict())
+
     if plugin_id in ['null', '']:
         plugin_id = None
     message = Message(
@@ -55,9 +64,11 @@ def send_message(
             message.files_id = new_file_ids
             fc.add_files(new_file_ids)
         message.reference_files_id = data.file_ids
+        chat_db.add_files_to_chat_session(uid, chat_session['id'], data.file_ids)
 
 
     chat_db.add_message(uid, message.dict())
+    chat_db.add_message_to_chat_session(uid, chat_session['id'],message.id)
 
     app = get_available_app_by_id(plugin_id, uid)
     app = App(**app) if app else None
@@ -100,6 +111,7 @@ def send_message(
             ai_message.reference_files_id = message.reference_files_id
 
         chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
         ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
