@@ -1,8 +1,6 @@
 import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
@@ -40,9 +38,7 @@ class _AuthComponentState extends State<AuthComponent> {
               SizedBox(
                   height:
                       MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              CustomSignInButton(
-                assetPath: Assets.images.googleLogo.path,
-                title: "Sign in with Google",
+              SignInButton.withGoogle(
                 onTap: () => provider.onGoogleSignIn(widget.onSignIn),
               ),
               if (Platform.isIOS) ...[
@@ -90,9 +86,7 @@ class _AuthComponentState extends State<AuthComponent> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                CustomSignInButton(
-                  assetPath: Assets.images.appleLogo.path,
-                  title: "Sign in with Apple",
+                SignInButton.withApple(
                   onTap: () => provider.onAppleSignIn(widget.onSignIn),
                 ),
               ],

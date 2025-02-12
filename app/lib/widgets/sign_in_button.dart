@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 
-class CustomSignInButton extends StatelessWidget {
+class SignInButton extends StatelessWidget {
   final String title;
   final String? assetPath;
   final VoidCallback onTap;
-  const CustomSignInButton(
+  const SignInButton(
       {super.key, required this.title, this.assetPath, required this.onTap});
+
+  factory SignInButton.withGoogle({required VoidCallback onTap}) {
+    return SignInButton(
+      assetPath: Assets.images.googleLogo.path,
+      title: "Sign in with Google",
+      onTap: onTap,
+    );
+  }
+
+  factory SignInButton.withApple({required VoidCallback onTap}) {
+    return SignInButton(
+      assetPath: Assets.images.appleLogo.path,
+      title: "Sign in with Apple",
+      onTap: onTap,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
