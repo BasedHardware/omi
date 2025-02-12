@@ -137,6 +137,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               ),
                               onPressed: () {
+                                provider.updateSearchQuery('');
                                 showModalBottomSheet(
                                   context: context,
                                   isScrollControlled: true,

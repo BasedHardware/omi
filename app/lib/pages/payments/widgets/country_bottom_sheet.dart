@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/utils/other/temp.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 import '../payment_method_provider.dart';
@@ -97,7 +98,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                             title: Text(
-                              country['name'] as String,
+                              (country['name'] as String).decodeString,
                               style: TextStyle(
                                 color: isSelected ? const Color(0xFF635BFF) : Colors.white,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
