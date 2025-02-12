@@ -80,6 +80,25 @@ static struct bt_uuid_128 voice_interaction_uuid = BT_UUID_INIT_128(
 static struct bt_uuid_128 voice_interaction_rx_uuid = BT_UUID_INIT_128(
     BT_UUID_128_ENCODE(0x19B10005, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+// Control characteristic for activating speaker mode
+static struct bt_uuid_128 voice_control_uuid = BT_UUID_INIT_128(
+    BT_UUID_128_ENCODE(0x19B10006, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+// Forward declarations for handlers
+static ssize_t voice_control_write_handler(struct bt_conn *conn,
+                                         const struct bt_gatt_attr *attr,
+                                         const void *buf,
+                                         uint16_t len,
+                                         uint16_t offset,
+                                         uint8_t flags);
+
+// Global variables for voice streaming
+static bool header_received = false;
+static uint32_t expected_length = 0;
+static uint32_t audio_buffer_index = 0;
+#define AUDIO_BUFFER_SIZE 65536
+static uint8_t audio_buffer[AUDIO_BUFFER_SIZE];
+
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
@@ -112,6 +131,10 @@ static struct bt_gatt_attr audio_service_attr[] = {
                            BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                            BT_GATT_PERM_WRITE,
                            NULL, voice_interaction_write_handler, NULL),
+    BT_GATT_CHARACTERISTIC(&voice_control_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL, voice_control_write_handler, NULL),
 #endif
 };
 
@@ -182,7 +205,7 @@ void broadcast_accel(struct k_work *work_item) {
     k_work_reschedule(&accel_work, K_MSEC(ACCEL_REFRESH_INTERVAL));
 }
 
-struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = GPIO_INT_DISABLE};
+struct gpio_dt_spec accel_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)), .pin=8, .dt_flags = 0};
 
 //use d4,d5
 static void accel_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
@@ -305,8 +328,6 @@ static ssize_t audio_codec_read_characteristic(struct bt_conn *conn, const struc
 static ssize_t audio_data_write_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
     uint16_t amount = 400;
-    int16_t *int16_buf = (int16_t *)buf;
-    uint8_t *data = (uint8_t *)buf;
     bt_gatt_notify(conn, attr, &amount, sizeof(amount));
     amount = speak(len, buf);
     return len;
@@ -371,6 +392,28 @@ static ssize_t voice_interaction_write_handler(struct bt_conn *conn,
     LOG_WRN("Device is off, ignoring voice data");
     return len;
 }
+
+static ssize_t voice_control_write_handler(struct bt_conn *conn,
+                                         const struct bt_gatt_attr *attr,
+                                         const void *buf,
+                                         uint16_t len,
+                                         uint16_t offset,
+                                         uint8_t flags) {
+    if (!is_off) {
+        uint8_t cmd = ((uint8_t*)buf)[0];
+        if (cmd == 0x01) {
+            LOG_INF("Switching to speaker mode");
+            // Reset streaming state
+            header_received = false;
+            expected_length = 0;
+            audio_buffer_index = 0;
+            // Optional: Turn on LED to indicate speaker mode
+            led_on();
+        }
+    }
+    return len;
+}
+
 void start_voice_interaction(void) {
     if (is_off || !current_connection) {
         LOG_ERR("Cannot start voice interaction - device off or not connected");
@@ -692,7 +735,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PADDED_LENGTH 80
 #define MAX_WRITE_SIZE 440
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 // bool write_to_storage(void)
 // {
@@ -886,7 +928,7 @@ int bt_off()
 }
 int bt_on()
 {
-   int err = bt_enable(NULL);
+   bt_enable(NULL);
    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
    bt_gatt_service_register(&storage_service);
    sd_on();
@@ -939,8 +981,11 @@ int transport_start()
     }
     LOG_INF("Speaker initialized");
     register_speaker_service();
-
-
+    // Clear codec ring buffer before use
+    ring_buf_reset(&codec_ring_buf);
+    // Play boot chime
+    play_boot_sound();
+    k_sleep(K_MSEC(100));  // Give time for chime to complete
 #endif
     // Start advertising
 
@@ -1000,23 +1045,17 @@ void accel_off()
     gpio_pin_set_dt(&accel_gpio_pin, 0);
 }
 
-// New globals for voice streaming.
-static bool header_received = false;
-static uint32_t expected_length = 0;
-static uint32_t audio_buffer_index = 0;
-#define AUDIO_BUFFER_SIZE 65536
-static uint8_t audio_buffer[AUDIO_BUFFER_SIZE];
-
 // Updated implementation of speak_stream()
 void speak_stream(uint8_t* data, uint16_t length) {
     // If header has not yet been received, expect the 4-byte header.
     if (!header_received) {
         if (length < 4) {
-            // Not enough data for header; ignore.
+            LOG_DBG("Received packet too small for header (%d bytes)", length);
             return;
         }
         // Read the header (expected total length) in little-endian format.
         expected_length = *((uint32_t*)data);
+        LOG_DBG("Received header. Expecting %d bytes of audio data", expected_length);
         header_received = true;
         audio_buffer_index = 0;
         led_on(); // Turn on LED to indicate streaming started.
@@ -1039,6 +1078,7 @@ void speak_stream(uint8_t* data, uint16_t length) {
 
     // If complete audio stream received, process it.
     if (audio_buffer_index >= expected_length) {
+        LOG_INF("Audio stream complete (%d bytes). Playing audio...", audio_buffer_index);
         led_off(); // Turn off LED to signal end of stream.
         speaker_play(audio_buffer, audio_buffer_index);
         // Reset variables for next stream.
@@ -1048,18 +1088,38 @@ void speak_stream(uint8_t* data, uint16_t length) {
     }
 }
 
-// Stub implementations for missing functions.
-// Replace these with your actual implementations as needed.
+// Use the actual speaker implementation from speaker.c
+void speaker_play(uint8_t *audio_data, uint32_t audio_length) {
+    // Ensure the audio is in the correct format (16-bit samples)
+    if (audio_length % 2 != 0) {
+        LOG_WRN("Audio length not aligned to 16-bit samples");
+        return;
+    }
+
+    LOG_INF("Playing audio through speaker...");
+    // Process audio in smaller chunks
+    const uint16_t CHUNK_SIZE = 320; // Process 160 samples (320 bytes) at a time
+    uint32_t bytes_processed = 0;
+
+    while (bytes_processed < audio_length) {
+        uint16_t chunk = MIN(CHUNK_SIZE, audio_length - bytes_processed);
+        int ret = speak(chunk, audio_data + bytes_processed);
+        if (ret != 0) {
+            LOG_ERR("Failed to play audio chunk: %d", ret);
+            return;
+        }
+        bytes_processed += chunk;
+        // Give time for the codec to process the data
+        k_sleep(K_MSEC(5));
+    }
+}
+
+// Use the actual LED implementation
 void led_on(void) {
-    LOG_INF("Stub: led_on() called");
+    set_led_blue(true);  // Or whichever LED color you want to use
 }
 
 void led_off(void) {
-    LOG_INF("Stub: led_off() called");
-}
-
-void speaker_play(uint8_t *audio_data, uint32_t audio_length) {
-    LOG_INF("Stub: speaker_play() called with %u bytes", audio_length);
-    /* You might add code here to actually play back audio via the speaker hardware */
+    set_led_blue(false);
 }
 
