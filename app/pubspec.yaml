@@ -163,6 +163,9 @@ flutter:
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
+    - assets/images/x_logo.png
+    - assets/images/new_background.png
+    - assets/images/clone.png
   fonts:
     - family: 'SF Pro Display'
       fonts:

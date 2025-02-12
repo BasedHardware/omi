@@ -396,4 +396,11 @@ class SharedPreferencesUtil {
   String get customAuthPassword => getString('customAuthPassword') ?? '';
 
   set customAuthPassword(String value) => saveString('customAuthPassword', value);
+
+  bool? get hasOmiDevice => _preferences?.getBool('has_omi_device');
+  set hasOmiDevice(bool? value) {
+    if (value != null) {
+      _preferences?.setBool('has_omi_device', value);
+    }
+  }
 }
