@@ -3,6 +3,7 @@
 #include "codec.h"
 #include "config.h"
 #include "utils.h"
+#include "transport.h"
 #ifdef CODEC_OPUS
 #include "lib/opus-1.2.1/opus.h"
 #endif
@@ -26,16 +27,16 @@ void set_codec_callback(codec_callback callback)
 
 uint8_t codec_ring_buffer_data[AUDIO_BUFFER_SAMPLES * 2]; // 2 bytes per sample
 struct ring_buf codec_ring_buf;
-int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic data is finished 
-{   
-   
+int codec_receive_pcm(int16_t *data, size_t len) //this gets called after mic data is finished
+{
+
     int written = ring_buf_put(&codec_ring_buf, (uint8_t *)data, len * 2);
     if (written != len * 2)
     {
         LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
         return -1;
     }
-    
+
 
     return 0;
 }
@@ -62,33 +63,20 @@ static uint8_t m_opus_encoder[OPUS_ENCODER_SIZE];
 static OpusEncoder *const m_opus_state = (OpusEncoder *)m_opus_encoder;
 #endif
 
-void codec_entry()
-{
-
+void codec_entry(void *p1, void *p2, void *p3) {
     uint16_t output_size;
-    while (1)
-    {
-
-        // Check if we have enough data
-        if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2)
-        {
-            // LOG_PRINTK("waiting on data....\n");
+    while (1) {
+        if (ring_buf_size_get(&codec_ring_buf) < CODEC_PACKAGE_SAMPLES * 2) {
             k_sleep(K_MSEC(10));
             continue;
         }
-        // Read package
         ring_buf_get(&codec_ring_buf, (uint8_t *)codec_input_samples, CODEC_PACKAGE_SAMPLES * 2);
-
-        // Run Codec
         output_size = execute_codec();
-
-        // Notify
-        if (_callback)
-        {
+        if (voice_interaction_active) {
+            handle_voice_data(codec_output_bytes, output_size);
+        } else if (_callback) {
             _callback(codec_output_bytes, output_size);
         }
-
-        // Yield
         k_yield();
     }
 }

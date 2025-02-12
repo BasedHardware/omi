@@ -15,15 +15,13 @@
 #define PDM_PWR_PIN NRF_GPIO_PIN_MAP(1, 10)
 
 // Codecs
-#ifdef CONFIG_OMI_CODEC_OPUS
+#if defined(CONFIG_CODEC_OPUS) || defined(CONFIG_OMI_CODEC_OPUS)
 #define CODEC_OPUS 1
-#else
-#error "Enable CONFIG_OMI_CODEC_OPUS in the project .conf file"
 #endif
 
 #if CODEC_OPUS
 #define CODEC_PACKAGE_SAMPLES 160
-#define CODEC_OUTPUT_MAX_BYTES CODEC_PACKAGE_SAMPLES * 2 // Let's assume that 16bit is enough
+#define CODEC_OUTPUT_MAX_BYTES (CODEC_PACKAGE_SAMPLES * 2) // Let's assume that 16bit is enough
 #define CODEC_OPUS_APPLICATION OPUS_APPLICATION_RESTRICTED_LOWDELAY
 #define CODEC_OPUS_BITRATE 32000
 #define CODEC_OPUS_VBR 1 // Or 1

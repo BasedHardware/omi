@@ -15,4 +15,7 @@ void set_mic_callback(mix_handler _callback);
 
 void mic_off();
 void mic_on();
+
+int mic_configure_for_voice(void);
+
 #endif

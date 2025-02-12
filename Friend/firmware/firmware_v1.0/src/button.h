@@ -1,8 +1,10 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 
+#include <stdbool.h>
+
 typedef enum {
-    IDLE, 
+    IDLE,
     GRACE
 } FSM_STATE_T;
 
@@ -13,5 +15,7 @@ void turnoff_all();
 FSM_STATE_T get_current_button_state();
 
 void force_button_state(FSM_STATE_T state);
+
+extern bool is_off;
 
 #endif
