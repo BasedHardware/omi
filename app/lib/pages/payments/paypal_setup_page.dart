@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/payments/payment_method_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
@@ -263,7 +264,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
           onPressed: () async {
             if (_formKey.currentState!.validate()) {
               setState(() => _isLoading = true);
-
+              MixpanelManager().track(_isComplete ? 'Update PayPal Details' : 'Save PayPal Details');
               await context.read<PaymentMethodProvider>().connectPayPal(
                     _emailController.text.trim(),
                     _paypalMeLinkController.text.trim(),
