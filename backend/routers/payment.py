@@ -84,12 +84,11 @@ async def create_connect_account_endpoint(request: Request, uid: str = Depends(a
     """
     try:
         account_id = get_stripe_connect_account_id(uid)
-        base_url = str(request.base_url).rstrip('/')
 
         if account_id:
-            account = refresh_connect_account_link(account_id, base_url)
+            account = refresh_connect_account_link(account_id)
         else:
-            account = create_connect_account(base_url, uid)
+            account = create_connect_account(uid)
             set_stripe_connect_account_id(uid, account['account_id'])
 
         return account
@@ -119,8 +118,7 @@ async def refresh_account_link_endpoint(request: Request, account_id: str,
     Generate a fresh account link if the previous one expired
     """
     try:
-        base_url = str(request.base_url).rstrip('/')
-        account = refresh_connect_account_link(account_id, base_url)
+        account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))

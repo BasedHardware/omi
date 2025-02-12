@@ -6,6 +6,7 @@ import stripe
 stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
 connect_secret = os.getenv('STRIPE_CONNECT_WEBHOOK_SECRET')
+base_url = os.getenv('BASE_API_URL')
 
 
 def create_product(name: str, description: str, image: str):
@@ -66,7 +67,7 @@ def parse_connect_event(payload, sig_header):
     )
 
 
-def create_connect_account(base_url: str, uid: str):
+def create_connect_account(uid: str):
     account = stripe.Account.create(
         controller={
             "stripe_dashboard": {
@@ -106,7 +107,7 @@ def create_connect_account(base_url: str, uid: str):
     }
 
 
-def refresh_connect_account_link(account_id: str, base_url: str):
+def refresh_connect_account_link(account_id: str):
     account_link = stripe.AccountLink.create(
         account=account_id,
         refresh_url=urljoin(base_url, f"/v1/stripe/refresh/{account_id}"),
