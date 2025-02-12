@@ -134,12 +134,7 @@ export default function HomePage() {
   const handleInputChange = (e: { target: { value: SetStateAction<string>; }; }) => {
     setHandle(e.target.value);
   };
-
-  //Twitter-specific redirection function
-  const redirectToTwitterChat = (id: string) => {
-    router.push(`/twitter-chat?id=${encodeURIComponent(id)}`);
-  };
-
+  
   //function to retrieve the document id from Firestore.
   const getProfileDocId = async (cleanHandle: string, category: 'twitter' | 'linkedin'): Promise<string | null> => {
     const q = query(
@@ -219,7 +214,7 @@ export default function HomePage() {
 
       const querySnapshot = await getDocs(q);
 
-      // Single Map for all bots, keyed by lowercase username
+      // Single Map for all bots, keyed by lowercase username and category
       const allBotsMap = new Map();
 
       querySnapshot.docs.forEach(doc => {
@@ -230,7 +225,12 @@ export default function HomePage() {
         if (!normalizedUsername || !bot.name) return;
 
         const key = `${normalizedUsername}-${category}`;
-        allBotsMap.set(key, bot);
+        const existingBot = allBotsMap.get(key);
+
+        // Only update if new bot has higher sub_count
+        if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+          allBotsMap.set(key, bot);
+        }
       });
 
       const uniqueBots = Array.from(allBotsMap.values());
@@ -251,12 +251,16 @@ export default function HomePage() {
             }
           });
 
+          // Then add new bots, only updating if sub_count is higher
           uniqueBots.forEach(bot => {
             const username = bot.username?.toLowerCase().trim();
             const category = bot.category;
             if (username) {
               const key = `${username}-${category}`;
-              masterMap.set(key, bot);
+              const existingBot = masterMap.get(key);
+              if (!existingBot || ((bot.sub_count || 0) > (existingBot.sub_count || 0))) {
+                masterMap.set(key, bot);
+              }
             }
           });
 
