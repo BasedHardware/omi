@@ -16,5 +16,16 @@ config ENABLE_BUTTON
     default n
 config ENABLE_SPEAKER
     bool "Enable the speaker!!"
-    default n 
+    default n
+endmenu
+
+menu "Voice Interaction Options"
+
+config ENABLE_VOICE_INTERACTION
+    bool "Enable Voice Interaction"
+    default n
+    help
+      Enable support for push-to-talk (bi-directional) voice interaction.
+      This will add extra BLE characteristics and code to support a dedicated voice mode.
+
 endmenu
