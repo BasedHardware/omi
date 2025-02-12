@@ -29,6 +29,7 @@ from utils.llm import (
     qa_rag,
     qa_rag_stream,
     retrieve_is_an_omi_question,
+    retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
@@ -121,9 +122,8 @@ def determine_conversation_type(
     if not question or len(question) == 0:
         return "no_context_conversation"
 
-    messages = state.get("messages", [])
-    last_message = messages[-1] if messages else None
-    if last_message and last_message.is_message_with_file():
+    is_file_question = retrieve_is_file_question(question)
+    if is_file_question:
         return "file_chat_question"
 
     is_omi_question = retrieve_is_an_omi_question(question)

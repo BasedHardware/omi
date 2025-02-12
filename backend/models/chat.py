@@ -134,3 +134,10 @@ class SendMessageRequest(BaseModel):
     file_ids: Optional[List[str]] = []
 
 
+class ChatSession(BaseModel):
+    id: str
+    message_ids: Optional[List[str]] = []
+    file_ids: Optional[List[str]] = []
+    created_at: datetime
+    deleted: bool = False
+

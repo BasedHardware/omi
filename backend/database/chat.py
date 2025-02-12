@@ -266,3 +266,42 @@ def delete_multi_files(uid: str, files_data: list):
 
     batch.commit()
 
+def add_chat_session(uid: str, chat_session_data: dict):
+    chat_session_data['deleted'] = False
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
+    return chat_session_data
+
+def get_chat_session(uid: str):
+    session_ref = (
+        db.collection('users').document(uid).collection('chat_sessions')
+        .where(filter=FieldFilter('deleted', '==', False)).limit(1)
+    )
+    sessions = session_ref.stream()
+    for session in sessions:
+        return session.to_dict()
+
+    return None
+
+def delete_chat_session(uid, chat_session_id):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({'deleted': True})
+
+def update_chat_session(uid: str, chat_session_id: str, chat_session_data: dict):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update(chat_session_data)
+
+def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+
+def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]):
+    if not file_ids:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
