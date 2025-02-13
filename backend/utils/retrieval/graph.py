@@ -15,7 +15,7 @@ import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
-from models.chat import Message
+from models.chat import ChatSession, Message
 from models.memory import Memory
 from models.plugin import Plugin
 from utils.llm import (
@@ -102,6 +102,8 @@ class GraphState(TypedDict):
     parsed_question: Optional[str]
     answer: Optional[str]
     ask_for_nps: Optional[bool]
+
+    chat_session: Optional[ChatSession]
 
 
 def determine_conversation(state: GraphState):
@@ -298,22 +300,33 @@ def qa_handler(state: GraphState):
 def file_chat_question(state: GraphState):
     print("chat_with_file_question node")
 
+    fc_tool = FileChatTool()
+
     uid = state.get("uid", "")
     question = state.get("parsed_question", "")
 
     messages = state.get("messages", [])
     last_message = messages[-1] if messages else None
-    if last_message and not last_message.is_message_with_file():
-        return {'answer': "", 'ask_for_nps': False}
 
-    fc_tool = FileChatTool()
+    file_ids = []
+    chat_session = state.get("chat_session")
+    if chat_session:
+        if last_message:
+            if len(last_message.files_id) > 0:
+                file_ids = last_message.files_id
+            else:
+                #if user asked about file but not attach new file, will get all file in session
+                file_ids = chat_session.file_ids
+    else:
+        file_ids = fc_tool.get_files()
+
 
     streaming = state.get("streaming")
     if streaming:
-        answer = fc_tool.process_chat_with_file_stream(uid, question,last_message.reference_files_id, callback= state.get('callback'))
+        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback= state.get('callback'))
         return {'answer': answer, 'ask_for_nps': True}
 
-    answer = fc_tool.process_chat_with_file(uid, question ,last_message.reference_files_id)
+    answer = fc_tool.process_chat_with_file(uid, question ,file_ids)
     return {'answer': answer, 'ask_for_nps': True}
 
 
@@ -359,19 +372,19 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, chat_session: Optional[ChatSession] = None
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
+            {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin, "chat_session": chat_session},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
 
 async def execute_graph_chat_stream(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {},
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -379,7 +392,7 @@ async def execute_graph_chat_stream(
 
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback},
+         "streaming": True, "callback": callback, "chat_session": chat_session},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
