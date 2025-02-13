@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 class AddPersonaPage extends StatefulWidget {
   const AddPersonaPage({super.key});
@@ -53,14 +55,14 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
     try {
       final personaData = {
         'author': _nameController.text,
-        'email': _emailController.text,
+        'private': !_isPublic,
       };
 
       var res = await createPersonaApp(_selectedImage!, personaData);
 
       if (mounted) {
         if (res) {
-          retrieveApps();
+          context.read<AppProvider>().getApps();
           AppSnackbar.showSnackbarSuccess('Persona created successfully');
         } else {
           AppSnackbar.showSnackbarError('Failed to create your persona');
@@ -156,32 +158,6 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    labelStyle: TextStyle(color: Colors.grey.shade400),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey.shade800),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey.shade600),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter an email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -202,21 +178,24 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                   ],
                 ),
                 const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: AnimatedLoadingButton(
-                    onPressed: _createPersona,
-                    color: Colors.white,
-                    loaderColor: Colors.black,
-                    text: "Create Persona",
-                    textStyle: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
               ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(left: 24, right: 24, bottom: 52),
+        child: SizedBox(
+          width: double.infinity,
+          child: AnimatedLoadingButton(
+            onPressed: _createPersona,
+            color: Colors.white,
+            loaderColor: Colors.black,
+            text: "Create Persona",
+            textStyle: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
