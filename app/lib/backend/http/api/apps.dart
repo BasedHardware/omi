@@ -75,6 +75,34 @@ Future<bool> reviewApp(String appId, AppReview review) async {
   }
 }
 
+Future<Map<String, String>> uploadAppThumbnail(File file) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      return {
+        'thumbnail_url': data['thumbnail_url'],
+        'thumbnail_id': data['thumbnail_id'],
+      };
+    } else {
+      debugPrint('Failed to upload thumbnail. Status code: ${response.statusCode}');
+      return {};
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploading thumbnail: $e');
+    return {};
+  }
+}
+
 Future<bool> updateAppReview(String appId, AppReview review) async {
   try {
     var response = await makeApiCall(

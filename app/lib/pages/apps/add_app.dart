@@ -97,9 +97,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(
-                            height: 18,
-                          ),
+                          const SizedBox(height: 18),
                           AppMetadataWidget(
                             pickImage: () async {
                               await provider.pickImage();
@@ -122,9 +120,87 @@ class _AddAppPageState extends State<AddAppPage> {
                                   paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
                                 )
                               : const SizedBox.shrink(),
-                          const SizedBox(
-                            height: 12,
+                          const SizedBox(height: 18),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Text(
+                                    'Preview and Screenshots',
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: 180,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: provider.thumbnailUrls.length + 1,
+                                    itemBuilder: (context, index) {
+                                      if (index == provider.thumbnailUrls.length) {
+                                        return GestureDetector(
+                                          onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
+                                          child: Container(
+                                            width: 120,
+                                            margin: const EdgeInsets.only(right: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade800,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: provider.isUploadingThumbnail
+                                                ? const Center(
+                                                    child: CircularProgressIndicator(
+                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                    ),
+                                                  )
+                                                : const Icon(Icons.add_photo_alternate_outlined, size: 32),
+                                          ),
+                                        );
+                                      }
+                                      return Stack(
+                                        children: [
+                                          Container(
+                                            width: 120,
+                                            margin: const EdgeInsets.only(right: 8),
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(8),
+                                              image: DecorationImage(
+                                                image: NetworkImage(provider.thumbnailUrls[index]),
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 4,
+                                            right: 12,
+                                            child: GestureDetector(
+                                              onTap: () => provider.removeThumbnail(index),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.6),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.close, size: 16),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(height: 18),
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.grey.shade900,

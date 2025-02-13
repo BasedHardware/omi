@@ -52,6 +52,11 @@ class AddAppProvider extends ChangeNotifier {
   File? imageFile;
   String? imageUrl;
   String? updateAppId;
+  
+  List<File> thumbnailFiles = [];
+  List<String> thumbnailUrls = [];
+  List<String> thumbnailIds = [];
+  bool isUploadingThumbnail = false;
   List<AppCapability> selectedCapabilities = [];
   List<NotificationScope> selectedScopes = [];
   List<AppCapability> capabilities = [];
@@ -422,6 +427,7 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -524,6 +530,47 @@ class AddAppProvider extends ChangeNotifier {
     }
     checkValidity();
     setIsSubmitting(false);
+  }
+
+  Future<void> pickThumbnail() async {
+    ImagePicker imagePicker = ImagePicker();
+    try {
+      var file = await imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file != null) {
+        setIsUploadingThumbnail(true);
+        var thumbnailFile = File(file.path);
+        
+        // Upload thumbnail
+        var result = await uploadAppThumbnail(thumbnailFile);
+        if (result.isNotEmpty) {
+          thumbnailFiles.add(thumbnailFile);
+          thumbnailUrls.add(result['thumbnail_url']!);
+          thumbnailIds.add(result['thumbnail_id']!);
+        }
+        setIsUploadingThumbnail(false);
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'photo_access_denied') {
+        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
+      }
+      setIsUploadingThumbnail(false);
+    }
+    notifyListeners();
+  }
+
+  void setIsUploadingThumbnail(bool uploading) {
+    isUploadingThumbnail = uploading;
+    notifyListeners();
+  }
+
+  void removeThumbnail(int index) {
+    thumbnailFiles.removeAt(index);
+    thumbnailUrls.removeAt(index);
+    thumbnailIds.removeAt(index);
+    notifyListeners();
   }
 
   Future pickImage() async {
