@@ -34,13 +34,47 @@ class PaymentMethodProvider extends ChangeNotifier {
   PaymentConnectionState _stripeConnectionState = PaymentConnectionState.notConnected;
   PaymentConnectionState _payPalConnectionState = PaymentConnectionState.notConnected;
 
+  List<Map<String, dynamic>> _supportedCountries = [];
+  List<Map<String, dynamic>> _filteredCountries = [];
+  String _searchQuery = '';
+
   PayPalDetails? paypalDetails;
 
+  List<Map<String, dynamic>> get supportedCountries => _supportedCountries;
+  List<Map<String, dynamic>> get filteredCountries => _filteredCountries;
+  String get searchQuery => _searchQuery;
+
   PaymentMethodType? get activeMethod => _activeMethod;
+  PaymentConnectionState get stripeConnectionState => _stripeConnectionState;
   bool get isStripeConnected => _stripeConnectionState == PaymentConnectionState.connected;
   bool get isStripePolling => _isStripePolling;
   bool get isPayPalConnected => _payPalConnectionState == PaymentConnectionState.connected;
   bool get isLoading => _isLoading;
+
+  Future getSupportedCountries() async {
+    _isLoading = true;
+    var res = await getStripeSupportedCountries();
+    _isLoading = false;
+    if (res != null) {
+      _supportedCountries = res.cast<Map<String, dynamic>>();
+      _filteredCountries = _supportedCountries;
+      notifyListeners();
+    } else {
+      AppSnackbar.showSnackbarError('Failed to fetch supported countries. Please try again later.');
+    }
+  }
+
+  void updateSearchQuery(String query) {
+    _searchQuery = query.toLowerCase();
+    if (_searchQuery.isEmpty) {
+      _filteredCountries = _supportedCountries;
+    } else {
+      _filteredCountries = _supportedCountries.where((country) {
+        return country['name'].toString().toLowerCase().contains(_searchQuery);
+      }).toList();
+    }
+    notifyListeners();
+  }
 
   void setActiveMethod(PaymentMethodType method) async {
     _isLoading = true;
@@ -83,8 +117,16 @@ class PaymentMethodProvider extends ChangeNotifier {
     }
   }
 
+  String? _selectedCountryId;
+  String? get selectedCountryId => _selectedCountryId;
+
+  void setSelectedCountryId(String countryId) {
+    _selectedCountryId = countryId;
+    notifyListeners();
+  }
+
   Future<String?> connectStripe() async {
-    var res = await getStripeAccountLink();
+    var res = await getStripeAccountLink(_selectedCountryId);
     if (res != null) {
       return res['url'];
     }
