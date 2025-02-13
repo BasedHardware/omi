@@ -579,9 +579,10 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None,
+                                 callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
+    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -609,13 +610,15 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini.invoke(prompt).content
 
+
 def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
+    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
-def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                       cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -702,17 +705,17 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
+
 def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                   messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
-def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -783,9 +786,10 @@ def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optiona
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
-def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
 
+def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
+                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -850,9 +854,9 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
-def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -918,15 +922,17 @@ def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
 
-def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                     messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
 
+def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                     cited: Optional[bool] = False,
+                     messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_large_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
-def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+              messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -1336,6 +1342,7 @@ class FiltersToUse(BaseModel):
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
+
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
@@ -1474,6 +1481,7 @@ def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
+
 def extract_question_from_conversation_v5(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
@@ -1532,6 +1540,7 @@ def extract_question_from_conversation_v5(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
 
 def extract_question_from_conversation_v4(messages: List[Message]) -> str:
     # user last messages
@@ -1919,3 +1928,60 @@ def generate_description(app_name: str, description: str) -> str:
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+
+# **************************************************
+# ******************* PERSONA **********************
+# **************************************************
+
+def condense_facts(facts):
+    combined_facts = "\n".join(facts)
+    prompt = f"""You are an expert in personality analysis and information preservation. Your task is to condense the following facts about a person while ensuring their complete personality traits and characteristics are preserved:
+    {combined_facts}
+
+Instructions:
+- Preserve ALL information that defines the person's unique traits, preferences, and behaviors
+- Group semantically related facts together to maintain context
+- Merge overlapping or redundant facts while retaining subtle nuances
+- Prioritize facts that showcase distinctive personality characteristics
+- Maintain chronological or causal relationships between facts
+- Keep the tone natural and conversational
+- Ensure the condensed version could recreate the exact same persona
+
+The output will be used to create an AI persona that perfectly mirrors this individual, so no unique trait or characteristic can be lost in the condensing process.
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content
+
+
+def generate_persona_description(facts):
+    prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
+
+Facts:
+{facts}
+
+Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
+
+    response = llm_medium.invoke(prompt)
+    description = response.content
+    return description
+
+
+def condense_conversations(conversations):
+    combined_conversations = "\n".join(conversations)
+    prompt = f"""You are an expert in conversation analysis and personality preservation. Your task is to condense the following conversations while preserving the essential context, communication style, and personality traits:
+    {combined_conversations}
+
+Instructions:
+- Preserve ALL information that defines the person's communication style and personality
+- Maintain key discussion topics and viewpoints expressed
+- Capture recurring patterns in how they interact and respond
+- Keep important contextual details and relationships mentioned
+- Retain their unique voice, vocabulary, and expression style
+- Group related conversations to maintain context flow
+- Ensure the condensed version accurately represents their conversational identity
+
+The output will be used to create an AI persona that mirrors this individual's conversation style, so no key personality trait or communication pattern can be lost in the condensing process.
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content

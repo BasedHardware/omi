@@ -18,6 +18,7 @@ from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
 from utils.llm import initial_chat_message
+from utils.openrouter import execute_persona_chat_stream
 from utils.other import endpoints as auth
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 
@@ -54,6 +55,7 @@ def send_message(
     app_id = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
+
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -94,7 +96,8 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data):
+        stream_function = execute_persona_chat_stream if app and 'persona' in app.capabilities else execute_graph_chat_stream
+        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data):
             if chunk:
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
