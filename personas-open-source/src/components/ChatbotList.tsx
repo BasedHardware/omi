@@ -8,21 +8,26 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { BadgeCheck, Search } from 'lucide-react';
 import { FaLinkedin } from 'react-icons/fa';
+import { Chatbot } from '@/types/profiles';
+import { Dispatch, SetStateAction, RefObject } from 'react';
+
+interface ChatbotListProps {
+  chatbots: Chatbot[];
+  searchQuery: string;
+  setSearchQuery: Dispatch<SetStateAction<string>>;
+  handleChatbotClick: (bot: Chatbot) => void;
+  hasMore: boolean;
+  ref: RefObject<HTMLDivElement> | ((node?: Element | null) => void);
+}
 
 /**
  * ChatbotList Component
  * 
  * @component
- * @param {Object} props - Component props
- * @param {Array<Chatbot>} props.chatbots - Array of chatbot objects to display
- * @param {string} props.searchQuery - Current search query string
- * @param {Function} props.setSearchQuery - Function to update search query
- * @param {Function} props.handleChatbotClick - Click handler for chatbot selection
- * @param {boolean} props.hasMore - Flag indicating if more chatbots can be loaded
- * @param {React.RefObject} props.ref - Ref for infinite scroll functionality
+ * @param {ChatbotListProps} props - Component props
  * @returns {JSX.Element} Rendered ChatbotList component
  */
-export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatbotClick, hasMore, ref }) => (
+export const ChatbotList = ({ chatbots, searchQuery, setSearchQuery, handleChatbotClick, hasMore, ref }: ChatbotListProps) => (
   <div className="w-full max-w-3xl">
     <div className="relative mb-6">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
