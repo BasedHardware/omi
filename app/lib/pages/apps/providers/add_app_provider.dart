@@ -489,6 +489,7 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
