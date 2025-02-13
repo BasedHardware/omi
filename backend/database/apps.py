@@ -261,3 +261,8 @@ def get_persona_by_id_db(persona_id: str):
     if doc.exists:
         return doc.to_dict()
     return None
+
+
+def add_persona_to_db(persona_data: dict):
+    persona_ref = db.collection('plugins_data')
+    persona_ref.add(persona_data, persona_data['id'])
