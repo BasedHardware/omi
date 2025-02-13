@@ -133,6 +133,8 @@ def is_onboarding_complete(account_id: str):
 
 # Stripe does not have any official API to get a list of supported countries for connect
 def get_supported_countries():
+    if countries := redis_db.get_generic_cache('stripe_supported_countries'):
+        return countries
     data = stripe.CountrySpec.list(limit=100)
     country_codes = [country['id'] for country in data.data]
     # Gibraltar is not supported by us since it does not allow transfers
@@ -147,5 +149,5 @@ def get_supported_countries():
         if pycountry.countries.get(alpha_2=code)
     ]
     # cache in redis for 7 days since it does not change that often. Maybe cache it for 30 days?
-    redis_db.set_generic_cache('stripe_supported_countries', data, 604800)
+    redis_db.set_generic_cache('stripe_supported_countries', countries, 604800)
     return countries
