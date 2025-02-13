@@ -259,3 +259,7 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
+def get_app_thumbnail_url(thumbnail_id: str) -> str:
+    path = f'{thumbnail_id}.jpg'
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
