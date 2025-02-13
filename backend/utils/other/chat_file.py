@@ -99,6 +99,9 @@ class FileChatTool:
     def retrieve_new_file(self, file_ids) -> List:
         return list(set(file_ids) - set(self.file_ids))
 
+    def get_files(self):
+        return self.file_ids
+
     def create_thread(self):
         if self.thread:
             return

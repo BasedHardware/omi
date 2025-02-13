@@ -95,7 +95,7 @@ def get_plugin_messages(uid: str, plugin_id: str, limit: int = 20, offset: int =
 
 @timeit
 def get_messages(
-        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None,
+        uid: str, limit: int = 20, offset: int = 0, include_memories: bool = False, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None
         # include_plugin_id_filter: bool = True,
 ):
     print('get_messages', uid, limit, offset, plugin_id, include_memories)
@@ -106,6 +106,8 @@ def get_messages(
     )
     # if include_plugin_id_filter:
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    if chat_session_id:
+        messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
@@ -186,12 +188,14 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
-def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None):
+def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     messages_ref = (
         parent_doc_ref.collection('messages')
         .where(filter=FieldFilter('deleted', '==', False))
     )
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', plugin_id))
+    if chat_session_id:
+        messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
     print('batch_delete_messages', plugin_id)
     last_doc = None  # For pagination
 
@@ -222,13 +226,13 @@ def batch_delete_messages(parent_doc_ref, batch_size=450, plugin_id: Optional[st
         last_doc = docs_list[-1]
 
 
-def clear_chat(uid: str, plugin_id: Optional[str] = None):
+def clear_chat(uid: str, plugin_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     try:
         user_ref = db.collection('users').document(uid)
         print(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
-        batch_delete_messages(user_ref, plugin_id=plugin_id)
+        batch_delete_messages(user_ref, plugin_id=plugin_id, chat_session_id=chat_session_id)
         return None
     except Exception as e:
         return {"message": str(e)}
@@ -287,11 +291,6 @@ def delete_chat_session(uid, chat_session_id):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({'deleted': True})
-
-def update_chat_session(uid: str, chat_session_id: str, chat_session_data: dict):
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update(chat_session_data)
 
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
     user_ref = db.collection('users').document(uid)

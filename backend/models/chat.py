@@ -57,9 +57,9 @@ class Message(BaseModel):
     deleted: bool = False
     reported: bool = False
     report_reason: Optional[str] = None
-    files_id: List[str] = [] # file attached with message
-    reference_files_id: List[str] = [] # related files with message
+    files_id: List[str] = []
     files: List[FileChat] = []
+    chat_session_id: Optional[str] = None
 
     @staticmethod
     def get_messages_as_string(
@@ -121,8 +121,6 @@ class Message(BaseModel):
 
         return '\n'.join(formatted_messages)
 
-    def is_message_with_file(self):
-        return len(self.reference_files_id) > 0
 
 
 class ResponseMessage(Message):
@@ -140,4 +138,11 @@ class ChatSession(BaseModel):
     file_ids: Optional[List[str]] = []
     created_at: datetime
     deleted: bool = False
+
+    def add_file_ids(self, new_file_ids: List[str]):
+        if self.file_ids is None:
+            self.file_ids = []
+        for file_id in new_file_ids:
+            if file_id not in self.file_ids:
+                self.file_ids.append(file_id)
 

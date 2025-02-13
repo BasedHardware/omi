@@ -37,6 +37,16 @@ def filter_messages(messages, plugin_id):
     print('filter_messages output:', len(collected))
     return collected
 
+def acquire_chat_session(uid: str):
+    chat_session = chat_db.get_chat_session(uid)
+    if chat_session is None:
+        cs = ChatSession(
+            id=str(uuid.uuid4()),
+            created_at=datetime.now(timezone.utc),
+        )
+        chat_session = chat_db.add_chat_session(uid, cs.dict())
+    return chat_session
+
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
@@ -45,12 +55,7 @@ def send_message(
     print('send_message', data.text, plugin_id, uid)
     # get chat session
     chat_session = chat_db.get_chat_session(uid)
-    if chat_session is None:
-        cs = ChatSession(
-            id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-        )
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
+    chat_session = ChatSession(**chat_session) if chat_session else None
 
     if plugin_id in ['null', '']:
         plugin_id = None
@@ -63,12 +68,15 @@ def send_message(
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             fc.add_files(new_file_ids)
-        message.reference_files_id = data.file_ids
-        chat_db.add_files_to_chat_session(uid, chat_session['id'], data.file_ids)
+        if chat_session:
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
 
+    if chat_session:
+        message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
-    chat_db.add_message_to_chat_session(uid, chat_session['id'],message.id)
 
     app = get_available_app_by_id(plugin_id, uid)
     app = App(**app) if app else None
@@ -107,11 +115,11 @@ def send_message(
             type='text',
             memories_id=memories_id,
         )
-        if len(message.reference_files_id) > 0:
-            ai_message.reference_files_id = message.reference_files_id
+        if chat_session:
+            ai_message.chat_session_id = chat_session.id
+            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
         chat_db.add_message(uid, ai_message.dict())
-        chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
         ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -120,7 +128,7 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data):
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
             if chunk:
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
@@ -161,18 +169,28 @@ def send_message_v1(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
+    # get chat session
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session = ChatSession(**chat_session) if chat_session else None
+
     if plugin_id in ['null', '']:
         plugin_id = None
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        plugin_id=plugin_id
+        plugin_id=plugin_id, chat_session_id=chat_session.id
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             fc.add_files(new_file_ids)
-        message.reference_files_id = data.file_ids
+        if chat_session:
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+
+    if chat_session:
+        message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
 
@@ -182,7 +200,8 @@ def send_message_v1(
     app_id = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)  # plugin
+
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True, chat_session=chat_session)  # plugin
 
     # cited extraction
     cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -208,12 +227,12 @@ def send_message_v1(
         plugin_id=app_id,
         type='text',
         memories_id=memories_id,
+        chat_session_id=chat_session.id,
     )
-    if message.reference_files_id is not None:
-        ai_message.reference_files_id = message.reference_files_id
 
 
     chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -242,9 +261,13 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    # get current chat session
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     if plugin_id in ['null', '']:
         plugin_id = None
-    err = chat_db.clear_chat(uid, plugin_id=plugin_id)
+    err = chat_db.clear_chat(uid, plugin_id=plugin_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
@@ -252,11 +275,18 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
     fc_tool = FileChatTool()
     fc_tool.cleanup(uid)
 
+    # clear session
+    if chat_session_id is not None:
+        chat_db.delete_chat_session(uid, chat_session_id)
+
     return initial_message_util(uid, plugin_id)
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
     print('initial_message_util', app_id)
+    # init chat session
+    chat_session = acquire_chat_session(uid)
+
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
     prev_messages_str = ''
@@ -280,8 +310,10 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
         from_external_integration=False,
         type='text',
         memories_id=[],
+        chat_session_id=chat_session['id'],
     )
     chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
     return ai_message
 
 
@@ -300,10 +332,13 @@ def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    chat_session = chat_db.get_chat_session(uid)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     if plugin_id in ['null', '']:
         plugin_id = None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id)
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id, chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
