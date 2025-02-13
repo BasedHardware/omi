@@ -1,4 +1,4 @@
-from fastapi import Request, Header, HTTPException, APIRouter, Depends
+from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 
 from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id, set_paypal_payment_details, \
@@ -78,7 +78,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
 
 @router.post("/v1/stripe/connect-accounts")
-async def create_connect_account_endpoint(request: Request, uid: str = Depends(auth.get_current_user_uid)):
+async def create_connect_account_endpoint(country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)):
     """
     Create a Stripe Connect account and return the account creation response
     """
@@ -88,13 +88,19 @@ async def create_connect_account_endpoint(request: Request, uid: str = Depends(a
         if account_id:
             account = refresh_connect_account_link(account_id)
         else:
-            account = create_connect_account(uid)
+            if country is None or country.strip() == "":
+                raise HTTPException(status_code=400, detail="Country is required")
+            account = create_connect_account(uid, country)
             set_stripe_connect_account_id(uid, account['account_id'])
 
         return account
-
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get('/v1/stripe/supported-countries')
+def get_supported_countries():
+    return stripe_utils.get_supported_countries()
 
 
 @router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
