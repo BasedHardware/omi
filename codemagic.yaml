@@ -30,9 +30,9 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: 'v*-ios-cm'
+        - pattern: "v*-ios-cm"
           include: true
-        - pattern: 'v*-mobile-cm'
+        - pattern: "v*-mobile-cm"
           include: true
     working_directory: app
     scripts:
@@ -50,8 +50,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -64,8 +64,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -122,10 +122,10 @@ workflows:
         script: |
           # Create a directory for dSYM files
           mkdir -p build/ios/dSYMs
-          
+
           # Copy dSYM files to the new directory
           cp -R build/ios/archive/Runner.xcarchive/dSYMs/* build/ios/dSYMs/
-          
+
           # Zip dSYM files
           cd build/ios/dSYMs
           zip -r ios_prod_dsyms.zip *.dSYM
@@ -138,7 +138,7 @@ workflows:
             -F os=iOS \
             -F symbols_file=@"ios_prod_dsyms.zip" \
             -F application_token="$INSTABUG_API_KEY"
-            
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -175,7 +175,7 @@ workflows:
         - google_play
         - shorebird
       vars:
-        PACKAGE_NAME: "com.friend.ios"
+        PACKAGE_NAME: "com.omi.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
       flutter: 3.22.3
       xcode: 15.4
@@ -190,9 +190,9 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: 'v*-android-cm'
+        - pattern: "v*-android-cm"
           include: true
-        - pattern: 'v*-mobile-cm'
+        - pattern: "v*-mobile-cm"
           include: true
     working_directory: app
     scripts:
@@ -201,7 +201,7 @@ workflows:
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
-         
+
             mkdir -p $ANDROID_HOME
 
             # Install cmdline-tools 11076708; NDK: 27.0.12077973
@@ -244,8 +244,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -258,8 +258,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -291,7 +291,7 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
       - name: Build AAB with Flutter
-        script: | 
+        script: |
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
@@ -304,7 +304,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-
 
       - name: Extracting version and Upload mapping file to Instabug
         script: |
@@ -338,8 +337,6 @@ workflows:
 
           echo "Success! Your mapping files got uploaded successfully"
 
-            
-            
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -392,9 +389,9 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: 'v*-ios-patch-cm'
+        - pattern: "v*-ios-patch-cm"
           include: true
-        - pattern: 'v*-mobile-patch-cm'
+        - pattern: "v*-mobile-patch-cm"
           include: true
     working_directory: app
     scripts:
@@ -419,8 +416,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -433,8 +430,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -508,7 +505,7 @@ workflows:
         - firebase
         - shorebird
       vars:
-        PACKAGE_NAME: "com.friend.ios"
+        PACKAGE_NAME: "com.omi.ios"
       flutter: 3.22.3
       xcode: 15.4
       cocoapods: 1.15.2
@@ -522,9 +519,9 @@ workflows:
       events:
         - tag
       tag_patterns:
-        - pattern: 'v*-android-patch-cm'
+        - pattern: "v*-android-patch-cm"
           include: true
-        - pattern: 'v*-mobile-patch-cm'
+        - pattern: "v*-mobile-patch-cm"
           include: true
     working_directory: app
     scripts:
@@ -540,7 +537,7 @@ workflows:
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
-         
+
             mkdir -p $ANDROID_HOME
 
             # Install cmdline-tools 11076708; NDK: 27.0.12077973
@@ -583,8 +580,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+            --android-package-name=com.omi.ios \
             --android-out=android/app/src/prod/  \
             --ios-out=ios/Config/Prod/ \
             --service-account="./firebase_key.json" \
@@ -597,8 +594,8 @@ workflows:
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
+            --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+            --android-package-name=com.omi.ios.dev \
             --android-out=android/app/src/dev/  \
             --ios-out=ios/Config/Dev/ \
             --service-account="./firebase_dev_key.json" \
@@ -630,7 +627,7 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
       - name: Patch Android app with Shorebird
-        script: | 
+        script: |
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
