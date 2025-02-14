@@ -71,6 +71,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
     showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Automatically open app home page if conditions are met
+      if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AppHomeWebPage(app: app),
+          ),
+        );
+      }
+      // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
       setState(() {
@@ -147,7 +157,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
-          if (app.enabled && app.worksWithChat())
+          if (app.enabled && app.worksWithChat()) ...[
             GestureDetector(
               child: const Icon(Icons.question_answer),
               onTap: () async {
@@ -170,9 +180,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 }
               },
             ),
-          if (app.enabled && app.worksWithChat())
             const SizedBox(width: 24),
-          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true)
+          ],
+          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
             GestureDetector(
               child: const Icon(Icons.open_in_browser),
               onTap: () {
@@ -184,8 +194,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 );
               },
             ),
-          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true)
             const SizedBox(width: 24),
+          ],
           isLoading
               ? const SizedBox.shrink()
               : GestureDetector(
