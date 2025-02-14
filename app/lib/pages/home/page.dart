@@ -272,67 +272,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
         builder: (ctx, connectivityProvider, child) {
-          bool isConnected = connectivityProvider.isConnected;
-          previousConnection ??= true;
-          if (previousConnection != isConnected) {
-            previousConnection = isConnected;
-            if (!isConnected) {
-              Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text('No internet connection. Please check your connection.'),
-                      backgroundColor: Colors.red,
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              });
-            } else {
-              Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text('Internet connection is restored.'),
-                      backgroundColor: Colors.green,
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            if (mounted) {
-                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                            }
-                          },
-                          child: const Text('Dismiss'),
-                        ),
-                      ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                      }),
-                    ),
-                  );
-                }
-
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
-                  }
-                });
-              });
-            }
-          }
           return child!;
         },
         child: Scaffold(
