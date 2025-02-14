@@ -144,11 +144,16 @@ class _AddAppPageState extends State<AddAppPage> {
                                     scrollDirection: Axis.horizontal,
                                     itemCount: provider.thumbnailUrls.length + 1,
                                     itemBuilder: (context, index) {
+                                      // Calculate dimensions to maintain 2:3 ratio
+                                      final width = 120.0;
+                                      final height = width * 1.5; // 2:3 ratio
+                                      
                                       if (index == provider.thumbnailUrls.length) {
                                         return GestureDetector(
                                           onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
                                           child: Container(
-                                            width: 120,
+                                            width: width,
+                                            height: height,
                                             margin: const EdgeInsets.only(right: 8),
                                             decoration: BoxDecoration(
                                               color: Colors.grey.shade800,
@@ -168,6 +173,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                         children: [
                                           Container(
                                             width: 120,
+                                            height: 180, // 2:3 ratio (120 * 1.5)
                                             margin: const EdgeInsets.only(right: 8),
                                             decoration: BoxDecoration(
                                               borderRadius: BorderRadius.circular(8),
