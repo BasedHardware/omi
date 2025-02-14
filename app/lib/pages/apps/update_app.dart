@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -175,15 +176,27 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     }
                                     return Stack(
                                       children: [
-                                        Container(
-                                          width: 120,
-                                          height: 180, // 2:3 ratio (120 * 1.5)
-                                          margin: const EdgeInsets.only(right: 8),
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(8),
-                                            image: DecorationImage(
-                                              image: NetworkImage(provider.thumbnailUrls[index]),
-                                              fit: BoxFit.cover,
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => FullScreenImageViewer(
+                                                  imageUrl: provider.thumbnailUrls[index],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            width: 120,
+                                            height: 180, // 2:3 ratio (120 * 1.5)
+                                            margin: const EdgeInsets.only(right: 8),
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(8),
+                                              image: DecorationImage(
+                                                image: NetworkImage(provider.thumbnailUrls[index]),
+                                                fit: BoxFit.cover,
+                                              ),
                                             ),
                                           ),
                                         ),

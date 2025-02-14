@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
 import 'package:friend_private/backend/preferences.dart';
@@ -625,20 +626,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       final width = screenWidth * 0.65;
                       // Calculate height to maintain 2:3 ratio (height = width * 1.5)
                       final height = width * 1.5;
-                      
-                      return Container(
-                        width: width,
-                        height: height,
-                        clipBehavior: Clip.hardEdge,
-                        margin: EdgeInsets.only(
-                          left: index == 0 ? 16 : 8,
-                          right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          image: DecorationImage(
-                            image: CachedNetworkImageProvider(app.thumbnailUrls[index]),
-                            fit: BoxFit.cover,
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FullScreenImageViewer(
+                                imageUrl: app.thumbnailUrls[index],
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: width,
+                          height: height,
+                          clipBehavior: Clip.hardEdge,
+                          margin: EdgeInsets.only(
+                            left: index == 0 ? 16 : 8,
+                            right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            image: DecorationImage(
+                              image: CachedNetworkImageProvider(app.thumbnailUrls[index]),
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                       );
