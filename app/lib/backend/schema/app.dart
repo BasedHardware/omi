@@ -189,6 +189,7 @@ class App {
   double? price;
   bool isUserPaid;
   String? paymentLink;
+  List<String> thumbnailIds;
   List<String> thumbnailUrls;
 
   App({
@@ -222,6 +223,7 @@ class App {
     this.price,
     required this.isUserPaid,
     this.paymentLink,
+    this.thumbnailIds = const [],
     this.thumbnailUrls = const [],
   });
 
@@ -270,6 +272,7 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
+      thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
       thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }

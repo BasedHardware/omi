@@ -52,7 +52,7 @@ class AddAppProvider extends ChangeNotifier {
   File? imageFile;
   String? imageUrl;
   String? updateAppId;
-  
+
   List<File> thumbnailFiles = [];
   List<String> thumbnailUrls = [];
   List<String> thumbnailIds = [];
@@ -156,6 +156,10 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
+
+    // Set existing thumbnails
+    thumbnailUrls = app.thumbnailUrls;
+    thumbnailIds = app.thumbnailIds;
     isValid = false;
     setIsLoading(false);
     notifyListeners();
@@ -543,7 +547,7 @@ class AddAppProvider extends ChangeNotifier {
       if (file != null) {
         setIsUploadingThumbnail(true);
         var thumbnailFile = File(file.path);
-        
+
         // Upload thumbnail
         var result = await uploadAppThumbnail(thumbnailFile);
         if (result.isNotEmpty) {
