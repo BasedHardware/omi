@@ -12,7 +12,7 @@ import database.memories as memories_db
 import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-from database.apps import record_app_usage
+from database.apps import record_app_usage, get_persona_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB
@@ -27,6 +27,7 @@ from utils.llm import summarize_open_glass, get_transcript_structure, generate_e
     trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
+from utils.persona import update_persona_prompt
 from utils.retrieval.rag import retrieve_rag_memory_context
 from utils.webhooks import memory_created_webhook
 
@@ -191,6 +192,11 @@ def process_memory(
 
     if not is_reprocess:
         threading.Thread(target=memory_created_webhook, args=(uid, memory,)).start()
+        # Update persona prompt with new memory
+        persona = get_persona_by_uid_db(uid)
+        print('updating persona after memory creation')
+        if persona:
+            update_persona_prompt(uid, persona['id'])
 
     # TODO: trigger external integrations here too
 

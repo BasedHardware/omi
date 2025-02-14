@@ -263,6 +263,19 @@ def get_persona_by_id_db(persona_id: str):
     return None
 
 
+def get_persona_by_uid_db(uid: str):
+    filters = [FieldFilter('uid', '==', uid), FieldFilter('capabilities', 'array_contains', 'persona'),
+               FieldFilter('deleted', '==', False)]
+    persona_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).limit(1)
+    docs = persona_ref.get()
+    if not docs:
+        return None
+    doc = next(iter(docs), None)
+    if not doc:
+        return None
+    return doc.to_dict()
+
+
 def add_persona_to_db(persona_data: dict):
     persona_ref = db.collection('plugins_data')
     persona_ref.add(persona_data, persona_data['id'])
