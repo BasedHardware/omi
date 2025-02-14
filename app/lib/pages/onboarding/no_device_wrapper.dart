@@ -3,14 +3,12 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/home/wrapper.dart';
 import 'package:friend_private/pages/onboarding/device_selection.dart';
 import 'package:friend_private/pages/onboarding/no_device/auth_screen.dart';
-import 'package:friend_private/pages/onboarding/no_device/clone_audience_screen.dart';
 import 'package:friend_private/pages/onboarding/no_device/clone_success_screen.dart';
-import 'package:friend_private/pages/onboarding/no_device/cloning_progress_screen.dart';
 import 'package:friend_private/pages/onboarding/no_device/social_handle_screen.dart';
 import 'package:friend_private/pages/onboarding/no_device/verify_identity_screen.dart';
-import 'package:friend_private/pages/onboarding/no_device/welcome_screen.dart';
 import 'package:friend_private/providers/no_device_onboarding_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/pages/no_device_chat/chat.dart';
 
 class NoDeviceOnboardingWrapper extends StatefulWidget {
   const NoDeviceOnboardingWrapper({super.key});
@@ -25,7 +23,7 @@ class _NoDeviceOnboardingWrapperState extends State<NoDeviceOnboardingWrapper> {
   int _currentPage = 0;
 
   void _goToNextPage() {
-    if (_currentPage < 6) {
+    if (_currentPage < 3) {  // Updated for 4 screens (0-3)
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -58,12 +56,23 @@ class _NoDeviceOnboardingWrapperState extends State<NoDeviceOnboardingWrapper> {
   }
 
   void _completeOnboarding() {
-    // Here you can use the provider data to complete the onboarding
-    // For example: save the user's name to preferences or make an API call
+    // Save onboarding completion status
     SharedPreferencesUtil().onboardingCompleted = true;
+    
+    // Save the twitter handle to preferences if not already saved
+    if (SharedPreferencesUtil().verifiedTwitterHandle.isEmpty) {
+      SharedPreferencesUtil().verifiedTwitterHandle = _provider.twitterHandle;
+    }
+
+    // Navigate to chat screen with provider
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const HomePageWrapper()),
+      MaterialPageRoute(
+        builder: (context) => ChangeNotifierProvider.value(
+          value: _provider,
+          child: const NoDeviceChatScreen(),
+        ),
+      ),
       (route) => false,
     );
   }
@@ -71,7 +80,6 @@ class _NoDeviceOnboardingWrapperState extends State<NoDeviceOnboardingWrapper> {
   @override
   void dispose() {
     _pageController.dispose();
-    _provider.dispose();
     super.dispose();
   }
 
@@ -83,13 +91,10 @@ class _NoDeviceOnboardingWrapperState extends State<NoDeviceOnboardingWrapper> {
         controller: _pageController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          NoDeviceWelcomeScreen(onNext: _goToNextPage, onBack: _goToPreviousPage),
-          NoDeviceAuthScreen(onNext: _goToNextPage, onBack: _goToPreviousPage),
-          CloneAudienceScreen(onNext: _goToNextPage, onBack: _goToPreviousPage),
           SocialHandleScreen(onNext: _goToNextPage, onBack: _goToPreviousPage),
           VerifyIdentityScreen(onNext: _goToNextPage, onBack: _goToPreviousPage),
-          CloningProgressScreen(onNext: _goToNextPage),
           CloneSuccessScreen(onNext: _completeOnboarding),
+          NoDeviceAuthScreen(onNext: _completeOnboarding, onBack: _goToPreviousPage),
         ],
       ),
     );

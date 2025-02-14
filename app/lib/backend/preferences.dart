@@ -327,6 +327,18 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested') ?? false;
 
+  set twitterHandle(String value) => saveString('twitterHandle', value);
+
+  String get twitterHandle => getString('twitterHandle') ?? '';
+
+  set twitterAccessToken(String value) => saveString('twitterAccessToken', value);
+
+  String get twitterAccessToken => getString('twitterAccessToken') ?? '';
+
+  set twitterAccessTokenSecret(String value) => saveString('twitterAccessTokenSecret', value);
+
+  String get twitterAccessTokenSecret => getString('twitterAccessTokenSecret') ?? '';
+
   //--------------------------------- Wals ------------------------------------//
 
   set wals(List<Wal> wals) {
@@ -403,4 +415,13 @@ class SharedPreferencesUtil {
       _preferences?.setBool('has_omi_device', value);
     }
   }
+
+  bool get isTwitterVerified => getBool('isTwitterVerified') ?? false;
+  set isTwitterVerified(bool value) => saveBool('isTwitterVerified', value);
+
+  String get verifiedTwitterHandle => getString('verifiedTwitterHandle') ?? '';
+  set verifiedTwitterHandle(String value) => saveString('verifiedTwitterHandle', value);
+
+  int get twitterVerificationTimestamp => getInt('twitterVerificationTimestamp') ?? 0;
+  set twitterVerificationTimestamp(int value) => saveInt('twitterVerificationTimestamp', value);
 }

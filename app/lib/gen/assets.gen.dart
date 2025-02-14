@@ -93,6 +93,9 @@ class $AssetsImagesGen {
   /// File path: assets/images/blob.png
   AssetGenImage get blob => const AssetGenImage('assets/images/blob.png');
 
+  /// File path: assets/images/clone.png
+  AssetGenImage get clone => const AssetGenImage('assets/images/clone.png');
+
   /// File path: assets/images/emotional_feedback_1.png
   AssetGenImage get emotionalFeedback1 =>
       const AssetGenImage('assets/images/emotional_feedback_1.png');
@@ -143,6 +146,10 @@ class $AssetsImagesGen {
   AssetGenImage get logoTransparentV2 =>
       const AssetGenImage('assets/images/logo_transparent_v2.png');
 
+  /// File path: assets/images/new_background.png
+  AssetGenImage get newBackground =>
+      const AssetGenImage('assets/images/new_background.png');
+
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
@@ -185,6 +192,9 @@ class $AssetsImagesGen {
   SvgGenImage get stripeLogo =>
       const SvgGenImage('assets/images/stripe_logo.svg');
 
+  /// File path: assets/images/x_logo.png
+  AssetGenImage get xLogo => const AssetGenImage('assets/images/x_logo.png');
+
   /// List of all assets
   List<dynamic> get values => [
         aiMagic,
@@ -193,6 +203,7 @@ class $AssetsImagesGen {
         appLauncherIconV2,
         background,
         blob,
+        clone,
         emotionalFeedback1,
         herologo,
         herologoV1,
@@ -206,6 +217,7 @@ class $AssetsImagesGen {
         logoTransparent,
         logoTransparentV1,
         logoTransparentV2,
+        newBackground,
         recordingGreenCircleIcon,
         speaker0Icon,
         speaker1Icon,
@@ -216,7 +228,8 @@ class $AssetsImagesGen {
         splashV1,
         splashV2,
         stars,
-        stripeLogo
+        stripeLogo,
+        xLogo
       ];
 }
 

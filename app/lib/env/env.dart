@@ -28,6 +28,12 @@ abstract class Env {
   static String? get intercomIOSApiKey => _instance.intercomIOSApiKey;
 
   static String? get intercomAndroidApiKey => _instance.intercomAndroidApiKey;
+
+  static String? get twitterApiKey => _instance.twitterApiKey;
+  
+  static String? get twitterApiSecret => _instance.twitterApiSecret;
+  
+  static String? get twitterRedirectUri => _instance.twitterRedirectUri;
 }
 
 abstract class EnvFields {
@@ -48,4 +54,10 @@ abstract class EnvFields {
   String? get intercomIOSApiKey;
 
   String? get intercomAndroidApiKey;
+  
+  String? get twitterApiKey;
+  
+  String? get twitterApiSecret;
+  
+  String? get twitterRedirectUri;
 }

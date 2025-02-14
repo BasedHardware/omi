@@ -1,14 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/providers/no_device_onboarding_provider.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:provider/provider.dart';
 
-class CloneSuccessScreen extends StatelessWidget {
+class CloneSuccessScreen extends StatefulWidget {
   final VoidCallback onNext;
 
   const CloneSuccessScreen({
     super.key,
     required this.onNext,
   });
+
+  @override
+  State<CloneSuccessScreen> createState() => _CloneSuccessScreenState();
+}
+
+class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
+  bool _isLoading = false;
+
+  Future<void> _handleTwitterSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userCredential = await signInWithTwitter();
+      if (userCredential != null) {
+        MixpanelManager().identify();
+        widget.onNext();
+      } else {
+        if (mounted) {
+          AppSnackbar.showSnackbarError('Failed to connect with Twitter. Please try again.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.showSnackbarError('An error occurred while connecting with Twitter.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +197,7 @@ class CloneSuccessScreen extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 50),
                     child: ElevatedButton(
-                      onPressed: onNext,
+                      onPressed: _isLoading ? null : _handleTwitterSignIn,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: Colors.white,
@@ -172,19 +210,30 @@ class CloneSuccessScreen extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Image.asset(
-                            'assets/images/x_logo.png',
-                            width: 20,
-                            height: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Share your clone',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          if (_isLoading)
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          else ...[
+                            Image.asset(
+                              'assets/images/x_logo.png',
+                              width: 20,
+                              height: 20,
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Connect to DMs',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

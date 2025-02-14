@@ -2,100 +2,139 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/onboarding/no_device_wrapper.dart';
+import 'dart:math' as math;
 
-class DeviceSelectionPage extends StatelessWidget {
+class DeviceSelectionPage extends StatefulWidget {
   const DeviceSelectionPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Do you have an Omi device?',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
-              _buildOptionButton(
-                context,
-                'Yes, I have an Omi device',
-                'Continue with device setup',
-                () {
-                  SharedPreferencesUtil().hasOmiDevice = true;
-                  // Route to existing onboarding flow with sign in
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const OnboardingWrapper()),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              _buildOptionButton(
-                context,
-                'No, I don\'t have a device',
-                'Continue without device',
-                () {
-                  SharedPreferencesUtil().hasOmiDevice = false;
-                  // Route to new no-device flow
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NoDeviceOnboardingWrapper()),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  State<DeviceSelectionPage> createState() => _DeviceSelectionPageState();
+}
+
+class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 6),
+      vsync: this,
+    )..repeat(reverse: true);
   }
 
-  Widget _buildOptionButton(
-    BuildContext context,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background image
+          Image.asset(
+            'assets/images/new_background.png',
+            fit: BoxFit.cover,
+          ),
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Spacer(),
+                    Column(
+                      children: [
+                        AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, child) {
+                            return Transform.translate(
+                              offset: Offset(0, 10 * math.sin(_controller.value * math.pi)),
+                              child: child,
+                            );
+                          },
+                          child: Image.asset(
+                            'assets/images/clone.png',
+                            width: 240,
+                            height: 240,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'omi',
+                          style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'scale yourself',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Column(
+                      children: [
+                        ElevatedButton(
+                          onPressed: () {
+                            SharedPreferencesUtil().hasOmiDevice = false;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const NoDeviceOnboardingWrapper()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey[900],
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 56),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          child: const Text(
+                            'Get Started',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            SharedPreferencesUtil().hasOmiDevice = true;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const OnboardingWrapper()),
+                            );
+                          },
+                          child: Text(
+                            'I have Omi Device',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

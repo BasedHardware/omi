@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 class NoDeviceOnboardingProvider extends ChangeNotifier {
+  static final NoDeviceOnboardingProvider _instance = NoDeviceOnboardingProvider._internal();
+  factory NoDeviceOnboardingProvider() => _instance;
+  NoDeviceOnboardingProvider._internal();
+
   String _fullName = '';
   String get fullName => _fullName;
 

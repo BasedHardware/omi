@@ -38,6 +38,10 @@ dependencies:
   firebase_auth: 5.1.4
   firebase_messaging: 15.0.4
 
+  # Auth
+  twitter_login: ^4.4.2
+  oauth1: ^2.0.0
+
   # Analytics and Support
   intercom_flutter:
   mixpanel_flutter: ^2.2.0

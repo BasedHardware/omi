@@ -50,7 +50,7 @@ import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
-
+import 'package:friend_private/providers/no_device_onboarding_provider.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
@@ -207,6 +207,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+          ChangeNotifierProvider(create: (_) => NoDeviceOnboardingProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

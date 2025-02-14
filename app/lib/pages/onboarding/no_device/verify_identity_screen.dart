@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/providers/no_device_onboarding_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:friend_private/services/twitter_verification_service.dart';
 
-class VerifyIdentityScreen extends StatelessWidget {
+class VerifyIdentityScreen extends StatefulWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
 
@@ -11,6 +13,119 @@ class VerifyIdentityScreen extends StatelessWidget {
     required this.onNext,
     required this.onBack,
   });
+
+  @override
+  _VerifyIdentityScreenState createState() => _VerifyIdentityScreenState();
+}
+
+class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
+  bool _isVerifying = false;
+  String? _verificationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingVerification();
+  }
+
+  Future<void> _checkExistingVerification() async {
+    final handle = context.read<NoDeviceOnboardingProvider>().twitterHandle.replaceAll('@', '');
+    if (TwitterVerificationService.isVerified(handle)) {
+      // If already verified, move to next screen
+      widget.onNext();
+    }
+  }
+
+  Future<void> _openTwitterToTweet(BuildContext context) async {
+    final handle = context.read<NoDeviceOnboardingProvider>().twitterHandle.replaceAll('@', '');
+    final tweetText = Uri.encodeComponent('Verifying my clone: omi.me/$handle');
+    final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
+    
+    if (await canLaunchUrl(Uri.parse(twitterUrl))) {
+      await launchUrl(Uri.parse(twitterUrl), mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _verifyTweet() async {
+    if (_isVerifying) return;
+
+    setState(() {
+      _isVerifying = true;
+      _verificationError = null;
+    });
+
+    try {
+      final handle = context.read<NoDeviceOnboardingProvider>().twitterHandle.replaceAll('@', '');
+      final isVerified = await TwitterVerificationService.verifyTweet(handle);
+
+      if (isVerified) {
+        widget.onNext();
+      } else {
+        // Show error dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                backgroundColor: Colors.grey[900],
+                title: const Text(
+                  'Verification Not Complete',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'We couldn\'t find your verification tweet. Please make sure you\'ve posted the tweet and try again.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              backgroundColor: Colors.grey[900],
+              title: const Text(
+                'Verification Error',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: const Text(
+                'An error occurred while verifying your tweet. Please try again.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +145,7 @@ class VerifyIdentityScreen extends StatelessWidget {
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: onBack,
+              onPressed: widget.onBack,
             ),
           ),
           body: SafeArea(
@@ -67,7 +182,7 @@ class VerifyIdentityScreen extends StatelessWidget {
                                   color: Colors.white.withOpacity(0.3),
                                 ),
                               ],
-                        ),
+                            ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
@@ -144,26 +259,80 @@ class VerifyIdentityScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 40),
-                    child: ElevatedButton(
-                      onPressed: onNext,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[900],
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
+                  Column(
+                    children: [
+                      if (_verificationError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Text(
+                            _verificationError!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ElevatedButton(
+                        onPressed: () => _openTwitterToTweet(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[900],
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/x_logo.png',
+                              width: 20,
+                              height: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Verify it\'s me',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: const Text(
-                        'Verify it\'s me',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _isVerifying ? null : _verifyTweet,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                            side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                          ),
                         ),
+                        child: _isVerifying
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'I have tweeted',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
-                    ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
                 ],
               ),
