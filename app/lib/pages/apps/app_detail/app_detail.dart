@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -607,8 +608,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     )
                   : const SizedBox.shrink(),
               if (app.thumbnailUrls.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
                   child: Text(
                     'Preview',
                     style: TextStyle(color: Colors.white, fontSize: 18),
@@ -638,27 +639,63 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             ),
                           );
                         },
-                        child: Container(
-                          width: width,
-                          height: height,
-                          clipBehavior: Clip.hardEdge,
-                          margin: EdgeInsets.only(
-                            left: index == 0 ? 16 : 8,
-                            right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: CachedNetworkImageProvider(app.thumbnailUrls[index]),
-                              fit: BoxFit.cover,
+                        child: CachedNetworkImage(
+                          imageUrl: app.thumbnailUrls[index],
+                          imageBuilder: (context, imageProvider) => Container(
+                            width: width,
+                            height: height,
+                            clipBehavior: Clip.hardEdge,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
                             ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF424242),
+                                width: 1,
+                              ),
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          placeholder: (context, url) => Shimmer.fromColors(
+                            baseColor: Colors.grey[900]!,
+                            highlightColor: Colors.grey[800]!,
+                            child: Container(
+                              width: width,
+                              height: height,
+                              margin: EdgeInsets.only(
+                                left: index == 0 ? 16 : 8,
+                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: width,
+                            height: height,
+                            margin: EdgeInsets.only(
+                              left: index == 0 ? 16 : 8,
+                              right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.error),
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
               ],
               InfoCardWidget(
                 onTap: () {
@@ -713,7 +750,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 },
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(18.0),
+                  padding: const EdgeInsets.all(16.0),
                   margin: const EdgeInsets.only(left: 8.0, right: 8.0, top: 12, bottom: 6),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
