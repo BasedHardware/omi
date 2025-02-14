@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -147,7 +151,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                       // Calculate dimensions to maintain 2:3 ratio
                                       final width = 120.0;
                                       final height = width * 1.5; // 2:3 ratio
-                                      
+
                                       if (index == provider.thumbnailUrls.length) {
                                         return GestureDetector(
                                           onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
@@ -420,7 +424,15 @@ class _AddAppPageState extends State<AddAppPage> {
                                     }
                                     SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
                                     Navigator.pop(context);
-                                    await provider.submitApp();
+                                    String? appId = await provider.submitApp();
+                                    App? app;
+                                    if (appId != null) {
+                                      app = await context.read<AppProvider>().getAppFromId(appId);
+                                    }
+                                    if (app != null && mounted && context.mounted) {
+                                      Navigator.pop(context);
+                                      routeToPage(context, AppDetailPage(app: app));
+                                    }
                                   },
                                   onCancel: () {
                                     Navigator.pop(context);

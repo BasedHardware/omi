@@ -185,7 +185,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   }
 }
 
-Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) async {
+Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
@@ -193,25 +193,31 @@ Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) 
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
-      return (true, '');
+      var respData = jsonDecode(response.body);
+      String? appId = respData['app_id'];
+      debugPrint('submitAppServer Response body: ${respData}');
+      return (true, '', appId);
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
-        return (false, jsonDecode(response.body)['detail'] as String);
+        return (
+          false,
+          jsonDecode(response.body)['detail'] as String,
+          null,
+        );
       } else {
-        return (false, 'Failed to submit app. Please try again later');
+        return (false, 'Failed to submit app. Please try again later', '');
       }
     }
   } catch (e) {
     debugPrint('An error occurred submitAppServer: $e');
-    return (false, 'Failed to submit app. Please try again later');
+    return (false, 'Failed to submit app. Please try again later', null);
   }
 }
 
@@ -225,7 +231,7 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
