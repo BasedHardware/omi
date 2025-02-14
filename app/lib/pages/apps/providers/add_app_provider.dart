@@ -52,6 +52,10 @@ class AddAppProvider extends ChangeNotifier {
   File? imageFile;
   String? imageUrl;
   String? updateAppId;
+
+  List<String> thumbnailUrls = [];
+  List<String> thumbnailIds = [];
+  bool isUploadingThumbnail = false;
   List<AppCapability> selectedCapabilities = [];
   List<NotificationScope> selectedScopes = [];
   List<AppCapability> capabilities = [];
@@ -151,6 +155,10 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
+
+    // Set existing thumbnails
+    thumbnailUrls = app.thumbnailUrls;
+    thumbnailIds = app.thumbnailIds;
     isValid = false;
     setIsLoading(false);
     notifyListeners();
@@ -180,6 +188,8 @@ class AddAppProvider extends ChangeNotifier {
     selectedScopes.clear();
     updateAppId = null;
     selectedCapabilities.clear();
+    thumbnailUrls = [];
+    thumbnailIds = [];
   }
 
   void setPaymentPlan(String? plan) {
@@ -405,7 +415,7 @@ class AddAppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateApp() async {
+  Future<bool> updateApp() async {
     setIsUpdating(true);
 
     Map<String, dynamic> data = {
@@ -422,6 +432,7 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -453,21 +464,25 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    var success = false;
     var res = await updateAppServer(imageFile, data);
     if (res) {
+      await appProvider!.getApps();
       var app = await getAppDetailsServer(updateAppId!);
       appProvider!.updateLocalApp(App.fromJson(app!));
       AppSnackbar.showSnackbarSuccess('App updated successfully 🚀');
       clear();
-      appProvider!.getApps();
+      success = true;
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
+      success = false;
     }
     checkValidity();
     setIsUpdating(false);
+    return success;
   }
 
-  Future<void> submitApp() async {
+  Future<String?> submitApp() async {
     setIsSubmitting(true);
 
     Map<String, dynamic> data = {
@@ -483,6 +498,7 @@ class AddAppProvider extends ChangeNotifier {
       'is_paid': isPaid,
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
+      'thumbnails': thumbnailIds,
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -514,16 +530,60 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    String? appId;
     var res = await submitAppServer(imageFile!, data);
     if (res.$1) {
       AppSnackbar.showSnackbarSuccess('App submitted successfully 🚀');
-      appProvider!.getApps();
+      await appProvider!.getApps();
       clear();
+      appId = res.$3;
     } else {
       AppSnackbar.showSnackbarError(res.$2);
     }
     checkValidity();
     setIsSubmitting(false);
+    return appId;
+  }
+
+  Future<void> pickThumbnail() async {
+    ImagePicker imagePicker = ImagePicker();
+    try {
+      var file = await imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (file != null) {
+        setIsUploadingThumbnail(true);
+        var thumbnailFile = File(file.path);
+
+        // Upload thumbnail
+        var result = await uploadAppThumbnail(thumbnailFile);
+        if (result.isNotEmpty) {
+          thumbnailUrls.add(result['thumbnail_url']!);
+          thumbnailIds.add(result['thumbnail_id']!);
+        }
+        setIsUploadingThumbnail(false);
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'photo_access_denied') {
+        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select an image');
+      }
+      setIsUploadingThumbnail(false);
+    }
+    checkValidity();
+    notifyListeners();
+  }
+
+  void setIsUploadingThumbnail(bool uploading) {
+    isUploadingThumbnail = uploading;
+    notifyListeners();
+  }
+
+  void removeThumbnail(int index) {
+    thumbnailUrls.removeAt(index);
+    thumbnailIds.removeAt(index);
+    checkValidity();
+    notifyListeners();
   }
 
   Future pickImage() async {
