@@ -15,13 +15,27 @@ class AppHomeWebPage extends StatefulWidget {
   State<AppHomeWebPage> createState() => _AppHomeWebPageState();
 }
 
-class _AppHomeWebPageState extends State<AppHomeWebPage> {
+class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProviderStateMixin {
   late final WebViewController _controller;
+  late final AnimationController _animationController;
+  late final Animation<Offset> _slideAnimation;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+    _animationController.forward();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -61,10 +75,22 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
+      body: SlideTransition(
+        position: _slideAnimation,
+        child: SafeArea(
         child: Stack(
           children: [
-            WebViewWidget(controller: _controller),
+            // Main content with top padding and rounded corners
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                child: WebViewWidget(controller: _controller),
+              ),
+            ),
             if (_isLoading)
               Container(
                 color: Colors.black,
@@ -80,27 +106,48 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 16,
+              bottom: 0,
               child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () {
+                  _animationController.reverse().then((_) {
+                    Navigator.of(context).pop();
+                  });
+                },
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(30),
                   ),
-                  child: const Icon(
-                    Icons.keyboard_double_arrow_down,
-                    color: Colors.white,
-                    size: 32,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.keyboard_double_arrow_down,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      Text(
+                        "${widget.app.name}'s App Details",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ],
         ),
-      ),
+      )),
     );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 }
 
