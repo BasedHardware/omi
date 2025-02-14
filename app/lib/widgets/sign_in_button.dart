@@ -5,8 +5,7 @@ class SignInButton extends StatelessWidget {
   final String title;
   final String? assetPath;
   final VoidCallback onTap;
-  const SignInButton(
-      {super.key, required this.title, this.assetPath, required this.onTap});
+  const SignInButton({super.key, required this.title, this.assetPath, required this.onTap});
 
   factory SignInButton.withGoogle({required VoidCallback onTap}) {
     return SignInButton(
