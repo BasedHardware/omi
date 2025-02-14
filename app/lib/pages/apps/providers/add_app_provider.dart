@@ -570,6 +570,7 @@ class AddAppProvider extends ChangeNotifier {
       }
       setIsUploadingThumbnail(false);
     }
+    checkValidity();
     notifyListeners();
   }
 
@@ -581,6 +582,7 @@ class AddAppProvider extends ChangeNotifier {
   void removeThumbnail(int index) {
     thumbnailUrls.removeAt(index);
     thumbnailIds.removeAt(index);
+    checkValidity();
     notifyListeners();
   }
 
