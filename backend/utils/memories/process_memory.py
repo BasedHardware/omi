@@ -13,6 +13,7 @@ import database.notifications as notification_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 from database.apps import record_app_usage, get_persona_by_uid_db
+from database.redis_db import delete_app_cache_by_id
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.facts import FactDB
@@ -197,6 +198,7 @@ def process_memory(
         print('updating persona after memory creation')
         if persona:
             update_persona_prompt(uid, persona['id'])
+            delete_app_cache_by_id(persona['id'])
 
     # TODO: trigger external integrations here too
 

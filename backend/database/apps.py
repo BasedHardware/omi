@@ -279,3 +279,8 @@ def get_persona_by_uid_db(uid: str):
 def add_persona_to_db(persona_data: dict):
     persona_ref = db.collection('plugins_data')
     persona_ref.add(persona_data, persona_data['id'])
+
+
+def update_persona_in_db(persona_data: dict):
+    persona_ref = db.collection('plugins_data').document(persona_data['id'])
+    persona_ref.update(persona_data)
