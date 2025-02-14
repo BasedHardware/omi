@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/shared.dart';
+import 'package:friend_private/backend/schema/chat_session.dart';
 import 'package:friend_private/backend/schema/message.dart';
 import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
@@ -81,33 +82,67 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
-  if (line.startsWith('think: ')) {
-    return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
-  }
+  try {
+    final jsonData = json.decode(line);
+    if (jsonData is Map<String, dynamic>) {
+      return ServerMessageChunk(
+        messageId,
+        jsonData['text'] ?? '',
+        MessageChunkType.done,
+        message: ServerMessage.fromJson(jsonData),
+      );
+    }
+  } catch (_) {
+    if (line.startsWith('think: ')) {
+      return ServerMessageChunk(
+        messageId, 
+        line.substring(7).replaceAll("__CRLF__", "\n"), 
+        MessageChunkType.think
+      );
+    }
 
-  if (line.startsWith('data: ')) {
-    return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
-  }
+    if (line.startsWith('data: ')) {
+      return ServerMessageChunk(
+        messageId, 
+        line.substring(6).replaceAll("__CRLF__", "\n"), 
+        MessageChunkType.data
+      );
+    }
 
-  if (line.startsWith('done: ')) {
-    var text = decodeBase64(line.substring(6));
-    return ServerMessageChunk(messageId, text, MessageChunkType.done,
-        message: ServerMessage.fromJson(json.decode(text)));
-  }
+    if (line.startsWith('done: ')) {
+      var text = decodeBase64(line.substring(6));
+      return ServerMessageChunk(
+        messageId, 
+        text, 
+        MessageChunkType.done,
+        message: ServerMessage.fromJson(json.decode(text))
+      );
+    }
 
-  if (line.startsWith('message: ')) {
-    var text = decodeBase64(line.substring(9));
-    return ServerMessageChunk(messageId, text, MessageChunkType.message,
-        message: ServerMessage.fromJson(json.decode(text)));
+    if (line.startsWith('message: ')) {
+      var text = decodeBase64(line.substring(9));
+      return ServerMessageChunk(
+        messageId, 
+        text, 
+        MessageChunkType.message,
+        message: ServerMessage.fromJson(json.decode(text))
+      );
+    }
   }
 
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId}) async* {
-  var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
-  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/messages';
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, String? sessionId}) async* {
+  debugPrint('sendMessageStreamServer started');
+  debugPrint('Text: $text, AppId: $appId, SessionId: $sessionId');
+
+  var url = sessionId != null 
+    ? '${Env.apiBaseUrl}v1/sessions/$sessionId/messages'  // Use sessions endpoint if sessionId exists
+    : '${Env.apiBaseUrl}v1/messages';  // Fall back to old endpoint
+
+  if (appId != null && appId.isNotEmpty && appId != 'null' && appId != 'no_selected') {
+    url += '?plugin_id=$appId';
   }
 
   try {
@@ -272,5 +307,170 @@ Future reportMessageServer(String messageId) async {
   if (response == null) throw Exception('Failed to report message');
   if (response.statusCode != 200) {
     throw Exception('Failed to report message');
+  }
+}
+
+Future<List<ChatSession>> getChatSessionsServer({
+  String? pluginId,
+  int limit = 20,
+  String? offset,
+}) async {
+  try {
+    var queryParams = {
+      if (pluginId != null) 'plugin_id': pluginId,
+      'limit': limit.toString(),
+      if (offset != null) 'offset': offset,
+    };
+
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions',
+      headers: {},
+      method: 'GET',
+      queryParams: queryParams,
+    );
+
+
+    if (response == null) return [];
+    
+    if (response.statusCode == 200) {
+      var decodedBody = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+      var sessions = decodedBody.map((session) {
+        debugPrint('Processing session: $session');
+        try {
+          return ChatSession.fromJson(session);
+        } catch (e) {
+          debugPrint('Error parsing session: $e');
+          return null;
+        }
+      })
+      .whereType<ChatSession>() // Filter out nulls
+      .toList();
+      
+      debugPrint('Parsed sessions: $sessions');
+      return sessions;
+    }
+    return [];
+  } catch (e) {
+    Logger.error('Error getting chat sessions: $e');
+    return [];
+  }
+}
+
+Future<ChatSession?> createChatSessionServer({String? pluginId}) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions',
+      headers: {},
+      method: 'POST',
+      queryParams: pluginId != null ? {'plugin_id': pluginId} : null,
+    );
+
+    if (response == null) return null;
+
+    if (response.statusCode == 200) {
+      return ChatSession.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    Logger.error('Error creating chat session: $e');
+    return null;
+  }
+}
+
+Future<bool> deleteChatSessionServer(String sessionId) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions/$sessionId',
+      headers: {},
+      method: 'DELETE',
+    );
+
+    return response?.statusCode == 200;
+  } catch (e) {
+    Logger.error('Error deleting chat session: $e');
+    return false;
+  }
+}
+
+Future<ChatSession?> updateChatSessionServer(
+  String sessionId, 
+  Map<String, dynamic> updates
+) async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions/$sessionId',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode(updates),
+    );
+
+    if (response == null) return null;
+
+    if (response.statusCode == 200) {
+      return ChatSession.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    Logger.error('Error updating chat session: $e');
+    return null;
+  }
+}
+
+Future<List<ServerMessage>> getSessionMessagesServer(
+  String sessionId, {
+  DateTime? before,
+}) async {
+  try {
+    var queryParams = {
+      if (before != null) 'before': before.toIso8601String(),
+    };
+
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions/$sessionId/messages',
+      headers: {},
+      method: 'GET',
+      queryParams: queryParams,
+    );
+
+    if (response == null) return [];
+
+    if (response.statusCode == 200) {
+      var decodedBody = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+      return decodedBody.map((msg) => ServerMessage.fromJson(msg)).toList();
+    }
+    return [];
+  } catch (e) {
+    Logger.error('Error getting session messages: $e');
+    return [];
+  }
+}
+
+Future<ServerMessage?> sendSessionMessageServer(
+  String sessionId,
+  String text, {
+  String? pluginId,
+}) async {
+  try {
+    var queryParams = {
+      if (pluginId != null) 'plugin_id': pluginId,
+    };
+
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sessions/$sessionId/messages',
+      headers: {},
+      method: 'POST',
+      queryParams: queryParams,
+      body: jsonEncode({'text': text}),
+    );
+
+    if (response == null) return null;
+
+    if (response.statusCode == 200) {
+      return ServerMessage.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  } catch (e) {
+    Logger.error('Error sending session message: $e');
+    return null;
   }
 }

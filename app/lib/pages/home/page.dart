@@ -13,14 +13,15 @@ import 'package:friend_private/pages/chat/page.dart';
 import 'package:friend_private/pages/conversations/conversations_page.dart';
 import 'package:friend_private/pages/facts/page.dart';
 import 'package:friend_private/pages/home/widgets/chat_apps_dropdown_widget.dart';
+import 'package:friend_private/pages/home/widgets/chat_history_widget.dart';
 import 'package:friend_private/pages/home/widgets/speech_language_sheet.dart';
 import 'package:friend_private/pages/settings/page.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/capture_provider.dart';
 import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/device_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/services/notifications.dart';
 import 'package:friend_private/utils/analytics/analytics_manager.dart';
@@ -387,7 +388,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             child: TabBar(
                               labelPadding: const EdgeInsets.only(top: 4, bottom: 4),
                               indicatorPadding: EdgeInsets.zero,
-                              onTap: (index) {
+                              onTap: (index) async {
                                 MixpanelManager().bottomNavigationTabClicked(['Memories', 'Chat', 'Apps'][index]);
                                 primaryFocus?.unfocus();
                                 if (home.selectedIndex == index) {
@@ -396,6 +397,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 home.setIndex(index);
                                 _controller?.animateToPage(index,
                                     duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+
+
+                                if (index == 1) { // Chat tab index
+                                  if (mounted) {
+                                    final messageProvider = context.read<MessageProvider>();
+                                    final appProvider = context.read<AppProvider>();
+                                    
+                                    // Refresh messages first
+                                    await messageProvider.refreshMessages();
+                                    
+                                    // Send initial message if needed
+                                    if (messageProvider.messages.isEmpty) {
+                                      final selectedApp = appProvider.getSelectedApp();
+                                      await messageProvider.sendInitialAppMessage(selectedApp);
+                                    }
+                                  }
+                                }
                               },
                               indicatorColor: Colors.transparent,
                               tabs: [
@@ -444,6 +462,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                const ChatHistoryWidget(),
                 const BatteryInfoWidget(),
                 Consumer<HomeProvider>(builder: (context, provider, child) {
                   if (provider.selectedIndex == 0) {
