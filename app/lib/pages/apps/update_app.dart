@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
@@ -165,9 +167,17 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: provider.isUploadingThumbnail
-                                              ? const Center(
-                                                  child: CircularProgressIndicator(
-                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              ? Shimmer.fromColors(
+                                                  baseColor: Colors.grey[900]!,
+                                                  highlightColor: Colors.grey[800]!,
+                                                  child: Container(
+                                                    width: width,
+                                                    height: height,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: const Icon(Icons.photo, size: 32),
                                                   ),
                                                 )
                                               : const Icon(Icons.add_photo_alternate_outlined, size: 32),
@@ -187,16 +197,46 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                               ),
                                             );
                                           },
-                                          child: Container(
-                                            width: 120,
-                                            height: 180, // 2:3 ratio (120 * 1.5)
-                                            margin: const EdgeInsets.only(right: 8),
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(8),
-                                              image: DecorationImage(
-                                                image: NetworkImage(provider.thumbnailUrls[index]),
-                                                fit: BoxFit.cover,
+                                          child: CachedNetworkImage(
+                                            imageUrl: provider.thumbnailUrls[index],
+                                            imageBuilder: (context, imageProvider) => Container(
+                                              width: 120,
+                                              height: 180, // 2:3 ratio (120 * 1.5)
+                                              margin: const EdgeInsets.only(right: 8),
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: const Color(0xFF424242),
+                                                  width: 1,
+                                                ),
+                                                image: DecorationImage(
+                                                  image: imageProvider,
+                                                  fit: BoxFit.cover,
+                                                ),
                                               ),
+                                            ),
+                                            placeholder: (context, url) => Shimmer.fromColors(
+                                              baseColor: Colors.grey[900]!,
+                                              highlightColor: Colors.grey[800]!,
+                                              child: Container(
+                                                width: 120,
+                                                height: 180,
+                                                margin: const EdgeInsets.only(right: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                              ),
+                                            ),
+                                            errorWidget: (context, url, error) => Container(
+                                              width: 120,
+                                              height: 180,
+                                              margin: const EdgeInsets.only(right: 8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[900],
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.error),
                                             ),
                                           ),
                                         ),

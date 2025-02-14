@@ -188,8 +188,8 @@ class AddAppProvider extends ChangeNotifier {
     selectedScopes.clear();
     updateAppId = null;
     selectedCapabilities.clear();
-    thumbnailUrls.clear();
-    thumbnailIds.clear();
+    thumbnailUrls = [];
+    thumbnailIds = [];
   }
 
   void setPaymentPlan(String? plan) {
@@ -467,11 +467,11 @@ class AddAppProvider extends ChangeNotifier {
     var success = false;
     var res = await updateAppServer(imageFile, data);
     if (res) {
+      await appProvider!.getApps();
       var app = await getAppDetailsServer(updateAppId!);
       appProvider!.updateLocalApp(App.fromJson(app!));
       AppSnackbar.showSnackbarSuccess('App updated successfully 🚀');
       clear();
-      appProvider!.getApps();
       success = true;
     } else {
       AppSnackbar.showSnackbarError('Failed to update app. Please try again later');
