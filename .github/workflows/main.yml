@@ -33,7 +33,7 @@ jobs:
           project_field: Status
           # Optional unless that project_field was set up. Then this field is required.
           # The value to modify in the project field
-          project_value: Backlog
+          project_value: TODO (This week)
           # Optional, labels to work with. Read below to see how to configure it.
           # If this value is set, the action will be applied only to issues with such label(s).
           labels: |
