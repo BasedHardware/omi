@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:friend_private/backend/preferences.dart';
 
 class AppHomeWebPage extends StatefulWidget {
   final App app;
@@ -68,7 +69,9 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
           },
         ),
       )
-      ..loadRequest(Uri.parse(widget.app.externalIntegration?.appHomeUrl ?? ''));
+      ..loadRequest(Uri.parse(
+        '${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
+      ));
   }
 
   @override
