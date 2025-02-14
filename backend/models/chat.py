@@ -146,3 +146,7 @@ class ChatSession(BaseModel):
             if file_id not in self.file_ids:
                 self.file_ids.append(file_id)
 
+    def retrieve_new_file(self, file_ids) -> List:
+        existing_files = set(self.file_ids or [])
+        return list(set(file_ids) - existing_files)
+

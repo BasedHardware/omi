@@ -65,12 +65,14 @@ def send_message(
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
+        if chat_session:
+            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             fc.add_files(new_file_ids)
-        if chat_session:
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
 
     if chat_session:
         message.chat_session_id = chat_session.id
@@ -181,12 +183,14 @@ def send_message_v1(
     )
     if data.file_ids is not None:
         new_file_ids = fc.retrieve_new_file(data.file_ids)
+        if chat_session:
+            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
+            chat_session.add_file_ids(data.file_ids)
+            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
+
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             fc.add_files(new_file_ids)
-        if chat_session:
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
 
     if chat_session:
         message.chat_session_id = chat_session.id
