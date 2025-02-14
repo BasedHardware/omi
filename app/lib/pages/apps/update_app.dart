@@ -151,7 +151,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     // Calculate dimensions to maintain 2:3 ratio
                                     final width = 120.0;
                                     final height = width * 1.5; // 2:3 ratio
-                                    
+
                                     if (index == provider.thumbnailUrls.length) {
                                       return GestureDetector(
                                         onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
@@ -352,7 +352,10 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                   () => Navigator.pop(context),
                                   () async {
                                     Navigator.pop(context);
-                                    await provider.updateApp();
+                                    bool ok = await provider.updateApp();
+                                    if (ok) {
+                                      Navigator.pop(context);
+                                    }
                                   },
                                   'Update App?',
                                   'Are you sure you want to update your app? The changes will reflect once reviewed by our team.',

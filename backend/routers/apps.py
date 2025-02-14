@@ -86,7 +86,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     app = App(**data)
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
-    return {'status': 'ok'}
+    return {'status': 'ok', 'app_id': app.id}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
