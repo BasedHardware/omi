@@ -82,6 +82,8 @@ class App(BaseModel):
     payment_link_id: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
+    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
+    thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
