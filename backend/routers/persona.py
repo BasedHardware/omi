@@ -74,7 +74,7 @@ Personal Facts and Context:"""
         'created_at': datetime.now().isoformat(),
         'deleted': False,
         'description': description,
-        'email': 'mohsin@test.com',
+        'email': data['email'],
         'id': persona_id,
         'image': img_url,
         'name': user_name,

@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+from database.apps import update_persona_in_db, get_persona_by_uid_db
 from database.facts import get_facts
 from database.auth import get_user_name
 from database.memories import get_memories
@@ -45,8 +46,7 @@ Recent Conversations:
 
 Use these facts and conversations to shape your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial."""
 
-    # Update persona data in Firestore
-    db.collection('plugins_data').document(doc_id).update({
-        'chat_prompt': chat_prompt,
-        'updated_at': datetime.now().isoformat()
-    })
+    persona = get_persona_by_uid_db(uid)
+    persona['chat_prompt'] = chat_prompt
+    persona['updated_at'] = datetime.utcnow()
+    update_persona_in_db(persona)
