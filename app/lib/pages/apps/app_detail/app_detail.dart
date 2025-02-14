@@ -605,6 +605,48 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       ),
                     )
                   : const SizedBox.shrink(),
+              if (app.thumbnailUrls.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
+                  child: Text(
+                    'Preview',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                ),
+                SizedBox(
+                  height: MediaQuery.of(context).size.width * 0.9,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: app.thumbnailUrls.length,
+                    itemBuilder: (context, index) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      // Calculate width to show 1.5 thumbnails
+                      final width = screenWidth * 0.65;
+                      // Calculate height to maintain 2:3 ratio (height = width * 1.5)
+                      final height = width * 1.5;
+                      
+                      return Container(
+                        width: width,
+                        height: height,
+                        clipBehavior: Clip.hardEdge,
+                        margin: EdgeInsets.only(
+                          left: index == 0 ? 16 : 8,
+                          right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          image: DecorationImage(
+                            image: CachedNetworkImageProvider(app.thumbnailUrls[index]),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
               InfoCardWidget(
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {

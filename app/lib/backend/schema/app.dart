@@ -189,6 +189,7 @@ class App {
   double? price;
   bool isUserPaid;
   String? paymentLink;
+  List<String> thumbnailUrls;
 
   App({
     required this.id,
@@ -221,6 +222,7 @@ class App {
     this.price,
     required this.isUserPaid,
     this.paymentLink,
+    this.thumbnailUrls = const [],
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -268,6 +270,7 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
+      thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }
 
