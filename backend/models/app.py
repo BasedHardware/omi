@@ -39,7 +39,7 @@ class ExternalIntegration(BaseModel):
     setup_instructions_file_path: str
     is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
-    # setup_instructions_markdown: str = ''
+    app_home_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):

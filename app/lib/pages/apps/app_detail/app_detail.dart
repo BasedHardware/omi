@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:friend_private/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -70,6 +71,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
     showInstallAppConfirmation = SharedPreferencesUtil().showInstallAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Automatically open app home page if conditions are met
+      if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AppHomeWebPage(app: app),
+          ),
+        );
+      }
+      // Load details
       setIsLoading(true);
       var res = await context.read<AppProvider>().getAppDetails(app.id);
       setState(() {
@@ -146,35 +157,45 @@ class _AppDetailPageState extends State<AppDetailPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
-          app.enabled && app.worksWithChat()
-              ? GestureDetector(
-                  child: const Icon(Icons.question_answer),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    context.read<HomeProvider>().setIndex(1);
-                    if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
-                      context.read<HomeProvider>().onSelectedIndexChanged!(1);
-                    }
-                    var appId = app.id;
-                    var appProvider = Provider.of<AppProvider>(context, listen: false);
-                    var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-                    App? selectedApp;
-                    if (appId.isNotEmpty) {
-                      selectedApp = await appProvider.getAppFromId(appId);
-                    }
-                    appProvider.setSelectedChatAppId(appId);
-                    await messageProvider.refreshMessages();
-                    if (messageProvider.messages.isEmpty) {
-                      messageProvider.sendInitialAppMessage(selectedApp);
-                    }
-                  },
-                )
-              : const SizedBox.shrink(),
-          app.enabled && app.worksWithChat()
-              ? const SizedBox(
-                  width: 24,
-                )
-              : const SizedBox.shrink(),
+          if (app.enabled && app.worksWithChat()) ...[
+            GestureDetector(
+              child: const Icon(Icons.question_answer),
+              onTap: () async {
+                Navigator.pop(context);
+                context.read<HomeProvider>().setIndex(1);
+                if (context.read<HomeProvider>().onSelectedIndexChanged != null) {
+                  context.read<HomeProvider>().onSelectedIndexChanged!(1);
+                }
+                var appId = app.id;
+                var appProvider = Provider.of<AppProvider>(context, listen: false);
+                var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                App? selectedApp;
+                if (appId.isNotEmpty) {
+                  selectedApp = await appProvider.getAppFromId(appId);
+                }
+                appProvider.setSelectedChatAppId(appId);
+                await messageProvider.refreshMessages();
+                if (messageProvider.messages.isEmpty) {
+                  messageProvider.sendInitialAppMessage(selectedApp);
+                }
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
+          if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
+            GestureDetector(
+              child: const Icon(Icons.open_in_browser),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AppHomeWebPage(app: app),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 24),
+          ],
           isLoading
               ? const SizedBox.shrink()
               : GestureDetector(
