@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/services/devices/device_connection.dart';
-import 'package:friend_private/services/devices/frame_connection.dart';
-import 'package:friend_private/services/devices/models.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/services/devices/device_connection.dart';
+import 'package:omi_private/services/devices/frame_connection.dart';
+import 'package:omi_private/services/devices/models.dart';
+import 'package:omi_private/utils/logger.dart';
 
 enum BleAudioCodec {
   pcm16,

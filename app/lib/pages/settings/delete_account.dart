@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/main.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class DeleteAccount extends StatefulWidget {

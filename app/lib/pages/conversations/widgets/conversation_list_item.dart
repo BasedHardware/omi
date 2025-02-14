@@ -1,14 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:friend_private/pages/conversation_detail/page.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/backend/schema/structured.dart';
+import 'package:omi_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi_private/pages/conversation_detail/page.dart';
+import 'package:omi_private/providers/conversation_provider.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 
 class ConversationListItem extends StatefulWidget {

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'widgets/app_metadata_widget.dart';

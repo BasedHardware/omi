@@ -3,10 +3,10 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/geolocation.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/backend/schema/transcript_segment.dart';
+import 'package:omi_private/backend/schema/geolocation.dart';
+import 'package:omi_private/backend/schema/message.dart';
+import 'package:omi_private/backend/schema/structured.dart';
+import 'package:omi_private/backend/schema/transcript_segment.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CreateConversationResponse {

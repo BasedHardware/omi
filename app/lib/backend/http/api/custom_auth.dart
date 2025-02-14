@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:developer';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_private/backend/http/shared.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/env/env.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 Future<bool> customAuthSignUp(String name, String email, String password) async {

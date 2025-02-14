@@ -1,4 +1,4 @@
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi_private/widgets/extensions/string.dart';
 
 class AppReview {
   String uid;

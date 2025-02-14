@@ -1,12 +1,12 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:friend_private/backend/http/api/messages.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/file.dart';
+import 'package:omi_private/backend/http/api/messages.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/backend/schema/message.dart';
+import 'package:omi_private/providers/app_provider.dart';
+import 'package:omi_private/utils/file.dart';
 
 class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/services/devices/errors.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/services/devices/errors.dart';
+import 'package:omi_private/utils/logger.dart';
 
 const String friendServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
 

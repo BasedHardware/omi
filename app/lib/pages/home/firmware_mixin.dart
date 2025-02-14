@@ -3,10 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/env/env.dart';
-import 'package:friend_private/services/services.dart';
+import 'package:omi_private/backend/http/shared.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/env/env.dart';
+import 'package:omi_private/services/services.dart';
 import 'package:nordic_dfu/nordic_dfu.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';

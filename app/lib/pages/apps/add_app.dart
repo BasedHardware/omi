@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
-import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
-import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
-import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
-import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/confirmation_dialog.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_private/pages/apps/widgets/app_metadata_widget.dart';
+import 'package:omi_private/pages/apps/widgets/external_trigger_fields_widget.dart';
+import 'package:omi_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:omi_private/pages/apps/widgets/payment_details_widget.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 

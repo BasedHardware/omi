@@ -3,11 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/shared.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/backend/schema/structured.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_private/backend/http/shared.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/backend/schema/structured.dart';
+import 'package:omi_private/env/env.dart';
 import 'package:tuple/tuple.dart';
 
 class SummaryResult {

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/home/firmware_mixin.dart';
-import 'package:friend_private/pages/home/page.dart';
-import 'package:friend_private/utils/analytics/intercom.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/pages/home/firmware_mixin.dart';
+import 'package:omi_private/pages/home/page.dart';
+import 'package:omi_private/utils/analytics/intercom.dart';
+import 'package:omi_private/utils/other/temp.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 

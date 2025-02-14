@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/notifications.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/providers/capture_provider.dart';
+import 'package:omi_private/services/devices.dart';
+import 'package:omi_private/services/notifications.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/schema/message.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
-import 'package:friend_private/utils/other/temp.dart';
+import 'package:omi_private/backend/schema/message.dart';
+import 'package:omi_private/widgets/extensions/string.dart';
+import 'package:omi_private/utils/other/temp.dart';
 
 class HumanMessage extends StatelessWidget {
   final ServerMessage message;
