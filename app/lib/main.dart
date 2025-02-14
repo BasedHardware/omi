@@ -22,6 +22,8 @@ import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/pages/onboarding/device_selection.dart';
+import 'package:friend_private/pages/onboarding/no_device_wrapper.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/auth_provider.dart';
 import 'package:friend_private/providers/calendar_provider.dart';
@@ -48,7 +50,7 @@ import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
-
+import 'package:friend_private/providers/no_device_onboarding_provider.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
@@ -205,6 +207,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+          ChangeNotifierProvider(create: (_) => NoDeviceOnboardingProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -349,7 +352,15 @@ class _DeciderWidgetState extends State<DeciderWidget> {
                     SharedPreferencesUtil().authToken.isNotEmpty))) {
           return const HomePageWrapper();
         } else {
-          return const OnboardingWrapper();
+          // Check if device selection has been made
+          if (SharedPreferencesUtil().hasOmiDevice == null) {
+            return const DeviceSelectionPage();
+          } else {
+            // Route to appropriate onboarding flow
+            return SharedPreferencesUtil().hasOmiDevice!
+                ? const OnboardingWrapper()
+                : const NoDeviceOnboardingWrapper();
+          }
         }
       },
     );

@@ -137,6 +137,13 @@
                     android:scheme="https"
                     android:pathPattern="/apps/.*" />
             </intent-filter>
+            <!-- Twitter Auth Callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="omiapp" />
+            </intent-filter>
         </activity>
 
         <!-- Don't delete the meta-data below.

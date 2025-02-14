@@ -43,4 +43,16 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'INTERCOM_ANDROID_API_KEY', obfuscate: true)
   final String? intercomAndroidApiKey = _ProdEnv.intercomAndroidApiKey;
+
+  @override
+  @EnviedField(varName: 'TWITTER_API_KEY', obfuscate: true)
+  final String? twitterApiKey = _ProdEnv.twitterApiKey;
+
+  @override
+  @EnviedField(varName: 'TWITTER_API_SECRET', obfuscate: true)
+  final String? twitterApiSecret = _ProdEnv.twitterApiSecret;
+
+  @override
+  @EnviedField(varName: 'TWITTER_REDIRECT_URI', obfuscate: true)
+  final String? twitterRedirectUri = _ProdEnv.twitterRedirectUri;
 }
