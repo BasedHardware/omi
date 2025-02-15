@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -111,6 +111,7 @@ def get_messages(
 
     messages = []
     memories_id = set()
+    files_id = set()
 
     # Fetch messages and collect memory IDs
     for doc in messages_ref.stream():
@@ -119,6 +120,7 @@ def get_messages(
         #     continue
         messages.append(message)
         memories_id.update(message.get('memories_id', []))
+        files_id.update(message.get('files_id', []))
 
     if not include_memories:
         return messages
@@ -137,6 +139,22 @@ def get_messages(
     for message in messages:
         message['memories'] = [
             memories[memory_id] for memory_id in message.get('memories_id', []) if memory_id in memories
+        ]
+
+    # Fetch file chat
+    files = {}
+    files_ref = user_ref.collection('files')
+    files_ref = [files_ref.document(str(file_id)) for file_id in files_id]
+    doc_files = db.get_all(files_ref)
+    for doc in doc_files:
+        if doc.exists:
+            file = doc.to_dict()
+            files[file['id']] = file
+
+    # Attach files to messages
+    for message in messages:
+        message['files'] = [
+            files[file_id] for file_id in message.get('files_id', []) if file_id in files
         ]
 
     return messages
@@ -214,3 +232,37 @@ def clear_chat(uid: str, plugin_id: Optional[str] = None):
         return None
     except Exception as e:
         return {"message": str(e)}
+
+def add_multi_files(uid: str, files_data: list):
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+
+    for file_data in files_data:
+        file_data["deleted"] = False
+        file_ref = user_ref.collection('files').document(file_data['id'])
+        batch.set(file_ref, file_data)
+
+    batch.commit()
+
+def get_chat_files(uid: str, files_id: List[str] = []):
+    files_ref = (
+        db.collection('users').document(uid).collection('files')
+        .where(filter=FieldFilter('deleted', '==', False))
+    )
+    if len(files_id) > 0:
+        files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
+
+    return [doc.to_dict() for doc in files_ref.stream()]
+
+
+def delete_multi_files(uid: str, files_data: list):
+    batch = db.batch()
+    user_ref = db.collection('users').document(uid)
+
+    for file_data in files_data:
+        file_data["deleted"] = True
+        file_ref = user_ref.collection('files').document(file_data["id"])
+        batch.update(file_ref, file_data)
+
+    batch.commit()
+
