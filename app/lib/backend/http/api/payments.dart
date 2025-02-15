@@ -5,10 +5,14 @@ import 'package:friend_private/env/env.dart';
 import 'package:friend_private/pages/payments/models/payment_method_config.dart';
 import 'package:friend_private/utils/logger.dart';
 
-Future<Map<String, dynamic>?> getStripeAccountLink() async {
+Future<Map<String, dynamic>?> getStripeAccountLink(String? country) async {
   try {
+    var url = '${Env.apiBaseUrl}v1/stripe/connect-accounts';
+    if (country != null) {
+      url += '?country=$country';
+    }
     var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/stripe/connect-accounts',
+      url: url,
       headers: {},
       body: '',
       method: 'POST',
@@ -110,5 +114,23 @@ Future<bool> setDefaultPaymentMethod(String method) async {
   } catch (e) {
     Logger.error(e);
     return false;
+  }
+}
+
+Future<List?> getStripeSupportedCountries() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/stripe/supported-countries',
+      headers: {},
+      body: '',
+      method: 'GET',
+    );
+    if (response == null || response.statusCode != 200) {
+      return null;
+    }
+    return jsonDecode(response.body);
+  } catch (e) {
+    Logger.error(e);
+    return null;
   }
 }
