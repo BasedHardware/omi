@@ -1963,21 +1963,32 @@ def generate_description(app_name: str, description: str) -> str:
 # ******************* PERSONA **********************
 # **************************************************
 
-def condense_facts(facts):
+def condense_facts(facts, name):
     combined_facts = "\n".join(facts)
-    prompt = f"""You are an expert in personality analysis and information preservation. Your task is to condense the following facts about a person while ensuring their complete personality traits and characteristics are preserved:
-    {combined_facts}
+    prompt = f"""
+You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
 
-Instructions:
-- Preserve ALL information that defines the person's unique traits, preferences, and behaviors
-- Group semantically related facts together to maintain context
-- Merge overlapping or redundant facts while retaining subtle nuances
-- Prioritize facts that showcase distinctive personality characteristics
-- Maintain chronological or causal relationships between facts
-- Keep the tone natural and conversational
-- Ensure the condensed version could recreate the exact same persona
+**Requirements:**  
+1. Prioritize facts based on:  
+   - Relevance to the user’s core identity, personality, and communication style.  
+   - Frequency of occurrence or mention in conversations.  
+   - Impact on decision-making processes and behavioral patterns.  
+2. Group related facts to eliminate redundancy while preserving context.  
+3. Preserve nuances in communication style, humor, tone, and preferences.  
+4. Retain facts essential for continuity in ongoing projects, interests, and relationships.  
+5. Discard trivial details, repetitive information, and rarely mentioned facts.  
+6. Maintain consistency in the user’s thought processes, conversational flow, and emotional responses.  
 
-The output will be used to create an AI persona that perfectly mirrors this individual, so no unique trait or characteristic can be lost in the condensing process.
+**Output Format (No Extra Text):**  
+- **Core Identity and Personality:** Brief overview encapsulating the user’s personality, values, and communication style.  
+- **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.  
+- **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.  
+- **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.  
+
+The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
+
+Facts:
+{combined_facts}
     """
     response = llm_medium.invoke(prompt)
     return response.content
@@ -1998,19 +2009,33 @@ Create a natural, memorable description that captures this person's essence. Foc
 
 def condense_conversations(conversations):
     combined_conversations = "\n".join(conversations)
-    prompt = f"""You are an expert in conversation analysis and personality preservation. Your task is to condense the following conversations while preserving the essential context, communication style, and personality traits:
-    {combined_conversations}
+    prompt = f"""
+You are an AI tasked with condensing context from the recent 50 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
 
-Instructions:
-- Preserve ALL information that defines the person's communication style and personality
-- Maintain key discussion topics and viewpoints expressed
-- Capture recurring patterns in how they interact and respond
-- Keep important contextual details and relationships mentioned
-- Retain their unique voice, vocabulary, and expression style
-- Group related conversations to maintain context flow
-- Ensure the condensed version accurately represents their conversational identity
+**Requirements:**  
+1. Prioritize information based on:  
+   - Most impactful and frequently occurring themes, topics, and interests.  
+   - Nuances in communication style, humor, tone, and emotional undertones.  
+   - Decision-making patterns and problem-solving approaches.  
+   - User preferences in conversation flow, level of detail, and type of responses.  
+2. Condense redundant or repetitive information while maintaining necessary context.  
+3. Group related contexts to enhance conciseness and preserve continuity.  
+4. Retain patterns in how the user reacts to different situations, questions, or challenges.  
+5. Preserve continuity for ongoing discussions, projects, or relationships.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
+7. Eliminate any trivial details or low-impact information.  
 
-The output will be used to create an AI persona that mirrors this individual's conversation style, so no key personality trait or communication pattern can be lost in the condensing process.
+**Output Format (No Extra Text):**  
+- **Condensed Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
+- **Condensed Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
+- **Condensed Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
+- **Condensed Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
+- **Condensed Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
+
+The output must be as concise as possible while retaining all necessary context for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed context in the specified format. Begin now.
+
+Conversations:
+{combined_conversations}
     """
     response = llm_medium.invoke(prompt)
     return response.content
