@@ -86,6 +86,10 @@ class $AssetsImagesGen {
   AssetGenImage get appLauncherIconV2 =>
       const AssetGenImage('assets/images/app_launcher_icon_v2.png');
 
+  /// File path: assets/images/apple_logo.png
+  AssetGenImage get appleLogo =>
+      const AssetGenImage('assets/images/apple_logo.png');
+
   /// File path: assets/images/background.png
   AssetGenImage get background =>
       const AssetGenImage('assets/images/background.png');
@@ -96,6 +100,10 @@ class $AssetsImagesGen {
   /// File path: assets/images/emotional_feedback_1.png
   AssetGenImage get emotionalFeedback1 =>
       const AssetGenImage('assets/images/emotional_feedback_1.png');
+
+  /// File path: assets/images/google_logo.png
+  AssetGenImage get googleLogo =>
+      const AssetGenImage('assets/images/google_logo.png');
 
   /// File path: assets/images/herologo.png
   AssetGenImage get herologo =>
@@ -191,9 +199,11 @@ class $AssetsImagesGen {
         appLauncherIcon,
         appLauncherIconV1,
         appLauncherIconV2,
+        appleLogo,
         background,
         blob,
         emotionalFeedback1,
+        googleLogo,
         herologo,
         herologoV1,
         herologoV3,
