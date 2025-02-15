@@ -15,7 +15,7 @@ import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
-from models.chat import Message
+from models.chat import ChatSession, Message
 from models.memory import Memory
 from models.plugin import Plugin
 from utils.llm import (
@@ -29,14 +29,17 @@ from utils.llm import (
     qa_rag,
     qa_rag_stream,
     retrieve_is_an_omi_question,
+    retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
 )
+from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
+
 
 
 class StructuredFilters(TypedDict):
@@ -77,6 +80,9 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         print(f"Error on LLM {error}")
         await self.end()
 
+    def put_data_nowait(self, text):
+        self.queue.put_nowait(f"data: {text}")
+
 
 class GraphState(TypedDict):
     uid: str
@@ -97,6 +103,8 @@ class GraphState(TypedDict):
     answer: Optional[str]
     ask_for_nps: Optional[bool]
 
+    chat_session: Optional[ChatSession]
+
 
 def determine_conversation(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
@@ -111,10 +119,14 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
         state: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
+) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question"]:
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
+
+    is_file_question = retrieve_is_file_question(question)
+    if is_file_question:
+        return "file_chat_question"
 
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
@@ -285,6 +297,39 @@ def qa_handler(state: GraphState):
     )
     return {"answer": response, "ask_for_nps": True}
 
+def file_chat_question(state: GraphState):
+    print("chat_with_file_question node")
+
+    fc_tool = FileChatTool()
+
+    uid = state.get("uid", "")
+    question = state.get("parsed_question", "")
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+
+    file_ids = []
+    chat_session = state.get("chat_session")
+    if chat_session:
+        if last_message:
+            if len(last_message.files_id) > 0:
+                file_ids = last_message.files_id
+            else:
+                #if user asked about file but not attach new file, will get all file in session
+                file_ids = chat_session.file_ids
+    else:
+        file_ids = fc_tool.get_files()
+
+
+    streaming = state.get("streaming")
+    if streaming:
+        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback= state.get('callback'))
+        return {'answer': answer, 'ask_for_nps': True}
+
+    answer = fc_tool.process_chat_with_file(uid, question ,file_ids)
+    return {'answer': answer, 'ask_for_nps': True}
+
+
 
 workflow = StateGraph(GraphState)
 
@@ -298,9 +343,11 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+workflow.add_node("file_chat_question", file_chat_question)
 
 workflow.add_edge("no_context_conversation", END)
 workflow.add_edge("omi_question", END)
+workflow.add_edge("file_chat_question", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
@@ -325,19 +372,19 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, chat_session: Optional[ChatSession] = None
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
+            {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin, "chat_session": chat_session},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
 
 async def execute_graph_chat_stream(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {},
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -345,7 +392,7 @@ async def execute_graph_chat_stream(
 
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback},
+         "streaming": True, "callback": callback, "chat_session": chat_session},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
@@ -354,11 +401,12 @@ async def execute_graph_chat_stream(
             chunk = await callback.queue.get()
             if chunk:
                 yield chunk
+            if chunk is None:
+                break
             else:
                 break
         except asyncio.CancelledError:
             break
-
     await task
     result = task.result()
     callback_data['answer'] = result.get("answer")
