@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/http/api/messages.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
@@ -25,12 +23,9 @@ import 'package:friend_private/services/sockets/sdcard_socket.dart';
 import 'package:friend_private/services/sockets/transcription_connection.dart';
 import 'package:friend_private/services/wals.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
 import 'package:friend_private/utils/enums.dart';
-import 'package:friend_private/utils/file.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
