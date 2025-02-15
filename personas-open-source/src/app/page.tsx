@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { db } from '@/lib/firebase';
+import { db, auth, googleProvider } from '@/lib/firebase';
 import { collection, addDoc, query, where, getDocs, orderBy, startAfter, limit } from 'firebase/firestore';
+import { signInWithPopup } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Plus, BadgeCheck } from 'lucide-react';
@@ -13,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
+import ProfileDropdown from '@/components/shared/ProfileDropdown';
 import { Mixpanel } from '@/lib/mixpanel';
 import { useInView } from 'react-intersection-observer';
 
@@ -102,6 +104,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [twitterHandle, setTwitterHandle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const { ref, inView } = useInView();
@@ -117,6 +120,10 @@ export default function HomePage() {
       page: 'Home',
       url: window.location.pathname,
       timestamp: new Date().toISOString()
+    });
+
+    auth.onAuthStateChanged((user) => {
+      setUser(user);
     });
   }, []);
 
@@ -312,14 +319,34 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
           <Link href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_top_banner" target="_blank">
             <img src="/omilogo.png" alt="Logo" className="h-6" />
           </Link>
-          <Link
-            href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_top_banner"
-            target="_blank"
-            className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-full flex items-center"
-          >
-            <span className="mr-1">Take AI personas with you</span>
-            <span className="text-lg">↗</span>
-          </Link>
+          <div className="flex items-center space-x-4">
+            {user ? (
+              <ProfileDropdown user={user} />
+            ) : (
+              <Button
+                className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-full"
+                onClick={async () => {
+                  try {
+                    await signInWithPopup(auth, googleProvider);
+                    toast.success('Signed in successfully!');
+                  } catch (error: any) {
+                    console.error('Error signing in:', error);
+                    toast.error('Failed to sign in.');
+                  }
+                }}
+              >
+                Sign In
+              </Button>
+            )}
+            <Link
+              href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_top_banner"
+              target="_blank"
+              className="bg-white hover:bg-gray-200 text-black px-4 py-2 rounded-full flex items-center"
+            >
+              <span className="mr-1">Take AI personas with you</span>
+              <span className="text-lg">↗</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -426,4 +453,3 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
     </div>
   );
 }
-
