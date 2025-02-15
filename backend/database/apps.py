@@ -41,6 +41,14 @@ def get_app_by_id_db(app_id: str):
     return None
 
 
+def get_audio_apps_count(app_ids: List[str]):
+    if not app_ids or len(app_ids) == 0:
+        return 0
+    filters = [FieldFilter('id', 'in', app_ids), FieldFilter('deleted', '==', False), FieldFilter('external_integration.triggers_on', '==', 'audio_bytes')]
+    apps_ref = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).count().get()
+    return apps_ref[0][0].value
+
+
 def get_private_apps_db(uid: str) -> List:
     filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True), FieldFilter('deleted', '==', False)]
     private_apps = db.collection('plugins_data').where(filter=BaseCompositeFilter('AND', filters)).stream()

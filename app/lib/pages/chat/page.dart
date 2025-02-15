@@ -9,6 +9,7 @@ import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/schema/conversation.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/pages/chat/select_text_screen.dart';
 import 'package:friend_private/pages/chat/widgets/ai_message.dart';
 import 'package:friend_private/pages/chat/widgets/animated_mini_banner.dart';
 import 'package:friend_private/pages/chat/widgets/user_message.dart';
@@ -17,6 +18,7 @@ import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/conversation_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:gradient_borders/gradient_borders.dart';
@@ -245,20 +247,29 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                         builder: (context) => MessageActionMenu(
                                           message: message.text.decodeString,
                                           onCopy: () async {
+                                            MixpanelManager()
+                                                .track('Chat Message Copied', properties: {'message': message.text});
                                             await Clipboard.setData(ClipboardData(text: message.text.decodeString));
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Message copied to clipboard.',
-                                                  style: TextStyle(
-                                                    color: Color.fromARGB(255, 255, 255, 255),
-                                                    fontSize: 12.0,
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Message copied to clipboard.',
+                                                    style: TextStyle(
+                                                      color: Color.fromARGB(255, 255, 255, 255),
+                                                      fontSize: 12.0,
+                                                    ),
                                                   ),
+                                                  duration: Duration(milliseconds: 2000),
                                                 ),
-                                                duration: Duration(milliseconds: 2000),
-                                              ),
-                                            );
-                                            Navigator.pop(context);
+                                              );
+                                              Navigator.pop(context);
+                                            }
+                                          },
+                                          onSelectText: () {
+                                            MixpanelManager().track('Chat Message Text Selected',
+                                                properties: {'message': message.text});
+                                            routeToPage(context, SelectTextScreen(message: message));
                                           },
                                           onShare: () {
                                             MixpanelManager()
@@ -295,6 +306,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     Navigator.of(context).pop();
                                                   },
                                                   () {
+                                                    MixpanelManager().track('Chat Message Reported',
+                                                        properties: {'message': message.text});
                                                     Navigator.of(context).pop();
                                                     Navigator.of(context).pop();
                                                     context.read<MessageProvider>().removeLocalMessage(message.id);
@@ -317,7 +330,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 );
                                               },
                                             );
-                                            // Navigator.pop(context);
                                           },
                                         ),
                                       );
