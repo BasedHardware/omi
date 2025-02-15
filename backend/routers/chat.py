@@ -1,3 +1,4 @@
+from pathlib import Path
 import uuid
 import re
 import json
@@ -7,18 +8,20 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
+from multipart.multipart import shutil
 
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory
+from models.chat import Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, FileChat
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
 from utils.llm import initial_chat_message
-from utils.other import endpoints as auth
+from utils.other import endpoints as auth, storage
+from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 
 router = APIRouter()
@@ -46,6 +49,9 @@ def send_message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id
     )
+    if data.file_ids is not None:
+        message.files_id = data.file_ids
+
     chat_db.add_message(uid, message.dict())
 
     app = get_available_app_by_id(plugin_id, uid)
@@ -85,6 +91,9 @@ def send_message(
             type='text',
             memories_id=memories_id,
         )
+        if len(message.files_id) > 0:
+            ai_message.files_id = message.files_id
+
         chat_db.add_message(uid, ai_message.dict())
         ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
@@ -141,6 +150,9 @@ def send_message_v1(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id
     )
+    if data.file_ids is not None:
+        message.files_id = data.file_ids
+
     chat_db.add_message(uid, message.dict())
 
     app = get_available_app_by_id(plugin_id, uid)
@@ -176,6 +188,10 @@ def send_message_v1(
         type='text',
         memories_id=memories_id,
     )
+    if data.file_ids is not None:
+        ai_message.files_id = data.file_ids
+
+
     chat_db.add_message(uid, ai_message.dict())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
@@ -209,6 +225,11 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
     err = chat_db.clear_chat(uid, plugin_id=plugin_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
+
+    # clean thread chat file
+    fc_tool = FileChatTool()
+    fc_tool.cleanup(uid)
+
     return initial_message_util(uid, plugin_id)
 
 
@@ -312,3 +333,54 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+def upload_file_chat(files: List[UploadFile] = File(...) , uid: str = Depends(auth.get_current_user_uid)):
+    thumbs_name = []
+    files_chat = []
+    for file in files:
+        temp_file = Path(f"{file.filename}")
+        with temp_file.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+        fc_tool = FileChatTool()
+        result = fc_tool.upload(temp_file)
+
+        thumb_name = result.get("thumbnail_name", "")
+        if thumb_name != "":
+            thumbs_name.append(thumb_name)
+
+        filechat = FileChat(
+            id=str(uuid.uuid4()),
+            name=result.get("file_name", ""),
+            mime_type=result.get("mime_type", ""),
+            openai_file_id=result.get("file_id", ""),
+            created_at=datetime.now(timezone.utc),
+            thumb_name=thumb_name,
+        )
+        files_chat.append(filechat)
+
+        # cleanup temp_file
+        temp_file.unlink()
+
+
+    if len(thumbs_name) > 0:
+        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+        for fc in files_chat:
+            if not fc.is_image():
+                continue
+            thumb_path = thumbs_path.get(fc.thumb_name , "")
+            fc.thumbnail = thumb_path
+            # cleanup file thumb
+            thumb_file = Path(fc.thumb_name)
+            thumb_file.unlink()
+
+
+    # save db
+    files_chat_dict = [fc.dict() for fc in files_chat]
+
+    chat_db.add_multi_files(uid, files_chat_dict)
+
+    response = [fc.dict() for fc in files_chat]
+
+    return response

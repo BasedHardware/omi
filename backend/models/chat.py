@@ -25,6 +25,24 @@ class MessageMemory(BaseModel):
     structured: MessageMemoryStructured
     created_at: datetime
 
+class FileChat(BaseModel):
+    id: str
+    name: str
+    thumbnail: Optional[str] = ""
+    mime_type: str
+    openai_file_id: str
+    created_at: datetime
+    deleted: bool = False
+    thumb_name: Optional[str] = ""
+
+
+    def is_image(self):
+        return self.mime_type.startswith("image")
+
+    def dict(self, **kwargs):
+        exclude_fields = {'thumb_name'}
+        return super().dict(exclude=exclude_fields, **kwargs)
+
 
 class Message(BaseModel):
     id: str
@@ -39,6 +57,8 @@ class Message(BaseModel):
     deleted: bool = False
     reported: bool = False
     report_reason: Optional[str] = None
+    files_id: List[str] = []
+    files: List[FileChat] = []
 
     @staticmethod
     def get_messages_as_string(
@@ -100,6 +120,9 @@ class Message(BaseModel):
 
         return '\n'.join(formatted_messages)
 
+    def is_message_with_file(self):
+        return len(self.files_id) > 0
+
 
 class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
@@ -107,3 +130,6 @@ class ResponseMessage(Message):
 
 class SendMessageRequest(BaseModel):
     text: str
+    file_ids: Optional[List[str]] = []
+
+

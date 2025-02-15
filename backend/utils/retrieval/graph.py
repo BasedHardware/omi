@@ -33,10 +33,12 @@ from utils.llm import (
     extract_question_from_conversation,
     generate_embedding,
 )
+from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
+
 
 
 class StructuredFilters(TypedDict):
@@ -77,6 +79,9 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         print(f"Error on LLM {error}")
         await self.end()
 
+    def put_data_nowait(self, text):
+        self.queue.put_nowait(f"data: {text}")
+
 
 class GraphState(TypedDict):
     uid: str
@@ -111,10 +116,15 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
         state: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
+) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question"]:
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+    if last_message and last_message.is_message_with_file():
+        return "file_chat_question"
 
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
@@ -285,6 +295,28 @@ def qa_handler(state: GraphState):
     )
     return {"answer": response, "ask_for_nps": True}
 
+def file_chat_question(state: GraphState):
+    print("chat_with_file_question node")
+
+    uid = state.get("uid", "")
+    question = state.get("parsed_question", "")
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+    if last_message and not last_message.is_message_with_file():
+        return {'answer': "", 'ask_for_nps': False}
+
+    fc_tool = FileChatTool()
+
+    streaming = state.get("streaming")
+    if streaming:
+        answer = fc_tool.process_chat_with_file_stream(uid, question, last_message.files_id, callback= state.get('callback'))
+        return {'answer': answer, 'ask_for_nps': True}
+
+    answer = fc_tool.process_chat_with_file(uid, question , last_message.files_id)
+    return {'answer': answer, 'ask_for_nps': True}
+
+
 
 workflow = StateGraph(GraphState)
 
@@ -298,9 +330,11 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+workflow.add_node("file_chat_question", file_chat_question)
 
 workflow.add_edge("no_context_conversation", END)
 workflow.add_edge("omi_question", END)
+workflow.add_edge("file_chat_question", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
@@ -354,11 +388,12 @@ async def execute_graph_chat_stream(
             chunk = await callback.queue.get()
             if chunk:
                 yield chunk
+            if chunk is None:
+                break
             else:
                 break
         except asyncio.CancelledError:
             break
-
     await task
     result = task.result()
     callback_data['answer'] = result.get("answer")
