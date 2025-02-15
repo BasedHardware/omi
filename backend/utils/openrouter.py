@@ -4,7 +4,7 @@ from typing import List, Optional
 from openai import AsyncClient
 
 from models.app import App
-from models.chat import Message
+from models.chat import Message, ChatSession
 
 openrouter_key = os.getenv('OPENROUTER_API_KEY')
 
@@ -15,10 +15,10 @@ client = AsyncClient(
 
 
 async def execute_persona_chat_stream(uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
-                                      callback_data: dict = None):
+                                      callback_data: dict = None, chat_session: Optional[ChatSession] = None):
     """Handle streaming chat responses for persona-type apps using OpenRouter."""
 
-    system_prompt = app.chat_prompt
+    system_prompt = app.persona_prompt
     formatted_messages = [{
         "role": "system",
         "content": system_prompt
@@ -36,7 +36,7 @@ async def execute_persona_chat_stream(uid: str, messages: List[Message], app: Ap
     try:
         stream = await client.chat.completions.create(
             messages=formatted_messages,
-            model="google/gemini-flash-1.5-8b",
+            model="gpt-4o",
             stream=True
         )
 

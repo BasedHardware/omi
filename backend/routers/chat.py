@@ -13,7 +13,8 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, FileChat
+from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
+    FileChat
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
@@ -28,6 +29,7 @@ from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 router = APIRouter()
 fc = FileChatTool()
 
+
 def filter_messages(messages, plugin_id):
     print('filter_messages', len(messages), plugin_id)
     collected = []
@@ -37,6 +39,7 @@ def filter_messages(messages, plugin_id):
         collected.append(message)
     print('filter_messages output:', len(collected))
     return collected
+
 
 def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
@@ -91,7 +94,6 @@ def send_message(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
 
-
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
@@ -135,12 +137,13 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-#         stream_function = execute_persona_chat_stream if app and 'persona' in app.capabilities else execute_graph_chat_stream
-#         async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data):
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
+        stream_function = execute_persona_chat_stream if app and app.is_a_persona() else execute_graph_chat_stream
+        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data,
+                                           chat_session=chat_session):
+            # async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
             if chunk:
-                data = chunk.replace("\n", "__CRLF__")
-                yield f'{data}\n\n'
+                msg = chunk.replace("\n", "__CRLF__")
+                yield f'{msg}\n\n'
             else:
                 response = callback_data.get('answer')
                 if response:
@@ -161,7 +164,6 @@ def send_message(
 def report_message(
         message_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
-
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -214,7 +216,8 @@ def send_message_v1(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
 
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True, chat_session=chat_session)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True,
+                                                         chat_session=chat_session)  # plugin
 
     # cited extraction
     cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -243,13 +246,11 @@ def send_message_v1(
         chat_session_id=chat_session.id,
     )
 
-
     chat_db.add_message(uid, ai_message.dict())
     chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
 
     resp = ai_message.dict()
     resp['ask_for_nps'] = ask_for_nps
@@ -274,11 +275,10 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-
     if plugin_id in ['null', '']:
         plugin_id = None
 
-   # get current chat session
+    # get current chat session
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
@@ -353,7 +353,8 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id, chat_session_id=chat_session_id)
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id,
+                                    chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
@@ -406,14 +407,15 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         media_type="text/event-stream"
     )
 
+
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(files: List[UploadFile] = File(...) , uid: str = Depends(auth.get_current_user_uid)):
+def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     thumbs_name = []
     files_chat = []
     for file in files:
         temp_file = Path(f"{file.filename}")
         with temp_file.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            shutil.copyfileobj(file.file, buffer)
 
         fc_tool = FileChatTool()
         result = fc_tool.upload(temp_file)
@@ -435,18 +437,16 @@ def upload_file_chat(files: List[UploadFile] = File(...) , uid: str = Depends(au
         # cleanup temp_file
         temp_file.unlink()
 
-
     if len(thumbs_name) > 0:
         thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name , "")
+            thumb_path = thumbs_path.get(fc.thumb_name, "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
             thumb_file = Path(fc.thumb_name)
             thumb_file.unlink()
-
 
     # save db
     files_chat_dict = [fc.dict() for fc in files_chat]

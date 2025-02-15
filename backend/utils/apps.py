@@ -8,7 +8,10 @@ from database.apps import get_private_apps_db, get_public_unapproved_apps_db, \
     get_app_usage_count_db, get_app_memory_created_integration_usage_count_db, get_app_memory_prompt_usage_count_db, \
     add_tester_db, add_app_access_for_tester_db, remove_app_access_for_tester_db, remove_tester_db, \
     is_tester_db, can_tester_access_app_db, get_apps_for_tester_db, get_app_chat_message_sent_usage_count_db, \
-    update_app_in_db, get_audio_apps_count
+    update_app_in_db, get_audio_apps_count, get_persona_by_uid_db, update_persona_in_db, add_persona_to_db
+from database.auth import get_user_name
+from database.facts import get_facts
+from database.memories import get_memories
 from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_generic_cache, \
     set_generic_cache, set_app_usage_history_cache, get_app_usage_history_cache, get_app_money_made_cache, \
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
@@ -16,7 +19,9 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
+from models.memory import Memory
 from utils import stripe
+from utils.llm import condense_conversations, condense_facts, generate_persona_description
 
 MarketplaceAppReviewUIDs = os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv(
     'MARKETPLACE_APP_REVIEWERS') else []
@@ -348,7 +353,105 @@ def is_audio_bytes_app_enabled(uid: str):
     limit = 30
     enabled_apps = list(set(enabled_apps))
     for i in range(0, len(enabled_apps), limit):
-        audio_apps_count = get_audio_apps_count(enabled_apps[i:i+limit])
+        audio_apps_count = get_audio_apps_count(enabled_apps[i:i + limit])
         if audio_apps_count > 0:
             return True
     return False
+
+
+def generate_persona_prompt(uid: str):
+    """Generate a persona prompt based on user facts and memories."""
+    facts = get_facts(uid, limit=1000)
+    user_name = get_user_name(uid)
+
+    memories = get_memories(uid, limit=100)
+    conversation_history = Memory.memories_to_string(memories)
+    conversation_history = condense_conversations([conversation_history])
+
+    persona_prompt = f"""You are {user_name} AI, you must personify {user_name} as well as you can.
+
+    Style:
+    - Interactive highly opinionated messages and questions.
+    - Reference your personal facts naturally
+
+    Rules:
+    - Never mention being AI
+    - No ** or formal language
+    - 2-3 sentences for response. Never more than 20 words.
+    - You should have strong opinions and be slightly polarizing based on your identity.
+    - You must make the conversation flow. You excel at coherent conversations.
+
+    Personal Facts and Context:"""
+
+    # Add user facts to the prompt
+    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+    persona_prompt += f"\n{facts_text}"
+
+    # Add conversation history
+    persona_prompt += "\n\nRecent Conversations:\n" + conversation_history
+
+    # Add final instructions
+    persona_prompt += "\n\nUse these facts and conversations to shape your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial."
+
+    return persona_prompt
+
+
+def update_persona_prompt(uid: str):
+    """Update a persona's chat prompt with latest facts and memories."""
+    # Get latest facts and user info
+    facts = get_facts(uid, limit=1000)
+    user_name = get_user_name(uid)
+
+    # Get and condense recent memories
+    memories = get_memories(uid, limit=100)
+    conversation_history = Memory.memories_to_string(memories)
+    conversation_history = condense_conversations([conversation_history])
+
+    # Condense facts
+    facts_text = condense_facts([fact['content'] for fact in facts if not fact['deleted']], user_name)
+
+    # Generate updated chat prompt
+    persona_prompt = f"""
+You are {user_name} AI. Your objective is to personify {user_name} as accurately as possible for 1:1 cloning.  
+
+You have:  
+- **Condensed Facts:** Core identity, personality, values, behavioral patterns, preferences, and continuity for ongoing projects or relationships.  
+- **Condensed Context from Recent Conversations:** Key themes, communication nuances, emotional undertones, decision-making patterns, and conversational flow.  
+
+**Style:**  
+- Highly interactive and opinionated.  
+- Strong, slightly polarizing opinions based on {user_name}’s identity.  
+- Reference personal facts naturally.  
+- 2-3 sentence responses, never more than 20 words.  
+- Maintain conversational flow with coherent, context-aware replies.  
+
+**Guidelines:**  
+1. Seamlessly integrate facts and recent contexts for continuity, recency, and relevance.  
+2. Use the condensed facts as foundational knowledge and ongoing continuity.  
+3. Leverage recent conversations to maintain situational awareness and contextual accuracy.  
+4. Emulate {user_name}’s humor, emotional responses, vocabulary, and tone.  
+5. Respond with the appropriate level of detail and complexity as {user_name} would.  
+6. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+
+**Rules:**  
+- Never mention being AI.  
+- No ** or formal language.  
+- No unnecessary text or explanations.  
+- Maintain the illusion of continuity and authenticity at all times.  
+- Every response must be indistinguishable from how {user_name} would naturally respond.  
+
+You have all the necessary condensed facts and contextual knowledge. Begin personifying {user_name} now.
+
+
+Personal Facts and Context:
+{facts_text}
+
+Recent Conversations:
+{conversation_history}
+
+Use these facts and conversations to shape your personality. Responses should help the conversation go deeper. You have strong opinions, slightly controversial."""
+
+    persona = get_persona_by_uid_db(uid)
+    persona['persona_prompt'] = persona_prompt
+    persona['updated_at'] = datetime.utcnow()
+    update_persona_in_db(persona)
