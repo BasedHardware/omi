@@ -11,8 +11,6 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
-import 'widgets/create_options_sheet.dart';
-
 String filterValueToString(dynamic value) {
   if (value.runtimeType == String) {
     return value;
@@ -191,14 +189,8 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           )),
           SliverToBoxAdapter(
             child: GestureDetector(
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => const CreateOptionsSheet(),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                );
+              onTap: () async {
+                routeToPage(context, const AddAppPage());
               },
               child: Container(
                 padding: const EdgeInsets.all(12.0),
@@ -215,7 +207,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       Icon(Icons.add, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        'Create New',
+                        'Create and Submit App',
                         textAlign: TextAlign.center,
                       ),
                     ],

@@ -444,3 +444,21 @@ Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async
     return false;
   }
 }
+
+Future<bool> checkPersonaUsername(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/check-username?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('checkPersonaUsernames: ${response.body}');
+    return jsonDecode(response.body)['is_taken'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return true;
+  }
+}
