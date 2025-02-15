@@ -20,6 +20,7 @@ postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_plugins_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
+app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 
 
 # *******************************************
@@ -251,3 +252,14 @@ def delete_plugin_logo(img_url: str):
     print('delete_plugin_logo', path)
     blob = bucket.blob(path)
     blob.delete()
+
+def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
+    bucket = storage_client.bucket(app_thumbnails_bucket)
+    path = f'{thumbnail_id}.jpg'
+    blob = bucket.blob(path)
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+
+def get_app_thumbnail_url(thumbnail_id: str) -> str:
+    path = f'{thumbnail_id}.jpg'
+    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
