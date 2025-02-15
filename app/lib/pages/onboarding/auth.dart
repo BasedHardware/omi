@@ -36,10 +36,10 @@ class _AuthComponentState extends State<AuthComponent> {
                 ),
               ),
               SizedBox(height: MediaQuery.of(context).textScaleFactor > 1.0 ? 18 : 32),
-              SignInButton.withGoogle(
-                onTap: () => provider.onGoogleSignIn(widget.onSignIn),
-              ),
               if (Platform.isIOS) ...[
+                SignInButton.withApple(
+                  onTap: () => provider.onAppleSignIn(widget.onSignIn),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -83,11 +83,11 @@ class _AuthComponentState extends State<AuthComponent> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SignInButton.withApple(
-                  onTap: () => provider.onAppleSignIn(widget.onSignIn),
-                ),
               ],
+              const SizedBox(height: 12),
+              SignInButton.withGoogle(
+                onTap: () => provider.onGoogleSignIn(widget.onSignIn),
+              ),
               const SizedBox(height: 16),
               RichText(
                 textAlign: TextAlign.center,
