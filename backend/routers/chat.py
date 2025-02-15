@@ -267,6 +267,29 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     return messages
 
 
+@router.get('/messages/by-date/{date}', tags=['chat'])
+def get_messages_by_date(
+    date: str,
+    plugin_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    try:
+        # Parse the date string (expected format: YYYY-MM-DD)
+        filter_date = datetime.strptime(date, '%Y-%m-%d')
+        messages = chat_db.get_messages(
+            uid=uid,
+            plugin_id=plugin_id,
+            date=filter_date,
+            include_memories=True
+        )
+        return {'messages': messages}
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Please use YYYY-MM-DD format."
+        )
+
+
 @router.post("/v1/voice-messages")
 async def create_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     paths = retrieve_file_paths(files, uid)
