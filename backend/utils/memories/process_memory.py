@@ -21,14 +21,13 @@ from models.memory import *
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps
+from utils.apps import get_available_apps, update_persona_prompt
 from utils.llm import obtain_emotional_message, retrieve_metadata_fields_from_transcript
 from utils.llm import summarize_open_glass, get_transcript_structure, generate_embedding, \
     get_plugin_result, should_discard_memory, summarize_experience_text, new_facts_extractor, \
     trends_extractor
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
-from utils.persona import update_persona_prompt
 from utils.retrieval.rag import retrieve_rag_memory_context
 from utils.webhooks import memory_created_webhook
 
@@ -197,7 +196,7 @@ def process_memory(
         persona = get_persona_by_uid_db(uid)
         print('updating persona after memory creation')
         if persona:
-            update_persona_prompt(uid, persona['id'])
+            update_persona_prompt(uid)
             delete_app_cache_by_id(persona['id'])
 
     # TODO: trigger external integrations here too
