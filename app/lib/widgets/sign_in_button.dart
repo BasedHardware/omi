@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 
@@ -5,13 +7,20 @@ class SignInButton extends StatelessWidget {
   final String title;
   final String? assetPath;
   final VoidCallback onTap;
-  const SignInButton({super.key, required this.title, this.assetPath, required this.onTap});
+  final EdgeInsets? padding;
+  final double iconSpacing;
+  const SignInButton(
+      {super.key, required this.title, this.assetPath, required this.onTap, this.padding, required this.iconSpacing});
 
   factory SignInButton.withGoogle({required VoidCallback onTap}) {
     return SignInButton(
       assetPath: Assets.images.googleLogo.path,
       title: "Sign in with Google",
       onTap: onTap,
+      padding: Platform.isIOS
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+          : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      iconSpacing: Platform.isIOS ? 12 : 10,
     );
   }
 
@@ -20,6 +29,8 @@ class SignInButton extends StatelessWidget {
       assetPath: Assets.images.appleLogo.path,
       title: "Sign in with Apple",
       onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      iconSpacing: 12,
     );
   }
 
@@ -28,7 +39,7 @@ class SignInButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(6),
@@ -43,7 +54,7 @@ class SignInButton extends StatelessWidget {
                 height: 20,
                 width: 20,
               ),
-            const SizedBox(width: 6),
+            SizedBox(width: iconSpacing),
             Text(
               title,
               style: const TextStyle(
