@@ -151,6 +151,8 @@ def get_messages(
     for doc in doc_files:
         if doc.exists:
             file = doc.to_dict()
+            if file['deleted']:
+                continue
             files[file['id']] = file
 
     # Attach files to messages
@@ -276,11 +278,14 @@ def add_chat_session(uid: str, chat_session_data: dict):
     user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
     return chat_session_data
 
-def get_chat_session(uid: str):
+def get_chat_session(uid: str, plugin_id: Optional[str] = None):
     session_ref = (
         db.collection('users').document(uid).collection('chat_sessions')
-        .where(filter=FieldFilter('deleted', '==', False)).limit(1)
+        .where(filter=FieldFilter('deleted', '==', False))
+        .where(filter=FieldFilter('plugin_id', '==', plugin_id))
+        .limit(1)
     )
+
     sessions = session_ref.stream()
     for session in sessions:
         return session.to_dict()

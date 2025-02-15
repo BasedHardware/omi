@@ -37,12 +37,13 @@ def filter_messages(messages, plugin_id):
     print('filter_messages output:', len(collected))
     return collected
 
-def acquire_chat_session(uid: str):
-    chat_session = chat_db.get_chat_session(uid)
+def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     if chat_session is None:
         cs = ChatSession(
             id=str(uuid.uuid4()),
             created_at=datetime.now(timezone.utc),
+            plugin_id=plugin_id
         )
         chat_session = chat_db.add_chat_session(uid, cs.dict())
     return chat_session
@@ -53,12 +54,14 @@ def send_message(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid)
-    chat_session = ChatSession(**chat_session) if chat_session else None
 
     if plugin_id in ['null', '']:
         plugin_id = None
+
+    # get chat session
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = ChatSession(**chat_session) if chat_session else None
+
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id
@@ -171,12 +174,14 @@ def send_message_v1(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     print('send_message', data.text, plugin_id, uid)
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid)
-    chat_session = ChatSession(**chat_session) if chat_session else None
 
     if plugin_id in ['null', '']:
         plugin_id = None
+
+    # get chat session
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session = ChatSession(**chat_session) if chat_session else None
+
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
         plugin_id=plugin_id, chat_session_id=chat_session.id
@@ -265,12 +270,14 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid)
-    chat_session_id = chat_session['id'] if chat_session else None
 
     if plugin_id in ['null', '']:
         plugin_id = None
+
+   # get current chat session
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     err = chat_db.clear_chat(uid, plugin_id=plugin_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
@@ -289,7 +296,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
 def initial_message_util(uid: str, app_id: Optional[str] = None):
     print('initial_message_util', app_id)
     # init chat session
-    chat_session = acquire_chat_session(uid)
+    chat_session = acquire_chat_session(uid, plugin_id=app_id)
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, plugin_id=app_id)))
     print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
@@ -336,11 +343,11 @@ def get_messages_v1(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-    chat_session = chat_db.get_chat_session(uid)
-    chat_session_id = chat_session['id'] if chat_session else None
-
     if plugin_id in ['null', '']:
         plugin_id = None
+
+    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
+    chat_session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id, chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)

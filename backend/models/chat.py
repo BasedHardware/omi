@@ -136,6 +136,7 @@ class ChatSession(BaseModel):
     id: str
     message_ids: Optional[List[str]] = []
     file_ids: Optional[List[str]] = []
+    plugin_id: Optional[str] = None
     created_at: datetime
     deleted: bool = False
 
