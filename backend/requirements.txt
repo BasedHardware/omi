@@ -253,3 +253,4 @@ websockets==12.0
 yarl==1.9.4
 stripe==11.3.0
 typesense==0.21.0
+pycountry==24.6.1

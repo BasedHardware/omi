@@ -111,6 +111,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       event = 'App is paused';
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
+
+      // Reload convos
+      if (mounted) {
+        debugPrint('Reload convos');
+        Provider.of<ConversationProvider>(context, listen: false).fetchNewConversations();
+      }
     } else if (state == AppLifecycleState.hidden) {
       event = 'App is hidden';
     } else if (state == AppLifecycleState.detached) {

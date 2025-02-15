@@ -292,6 +292,39 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(
+                      height: 16,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0),
+                      child: Text(
+                        'App Home URL (optional)',
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      width: double.infinity,
+                      child: TextFormField(
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty && !isValidUrl(value)) {
+                            return 'Please enter a valid URL';
+                          }
+                          return null;
+                        },
+                        controller: provider.appHomeUrlController,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          hintText: 'https://your-app-home.com/',
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

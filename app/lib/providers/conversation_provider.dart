@@ -161,6 +161,18 @@ class ConversationProvider extends ChangeNotifier implements IWalServiceListener
     notifyListeners();
   }
 
+  Future fetchNewConversations() async {
+    List<ServerConversation> newConversations = await getConversationsFromServer();
+    List<ServerConversation> upsertConvos =
+        newConversations.where((c) => conversations.indexWhere((cc) => cc.id == c.id) == -1).toList();
+    if (upsertConvos.isEmpty) {
+      return;
+    }
+    conversations.insertAll(0, upsertConvos);
+    _groupConversationsByDateWithoutNotify();
+    notifyListeners();
+  }
+
   Future fetchConversations() async {
     previousQuery = "";
     currentSearchPage = 0;

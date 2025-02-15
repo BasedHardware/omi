@@ -84,6 +84,7 @@ class ExternalIntegration {
   String setupInstructionsFilePath;
   bool isInstructionsUrl;
   List<AuthStep> authSteps;
+  String? appHomeUrl;
 
   ExternalIntegration({
     required this.triggersOn,
@@ -92,6 +93,7 @@ class ExternalIntegration {
     required this.setupInstructionsFilePath,
     required this.isInstructionsUrl,
     this.authSteps = const [],
+    this.appHomeUrl,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -99,6 +101,7 @@ class ExternalIntegration {
       triggersOn: json['triggers_on'],
       webhookUrl: json['webhook_url'],
       setupCompletedUrl: json['setup_completed_url'],
+      appHomeUrl: json['app_home_url'],
       isInstructionsUrl: json['is_instructions_url'] ?? false,
       setupInstructionsFilePath: json['setup_instructions_file_path'],
       authSteps: json['auth_steps'] == null
@@ -123,6 +126,7 @@ class ExternalIntegration {
       'triggers_on': triggersOn,
       'webhook_url': webhookUrl,
       'setup_completed_url': setupCompletedUrl,
+      'app_home_url': appHomeUrl,
       'is_instructions_url': isInstructionsUrl,
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
@@ -189,6 +193,8 @@ class App {
   double? price;
   bool isUserPaid;
   String? paymentLink;
+  List<String> thumbnailIds;
+  List<String> thumbnailUrls;
 
   App({
     required this.id,
@@ -221,6 +227,8 @@ class App {
     this.price,
     required this.isUserPaid,
     this.paymentLink,
+    this.thumbnailIds = const [],
+    this.thumbnailUrls = const [],
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -268,6 +276,8 @@ class App {
       price: json['price'] ?? 0.0,
       isUserPaid: json['is_user_paid'] ?? false,
       paymentLink: json['payment_link'],
+      thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
+      thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }
 
