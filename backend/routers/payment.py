@@ -1,4 +1,4 @@
-from fastapi import Request, Header, HTTPException, APIRouter, Depends
+from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 
 from database.users import get_stripe_connect_account_id, set_stripe_connect_account_id, set_paypal_payment_details, \
@@ -37,8 +37,29 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             raise HTTPException(status_code=400, detail="Invalid client")
         uid = client_reference_id[4:]
 
+        if session.get("subscription"):
+            subscription_id = session["subscription"]
+            stripe.Subscription.modify(
+                subscription_id,
+                metadata={"uid": uid, "app_id": app_id}
+            )
+
         # paid
         paid_app(app_id, uid)
+
+    return {"status": "success"}
+
+
+@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
+async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
+    payload = await request.body()
+
+    try:
+        event = stripe_utils.parse_connect_event(payload, stripe_signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event['type'] == 'account.updated':
         # this event occurs for the connected account, check if the account is fully onboarded to set default method
@@ -50,32 +71,36 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 set_default_payment_method(uid, 'stripe')
 
     # TODO: handle this event to link transfers?
-    if event['type'] == 'transfer.created':
-        transfer = event['data']['object']
-        print(transfer)
+    # if event['type'] == 'transfer.created':
+    #     transfer = event['data']['object']
 
     return {"status": "success"}
 
 
 @router.post("/v1/stripe/connect-accounts")
-async def create_connect_account_endpoint(request: Request, uid: str = Depends(auth.get_current_user_uid)):
+async def create_connect_account_endpoint(country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)):
     """
     Create a Stripe Connect account and return the account creation response
     """
     try:
         account_id = get_stripe_connect_account_id(uid)
-        base_url = str(request.base_url).rstrip('/')
 
         if account_id:
-            account = refresh_connect_account_link(account_id, base_url)
+            account = refresh_connect_account_link(account_id)
         else:
-            account = create_connect_account(base_url, uid)
+            if country is None or country.strip() == "":
+                raise HTTPException(status_code=400, detail="Country is required")
+            account = create_connect_account(uid, country)
             set_stripe_connect_account_id(uid, account['account_id'])
 
         return account
-
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get('/v1/stripe/supported-countries')
+def get_supported_countries():
+    return stripe_utils.get_supported_countries()
 
 
 @router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
@@ -99,8 +124,7 @@ async def refresh_account_link_endpoint(request: Request, account_id: str,
     Generate a fresh account link if the previous one expired
     """
     try:
-        base_url = str(request.base_url).rstrip('/')
-        account = refresh_connect_account_link(account_id, base_url)
+        account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))

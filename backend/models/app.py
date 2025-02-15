@@ -39,7 +39,7 @@ class ExternalIntegration(BaseModel):
     setup_instructions_file_path: str
     is_instructions_url: bool = True
     auth_steps: Optional[List[AuthStep]] = []
-    # setup_instructions_markdown: str = ''
+    app_home_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):
@@ -82,6 +82,8 @@ class App(BaseModel):
     payment_link_id: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
+    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
+    thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List
 import requests
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Response
 
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
@@ -22,7 +22,7 @@ from utils.llm import generate_description
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
-from utils.other.storage import upload_plugin_logo, delete_plugin_logo
+from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.stripe import is_onboarding_complete
 
 router = APIRouter()
@@ -86,7 +86,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     app = App(**data)
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
-    return {'status': 'ok'}
+    return {'status': 'ok', 'app_id': app.id}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
@@ -152,6 +152,13 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # payment link
     if app.payment_link:
         app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+
+    # Generate thumbnail URLs if thumbnails exist
+    if app.thumbnails:
+        app.thumbnail_urls = [
+            get_app_thumbnail_url(thumbnail_id)
+            for thumbnail_id in app.thumbnails
+        ]
 
     return app
 
@@ -448,6 +455,43 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
+@router.post('/v1/app/thumbnails', tags=['v1'])
+async def upload_app_thumbnail_endpoint(
+    file: UploadFile = File(...),
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    """Upload a thumbnail image for an app.
+
+    Args:
+        file: The thumbnail image file
+        app_id: ID of the app to add thumbnail for
+        uid: User ID from auth
+
+    Returns:
+        Dict with thumbnail URL
+    """
+    # Save uploaded file temporarily
+    thumbnail_id = str(ULID())
+    os.makedirs('_temp/thumbnails', exist_ok=True)
+    temp_path = f'_temp/thumbnails/{thumbnail_id}.jpg'
+
+    try:
+        with open(temp_path, 'wb') as f:
+            f.write(await file.read())
+
+        # Upload to cloud storage
+        url = upload_app_thumbnail(temp_path, thumbnail_id)
+
+        return {
+            'thumbnail_url': url,
+            'thumbnail_id': thumbnail_id
+        }
+
+    finally:
+        # Cleanup temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:friend_private/backend/schema/app.dart';
+import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:friend_private/pages/apps/widgets/external_trigger_fields_widget.dart';
 import 'package:friend_private/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:friend_private/pages/apps/widgets/payment_details_widget.dart';
+import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -97,9 +104,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(
-                            height: 18,
-                          ),
+                          const SizedBox(height: 18),
                           AppMetadataWidget(
                             pickImage: () async {
                               await provider.pickImage();
@@ -122,9 +127,143 @@ class _AddAppPageState extends State<AddAppPage> {
                                   paymentPlan: provider.mapPaymentPlanIdToName(provider.selectePaymentPlan),
                                 )
                               : const SizedBox.shrink(),
-                          const SizedBox(
-                            height: 12,
+                          const SizedBox(height: 18),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Text(
+                                    'Preview and Screenshots',
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: 180,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: provider.thumbnailUrls.length + 1,
+                                    itemBuilder: (context, index) {
+                                      // Calculate dimensions to maintain 2:3 ratio
+                                      final width = 120.0;
+                                      final height = width * 1.5; // 2:3 ratio
+
+                                      if (index == provider.thumbnailUrls.length) {
+                                        return GestureDetector(
+                                          onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
+                                          child: Container(
+                                            width: width,
+                                            height: height,
+                                            margin: const EdgeInsets.only(right: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade800,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: provider.isUploadingThumbnail
+                                                ? Shimmer.fromColors(
+                                                    baseColor: Colors.grey[900]!,
+                                                    highlightColor: Colors.grey[800]!,
+                                                    child: Container(
+                                                      width: width,
+                                                      height: height,
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black,
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                      child: const Icon(Icons.photo, size: 32),
+                                                    ),
+                                                  )
+                                                : const Icon(Icons.add_photo_alternate_outlined, size: 32),
+                                          ),
+                                        );
+                                      }
+                                      return Stack(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => FullScreenImageViewer(
+                                                    imageUrl: provider.thumbnailUrls[index],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: CachedNetworkImage(
+                                              imageUrl: provider.thumbnailUrls[index],
+                                              imageBuilder: (context, imageProvider) => Container(
+                                                width: 120,
+                                                height: 180, // 2:3 ratio (120 * 1.5)
+                                                margin: const EdgeInsets.only(right: 8),
+                                                decoration: BoxDecoration(
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: const Color(0xFF424242),
+                                                    width: 1,
+                                                  ),
+                                                  image: DecorationImage(
+                                                    image: imageProvider,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                ),
+                                              ),
+                                              placeholder: (context, url) => Shimmer.fromColors(
+                                                baseColor: Colors.grey[900]!,
+                                                highlightColor: Colors.grey[800]!,
+                                                child: Container(
+                                                  width: 120,
+                                                  height: 180,
+                                                  margin: const EdgeInsets.only(right: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black,
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                ),
+                                              ),
+                                              errorWidget: (context, url, error) => Container(
+                                                width: 120,
+                                                height: 180,
+                                                margin: const EdgeInsets.only(right: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[900],
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: const Icon(Icons.error),
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 4,
+                                            right: 12,
+                                            child: GestureDetector(
+                                              onTap: () => provider.removeThumbnail(index),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.6),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.close, size: 16),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(height: 18),
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.grey.shade900,
@@ -338,7 +477,15 @@ class _AddAppPageState extends State<AddAppPage> {
                                     }
                                     SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
                                     Navigator.pop(context);
-                                    await provider.submitApp();
+                                    String? appId = await provider.submitApp();
+                                    App? app;
+                                    if (appId != null) {
+                                      app = await context.read<AppProvider>().getAppFromId(appId);
+                                    }
+                                    if (app != null && mounted && context.mounted) {
+                                      Navigator.pop(context);
+                                      routeToPage(context, AppDetailPage(app: app));
+                                    }
                                   },
                                   onCancel: () {
                                     Navigator.pop(context);
