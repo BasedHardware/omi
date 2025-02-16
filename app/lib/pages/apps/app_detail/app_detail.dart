@@ -196,7 +196,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             ),
             const SizedBox(width: 24),
           ],
-          isLoading
+          isLoading || app.private
               ? const SizedBox.shrink()
               : GestureDetector(
                   child: const Icon(Icons.share),
