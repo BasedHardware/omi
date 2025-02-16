@@ -73,7 +73,7 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
                     SizedBox(height: 16),
                     _buildReasonTile(
                       icon: Icons.group,
-                      title: "Train Profiles for Friends and Family",
+                      title: "Train Profiles for Omis and Family",
                       description: "Your recordings help us recognize and create profiles for your friends and family.",
                     ),
                     SizedBox(height: 16),

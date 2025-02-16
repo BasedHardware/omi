@@ -20,9 +20,9 @@ class DeviceConnectionFactory {
     }
     switch (device.type!) {
       case DeviceType.friend:
-        return FriendDeviceConnection(device, bleDevice);
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.openglass:
-        return FriendDeviceConnection(device, bleDevice);
+        return OmiDeviceConnection(device, bleDevice);
       case DeviceType.frame:
         return FrameDeviceConnection(device, bleDevice);
       default:

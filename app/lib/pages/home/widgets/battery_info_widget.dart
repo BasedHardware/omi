@@ -67,7 +67,7 @@ class BatteryInfoWidget extends StatelessWidget {
                 onTap: () async {
                   if (SharedPreferencesUtil().btDevice.id.isEmpty) {
                     routeToPage(context, const ConnectDevicePage());
-                    MixpanelManager().connectFriendClicked();
+                    MixpanelManager().connectOmiClicked();
                   } else {
                     await routeToPage(context, const ConnectedDevice());
                   }

@@ -222,9 +222,9 @@ class MixpanelManager {
   void manualConversationCreated(ServerConversation conversation) =>
       track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
-  void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
+  void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourOmi, String ageRange) {
     setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Friend At', whereDoYouPlanToUseYourFriend);
+    setUserProperty('Using Omi At', whereDoYouPlanToUseYourOmi);
     setUserProperty('Age Range', ageRange);
   }
 
@@ -267,11 +267,11 @@ class MixpanelManager {
 
   void upgradeModalClicked() => track('Upgrade Modal Clicked');
 
-  void getFriendClicked() => track('Get Friend Clicked');
+  void getOmiClicked() => track('Get Omi Clicked');
 
-  void connectFriendClicked() => track('Connect Friend Clicked');
+  void connectOmiClicked() => track('Connect Omi Clicked');
 
-  void disconnectFriendClicked() => track('Disconnect Friend Clicked');
+  void disconnectOmiClicked() => track('Disconnect Omi Clicked');
 
   void batteryIndicatorClicked() => track('Battery Indicator Clicked');
 

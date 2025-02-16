@@ -8,7 +8,7 @@ module.exports = {
   fields: [
     {
       helpText:
-        'You can find the Secret Key in the Friend App under Settings > Plugins > Integration > Zapier > Integration Instructions',
+        'You can find the Secret Key in the Omi App under Settings > Plugins > Integration > Zapier > Integration Instructions',
       computed: false,
       key: 'uid',
       required: true,

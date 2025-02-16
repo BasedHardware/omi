@@ -206,18 +206,18 @@ class BtDevice {
     }
 
     if (type == DeviceType.friend) {
-      return await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
-      return await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.frame) {
       return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else {
-      return await _getDeviceInfoFromFriend(conn);
+      return await _getDeviceInfoFromOmi(conn);
     }
   }
 
-  Future _getDeviceInfoFromFriend(DeviceConnection conn) async {
-    var modelNumber = 'Friend';
+  Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
+    var modelNumber = 'Omi';
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';

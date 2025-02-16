@@ -143,7 +143,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         content: Text(
                             'Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
-                      MixpanelManager().disconnectFriendClicked();
+                      MixpanelManager().disconnectOmiClicked();
                     },
                     child: Text(
                       provider.connectedDevice == null ? "Unpair" : "Disconnect",
