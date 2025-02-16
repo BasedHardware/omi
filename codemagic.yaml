@@ -92,7 +92,7 @@ workflows:
 
       - name: Generate iOS Custom Config (Custom.xcconfig)
         script: |
-          sh scripts/generate_ios_custom_config.sh ios/Runner/GoogleService-Info.plist ios/Flutter/
+          sh scripts/generate_ios_custom_config.sh ios/Config/Prod/GoogleService-Info.plist ios/Flutter/
 
       - name: Get Flutter packages
         script: |
