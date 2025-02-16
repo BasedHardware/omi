@@ -271,7 +271,7 @@ class CaptureProvider extends ChangeNotifier
     _cleanupCurrentState();
     await _recheckCodecChange();
     await _ensureSocketConnection();
-    await _initiateFriendAudioStreaming();
+    await _initiateOmiAudioStreaming();
     await initiateStorageBytesStreaming(); // ??
     notifyListeners();
   }
@@ -359,7 +359,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _initiateFriendAudioStreaming() async {
+  Future<void> _initiateOmiAudioStreaming() async {
     if (_recordingDevice == null) return;
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);

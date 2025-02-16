@@ -89,7 +89,7 @@ class SpeechProfileProvider extends ChangeNotifier
     device = deviceProvider?.connectedDevice;
     await _initiateWebsocket(force: true);
 
-    if (device != null) await initiateFriendAudioStreaming();
+    if (device != null) await initiateOmiAudioStreaming();
     if (_socket?.state != SocketServiceState.connected) {
       // wait for websocket to connect
       await Future.delayed(const Duration(seconds: 2));
@@ -198,7 +198,7 @@ class SpeechProfileProvider extends ChangeNotifier
     return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
-  Future<void> initiateFriendAudioStreaming() async {
+  Future<void> initiateOmiAudioStreaming() async {
     _bleBytesStream = await _getBleAudioBytesListener(
       device!.id,
       onAudioBytesReceived: (List<int> value) {
@@ -300,7 +300,7 @@ class SpeechProfileProvider extends ChangeNotifier
         }
         device = connection.device;
         notifyListeners();
-        initiateFriendAudioStreaming();
+        initiateOmiAudioStreaming();
         break;
       case DeviceConnectionState.disconnected:
         if (deviceId == device?.id) {
