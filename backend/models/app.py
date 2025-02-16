@@ -61,6 +61,8 @@ class App(BaseModel):
     capabilities: Set[str]
     memory_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    username: Optional[str] = None
     external_integration: Optional[ExternalIntegration] = None
     reviews: List[AppReview] = []
     user_review: Optional[AppReview] = None
@@ -95,7 +97,10 @@ class App(BaseModel):
         return self.has_capability('memories')
 
     def works_with_chat(self) -> bool:
-        return self.has_capability('chat')
+        return self.has_capability('chat') or self.has_capability('persona')
+
+    def is_a_persona(self) -> bool:
+        return self.has_capability('persona')
 
     def works_externally(self) -> bool:
         return self.has_capability('external_integration')

@@ -9,14 +9,15 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db
+from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken
 from database.users import get_stripe_connect_account_id
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get
+    is_permit_payment_plan_get, generate_persona_prompt
 from utils.llm import generate_description
 
 from utils.notifications import send_notification
@@ -50,6 +51,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('author') and not data.get('email'):
+        user = get_user_from_uid(uid)
+        data['author'] = user['display_name']
+        data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -72,12 +77,15 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 external_integration['is_instructions_url'] = True
             else:
                 external_integration['is_instructions_url'] = False
+    if "persona" in data['capabilities']:
+        data['persona_prompt'] = generate_persona_prompt(uid)
+        data['connected_accounts'] = ['omi']
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    imgUrl = upload_plugin_logo(file_path, data['id'])
-    data['image'] = imgUrl
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
     add_app_to_db(data)
@@ -87,6 +95,14 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
+
+
+@router.get('/v1/apps/check-username', tags=['v1'])
+def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    persona = is_username_taken(username)
+    if persona == 0:
+        return {'is_taken': False}
+    return {'is_taken': True}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
@@ -111,7 +127,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), data.get('uid'),
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+                            data.get('uid'),
                             previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
@@ -282,6 +299,7 @@ def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Memories', 'id': 'memories'},
+        {'title': 'Persona', 'id': 'persona'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},
@@ -457,8 +475,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(
-    file: UploadFile = File(...),
-    uid: str = Depends(auth.get_current_user_uid)
+        file: UploadFile = File(...),
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """Upload a thumbnail image for an app.
 
@@ -491,6 +509,7 @@ async def upload_app_thumbnail_endpoint(
         # Cleanup temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
 
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):

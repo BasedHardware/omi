@@ -189,8 +189,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           )),
           SliverToBoxAdapter(
             child: GestureDetector(
-              onTap: () {
-                MixpanelManager().pageOpened('Submit App');
+              onTap: () async {
                 routeToPage(context, const AddAppPage());
               },
               child: Container(
@@ -208,7 +207,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       Icon(Icons.add, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        'Create and submit a new app',
+                        'Create and Submit App',
                         textAlign: TextAlign.center,
                       ),
                     ],

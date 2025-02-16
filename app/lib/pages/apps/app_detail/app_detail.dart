@@ -202,10 +202,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   child: const Icon(Icons.share),
                   onTap: () {
                     MixpanelManager().track('App Shared', properties: {'appId': app.id});
-                    Share.share(
-                      'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
-                      subject: app.name,
-                    );
+                    if (app.isNotPersona()) {
+                      Share.share(
+                        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                        subject: app.name,
+                      );
+                    } else {
+                      Share.share(
+                        'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://persona.omi.me/u/${app.username}',
+                        subject: app.name,
+                      );
+                    }
                   },
                 ),
           !context.watch<AppProvider>().isAppOwner

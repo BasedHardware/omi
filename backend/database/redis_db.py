@@ -70,6 +70,29 @@ def delete_app_cache_by_id(app_id: str):
 
 
 # ******************************************************
+# ********************** PERSONA ***********************
+# ******************************************************
+
+def is_username_taken(username: str) -> bool:
+    return r.exists(f'personas:{username}')
+
+
+def get_uid_by_username(username: str) -> str | None:
+    uid = r.get(f'personas:{username}')
+    if not uid:
+        return None
+    return uid.decode()
+
+
+def delete_username(username: str):
+    r.delete(f'personas:{username}')
+
+
+def save_username(username: str, uid: str):
+    r.set(f'personas:{username}', uid)
+
+
+# ******************************************************
 # *********************** APPS *************************
 # ******************************************************
 
@@ -157,6 +180,7 @@ def migrate_user_plugins_reviews(prev_uid: str, new_uid: str):
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int):
     r.set(f'users:{uid}:paid_apps:{app_id}', app_id, ex=ttl)
+
 
 def get_user_paid_app(app_id: str, uid: str) -> str:
     val = r.get(f'users:{uid}:paid_apps:{app_id}')
