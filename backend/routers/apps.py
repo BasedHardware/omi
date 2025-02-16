@@ -12,8 +12,8 @@ from database.apps import change_app_approval_status, get_unapproved_public_apps
 from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken
-from database.users import get_stripe_connect_account_id
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username, \
+    get_uid_by_username
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
@@ -24,7 +24,6 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.stripe import is_onboarding_complete
 
 router = APIRouter()
 
@@ -78,6 +77,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             else:
                 external_integration['is_instructions_url'] = False
     if "persona" in data['capabilities']:
+        save_username(data['username'], uid)
         data['persona_prompt'] = generate_persona_prompt(uid)
         data['connected_accounts'] = ['omi']
     os.makedirs(f'_temp/plugins', exist_ok=True)
@@ -102,7 +102,12 @@ def check_username(username: str, uid: str = Depends(auth.get_current_user_uid))
     persona = is_username_taken(username)
     if persona == 0:
         return {'is_taken': False}
-    return {'is_taken': True}
+    else:
+        username_owner = get_uid_by_username(username)
+        if username_owner == uid:
+            return {'is_taken': False}
+        else:
+            return {'is_taken': True}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
@@ -122,6 +127,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
             f.write(file.file.read())
         img_url = upload_plugin_logo(file_path, app_id)
         data['image'] = img_url
+    if "persona" in data['capabilities']:
+        save_username(data['username'], uid)
     data['updated_at'] = datetime.now(timezone.utc)
     # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)

@@ -154,6 +154,9 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
+    if (app.username != null) {
+      usernameController.text = app.username!;
+    }
 
     // Set existing thumbnails
     thumbnailUrls = app.thumbnailUrls;
@@ -475,6 +478,9 @@ class AddAppProvider extends ChangeNotifier {
           data['proactive_notification'] = {};
         }
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
+      }
+      if (capability.id == 'persona') {
+        data['username'] = usernameController.text;
       }
     }
     var success = false;
