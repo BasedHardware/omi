@@ -57,8 +57,8 @@ function setup_firebase_with_service_account() {
   flutterfire config \
     --platforms="android,ios" \
     --out=lib/firebase_options_dev.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-    --android-app-id=com.friend.ios.dev \
+    --ios-bundle-id=com.omi-app-with-wearable.ios12.development \
+    --android-app-id=com.omi.mobile.dev \
     --android-out=android/app/src/dev/  \
     --ios-out=ios/Config/Dev/ \
     --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
@@ -69,8 +69,8 @@ function setup_firebase_with_service_account() {
   flutterfire config \
     --platforms="android,ios" \
     --out=lib/firebase_options_prod.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-    --android-app-id=com.friend.ios.dev \
+    --ios-bundle-id=com.omi-app-with-wearable.ios12 \
+    --android-app-id=com.omi.mobile.dev \
     --android-out=android/app/src/prod/ \
     --ios-out=ios/Config/Prod/ \
     --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \

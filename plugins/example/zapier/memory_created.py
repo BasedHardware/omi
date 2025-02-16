@@ -43,7 +43,7 @@ async def connect(request: Request, uid: str = Form(...)):
     status = "enabled"
 
     print({'uid': uid, 'status': status})
-    # Should validate uid is valid user on Friend backend before insert
+    # Should validate uid is valid user on Omi backend before insert
     store_zapier_user_status(uid, status)
 
     return response_setup_page(request, uid, status)
@@ -62,7 +62,7 @@ async def disconnect(request: Request, uid: str = Form(...)):
 
     print({'uid': uid, 'status': status})
 
-    # Should validate uid is valid user on Friend backend before insert
+    # Should validate uid is valid user on Omi backend before insert
     store_zapier_user_status(uid, status)
 
     return response_setup_page(request, uid, status)

@@ -21,7 +21,7 @@ class NotificationService {
   NotificationService._();
 
   static NotificationService instance = NotificationService._();
-  MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
+  MethodChannel platform = const MethodChannel('com.omi.mobile/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final channel = NotificationChannel(

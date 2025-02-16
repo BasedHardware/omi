@@ -6,7 +6,7 @@
 # import numpy as np
 # from bleak import BleakClient, discover
 #
-# DEVICE_NAME = "Friend"
+# DEVICE_NAME = "Omi"
 # SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214"
 # CHARACTERISTIC_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"
 #

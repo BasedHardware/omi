@@ -108,7 +108,7 @@ const productInfo = {
 
 const appStoreInfo = {
   ios: 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163',
-  android: 'https://play.google.com/store/apps/details?id=com.friend.ios',
+  android: 'https://play.google.com/store/apps/details?id=com.omi.mobile',
 };
 
 export function generateBreadcrumbSchema(category?: string) {

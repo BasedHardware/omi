@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.omi.mobile
 
 import android.content.Intent
 import androidx.annotation.NonNull
@@ -12,7 +12,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private val CHANNEL = "com.omi.mobile/notifyOnKill"
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

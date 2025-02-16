@@ -64,7 +64,7 @@ export async function generateMetadata(
     other: {
       'application-name': 'Omi',
       'apple-itunes-app': `app-id=6502156163`,
-      'google-play-app': `app-id=com.friend.ios`,
+      'google-play-app': `app-id=com.omi.mobile`,
     },
   };
 }
@@ -73,7 +73,7 @@ export async function generateMetadata(
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.omi.mobile';
   const productUrl = 'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
   return {
@@ -156,7 +156,7 @@ function getPlatformLink(userAgent: string) {
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
   return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+    ? 'https://play.google.com/store/apps/details?id=com.omi.mobile'
     : isIOS
     ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
     : 'https://omi.me';
@@ -275,7 +275,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                         />
                       </a>
                       <a
-                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
+                        href="https://play.google.com/store/apps/details?id=com.omi.mobile"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"

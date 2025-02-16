@@ -52,7 +52,7 @@
   object.
     - [ ] `createWavFile` remove empty sounds without words, and saves that fixed file.
 
-- [ ] ~~ (Idea) Detect a keyword or special order e.g. "Hey Friend" (but not so generic) and  
+- [ ] ~~ (Idea) Detect a keyword or special order e.g. "Hey Omi" (but not so generic) and  
   triggers a prompt execution + response. This would require a few hardware updates (could also be
   a  
   button on the device), and it's way bigger than it seems.

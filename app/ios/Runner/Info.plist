@@ -7,7 +7,7 @@
 		<key>BGTaskSchedulerPermittedIdentifiers</key>
 		<array>
 			<string>daily-summary</string>
-			<string>com.friend-app-with-wearable.ios12.daily-summary</string>
+			<string>com.omi-app-with-wearable.ios12.daily-summary</string>
 			<string>dev.flutter.background.refresh</string>
 		</array>
 		<key>CADisableMinimumFrameDurationOnPhone</key>

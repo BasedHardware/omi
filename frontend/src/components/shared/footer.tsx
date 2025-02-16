@@ -83,7 +83,7 @@ export default function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Friend
+                Omi
               </a>
             </li>
             <li>
@@ -93,7 +93,7 @@ export default function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Friend DEV KIT
+                Omi DEV KIT
               </a>
             </li>
           </ul>

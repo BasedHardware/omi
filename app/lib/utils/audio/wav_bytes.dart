@@ -88,7 +88,7 @@ class WavBytesUtil {
 
   // static Future<void> printSharedPreferencesFileSize() async {
   //   final file = File(
-  //       '/var/mobile/Containers/Data/Application/987446B3-3A14-4AE6-9EE7-3BBEFC4DBE04/Library/Preferences/com.friend-app-with-wearable.ios12.plist');
+  //       '/var/mobile/Containers/Data/Application/987446B3-3A14-4AE6-9EE7-3BBEFC4DBE04/Library/Preferences/com.omi-app-with-wearable.ios12.plist');
   //
   //   if (await file.exists()) {
   //     final fileSize = await file.length();
@@ -242,7 +242,7 @@ class WavBytesUtil {
 
   Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
     // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
-    // https://github.com/BasedHardware/Friend/blob/main/docs/_developer/Protocol.md
+    // https://github.com/BasedHardware/Omi/blob/main/docs/_developer/Protocol.md
     Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
     return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
   }

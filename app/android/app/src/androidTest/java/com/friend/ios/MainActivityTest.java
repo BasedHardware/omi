@@ -1,4 +1,4 @@
-package com.friend.ios;
+package com.omi.mobile;
 
 import androidx.test.rule.ActivityTestRule;
 import dev.flutter.plugins.integration_test.FlutterTestRunner;
