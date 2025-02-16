@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
+import 'package:friend_private/utils/other/debouncer.dart';
+import 'package:friend_private/utils/text_formatter.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -23,6 +26,8 @@ class UpdateAppPage extends StatefulWidget {
 }
 
 class _UpdateAppPageState extends State<UpdateAppPage> {
+  final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -366,6 +371,77 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                 ),
                               ),
                             ],
+                          ),
+                        if (provider.isCapabilitySelectedById('persona'))
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            padding: const EdgeInsets.all(14.0),
+                            margin: const EdgeInsets.only(top: 22),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: Text(
+                                    'Persona Username',
+                                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                                  margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade800,
+                                    borderRadius: BorderRadius.circular(10.0),
+                                  ),
+                                  width: double.infinity,
+                                  child: TextFormField(
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter a username to access the persona';
+                                      }
+                                      return null;
+                                    },
+                                    onChanged: (value) {
+                                      _debouncer.run(() async {
+                                        await provider.checkIsUsernameTaken(value);
+                                      });
+                                    },
+                                    controller: provider.usernameController,
+                                    inputFormatters: [
+                                      LowerCaseTextFormatter(),
+                                      FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
+                                    ],
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      border: InputBorder.none,
+                                      hintText: 'Enter a username',
+                                      suffix: provider.usernameController.text.isEmpty
+                                          ? null
+                                          : provider.isCheckingUsername
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: Center(
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                                                    ),
+                                                  ),
+                                                )
+                                              : Icon(
+                                                  provider.isUsernameTaken ? Icons.close : Icons.check,
+                                                  color: provider.isUsernameTaken ? Colors.red : Colors.green,
+                                                  size: 16,
+                                                ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         const SizedBox(
                           height: 90,
