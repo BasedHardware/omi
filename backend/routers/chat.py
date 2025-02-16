@@ -1,10 +1,9 @@
-from pathlib import Path
 import uuid
 import re
-import json
 import base64
 from datetime import datetime, timezone
 from typing import List, Optional
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -174,7 +173,6 @@ def report_message(
     chat_db.report_message(uid, msg_doc_id)
     return {'message': 'Message reported'}
 
-
 @router.post('/v1/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message_v1(
         data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
@@ -184,28 +182,10 @@ def send_message_v1(
     if plugin_id in ['null', '']:
         plugin_id = None
 
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
-
     message = Message(
         id=str(uuid.uuid4()), text=data.text, created_at=datetime.now(timezone.utc), sender='human', type='text',
-        plugin_id=plugin_id, chat_session_id=chat_session.id
+        plugin_id=plugin_id,
     )
-    if data.file_ids is not None:
-        new_file_ids = fc.retrieve_new_file(data.file_ids)
-        if chat_session:
-            new_file_ids = chat_session.retrieve_new_file(data.file_ids)
-            chat_session.add_file_ids(data.file_ids)
-            chat_db.add_files_to_chat_session(uid, chat_session.id, data.file_ids)
-
-        if len(new_file_ids) > 0:
-            message.files_id = new_file_ids
-            fc.add_files(new_file_ids)
-
-    if chat_session:
-        message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
 
@@ -243,11 +223,9 @@ def send_message_v1(
         plugin_id=app_id,
         type='text',
         memories_id=memories_id,
-        chat_session_id=chat_session.id,
     )
 
     chat_db.add_message(uid, ai_message.dict())
-    chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -299,6 +277,7 @@ def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
     print('initial_message_util', app_id)
+
     # init chat session
     chat_session = acquire_chat_session(uid, plugin_id=app_id)
 

@@ -201,7 +201,7 @@ class FileChatTool:
                 callback.put_data_nowait(text)
                 output_list.append(text)
             stream.until_done()
-            callback.put_data_nowait(text=None)
+            callback.end_nowait()
 
         return ''.join(output_list)
 
