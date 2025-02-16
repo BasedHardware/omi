@@ -83,7 +83,6 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       return getDialog(context, () {
                         Navigator.of(context).pop();
                       }, () {
-                        SharedPreferencesUtil().fileIdsList = [];
                         context.read<MessageProvider>().clearChat();
                         Navigator.of(context).pop();
                       }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");

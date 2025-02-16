@@ -41,7 +41,6 @@ from utils.plugins import get_github_docs_content
 model = ChatOpenAI(model="gpt-4o-mini")
 
 
-
 class StructuredFilters(TypedDict):
     topics: List[str]
     people: List[str]
@@ -120,10 +119,17 @@ def determine_conversation(state: GraphState):
 def determine_conversation_type(
         state: GraphState,
 ) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question"]:
+    # chat with files by attachments on the last message
+    messages = state.get("messages", [])
+    if len(messages) > 0 and len(messages[-1].files_id) > 0:
+        return "file_chat_question"
+
+    # no context
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
 
+    # determine the follow up question is chatting with files or not
     is_file_question = retrieve_is_file_question(question)
     if is_file_question:
         return "file_chat_question"
@@ -315,20 +321,18 @@ def file_chat_question(state: GraphState):
             if len(last_message.files_id) > 0:
                 file_ids = last_message.files_id
             else:
-                #if user asked about file but not attach new file, will get all file in session
+                # if user asked about file but not attach new file, will get all file in session
                 file_ids = chat_session.file_ids
     else:
         file_ids = fc_tool.get_files()
 
-
     streaming = state.get("streaming")
     if streaming:
-        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback= state.get('callback'))
+        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
         return {'answer': answer, 'ask_for_nps': True}
 
-    answer = fc_tool.process_chat_with_file(uid, question ,file_ids)
+    answer = fc_tool.process_chat_with_file(uid, question,file_ids)
     return {'answer': answer, 'ask_for_nps': True}
-
 
 
 workflow = StateGraph(GraphState)
@@ -372,16 +376,15 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, chat_session: Optional[ChatSession] = None
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     result = graph.invoke(
-            {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin, "chat_session": chat_session},
+        {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
-
 
 async def execute_graph_chat_stream(
     uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
@@ -401,8 +404,6 @@ async def execute_graph_chat_stream(
             chunk = await callback.queue.get()
             if chunk:
                 yield chunk
-            if chunk is None:
-                break
             else:
                 break
         except asyncio.CancelledError:
@@ -415,42 +416,3 @@ async def execute_graph_chat_stream(
 
     yield None
     return
-
-
-def _pretty_print_conversation(messages: List[Message]):
-    for msg in messages:
-        print(f"{msg.sender}: {msg.text}")
-
-
-if __name__ == "__main__":
-    # graph.get_graph().draw_png("workflow.png")
-    uid = "viUv7GtdoHXbK1UBCDlPuTDuPgJ2"
-    # def _send_message(text: str, sender: str = 'human'):
-    #     message = Message(
-    #         id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
-    #         type='text'
-    #     )
-    #     chat_db.add_message(uid, message.dict())
-    messages = [
-        Message(
-            id=str(uuid.uuid4()),
-            text="Should I give equity to Ansh?",
-            # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
-            # text="Should I build the features myself or hire people?",
-            # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
-            created_at=datetime.datetime.now(datetime.timezone.utc),
-            sender="human",
-            type="text",
-        )
-    ]
-    result = execute_graph_chat(uid, messages)
-    print("result:", print(result[0]))
-    # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    # _pretty_print_conversation(messages)
-    # # print(messages[-1].text)
-    # # _send_message('Check again, Im pretty sure I had some')
-    # # raise Exception()
-    # start_time = time.time()
-    # result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
-    # print('result:', result.get('answer'))
-    # print('time:', time.time() - start_time)
