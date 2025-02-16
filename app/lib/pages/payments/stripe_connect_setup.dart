@@ -229,7 +229,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                   AnimatedLoadingButton(
                     text: "Connect Now",
                     loaderColor: Colors.black,
-                    onPressed: provider.stripeConnectionState == PaymentConnectionState.notConnected ||
+                    onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                             provider.selectedCountryId != null
                         ? () async {
                             MixpanelManager().track('Stripe Connect Started');
@@ -242,13 +242,13 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             }
                           }
                         : () async {},
-                    color: provider.stripeConnectionState == PaymentConnectionState.connected ||
+                    color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                             provider.selectedCountryId != null
                         ? Colors.white
                         : Colors.grey,
                     textStyle: TextStyle(
                       fontSize: 16,
-                      color: provider.stripeConnectionState == PaymentConnectionState.connected ||
+                      color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                               provider.selectedCountryId != null
                           ? Colors.black
                           : Colors.grey[600],
