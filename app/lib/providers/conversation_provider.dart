@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/backend/http/api/conversations.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/services/wals.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
 
 class ConversationProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   List<ServerConversation> conversations = [];

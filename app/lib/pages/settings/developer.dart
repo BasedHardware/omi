@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/conversations.dart';
-import 'package:friend_private/backend/schema/conversation.dart';
-import 'package:friend_private/providers/developer_mode_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/backend/http/api/conversations.dart';
+import 'package:omi_private/backend/schema/conversation.dart';
+import 'package:omi_private/providers/developer_mode_provider.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';

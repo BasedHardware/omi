@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
-import 'package:friend_private/backend/http/api/speech_profile.dart';
-import 'package:friend_private/backend/http/api/users.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/person.dart';
-import 'package:friend_private/providers/base_provider.dart';
+import 'package:omi_private/backend/http/api/speech_profile.dart';
+import 'package:omi_private/backend/http/api/users.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/person.dart';
+import 'package:omi_private/providers/base_provider.dart';
 import 'package:just_audio/just_audio.dart';
 
 class PeopleProvider extends BaseProvider {

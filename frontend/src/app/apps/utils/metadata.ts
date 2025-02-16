@@ -51,7 +51,7 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
   social: {
     title: 'Social Apps for OMI Necklace',
     description:
-      'Stay connected with OMI social apps. Experience new ways to communicate, share, and interact with friends and family through your AI-powered necklace.',
+      'Stay connected with OMI social apps. Experience new ways to communicate, share, and interact with omis and family through your AI-powered necklace.',
     keywords: [
       'social apps',
       'communication',
@@ -103,12 +103,12 @@ const productInfo = {
   description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
   price: '69.99',
   currency: 'USD',
-  url: 'https://www.omi.me/products/friend-dev-kit-2',
+  url: 'https://www.omi.me/products/omi-dev-kit-2',
 };
 
 const appStoreInfo = {
-  ios: 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163',
-  android: 'https://play.google.com/store/apps/details?id=com.friend.ios',
+  ios: 'https://apps.apple.com/us/app/omi-ai-wearable/id6502156163',
+  android: 'https://play.google.com/store/apps/details?id=com.omi.ios',
 };
 
 export function generateBreadcrumbSchema(category?: string) {

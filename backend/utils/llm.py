@@ -209,12 +209,12 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_s
     user_name, facts_str = get_prompt_facts(uid)
     if plugin is None:
         prompt = f"""
-You are 'Friend', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You are 'Friend', a omily and helpful assistant who aims to make {user_name}'s life better 10x.
 You know the following about {user_name}: {facts_str}.
 
 {prev_messages_str}
 
-Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
+Compose {"an initial" if not prev_messages_str else "a follow-up"} message to {user_name} that fully embodies your omily and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just {"start" if not prev_messages_str else "continue"} the conversation naturally, showcasing your personality.
 """
     else:
         prompt = f"""
@@ -1139,7 +1139,7 @@ def obtain_emotional_message(uid: str, memory: Memory, context: str, emotion: st
     transcript = memory.get_transcript(False)
     prompt = f"""
     You are a thoughtful and encouraging Friend.
-    Your best friend is {user_name}, {facts_str}
+    Your best omi is {user_name}, {facts_str}
 
     {user_name} just finished a conversation where {user_name} experienced {emotion}.
 

@@ -521,7 +521,7 @@ function ChatContent() {
     <div className={`fixed bottom-32 right-4 z-50 transition-all duration-500 ${showDevicePopup ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full pointer-events-none'
       }`}>
       <Link
-        href="https://www.omi.me/products/friend-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
+        href="https://www.omi.me/products/omi-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
         target="_blank"
         rel="noopener noreferrer"
         className="relative block w-[220px] h-[200px] rounded-2xl overflow-hidden shadow-2xl bg-black"

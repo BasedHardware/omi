@@ -90,7 +90,7 @@ static int nfc_create_message(void)
         return -EIO;
     }
 
-    snprintf(uri_buffer, sizeof(uri_buffer), "https://friend.based.com/pair?id=%s", device_id);
+    snprintf(uri_buffer, sizeof(uri_buffer), "https://omi.based.com/pair?id=%s", device_id);
 
     NFC_NDEF_MSG_DEF(nfc_msg, MAX_REC_COUNT);
     NFC_NDEF_URI_RECORD_DESC_DEF(uri_rec, 0, uri_buffer, strlen(uri_buffer));

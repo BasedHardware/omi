@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from db import get_zapier_user_status, store_zapier_user_status, store_zapier_subscribes, get_zapier_subscribes, \
     remove_zapier_subscribes
 from models import Memory, WorkflowCreateMemory, EndpointResponse
-from .client import get_zapier, get_friend
+from .client import get_zapier, get_omi
 from .models import ZapierSubcribeModel, ZapierCreateMemory, ZapierActionCreateMemory
 
 router = APIRouter()
@@ -137,7 +137,7 @@ async def get_trigger_memory_sample(request: Request, uid: str):
     )
 
     # Get latest from Omi
-    ok = get_friend().get_latest_memory(uid)
+    ok = get_omi().get_latest_memory(uid)
     print(ok)
     if "error" in ok:
         err = ok["error"]
@@ -229,7 +229,7 @@ def zapier_action_memories(create_memory: ZapierActionCreateMemory, uid: str):
         geolocation=create_memory.geolocation,
     )
 
-    ok = get_friend().create_memory(memory, uid)
+    ok = get_omi().create_memory(memory, uid)
     print(ok)
     if "error" in ok:
         err = ok["error"]

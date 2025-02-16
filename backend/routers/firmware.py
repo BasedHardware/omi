@@ -113,7 +113,7 @@ async def get_latest_version_v1(device: int):
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch latest release")
         releases = response.json()
         latest_release = None
-        device_type = "friend" if device == 1 else "openglass"
+        device_type = "omi" if device == 1 else "openglass"
         for release in releases:
             if (
                 release.get("published_at")

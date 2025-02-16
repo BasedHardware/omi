@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/providers/calendar_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/extensions/functions.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/providers/calendar_provider.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 
 class CalendarPage extends StatefulWidget {

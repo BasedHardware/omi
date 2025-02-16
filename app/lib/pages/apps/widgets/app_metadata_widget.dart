@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/gen/assets.gen.dart';
+import 'package:omi_private/pages/apps/providers/add_app_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 

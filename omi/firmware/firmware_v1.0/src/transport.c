@@ -20,7 +20,7 @@
 #include "button.h"
 #include "mic.h"
 #include "lib/battery/battery.h"
-// #include "friend.h"
+// #include "omi.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_STORAGE_BYTES 0xFFFF0000
@@ -838,7 +838,7 @@ int transport_start()
         LOG_INF("Battery initialized");
     }
 
-    // friend_init();
+    // omi_init();
 
     // Start pusher
     ring_buf_init(&ring_buf, sizeof(tx_queue), tx_queue);

@@ -1,14 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/providers/message_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/gen/assets.gen.dart';
+import 'package:omi_private/providers/app_provider.dart';
+import 'package:omi_private/providers/home_provider.dart';
+import 'package:omi_private/providers/message_provider.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class ChatAppsDropdownWidget extends StatelessWidget {

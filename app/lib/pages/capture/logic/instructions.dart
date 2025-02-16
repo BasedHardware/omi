@@ -1,7 +1,7 @@
 // Map<int, int> processedSegments = {};
 // _doProcessingOfInstructions() async {
 //   for (var element in segments) {
-//     var hotWords = ['hey friend', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
+//     var hotWords = ['hey omi', 'hey frend', 'hey fren', 'hey bren', 'hey frank'];
 //     for (var option in hotWords) {
 //       if (element.text.toLowerCase().contains(option)) {
 //         debugPrint('Hey Friend detected');

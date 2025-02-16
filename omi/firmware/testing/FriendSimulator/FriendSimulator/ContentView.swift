@@ -39,13 +39,13 @@ struct ContentView: View {
     }
     
     func setupAudio() {
-        let friendFormat = AVAudioFormat.init(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
+        let omiFormat = AVAudioFormat.init(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
 
         let input = audioEngine.inputNode
         let bus = 0
         let inputFormat = input.inputFormat(forBus: bus)
         
-        let formatConverter =  AVAudioConverter(from:inputFormat, to: friendFormat!)
+        let formatConverter =  AVAudioConverter(from:inputFormat, to: omiFormat!)
         
         input.installTap(onBus: bus, bufferSize: 160, format: inputFormat) { (buffer, time) in
             // Note: implementation may choose other size that requested (and in fact it does) -> need to split later before sending over BLE
@@ -55,8 +55,8 @@ struct ContentView: View {
             }
             
             if let formatConverter {
-                let ratio = friendFormat!.sampleRate / buffer.format.sampleRate
-                let pcmBuffer = AVAudioPCMBuffer(pcmFormat: friendFormat!, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * ratio))
+                let ratio = omiFormat!.sampleRate / buffer.format.sampleRate
+                let pcmBuffer = AVAudioPCMBuffer(pcmFormat: omiFormat!, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * ratio))
                 var error: NSError? = nil
                 
                 let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in

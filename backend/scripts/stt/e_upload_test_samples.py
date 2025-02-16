@@ -27,4 +27,4 @@ if __name__ == '__main__':
 # "Pack my box with five dozen liquor jugs."
 # "The five boxing wizards jump quickly and quietly."
 # "Bright blue birds fly above the green grassy hills."
-# "Fred’s friends fried Fritos for Friday's food festival."
+# "Fred’s omis fried Fritos for Friday's food festival."

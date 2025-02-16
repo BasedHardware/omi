@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/pages/capture/widgets/widgets.dart';
-import 'package:friend_private/providers/capture_provider.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/device_provider.dart';
-import 'package:friend_private/providers/onboarding_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/pages/capture/widgets/widgets.dart';
+import 'package:omi_private/providers/capture_provider.dart';
+import 'package:omi_private/providers/connectivity_provider.dart';
+import 'package:omi_private/providers/device_provider.dart';
+import 'package:omi_private/providers/onboarding_provider.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/utils/audio/wav_bytes.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 class LiteCaptureWidget extends StatefulWidget {
