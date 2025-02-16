@@ -314,6 +314,26 @@ def get_plugin_capabilities():
     ]
 
 
+@router.get('/v2/app-capabilities', tags=['v2'])
+def get_plugin_capabilities():
+    return [
+        {'title': 'Chat', 'id': 'chat'},
+        {'title': 'Memories', 'id': 'memories'},
+        {'title': 'Persona', 'id': 'persona'},
+        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
+            {'title': 'Audio Bytes', 'id': 'audio_bytes'},
+            {'title': 'Memory Creation', 'id': 'memory_creation'},
+            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
+        ]},
+        {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
+            {'title': 'User Name', 'id': 'user_name'},
+            {'title': 'User Facts', 'id': 'user_facts'},
+            {'title': 'User Memories', 'id': 'user_context'},
+            {'title': 'User Chat', 'id': 'user_chat'}
+        ]}
+    ]
+
+
 # @deprecated
 @router.get('/v1/app/payment-plans', tags=['v1'])
 def get_payment_plans_v1():

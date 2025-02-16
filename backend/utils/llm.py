@@ -2,9 +2,10 @@ import json
 import re
 import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator
 
 import tiktoken
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompt_values import StringPromptValue
@@ -1181,6 +1182,7 @@ class Facts(BaseModel):
     )
 
 
+
 def new_facts_extractor(
         uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, facts_str: Optional[str] = None
 ) -> List[Fact]:
@@ -2039,3 +2041,50 @@ Conversations:
     """
     response = llm_medium.invoke(prompt)
     return response.content
+
+
+async def execute_persona_chat_stream(
+        uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
+        callback_data: dict = None, chat_session: Optional[str] = None
+) -> AsyncGenerator[str, None]:
+    """Handle streaming chat responses for persona-type apps"""
+
+    system_prompt = app.persona_prompt
+    formatted_messages = [SystemMessage(content=system_prompt)]
+
+    for msg in messages:
+        if msg.sender == "ai":
+            formatted_messages.append(AIMessage(content=msg.text))
+        else:
+            formatted_messages.append(HumanMessage(content=msg.text))
+
+    full_response = []
+
+    async def stream_tokens():
+
+        def get_tokens():
+            for token in llm_medium_stream.stream(formatted_messages):
+                yield token.content
+
+        for token in get_tokens():
+            yield token
+
+    try:
+        async for token in stream_tokens():
+            full_response.append(token)
+            yield f"data: {token}\n\n"
+
+        if callback_data is not None:
+            callback_data['answer'] = ''.join(full_response)
+            callback_data['memories_found'] = []
+            callback_data['ask_for_nps'] = False
+
+        yield None
+        return
+
+    except Exception as e:
+        print(f"Error in execute_persona_chat_stream: {e}")
+        if callback_data is not None:
+            callback_data['error'] = str(e)
+        yield None
+        return

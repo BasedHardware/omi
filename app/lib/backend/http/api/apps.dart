@@ -270,7 +270,7 @@ Future<List<Category>> getAppCategories() async {
 
 Future<List<AppCapability>> getAppCapabilitiesServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/app-capabilities',
+    url: '${Env.apiBaseUrl}v2/app-capabilities',
     headers: {},
     body: '',
     method: 'GET',

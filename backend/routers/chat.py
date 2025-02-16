@@ -19,8 +19,7 @@ from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
 from utils.apps import get_available_app_by_id
 from utils.chat import process_voice_message_segment, process_voice_message_segment_stream
-from utils.llm import initial_chat_message
-from utils.openrouter import execute_persona_chat_stream
+from utils.llm import initial_chat_message, execute_persona_chat_stream
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
@@ -137,9 +136,7 @@ def send_message(
     async def generate_stream():
         callback_data = {}
         stream_function = execute_persona_chat_stream if app and app.is_a_persona() else execute_graph_chat_stream
-        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data,
-                                           chat_session=chat_session):
-            # async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
+        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
                 yield f'{msg}\n\n'
@@ -196,8 +193,7 @@ def send_message_v1(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
 
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True,
-                                                         chat_session=chat_session)  # plugin
+    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app, cited=True)  # plugin
 
     # cited extraction
     cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
