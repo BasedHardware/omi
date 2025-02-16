@@ -206,15 +206,6 @@ class SharedPreferencesUtil {
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
 
-  List<String> get fileIdsList {
-    final List<String> fileIds = getStringList('fileIdsList') ?? [];
-    return fileIds;
-  }
-
-  set fileIdsList(List<String> fileIds) {
-    saveStringList('fileIdsList', fileIds);
-  }
-
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories') ?? false) {
       if (getStringList('cachedMemories') != null || getStringList('cachedMemories')!.isNotEmpty) {
