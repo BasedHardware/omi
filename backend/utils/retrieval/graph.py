@@ -82,6 +82,9 @@ class AsyncStreamingCallback(BaseCallbackHandler):
     def put_data_nowait(self, text):
         self.queue.put_nowait(f"data: {text}")
 
+    def end_nowait(self):
+        self.queue.put_nowait(None)
+
 
 class GraphState(TypedDict):
     uid: str
