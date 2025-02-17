@@ -56,8 +56,6 @@ if is_dg_self_hosted:
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
-else:
-    print("Using Deepgram Cloud API")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
