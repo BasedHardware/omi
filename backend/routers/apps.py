@@ -80,6 +80,14 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['image'] = imgUrl
     data['created_at'] = datetime.now(timezone.utc)
 
+    # Backward compatibility: Set app_home_url from first auth step if not provided
+    if 'external_integration' in data:
+        ext_int = data['external_integration']
+        if (not ext_int.get('app_home_url') and 
+            ext_int.get('auth_steps') and 
+            len(ext_int['auth_steps']) == 1):
+            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+
     add_app_to_db(data)
 
     # payment link
@@ -107,6 +115,15 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
         img_url = upload_plugin_logo(file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
+
+    # Backward compatibility: Set app_home_url from first auth step if not provided
+    if 'external_integration' in data:
+        ext_int = data['external_integration']
+        if (not ext_int.get('app_home_url') and 
+            ext_int.get('auth_steps') and 
+            len(ext_int['auth_steps']) == 1):
+            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+
     # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)
 

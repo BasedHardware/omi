@@ -391,14 +391,13 @@ class _AddAppPageState extends State<AddAppPage> {
                                 },
                                 shape: const CircleBorder(),
                               ),
-                              SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.7,
-                                child: const Text("Make my app public"),
+                              const Expanded(
+                                child: Text("Make my app public"),
                               ),
                             ],
                           ),
                           const SizedBox(
-                            height: 30,
+                            height: 8,
                           ),
                           Row(
                             children: [
@@ -407,15 +406,14 @@ class _AddAppPageState extends State<AddAppPage> {
                                 onChanged: provider.setTermsAgreed,
                                 shape: const CircleBorder(),
                               ),
-                              SizedBox(
-                                width: MediaQuery.of(context).size.width * 0.78,
-                                child: const Text(
+                              const Expanded(
+                                child: Text(
                                     "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy"),
                               ),
                             ],
                           ),
                           const SizedBox(
-                            height: 90,
+                            height: 106,
                           ),
                         ],
                       ),
