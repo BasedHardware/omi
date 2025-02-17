@@ -45,8 +45,21 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
     print('send_initial_file', time.time() - start)
 
 
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'),
-                          DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"}))
+# Initialize Deepgram client based on environment configuration
+is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
+deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+
+if is_dg_self_hosted:
+    dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
+    if not dg_self_hosted_url:
+        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
+    # Override only the URL while keeping all other options
+    deepgram_options.url = dg_self_hosted_url
+    print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
+else:
+    print("Using Deepgram Cloud API")
+
+deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
 
 async def process_audio_dg(
