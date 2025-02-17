@@ -184,7 +184,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
           ],
           if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
             GestureDetector(
-              child: const Icon(Icons.open_in_browser),
+              child: const Icon(
+                Icons.open_in_browser_rounded,
+                color: Colors.white,
+              ),
               onTap: () {
                 Navigator.push(
                   context,
@@ -875,6 +878,20 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       prefs.enableApp(appId);
       MixpanelManager().appEnabled(appId);
+
+      // Automatically open app home page after installation if available
+      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AppHomeWebPage(app: app),
+              ),
+            );
+          }
+        });
+      }
     } else {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);
