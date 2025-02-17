@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/preferences.dart';
 
 class AppHomeWebPage extends StatefulWidget {
@@ -79,71 +78,70 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
     return Scaffold(
       backgroundColor: Colors.black,
       body: SlideTransition(
-        position: _slideAnimation,
-        child: SafeArea(
-        child: Stack(
-          children: [
-            // Main content with top padding and rounded corners
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+          position: _slideAnimation,
+          child: SafeArea(
+            child: Stack(
+              children: [
+                // Main content with top padding and rounded corners
+                Padding(
+                  padding: const EdgeInsets.only(top: 16, bottom: 48),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    child: WebViewWidget(controller: _controller),
+                  ),
                 ),
-                child: WebViewWidget(controller: _controller),
-              ),
-            ),
-            if (_isLoading)
-              Container(
-                color: Colors.black,
-                child: const Center(
-                  child: ShimmerLoading(
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: double.infinity,
+                if (_isLoading)
+                  Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _animationController.reverse().then((_) {
+                        Navigator.of(context).pop();
+                      });
+                    },
+                    child: Container(
+                      height: 48,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.max,
+                        children: [
+                          const Icon(
+                            Icons.keyboard_double_arrow_down,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          Text(
+                            "${widget.app.name}'s App Details",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: GestureDetector(
-                onTap: () {
-                  _animationController.reverse().then((_) {
-                    Navigator.of(context).pop();
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.keyboard_double_arrow_down,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                      Text(
-                        "${widget.app.name}'s App Details",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
-      )),
+          )),
     );
   }
 
@@ -151,23 +149,5 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
   void dispose() {
     _animationController.dispose();
     super.dispose();
-  }
-}
-
-class ShimmerLoading extends StatelessWidget {
-  final Widget child;
-
-  const ShimmerLoading({
-    Key? key,
-    required this.child,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[900]!,
-      highlightColor: Colors.grey[800]!,
-      child: child,
-    );
   }
 }
