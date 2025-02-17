@@ -90,6 +90,10 @@ workflows:
           # TODO: check why we need this ?
           echo "$GOOGLE_INFO_PLIST_KEY" > "$(pwd)/ios/Runner/GoogleService-Info.plist"
 
+      - name: Generate iOS Custom Config (Custom.xcconfig)
+        script: |
+          sh scripts/generate_ios_custom_config.sh ios/Config/Prod/GoogleService-Info.plist ios/Flutter/
+
       - name: Get Flutter packages
         script: |
           flutter pub get

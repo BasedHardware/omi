@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:friend_private/backend/http/api/users.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/facts/page.dart';
+import 'package:friend_private/pages/payments/payments_page.dart';
 import 'package:friend_private/pages/settings/change_name_widget.dart';
 import 'package:friend_private/pages/settings/people.dart';
 import 'package:friend_private/pages/settings/privacy.dart';
@@ -11,7 +11,6 @@ import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 
 import 'delete_account.dart';
-import 'recordings_storage_permission.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -103,9 +102,26 @@ class _ProfilePageState extends State<ProfilePage> {
                 ).whenComplete(() => setState(() {}));
               },
             ),
-            const SizedBox(height: 24),
-            // Divider(color: Colors.grey.shade300, height: 1),
-            const SizedBox(height: 32),
+            const SizedBox(height: 56),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'CREATORS',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.start,
+              ),
+            ),
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(0, 0, 24, 0),
+              title: const Text('Payments', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Add or change your payment method'),
+              trailing: const Icon(Icons.attach_money_outlined, size: 20),
+              onTap: () {
+                routeToPage(context, const PaymentsPage());
+                // MixpanelManager().pageOpened('Profile Connect Stripe');
+              },
+            ),
+            const SizedBox(height: 56),
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(

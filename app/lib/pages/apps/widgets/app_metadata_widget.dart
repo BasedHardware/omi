@@ -405,7 +405,7 @@ class AppMetadataWidget extends StatelessWidget {
                                     await context.read<AddAppProvider>().generateDescription();
                                   },
                                   child: SvgPicture.asset(
-                                    Assets.images.aiMagic,
+                                    Assets.images.aiMagic.path,
                                     color: Colors.white,
                                   ),
                                 ),

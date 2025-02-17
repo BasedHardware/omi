@@ -14,6 +14,7 @@ from database.redis_db import get_enabled_plugins, get_plugin_reviews, get_gener
     set_app_money_made_cache, get_plugins_installs_count, get_plugins_reviews, get_app_cache_by_id, set_app_cache_by_id, \
     set_app_review_cache, get_app_usage_count_cache, set_app_money_made_amount_cache, get_app_money_made_amount_cache, \
     set_app_usage_count_cache, set_user_paid_app, get_user_paid_app
+from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils import stripe
 
@@ -275,7 +276,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     return money
 
 
-def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str,
+def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str,
                             previous_price: float | None = None):
     if not is_paid_app:
         print(f"App is not a paid app, app_id: {app_id}")
@@ -302,6 +303,8 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
 
     # create recurring payment link
     if payment_plan == 'monthly_recurring':
+        stripe_acc_id = get_stripe_connect_account_id(uid)
+
         # product
         if not app.payment_product_id:
             payment_product = stripe.create_product(f"{app.name} Monthly Plan", app.description, app.image)
@@ -312,7 +315,7 @@ def upsert_app_payment_link(app_id: str, is_paid_app: bool, price: float, paymen
         app.payment_price_id = payment_price.id
 
         # payment link
-        payment_link = stripe.create_app_payment_link(app.payment_price_id, app.id)
+        payment_link = stripe.create_app_payment_link(app.payment_price_id, app.id, stripe_acc_id)
         app.payment_link_id = payment_link.id
         app.payment_link = payment_link.url
 
