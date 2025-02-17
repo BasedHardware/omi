@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/utils/other/validators.dart';
 import 'package:provider/provider.dart';
+import 'package:friend_private/widgets/collapsible_section.dart';
 
 class ExternalTriggerFieldsWidget extends StatelessWidget {
   const ExternalTriggerFieldsWidget({super.key});
@@ -159,33 +160,6 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
                       child: Text(
-                        'Auth URL (if required)',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      width: double.infinity,
-                      child: TextFormField(
-                        controller: provider.authUrlController,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          hintText: 'https://your-auth-url.com/',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 16,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
                         'Webhook URL',
                         style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                       ),
@@ -215,92 +189,57 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(
-                      height: 16,
+                      height: 8,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
-                        'Setup Completed URL (optional)',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      width: double.infinity,
-                      child: TextFormField(
-                        validator: (value) {
-                          if (value != null) {
-                            if (value.isNotEmpty && !isValidUrl(value)) {
-                              return 'Please enter a valid URL';
-                            }
-                          }
-
-                          return null;
-                        },
-                        controller: provider.setupCompletedController,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          hintText: 'https://your-setup-completed-url.com/',
+                    Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            'App Home URL (optional)',
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 16,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
-                        'Setup Instructions',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(10.0),
-                      ),
-                      width: double.infinity,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: MediaQuery.sizeOf(context).height * 0.1,
-                          maxHeight: MediaQuery.sizeOf(context).height * 0.4,
-                        ),
-                        child: Scrollbar(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.vertical,
-                            reverse: false,
-                            child: TextFormField(
-                              controller: provider.instructionsController,
-                              maxLines: null,
-                              decoration: const InputDecoration(
-                                contentPadding: EdgeInsets.only(top: 6, bottom: 2),
-                                isDense: true,
-                                border: InputBorder.none,
-                                hintText: 'Link or text instructions for app setup',
-                                hintMaxLines: 4,
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: IconButton(
+                              alignment: Alignment.centerRight,
+                              icon: const Icon(
+                                Icons.info_outline,
+                                color: Colors.white60,
+                                size: 20,
                               ),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    backgroundColor: Colors.grey.shade900,
+                                    title: Text(
+                                      'App Home URL',
+                                      style: TextStyle(color: Colors.grey.shade100),
+                                    ),
+                                    content: Text(
+                                      'Omi opens this URL instantly when users launch your app after installation, perfect for authentication or setup instructions.',
+                                      style: TextStyle(color: Colors.grey.shade300),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: Text(
+                                          'OK',
+                                          style: TextStyle(color: Colors.grey.shade100),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 16,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
-                        'App Home URL (optional)',
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                      ),
+                      ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
@@ -324,6 +263,122 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                           hintText: 'https://your-app-home.com/',
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    CollapsibleSection(
+                      title: Container(
+                        padding: const EdgeInsets.only(left: 8, top: 12, bottom: 12),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Advanced',
+                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                      children: [
+                        const SizedBox(
+                          height: 16,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            'Setup Instructions',
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                          margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade800,
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          width: double.infinity,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: MediaQuery.sizeOf(context).height * 0.1,
+                              maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+                            ),
+                            child: Scrollbar(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.vertical,
+                                reverse: false,
+                                child: TextFormField(
+                                  controller: provider.instructionsController,
+                                  maxLines: null,
+                                  decoration: const InputDecoration(
+                                    contentPadding: EdgeInsets.only(top: 6, bottom: 2),
+                                    isDense: true,
+                                    border: InputBorder.none,
+                                    hintText: 'Link or text instructions for app setup',
+                                    hintMaxLines: 4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            'Auth URL (if required)',
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                          margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade800,
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          width: double.infinity,
+                          child: TextFormField(
+                            controller: provider.authUrlController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: 'https://your-auth-url.com/',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            'Setup Completed URL (optional)',
+                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                          margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade800,
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          width: double.infinity,
+                          child: TextFormField(
+                            validator: (value) {
+                              if (value != null) {
+                                if (value.isNotEmpty && !isValidUrl(value)) {
+                                  return 'Please enter a valid URL';
+                                }
+                              }
+                              return null;
+                            },
+                            controller: provider.setupCompletedController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: 'https://your-setup-completed-url.com/',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
