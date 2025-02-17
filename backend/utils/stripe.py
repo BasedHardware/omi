@@ -84,7 +84,7 @@ def create_connect_account(uid: str, country: str):
             },
         },
         country=country,
-        tos_acceptance={"service_agreement": "recipient"},
+        tos_acceptance={"service_agreement": "full" if country == "US" else "recipient"},
         capabilities={"transfers": {"requested": True}},
         metadata={
             "uid": uid,
