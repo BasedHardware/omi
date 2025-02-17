@@ -2,6 +2,7 @@ import 'package:friend_private/backend/http/api/facts.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/fact.dart';
 import 'package:friend_private/providers/base_provider.dart';
+import 'package:friend_private/widgets/extensions/string.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,12 +11,30 @@ class FactsProvider extends BaseProvider {
   List<Fact> filteredFacts = [];
   List<Tuple2<FactCategory, int>> categories = [];
   FactCategory? selectedCategory;
+  String searchQuery = '';
+
+  List<Fact> get unreviewed => facts.where((f) => !f.reviewed).toList();
 
   void setCategory(FactCategory? category) {
     selectedCategory = category;
-    filteredFacts = category == null ? facts : facts.where((fact) => fact.category == category).toList();
-    filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _filterFacts();
     notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    searchQuery = query.toLowerCase();
+    _filterFacts();
+    notifyListeners();
+  }
+
+  void _filterFacts() {
+    if (searchQuery.isNotEmpty) {
+      filteredFacts = facts.where((fact) => fact.content.decodeString.toLowerCase().contains(searchQuery)).toList();
+    } else {
+      filteredFacts =
+          selectedCategory == null ? facts : facts.where((fact) => fact.category == selectedCategory).toList();
+    }
+    filteredFacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void _setCategories() {
@@ -23,12 +42,12 @@ class FactsProvider extends BaseProvider {
       final count = facts.where((fact) => fact.category == category).length;
       return Tuple2(category, count);
     }).toList();
-    setCategory(selectedCategory); // refresh
+    _filterFacts();
     notifyListeners();
   }
 
-  void init() async {
-    loadFacts();
+  Future<void> init() async {
+    await loadFacts();
   }
 
   Future loadFacts() async {
@@ -38,20 +57,6 @@ class FactsProvider extends BaseProvider {
     loading = false;
     _setCategories();
   }
-
-  // void reviewFactProvider(int idx, bool value) async {
-  //   var fact = facts[idx];
-  //   reviewFact(fact.id, value);
-  //   fact.reviewed = true;
-  //   fact.userReview = value;
-  //   if (!value) {
-  //     facts.removeAt(idx);
-  //   } else {
-  //     facts[idx] = fact;
-  //   }
-  //   _setCategories();
-  //   notifyListeners();
-  // }
 
   void deleteFactProvider(Fact fact) async {
     deleteFact(fact.id);
@@ -69,6 +74,12 @@ class FactsProvider extends BaseProvider {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       manuallyAdded: true,
+      edited: false,
+      reviewed: false,
+      userReview: null,
+      conversationId: null,
+      conversationCategory: null,
+      deleted: false,
     ));
     _setCategories();
   }
@@ -82,5 +93,22 @@ class FactsProvider extends BaseProvider {
     fact.edited = true;
     facts[idx] = fact;
     _setCategories();
+  }
+
+  void reviewFact(Fact fact, bool approved) async {
+    var idx = facts.indexWhere((f) => f.id == fact.id);
+    if (idx != -1) {
+      fact.reviewed = true;
+      fact.userReview = approved;
+      if (!approved) {
+        fact.deleted = true;
+        facts.removeAt(idx);
+        deleteFactProvider(fact);
+      } else {
+        facts[idx] = fact;
+      }
+      _setCategories();
+      notifyListeners();
+    }
   }
 }
