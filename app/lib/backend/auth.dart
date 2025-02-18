@@ -108,19 +108,29 @@ Future<UserCredential?> signInWithApple() async {
 
 Future<UserCredential?> signInWithGoogle() async {
   try {
-    print('Signing in with Google');
+    debugPrint('Signing in with Google');
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
-    print('Google User: $googleUser');
+    debugPrint('Google User: $googleUser');
+
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    print('Google Auth: $googleAuth');
+    debugPrint('Google Auth: $googleAuth');
+    if (googleAuth == null) {
+      debugPrint('Failed to sign in with Google: googleAuth is NULL');
+      Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
+      return null;
+    }
 
     // Create a new credential
-    // TODO: store email + name, need to?
+    if (googleAuth.accessToken == null && googleAuth.idToken == null) {
+      debugPrint('Failed to sign in with Google: accessToken, idToken are NULL');
+      Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
+      return null;
+    }
     final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth?.accessToken,
-      idToken: googleAuth?.idToken,
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
     );
 
     // Once signed in, return the UserCredential

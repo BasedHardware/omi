@@ -20,6 +20,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
+  bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   int connectionCheckSeconds = 4;
 
@@ -102,6 +103,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
+        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
+          _hasLowBatteryAlerted = true;
+          NotificationService.instance.createNotification(
+            title: "Low Battery Alert",
+            body: "Your device is running low on battery. Time for a recharge! 🔋",
+          );
+        } else if (batteryLevel > 20) {
+          _hasLowBatteryAlerted = true;
+        }
         notifyListeners();
       },
     );
@@ -246,6 +256,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsDeviceV2Connected();
     setIsConnected(true);
     await initiateBleBatteryListener();
+    if (batteryLevel != -1 && batteryLevel < 20) {
+      _hasLowBatteryAlerted = false;
+    }
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: device);
 
