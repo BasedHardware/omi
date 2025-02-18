@@ -25,10 +25,8 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController appDescriptionController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
   TextEditingController conversationPromptController = TextEditingController();
-  TextEditingController usernameController = TextEditingController();
+
   String? appCategory;
-  bool isUsernameTaken = false;
-  bool isCheckingUsername = false;
 
 // Trigger Event
   String? triggerEvent;
@@ -154,9 +152,6 @@ class AddAppProvider extends ChangeNotifier {
       selectedScopes = app.getNotificationScopesFromIds(
           capabilities.firstWhere((element) => element.id == 'proactive_notification').notificationScopes);
     }
-    if (app.username != null) {
-      usernameController.text = app.username!;
-    }
 
     // Set existing thumbnails
     thumbnailUrls = app.thumbnailUrls;
@@ -244,12 +239,6 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future checkIsUsernameTaken(String username) async {
-    setIsCheckingUsername(true);
-    isUsernameTaken = await checkPersonaUsername(username);
-    setIsCheckingUsername(false);
-  }
-
   bool hasDataChanged(App app, String category) {
     if (imageFile != null) {
       return true;
@@ -322,9 +311,6 @@ class AddAppProvider extends ChangeNotifier {
           }
           if (capability.id == 'proactive_notification') {
             isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
-          }
-          if (capability.id == 'persona') {
-            isValid = usernameController.text.isNotEmpty && !isUsernameTaken;
           }
         }
         if (isPaid) {
@@ -410,16 +396,6 @@ class AddAppProvider extends ChangeNotifier {
             return false;
           }
         }
-        if (capability.id == 'persona') {
-          if (usernameController.text.isEmpty) {
-            AppSnackbar.showSnackbarError('Please enter a username for your persona app');
-            return false;
-          }
-          if (isUsernameTaken) {
-            AppSnackbar.showSnackbarError('Username is already taken. Please choose another username');
-            return false;
-          }
-        }
       }
       if (appCategory == null) {
         AppSnackbar.showSnackbarError('Please select a category for your app');
@@ -479,9 +455,6 @@ class AddAppProvider extends ChangeNotifier {
         }
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
-      if (capability.id == 'persona') {
-        data['username'] = usernameController.text;
-      }
     }
     var success = false;
     var res = await updateAppServer(imageFile, data);
@@ -516,7 +489,6 @@ class AddAppProvider extends ChangeNotifier {
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
       'thumbnails': thumbnailIds,
-      'username': usernameController.text.trim(),
     };
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
@@ -747,10 +719,5 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
-  }
-
-  void setIsCheckingUsername(bool checking) {
-    isCheckingUsername = checking;
-    notifyListeners();
   }
 }

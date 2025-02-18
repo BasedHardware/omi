@@ -270,7 +270,7 @@ Future<List<Category>> getAppCategories() async {
 
 Future<List<AppCapability>> getAppCapabilitiesServer() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/app-capabilities',
+    url: '${Env.apiBaseUrl}v1/app-capabilities',
     headers: {},
     body: '',
     method: 'GET',
@@ -418,7 +418,7 @@ Future<String> getGenratedDescription(String name, String description) async {
 Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async {
   var request = http.MultipartRequest(
     'POST',
-    Uri.parse('${Env.apiBaseUrl}v1/persona'),
+    Uri.parse('${Env.apiBaseUrl}v1/personas'),
   );
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
@@ -441,6 +441,34 @@ Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async
     }
   } catch (e) {
     debugPrint('An error occurred createPersonaApp: $e');
+    return false;
+  }
+}
+
+Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'PATCH',
+    Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),
+  );
+  if (file != null) {
+    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  debugPrint(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('updatePersonaApp Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('An error occurred updatePersonaApp: $e');
     return false;
   }
 }

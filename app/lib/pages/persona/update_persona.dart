@@ -1,142 +1,30 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:friend_private/utils/text_formatter.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
-class AddPersonaPage extends StatefulWidget {
-  const AddPersonaPage({super.key});
+class UpdatePersonaPage extends StatefulWidget {
+  final App app;
+  const UpdatePersonaPage({super.key, required this.app});
 
   @override
-  State<AddPersonaPage> createState() => _AddPersonaPageState();
+  State<UpdatePersonaPage> createState() => _UpdatePersonaPageState();
 }
 
-class _AddPersonaPageState extends State<AddPersonaPage> {
+class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
-
-  void _showSuccessDialog(String url) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.grey[900],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Your Omi Persona is live!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Share it with anyone who\nneeds to hear back from you',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: "https://$url"));
-                    AppSnackbar.showSnackbarSuccess('Persona link copied to clipboard');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.link,
-                          color: Colors.grey,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          url,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.read<AppProvider>().getApps();
-                    context.read<PersonaProvider>().resetForm();
-                    Navigator.of(context).pop();
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Done',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   @override
   void initState() {
-    super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<PersonaProvider>(context, listen: false);
-      provider.onShowSuccessDialog = _showSuccessDialog;
+      context.read<PersonaProvider>().prepareUpdatePersona(widget.app);
     });
+    super.initState();
   }
 
   @override
@@ -176,19 +64,29 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                           borderRadius: BorderRadius.circular(60),
                           border: Border.all(color: Colors.grey.shade800),
                         ),
-                        child: provider.selectedImage != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(60),
-                                child: Image.file(
-                                  provider.selectedImage!,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Icon(
-                                Icons.add_a_photo,
-                                size: 40,
-                                color: Colors.grey.shade400,
-                              ),
+                        // child: provider.selectedImage != null
+                        //     ? ClipRRect(
+                        //         borderRadius: BorderRadius.circular(60),
+                        //         child: Image.file(
+                        //           provider.selectedImage!,
+                        //           fit: BoxFit.cover,
+                        //         ),
+                        //       )
+                        //     : Icon(
+                        //         Icons.add_a_photo,
+                        //         size: 40,
+                        //         color: Colors.grey.shade400,
+                        //       ),
+                        child: provider.selectedImage != null || provider.selectedImageUrl != null
+                            ? (provider.selectedImageUrl == null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(60),
+                                    child: Image.file(provider.selectedImage!, fit: BoxFit.cover))
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(60),
+                                    child: CachedNetworkImage(imageUrl: provider.selectedImageUrl!),
+                                  ))
+                            : const Icon(Icons.add_a_photo, color: Colors.grey, size: 32),
                       ),
                     ),
                   ),
