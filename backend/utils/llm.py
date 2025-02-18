@@ -1972,17 +1972,17 @@ You are an AI tasked with condensing a detailed profile of hundreds facts about 
 
 **Requirements:**  
 1. Prioritize facts based on:  
-   - Relevance to the user’s core identity, personality, and communication style.  
+   - Relevance to the user's core identity, personality, and communication style.  
    - Frequency of occurrence or mention in conversations.  
    - Impact on decision-making processes and behavioral patterns.  
 2. Group related facts to eliminate redundancy while preserving context.  
 3. Preserve nuances in communication style, humor, tone, and preferences.  
 4. Retain facts essential for continuity in ongoing projects, interests, and relationships.  
 5. Discard trivial details, repetitive information, and rarely mentioned facts.  
-6. Maintain consistency in the user’s thought processes, conversational flow, and emotional responses.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
 
 **Output Format (No Extra Text):**  
-- **Core Identity and Personality:** Brief overview encapsulating the user’s personality, values, and communication style.  
+- **Core Identity and Personality:** Brief overview encapsulating the user's personality, values, and communication style.  
 - **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.  
 - **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.  
 - **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.  
@@ -1996,8 +1996,10 @@ Facts:
     return response.content
 
 
-def generate_persona_description(facts):
+def generate_persona_description(facts, name):
     prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
+    
+    They chose to be known as {name}.
 
 Facts:
 {facts}
@@ -2043,48 +2045,3 @@ Conversations:
     return response.content
 
 
-async def execute_persona_chat_stream(
-        uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
-        callback_data: dict = None, chat_session: Optional[str] = None
-) -> AsyncGenerator[str, None]:
-    """Handle streaming chat responses for persona-type apps"""
-
-    system_prompt = app.persona_prompt
-    formatted_messages = [SystemMessage(content=system_prompt)]
-
-    for msg in messages:
-        if msg.sender == "ai":
-            formatted_messages.append(AIMessage(content=msg.text))
-        else:
-            formatted_messages.append(HumanMessage(content=msg.text))
-
-    full_response = []
-
-    async def stream_tokens():
-
-        def get_tokens():
-            for token in llm_medium_stream.stream(formatted_messages):
-                yield token.content
-
-        for token in get_tokens():
-            yield token
-
-    try:
-        async for token in stream_tokens():
-            full_response.append(token)
-            yield f"data: {token}\n\n"
-
-        if callback_data is not None:
-            callback_data['answer'] = ''.join(full_response)
-            callback_data['memories_found'] = []
-            callback_data['ask_for_nps'] = False
-
-        yield None
-        return
-
-    except Exception as e:
-        print(f"Error in execute_persona_chat_stream: {e}")
-        if callback_data is not None:
-            callback_data['error'] = str(e)
-        yield None
-        return
