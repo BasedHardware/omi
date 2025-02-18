@@ -1919,3 +1919,83 @@ def generate_description(app_name: str, description: str) -> str:
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+def _get_qa_rag_prompt_with_twitter(uid: str, question: str, context: str, twitter_context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                       messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+
+    user_name, facts_str = get_prompt_facts(uid)
+    plugin_info = ""
+    if plugin:
+        plugin_info = f"""
+        <plugin_instructions>
+        Your name is: {plugin.name}
+        Your personality/description is: {plugin.description}
+        Make sure to reflect your personality in your response.
+        </plugin_instructions>
+        """
+
+    # Only include Twitter DMs section if there is actual content
+    twitter_section = f"""
+    <twitter_dms>
+    {twitter_context}
+    </twitter_dms>
+    """ if twitter_context and twitter_context != "No recent Twitter DMs available." else ""
+
+    return f"""
+    <assistant_role>
+        You are an assistant helping to analyze and summarize Twitter Direct Messages (DMs).
+    </assistant_role>
+
+    <task>
+        Answer questions about the user's Twitter DM conversations using the provided <twitter_dms>. Focus on:
+        - Who said what in the conversations
+        - The content and context of messages
+        - The flow of conversations between participants
+        - Specific details or information shared in DMs
+    </task>
+
+    <instructions>
+    - Your primary source of information is the Twitter DMs provided
+    - Answer questions directly about the content of DMs, participants, and conversation flow
+    - If asked about a specific person or message, quote the relevant parts of the conversation
+    - If there are no relevant DMs available, clearly state that you don't see messages matching the query
+    - Keep responses concise and focused on the DM content
+    - Use usernames (e.g. @username) when referring to participants
+    - Maintain the chronological order of messages when describing conversations
+    {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
+    </instructions>
+
+    <plugin_instructions>
+    {plugin_info}
+    </plugin_instructions>
+
+    <question>
+    {question}
+    </question>
+
+    {twitter_section}
+
+    <previous_messages>
+    {Message.get_messages_as_xml(messages)}
+    </previous_messages>
+
+    <current_datetime_utc>
+        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+    </current_datetime_utc>
+
+    <question_timezone>
+        Question's timezone: {tz}
+    </question_timezone>
+
+    <answer>
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+
+def qa_rag_with_twitter(uid: str, question: str, context: str, twitter_context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+    prompt = _get_qa_rag_prompt_with_twitter(uid, question, context, twitter_context, plugin, cited, messages, tz)
+    return llm_medium.invoke(prompt).content
+
+def qa_rag_with_twitter_stream(uid: str, question: str, context: str, twitter_context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+                  messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
+    prompt = _get_qa_rag_prompt_with_twitter(uid, question, context, twitter_context, plugin, cited, messages, tz)
+    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content

@@ -80,7 +80,7 @@ humanfriendly==10.0
 hyperframe==6.0.1
 HyperPyYAML==1.2.2
 idna==3.7
-ipython==8.26.0
+ipython>=8.18.1
 jedi==0.19.1
 Jinja2==3.1.4
 jiter==0.6.1
@@ -126,7 +126,7 @@ multidict==6.0.5
 mypy-extensions==1.0.0
 narwhals==1.5.2
 neo4j==5.23.1
-networkx==3.3
+networkx>=3.2.1
 noisereduce==3.0.2
 numba==0.60.0
 numpy==1.26.4

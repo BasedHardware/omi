@@ -312,3 +312,132 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
+
+def decrypt_twitter_message(encrypted_message: str, key: str) -> str:
+    try:
+        bytes_message = base64.b64decode(encrypted_message)
+        key_bytes = base64.b64decode(key)
+        decrypted = bytes([bytes_message[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(bytes_message))])
+        return decrypted.decode('utf-8')
+    except Exception as e:
+        print(f"Error decrypting message: {e}")
+        return encrypted_message
+
+def get_twitter_dms(uid: str, limit: int = 10) -> List[dict]:
+    try:
+        user_ref = db.collection('users').document(uid)
+        dms_ref = (
+            user_ref.collection('twitter_messages')
+            .order_by('created_at', direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        
+        dms = []
+        for doc in dms_ref.stream():
+            dm = doc.to_dict()
+            if dm.get('text') and dm.get('encryption_key'):
+                dm['text'] = decrypt_twitter_message(dm['text'], dm['encryption_key'])
+            dms.append(dm)
+        return dms
+    except Exception as e:
+        print(f"Error retrieving Twitter DMs: {e}")
+        return []
+
+@router.post('/v2/messages_twitter', tags=['chat'], response_model=ResponseMessage)
+def send_message_with_twitter(
+        data: SendMessageRequest, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    print('send_message_with_twitter', data.text, plugin_id, uid)
+    if plugin_id in ['null', '']:
+        plugin_id = None
+    
+    # Create and add the user's message
+    message = Message(
+        id=str(uuid.uuid4()), 
+        text=data.text, 
+        created_at=datetime.now(timezone.utc), 
+        sender='human', 
+        type='text',
+        plugin_id=plugin_id
+    )
+    chat_db.add_message(uid, message.dict())
+
+    # Get app info
+    app = get_available_app_by_id(plugin_id, uid)
+    app = App(**app) if app else None
+    app_id = app.id if app else None
+
+    # Get recent messages and Twitter DMs
+    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, plugin_id=plugin_id)]))
+    twitter_dms = get_twitter_dms(uid)
+    
+    # Format Twitter DMs as context
+    twitter_context = ""
+    if twitter_dms:
+        twitter_context = "Recent Twitter DM conversations:\n"
+        for dm in twitter_dms:
+            sender_info = dm.get('sender_info', {})
+            twitter_context += f"From @{sender_info.get('username', 'unknown')}: {dm.get('text', '')}\n"
+    else:
+        twitter_context = "No recent Twitter DMs available."
+
+    def process_message(response: str, callback_data: dict):
+        memories = callback_data.get('memories_found', [])
+        ask_for_nps = callback_data.get('ask_for_nps', False)
+
+        # cited extraction
+        cited_memory_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+        if len(cited_memory_idxs) > 0:
+            response = re.sub(r'\[\d+\]', '', response)
+        memories = [memories[i - 1] for i in cited_memory_idxs if 0 < i and i <= len(memories)]
+
+        memories_id = []
+        if memories:
+            converted_memories = []
+            for m in memories[:5]:
+                if isinstance(m, dict):
+                    converted_memories.append(Memory(**m))
+                else:
+                    converted_memories.append(m)
+            memories_id = [m.id for m in converted_memories]
+
+        ai_message = Message(
+            id=str(uuid.uuid4()),
+            text=response,
+            created_at=datetime.now(timezone.utc),
+            sender='ai',
+            plugin_id=app_id,
+            type='text',
+            memories_id=memories_id,
+        )
+        chat_db.add_message(uid, ai_message.dict())
+        ai_message.memories = [MessageMemory(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        if app_id:
+            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+
+        return ai_message, ask_for_nps
+
+    async def generate_stream():
+        callback_data = {}
+        # Add Twitter context to the conversation
+        callback_data['twitter_context'] = twitter_context
+        
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data):
+            if chunk:
+                data = chunk.replace("\n", "__CRLF__")
+                yield f'{data}\n\n'
+            else:
+                response = callback_data.get('answer')
+                if response:
+                    ai_message, ask_for_nps = process_message(response, callback_data)
+                    ai_message_dict = ai_message.dict()
+                    response_message = ResponseMessage(**ai_message_dict)
+                    response_message.ask_for_nps = ask_for_nps
+                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {data}\n\n"
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream"
+    )

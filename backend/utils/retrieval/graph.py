@@ -32,6 +32,8 @@ from utils.llm import (
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
+    qa_rag_with_twitter,
+    qa_rag_with_twitter_stream,
 )
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
@@ -92,6 +94,7 @@ class GraphState(TypedDict):
     date_filters: Optional[DateRangeFilters]
 
     memories_found: Optional[List[Memory]]
+    twitter_context: Optional[str] = None
 
     parsed_question: Optional[str]
     answer: Optional[str]
@@ -254,16 +257,18 @@ def query_vectors(state: GraphState):
 
 def qa_handler(state: GraphState):
     uid = state.get("uid")
+    twitter_context = state.get("twitter_context", "")
 
     # streaming
     streaming = state.get("streaming")
     if streaming:
         # state['callback'].put_thought_nowait("Reasoning")
         memories = state.get("memories_found", [])
-        response: str = qa_rag_stream(
+        response: str = qa_rag_with_twitter_stream(
             uid,
             state.get("parsed_question"),
             Memory.memories_to_string(memories, False),
+            twitter_context,
             state.get("plugin_selected"),
             cited=state.get("cited"),
             messages=state.get("messages"),
@@ -274,10 +279,11 @@ def qa_handler(state: GraphState):
 
     # no streaming
     memories = state.get("memories_found", [])
-    response: str = qa_rag(
+    response: str = qa_rag_with_twitter(
         uid,
         state.get("parsed_question"),
         Memory.memories_to_string(memories, False),
+        twitter_context,
         state.get("plugin_selected"),
         cited=state.get("cited"),
         messages=state.get("messages"),
@@ -343,9 +349,12 @@ async def execute_graph_chat_stream(
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
+    # Get Twitter context from callback_data if available
+    twitter_context = callback_data.get('twitter_context', '')
+
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback},
+         "streaming": True, "callback": callback, "twitter_context": twitter_context},
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
