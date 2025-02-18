@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
@@ -24,6 +25,32 @@ class PersonaProvider extends ChangeNotifier {
 
   bool isFormValid = false;
   bool _isLoading = false;
+
+  Map twitterProfile = {};
+
+  Future getTwitterProfile(String username) async {
+    var res = await getTwitterProfileData(username);
+    print('Twitter Profile: $res');
+    if (res != null) {
+      if (res['status'] == 'notfound') {
+        AppSnackbar.showSnackbarError('Twitter handle not found');
+        twitterProfile = {};
+      } else {
+        twitterProfile = res;
+      }
+    }
+    notifyListeners();
+  }
+
+  Future verifyTweet(String username) async {
+    var res = await verifyTwitterOwnership(username);
+    if (res) {
+      AppSnackbar.showSnackbarSuccess('Twitter handle verified');
+    } else {
+      AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
+    }
+    return res;
+  }
 
   void setPersonaPublic(bool? value) {
     if (value == null) {

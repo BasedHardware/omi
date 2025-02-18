@@ -490,3 +490,39 @@ Future<bool> checkPersonaUsername(String username) async {
     return true;
   }
 }
+
+Future<Map?> getTwitterProfileData(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/profile?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getTwitterProfileData: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<bool> verifyTwitterOwnership(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('verifyTwitterOwnership: ${response.body}');
+    return jsonDecode(response.body)['verified'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}

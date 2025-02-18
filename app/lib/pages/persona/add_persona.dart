@@ -4,9 +4,12 @@ import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/other/debouncer.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/utils/text_formatter.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
+
+import 'twitter/social_profile.dart';
 
 class AddPersonaPage extends StatefulWidget {
   const AddPersonaPage({super.key});
@@ -312,6 +315,88 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                             provider.setPersonaPublic(value);
                           },
                           activeColor: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0, bottom: 12),
+                          child: Text(
+                            'Connected Knowledge Data',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset(
+                                'assets/images/x_logo_mini.png',
+                                width: 24,
+                                height: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                provider.twitterProfile.isEmpty
+                                    ? 'Connect Twitter'
+                                    : provider.twitterProfile['username'] ?? '',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (provider.twitterProfile.isEmpty)
+                                GestureDetector(
+                                  onTap: () {
+                                    routeToPage(context, SocialHandleScreen());
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Text(
+                                      'Connect',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Text(
+                                    'Connected',
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
