@@ -374,11 +374,12 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     except ValidationError:
         return False
 
+
 class IsFileQuestion(BaseModel):
     value: bool = Field(description="If the message is related to file/image")
 
-def retrieve_is_file_question(question: str) -> bool:
 
+def retrieve_is_file_question(question: str) -> bool:
     prompt = f'''
     Based on the current question, your task is to determine whether the user is referring to a file or an image that was just attached or mentioned earlier in the conversation.
 
@@ -1180,7 +1181,6 @@ class Facts(BaseModel):
         description="List of **new** facts. If any",
         default=[],
     )
-
 
 
 def new_facts_extractor(
@@ -2045,3 +2045,76 @@ Conversations:
     return response.content
 
 
+def condense_tweets(tweets, name):
+    combined_tweets = "\n".join(tweets)
+    prompt = f"""
+You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}’s core identity, personality, communication style, and thought patterns.  
+
+**Input:**  
+A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.  
+
+**Output:**  
+A condensed context that includes:  
+- Core identity and personality traits as expressed through tweets.  
+- Recurring themes, opinions, and values.  
+- Humor style, emotional undertones, and tone of voice.  
+- Vocabulary, expressions, and communication style.  
+- Decision-making patterns and conversational dynamics.  
+- Situational awareness and context continuity for ongoing topics.  
+
+**Guidelines:**  
+1. Prioritize impactful and influential tweets that define {name}’s identity.  
+2. Condense repetitive or less relevant tweets while preserving essential context.  
+3. Maintain the flow and coherence of {name}’s conversational style.  
+4. Extract humor style, emotional responses, and tone consistency.  
+5. Identify and retain decision-making patterns and strong opinions.  
+
+**Important:**  
+- The output must be concise yet comprehensive, capturing the essence of {name}’s identity.  
+- Absolutely no unnecessary text or explanations.  
+- Every detail must contribute to 1:1 cloning authenticity.  
+
+Generate the condensed context now.
+
+Tweets:
+{combined_tweets}
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content
+
+
+def generate_twitter_persona_prompt(tweets, name):
+    combined_tweets = "\n".join(tweets)
+    prompt = f"""
+You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
+
+You have:  
+- **Condensed Tweets Context:** Key themes, opinions, communication style, humor, emotional undertones, decision-making patterns, and conversational flow extracted from {name}’s tweets.  
+
+**Style:**  
+- Highly interactive and opinionated.  
+- Strong, slightly polarizing opinions based on {name}’s tweet history.  
+- Reference personal opinions, humor, and expressions naturally.  
+- 2-3 sentence responses, never more than 20 words.  
+- Maintain conversational flow with coherent, context-aware replies.  
+
+**Guidelines:**  
+1. Seamlessly integrate recurring themes, opinions, and patterns identified from the tweets.  
+2. Use condensed tweets context for situational awareness and contextual accuracy.  
+3. Emulate {name}’s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
+4. Respond with the same level of detail, brevity, and wit as the tweets.  
+5. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+
+**Rules:**  
+- Never mention being AI.  
+- No ** or formal language.  
+- No unnecessary text or explanations.  
+- Maintain the illusion of continuity and authenticity at all times.  
+- Every response must be indistinguishable from how {name} would naturally respond on Twitter.  
+
+You have all the necessary condensed tweets context. Begin personifying {name} now.
+
+Tweets:
+{combined_tweets}
+    """
+    return prompt

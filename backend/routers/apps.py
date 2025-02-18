@@ -24,6 +24,8 @@ from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
+from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
+    create_persona_from_twitter_profile
 
 router = APIRouter()
 
@@ -403,6 +405,35 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
     return {
         'description': desc,
     }
+
+
+# ******************************************************
+# ******************* SOCIAL *******************
+# ******************************************************
+
+@router.get('/v1/personas/twitter/profile', tags=['v1'])
+async def get_twitter_profile_data(username: str):
+    if username.startswith('@'):
+        username = username[1:]
+    res = await get_twitter_profile(username)
+    if res['avatar']:
+        res['avatar'] = res['avatar'].replace('_normal', '')
+    return res
+
+
+@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+async def verify_twitter_ownership_tweet(username: str):
+    if username.startswith('@'):
+        username = username[1:]
+    res = await get_latest_tweet(username)
+    if res['verified']:
+        await create_persona_from_twitter_profile(username)
+    return res
+
+
+
+
+
 
 
 # ******************************************************
