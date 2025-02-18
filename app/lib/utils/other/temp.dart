@@ -35,3 +35,13 @@ String formatChatTimestamp(DateTime dateTime) {
     return dateTimeFormat('MMM d, h:mm a', dateTime);
   }
 }
+
+String countryFlagFromCode(String countryCode) {
+  const flagOffset = 0x1F1E6;
+  const asciiOffset = 0x41;
+
+  final firstChar = countryCode.codeUnitAt(0) - asciiOffset + flagOffset;
+  final secondChar = countryCode.codeUnitAt(1) - asciiOffset + flagOffset;
+
+  return String.fromCharCode(firstChar) + String.fromCharCode(secondChar);
+}

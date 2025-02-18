@@ -96,6 +96,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                     title: const Text('Update App Details'),
                     leading: const Icon(Icons.edit),
                     onTap: () {
+                      Navigator.pop(context);
                       routeToPage(context, UpdateAppPage(app: app));
                     },
                   ),

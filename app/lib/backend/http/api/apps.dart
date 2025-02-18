@@ -75,6 +75,34 @@ Future<bool> reviewApp(String appId, AppReview review) async {
   }
 }
 
+Future<Map<String, String>> uploadAppThumbnail(File file) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/app/thumbnails'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      return {
+        'thumbnail_url': data['thumbnail_url'],
+        'thumbnail_id': data['thumbnail_id'],
+      };
+    } else {
+      debugPrint('Failed to upload thumbnail. Status code: ${response.statusCode}');
+      return {};
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploading thumbnail: $e');
+    return {};
+  }
+}
+
 Future<bool> updateAppReview(String appId, AppReview review) async {
   try {
     var response = await makeApiCall(
@@ -157,7 +185,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   }
 }
 
-Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) async {
+Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
   var request = http.MultipartRequest(
     'POST',
     Uri.parse('${Env.apiBaseUrl}v1/apps'),
@@ -165,25 +193,31 @@ Future<(bool, String)> submitAppServer(File file, Map<String, dynamic> appData) 
   request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      debugPrint('submitAppServer Response body: ${jsonDecode(response.body)}');
-      return (true, '');
+      var respData = jsonDecode(response.body);
+      String? appId = respData['app_id'];
+      debugPrint('submitAppServer Response body: ${respData}');
+      return (true, '', appId);
     } else {
       debugPrint('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
-        return (false, jsonDecode(response.body)['detail'] as String);
+        return (
+          false,
+          jsonDecode(response.body)['detail'] as String,
+          null,
+        );
       } else {
-        return (false, 'Failed to submit app. Please try again later');
+        return (false, 'Failed to submit app. Please try again later', '');
       }
     }
   } catch (e) {
     debugPrint('An error occurred submitAppServer: $e');
-    return (false, 'Failed to submit app. Please try again later');
+    return (false, 'Failed to submit app. Please try again later', null);
   }
 }
 
@@ -197,7 +231,7 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
   }
   request.headers.addAll({'Authorization': await getAuthHeader()});
   request.fields.addAll({'app_data': jsonEncode(appData)});
-  print(jsonEncode(appData));
+  debugPrint(jsonEncode(appData));
   try {
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);

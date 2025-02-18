@@ -15,7 +15,7 @@ import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
-from models.chat import Message
+from models.chat import ChatSession, Message
 from models.memory import Memory
 from models.plugin import Plugin
 from utils.llm import (
@@ -29,12 +29,14 @@ from utils.llm import (
     qa_rag,
     qa_rag_stream,
     retrieve_is_an_omi_question,
+    retrieve_is_file_question,
     select_structured_filters,
     extract_question_from_conversation,
     generate_embedding,
     qa_rag_with_twitter,
     qa_rag_with_twitter_stream,
 )
+from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
@@ -79,6 +81,12 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         print(f"Error on LLM {error}")
         await self.end()
 
+    def put_data_nowait(self, text):
+        self.queue.put_nowait(f"data: {text}")
+
+    def end_nowait(self):
+        self.queue.put_nowait(None)
+
 
 class GraphState(TypedDict):
     uid: str
@@ -100,6 +108,8 @@ class GraphState(TypedDict):
     answer: Optional[str]
     ask_for_nps: Optional[bool]
 
+    chat_session: Optional[ChatSession]
+
 
 def determine_conversation(state: GraphState):
     question = extract_question_from_conversation(state.get("messages", []))
@@ -114,10 +124,21 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
         state: GraphState,
-) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question"]:
+) -> Literal["no_context_conversation", "context_dependent_conversation", "omi_question", "file_chat_question"]:
+    # chat with files by attachments on the last message
+    messages = state.get("messages", [])
+    if len(messages) > 0 and len(messages[-1].files_id) > 0:
+        return "file_chat_question"
+
+    # no context
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
+
+    # determine the follow up question is chatting with files or not
+    is_file_question = retrieve_is_file_question(question)
+    if is_file_question:
+        return "file_chat_question"
 
     is_omi_question = retrieve_is_an_omi_question(question)
     if is_omi_question:
@@ -291,6 +312,37 @@ def qa_handler(state: GraphState):
     )
     return {"answer": response, "ask_for_nps": True}
 
+def file_chat_question(state: GraphState):
+    print("chat_with_file_question node")
+
+    fc_tool = FileChatTool()
+
+    uid = state.get("uid", "")
+    question = state.get("parsed_question", "")
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+
+    file_ids = []
+    chat_session = state.get("chat_session")
+    if chat_session:
+        if last_message:
+            if len(last_message.files_id) > 0:
+                file_ids = last_message.files_id
+            else:
+                # if user asked about file but not attach new file, will get all file in session
+                file_ids = chat_session.file_ids
+    else:
+        file_ids = fc_tool.get_files()
+
+    streaming = state.get("streaming")
+    if streaming:
+        answer = fc_tool.process_chat_with_file_stream(uid, question, file_ids, callback=state.get('callback'))
+        return {'answer': answer, 'ask_for_nps': True}
+
+    answer = fc_tool.process_chat_with_file(uid, question,file_ids)
+    return {'answer': answer, 'ask_for_nps': True}
+
 
 workflow = StateGraph(GraphState)
 
@@ -304,9 +356,11 @@ workflow.add_conditional_edges("determine_conversation", determine_conversation_
 workflow.add_node("no_context_conversation", no_context_conversation)
 workflow.add_node("omi_question", omi_question)
 workflow.add_node("context_dependent_conversation", context_dependent_conversation)
+workflow.add_node("file_chat_question", file_chat_question)
 
 workflow.add_edge("no_context_conversation", END)
 workflow.add_edge("omi_question", END)
+workflow.add_edge("file_chat_question", END)
 workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")
 
@@ -331,7 +385,7 @@ graph_stream = workflow.compile()
 
 @timeit
 def execute_graph_chat(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
+        uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Memory]]:
     print('execute_graph_chat plugin    :', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -341,9 +395,8 @@ def execute_graph_chat(
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
-
 async def execute_graph_chat_stream(
-    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {},
+    uid: str, messages: List[Message], plugin: Optional[Plugin] = None, cited: Optional[bool] = False, callback_data: dict = {}, chat_session: Optional[ChatSession] = None
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream plugin: ', plugin.id if plugin else '<none>')
     tz = notification_db.get_user_time_zone(uid)
@@ -354,7 +407,8 @@ async def execute_graph_chat_stream(
 
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
-         "streaming": True, "callback": callback, "twitter_context": twitter_context},
+         "streaming": True, "callback": callback, "twitter_context": twitter_context, "chat_session": chat_session},
+         "streaming": True, "callback": callback, "chat_session": chat_session}
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
@@ -367,7 +421,6 @@ async def execute_graph_chat_stream(
                 break
         except asyncio.CancelledError:
             break
-
     await task
     result = task.result()
     callback_data['answer'] = result.get("answer")
@@ -376,42 +429,3 @@ async def execute_graph_chat_stream(
 
     yield None
     return
-
-
-def _pretty_print_conversation(messages: List[Message]):
-    for msg in messages:
-        print(f"{msg.sender}: {msg.text}")
-
-
-if __name__ == "__main__":
-    # graph.get_graph().draw_png("workflow.png")
-    uid = "viUv7GtdoHXbK1UBCDlPuTDuPgJ2"
-    # def _send_message(text: str, sender: str = 'human'):
-    #     message = Message(
-    #         id=str(uuid.uuid4()), text=text, created_at=datetime.datetime.now(datetime.timezone.utc), sender=sender,
-    #         type='text'
-    #     )
-    #     chat_db.add_message(uid, message.dict())
-    messages = [
-        Message(
-            id=str(uuid.uuid4()),
-            text="Should I give equity to Ansh?",
-            # text="I need to launch a new consumer hardware wearable and need to make a video for it. Recommend best books about video production for the launch",
-            # text="Should I build the features myself or hire people?",
-            # text="So i just woke up and i'm thinking i want to wake Up earlier because i woke up today at like 2 p.m. it's crazy. but i need to have something in the morning, some commitment in the morning, like 10 a.m. that i would wake up for so that i go to sleep later as well. what do you think that commitment can and should be?",
-            created_at=datetime.datetime.now(datetime.timezone.utc),
-            sender="human",
-            type="text",
-        )
-    ]
-    result = execute_graph_chat(uid, messages)
-    print("result:", print(result[0]))
-    # messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    # _pretty_print_conversation(messages)
-    # # print(messages[-1].text)
-    # # _send_message('Check again, Im pretty sure I had some')
-    # # raise Exception()
-    # start_time = time.time()
-    # result = graph.invoke({'uid': uid, 'messages': messages}, {"configurable": {"thread_id": "foo"}})
-    # print('result:', result.get('answer'))
-    # print('time:', time.time() - start_time)

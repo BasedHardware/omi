@@ -54,7 +54,7 @@ Future<List<ServerMessage>> clearChatServer({String? pluginId}) async {
   }
 }
 
-Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
+Future<ServerMessage> sendMessageServer(String text, {String? appId, List<String>? fileIds}) {
   var url = '${Env.apiBaseUrl}v1/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v1/messages';
@@ -63,7 +63,7 @@ Future<ServerMessage> sendMessageServer(String text, {String? appId}) {
     url: url,
     headers: {},
     method: 'POST',
-    body: jsonEncode({'text': text}),
+    body: jsonEncode({'text': text, 'file_ids': fileIds}),
   ).then((response) {
     if (response == null) throw Exception('Failed to send message');
     if (response.statusCode == 200) {
@@ -104,7 +104,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId}) async* {
+Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?plugin_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
@@ -114,7 +114,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId})
     final request = await HttpClient().postUrl(Uri.parse(url));
     request.headers.set('Authorization', await getAuthHeader());
     request.headers.contentType = ContentType.json;
-    request.write(jsonEncode({'text': text}));
+    request.write(jsonEncode({'text': text, 'file_ids': filesId}));
 
     final response = await request.close();
 
@@ -259,6 +259,44 @@ Future<List<ServerMessage>> sendVoiceMessageServer(List<File> files) async {
   } catch (e) {
     debugPrint('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
+  }
+}
+
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+  var url = '${Env.apiBaseUrl}v1/files?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v1/files';
+  }
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse(url),
+  );
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  for (var file in files) {
+    var stream = http.ByteStream(file.openRead());
+    var length = await file.length();
+    var multipartFile = http.MultipartFile(
+      'files',
+      stream,
+      length,
+      filename: basename(file.path),
+    );
+    request.files.add(multipartFile);
+  }
+
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode == 200) {
+      debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
+      return MessageFile.fromJsonList(jsonDecode(response.body));
+    } else {
+      debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
+      throw Exception('Failed to upload file. Status code: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('An error occurred uploadFileServer: $e');
+    throw Exception('An error occurred uploadFileServer: $e');
   }
 }
 

@@ -50,6 +50,10 @@
 				<key>CFBundleURLSchemes</key>
 				<array>
 					<string>omiapp</string>
+				<string>h.omi.me</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>$(GOOGLE_REVERSE_CLIENT_ID)</string>
 				</array>
 			</dict>
 		</array>

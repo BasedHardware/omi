@@ -1,8 +1,11 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:friend_private/backend/http/api/payments.dart';
 import 'package:friend_private/gen/assets.gen.dart';
+import 'package:friend_private/pages/payments/widgets/country_bottom_sheet.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +21,7 @@ class StripeConnectSetup extends StatefulWidget {
 
 class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+
   @override
   void initState() {
     super.initState();
@@ -25,6 +29,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    context.read<PaymentMethodProvider>().getSupportedCountries();
   }
 
   @override
@@ -119,6 +124,87 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                     description: 'Stripe ensures safe and timely transfers of your app revenue',
                   ),
                   const Spacer(),
+                  provider.stripeConnectionState == PaymentConnectionState.notConnected
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              ),
+                              onPressed: () {
+                                provider.updateSearchQuery('');
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: const Color(0xFF1A1A1A),
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                  ),
+                                  builder: (context) {
+                                    return const CountryBottomSheet();
+                                  },
+                                );
+                              },
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      if (!(provider.selectedCountryId?.isEmpty ?? true) &&
+                                          provider.selectedCountryId != null)
+                                        Text(
+                                          countryFlagFromCode(provider.selectedCountryId!),
+                                          style: const TextStyle(fontSize: 24),
+                                        ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        provider.selectedCountryId?.isEmpty ?? true
+                                            ? 'Select your country'
+                                            : (provider.filteredCountries.firstWhereOrNull((country) =>
+                                                    country['id'] == provider.selectedCountryId)?['name'] ??
+                                                'Select your country'),
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                  const Icon(Icons.arrow_drop_down, color: Colors.white),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : const SizedBox(),
+                  const SizedBox(height: 12),
+                  provider.stripeConnectionState == PaymentConnectionState.notConnected
+                      ? Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.red[400], size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Your country selection is permanent and cannot be changed later.',
+                                  style: TextStyle(
+                                    color: Colors.red[400],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : const SizedBox(),
+                  const SizedBox(height: 24),
                   Text(
                     'By clicking on "Connect Now" you agree to the',
                     style: TextStyle(
@@ -143,19 +229,29 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                   AnimatedLoadingButton(
                     text: "Connect Now",
                     loaderColor: Colors.black,
-                    onPressed: () async {
-                      var url = await provider.connectStripe();
-                      if (url != null) {
-                        provider.startStripePolling();
-                        await launchUrl(Uri.parse(url));
-                      } else {
-                        AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
-                      }
-                    },
-                    color: Colors.white,
-                    textStyle: const TextStyle(
+                    onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                            provider.selectedCountryId != null
+                        ? () async {
+                            MixpanelManager().track('Stripe Connect Started');
+                            var url = await provider.connectStripe();
+                            if (url != null) {
+                              provider.startStripePolling();
+                              await launchUrl(Uri.parse(url));
+                            } else {
+                              AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
+                            }
+                          }
+                        : () async {},
+                    color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                            provider.selectedCountryId != null
+                        ? Colors.white
+                        : Colors.grey,
+                    textStyle: TextStyle(
                       fontSize: 16,
-                      color: Colors.black,
+                      color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                              provider.selectedCountryId != null
+                          ? Colors.black
+                          : Colors.grey[600],
                     ),
                     width: MediaQuery.of(context).size.width * 0.8,
                   ),
@@ -215,10 +311,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                   AnimatedLoadingButton(
                     text: "Failed? Try Again",
                     onPressed: () async {
-                      var res = await getStripeAccountLink();
+                      MixpanelManager().track('Stripe Connect Retry');
+                      var res = await provider.connectStripe();
                       if (res != null) {
                         provider.startStripePolling();
-                        await launchUrl(Uri.parse(res['url']));
+                        await launchUrl(Uri.parse(res));
                       } else {
                         AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
                       }
@@ -233,6 +330,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                   ),
                   TextButton(
                       onPressed: () {
+                        MixpanelManager().track('Stripe Connect Later');
                         provider.stopStripePolling();
                         Navigator.pop(context);
                       },
@@ -301,6 +399,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                   AnimatedLoadingButton(
                     text: "Update Stripe Details",
                     onPressed: () async {
+                      MixpanelManager().track('Stripe Connect Update');
                       var url = await provider.connectStripe();
                       if (url != null) {
                         provider.startStripePolling();
