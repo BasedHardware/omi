@@ -408,7 +408,6 @@ async def execute_graph_chat_stream(
     task = asyncio.create_task(graph_stream.ainvoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": plugin,
          "streaming": True, "callback": callback, "twitter_context": twitter_context, "chat_session": chat_session},
-         "streaming": True, "callback": callback, "chat_session": chat_session}
         {"configurable": {"thread_id": str(uuid.uuid4())}},
     ))
 
