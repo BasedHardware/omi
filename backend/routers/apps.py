@@ -17,8 +17,8 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get, generate_persona_prompt
-from utils.llm import generate_description
+    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc
+from utils.llm import generate_description, generate_persona_description
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
@@ -97,6 +97,64 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     return {'status': 'ok', 'app_id': app.id}
 
 
+@router.post('/v1/personas', tags=['v1'])
+def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    data['approved'] = False
+    data['deleted'] = False
+    data['status'] = 'under-review'
+    data['category'] = 'personality-emulation'
+    data['name'] = data['name'].strip()
+    data['id'] = str(ULID())
+    data['uid'] = uid
+    data['capabilities'] = ['persona']
+    user = get_user_from_uid(uid)
+    data['author'] = user['display_name']
+    data['email'] = user['email']
+    save_username(data['username'], uid)
+    data['persona_prompt'] = generate_persona_prompt(uid)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    data['connected_accounts'] = ['omi']
+    os.makedirs(f'_temp/plugins', exist_ok=True)
+    file_path = f"_temp/plugins/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
+
+    add_app_to_db(data)
+
+    return {'status': 'ok', 'app_id': data['id']}
+
+
+@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
+                   uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    persona = get_available_app_by_id(persona_id, uid)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if persona['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if file:
+        delete_plugin_logo(persona['image'])
+        os.makedirs(f'_temp/plugins', exist_ok=True)
+        file_path = f"_temp/plugins/{file.filename}"
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        img_url = upload_plugin_logo(file_path, persona_id)
+        data['image'] = img_url
+    save_username(data['username'], uid)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    data['updated_at'] = datetime.now(timezone.utc)
+    update_app_in_db(data)
+    if persona['approved'] and (persona['private'] is None or persona['private'] is False):
+        delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(persona_id)
+    return {'status': 'ok'}
+
+
 @router.get('/v1/apps/check-username', tags=['v1'])
 def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = is_username_taken(username)
@@ -127,8 +185,6 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
             f.write(file.file.read())
         img_url = upload_plugin_logo(file_path, app_id)
         data['image'] = img_url
-    if "persona" in data['capabilities']:
-        save_username(data['username'], uid)
     data['updated_at'] = datetime.now(timezone.utc)
     # Warn: the user can update any fields, e.g. approved.
     update_app_in_db(data)
@@ -306,27 +362,6 @@ def get_plugin_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Memories', 'id': 'memories'},
-        {'title': 'Persona', 'id': 'persona'},
-        {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
-            {'title': 'Audio Bytes', 'id': 'audio_bytes'},
-            {'title': 'Memory Creation', 'id': 'memory_creation'},
-            {'title': 'Transcript Processed', 'id': 'transcript_processed'},
-        ]},
-        {'title': 'Notification', 'id': 'proactive_notification', 'scopes': [
-            {'title': 'User Name', 'id': 'user_name'},
-            {'title': 'User Facts', 'id': 'user_facts'},
-            {'title': 'User Memories', 'id': 'user_context'},
-            {'title': 'User Chat', 'id': 'user_chat'}
-        ]}
-    ]
-
-
-@router.get('/v2/app-capabilities', tags=['v2'])
-def get_plugin_capabilities():
-    return [
-        {'title': 'Chat', 'id': 'chat'},
-        {'title': 'Memories', 'id': 'memories'},
-        {'title': 'Persona', 'id': 'persona'},
         {'title': 'External Integration', 'id': 'external_integration', 'triggers': [
             {'title': 'Audio Bytes', 'id': 'audio_bytes'},
             {'title': 'Memory Creation', 'id': 'memory_creation'},

@@ -729,10 +729,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 onTap: () {
                   if (app.description.decodeString.characters.length > 200) {
                     routeToPage(
-                        context, MarkdownViewer(title: 'About the App', markdown: app.description.decodeString));
+                        context,
+                        MarkdownViewer(
+                            title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                            markdown: app.description.decodeString));
                   }
                 },
-                title: 'About the App',
+                title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                 description: app.description,
                 showChips: true,
                 chips: app

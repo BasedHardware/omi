@@ -396,6 +396,14 @@ def generate_persona_prompt(uid: str):
     return persona_prompt
 
 
+def generate_persona_desc(uid: str, persona_name: str):
+    """Generate a persona description based on user facts."""
+    facts = get_facts(uid, limit=1000)
+
+    persona_description = generate_persona_description(facts, persona_name)
+    return persona_description
+
+
 def update_persona_prompt(uid: str):
     """Update a persona's chat prompt with latest facts and memories."""
     # Get latest facts and user info
