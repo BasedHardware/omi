@@ -152,19 +152,6 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            TextButton(
-                              onPressed: () {
-                                // Handle Instagram option
-                              },
-                              child: Text(
-                                'Use Instagram instead',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -175,6 +162,9 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
                   child: ElevatedButton(
                     onPressed: () {
+                      // Dismiss keyboard first
+                      FocusScope.of(context).unfocus();
+                      
                       if (_formKey.currentState!.validate()) {
                         context.read<NoDeviceOnboardingProvider>().setTwitterHandle(_controller.text.trim());
                         widget.onNext();

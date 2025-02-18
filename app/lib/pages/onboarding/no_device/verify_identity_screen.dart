@@ -324,7 +324,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                                 ),
                               )
                             : const Text(
-                                'I have tweeted',
+                                'I have verified',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,

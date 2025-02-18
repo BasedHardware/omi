@@ -51,6 +51,8 @@ import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:friend_private/providers/no_device_onboarding_provider.dart';
+import 'package:friend_private/pages/no_device_chat/chat.dart';
+import 'package:friend_private/providers/no_device_chat_provider.dart';
 Future<bool> _init() async {
   // Service manager
   ServiceManager.init();
@@ -208,6 +210,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (_) => NoDeviceOnboardingProvider()),
+          ChangeNotifierProvider(create: (_) => NoDeviceChatProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -350,6 +353,10 @@ class _DeciderWidgetState extends State<DeciderWidget> {
             (authProvider.user != null ||
                 (SharedPreferencesUtil().customBackendUrl.isNotEmpty &&
                     SharedPreferencesUtil().authToken.isNotEmpty))) {
+          // Check if user has no device
+          if (SharedPreferencesUtil().hasOmiDevice == false) {
+            return const NoDeviceChatScreen();
+          }
           return const HomePageWrapper();
         } else {
           // Check if device selection has been made

@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:friend_private/backend/schema/message.dart';
+import 'package:friend_private/providers/no_device_chat_provider.dart';
 import 'package:friend_private/providers/no_device_onboarding_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/no_device_chat/settings.dart';
+import 'package:friend_private/services/twitter_api_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
 
 class NoDeviceChatScreen extends StatefulWidget {
   const NoDeviceChatScreen({super.key});
@@ -15,39 +22,105 @@ class NoDeviceChatScreen extends StatefulWidget {
 class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<ServerMessage> _messages = [];
-  bool _isTyping = false;
-  late NoDeviceOnboardingProvider _provider;
+  late NoDeviceOnboardingProvider _onboardingProvider;
   bool _initialized = false;
+  final TwitterApiService _twitterService = TwitterApiService();
 
   @override
   void initState() {
     super.initState();
-    
-    // Use post-frame callback to safely initialize
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_initialized) {
-        _provider = context.read<NoDeviceOnboardingProvider>();
-        
-        setState(() {
-          // Add initial message with personalized greeting using the Twitter handle
-          final twitterHandle = _provider.twitterHandle.replaceAll('@', '');
-          _messages.add(
-            ServerMessage(
-              '1',
-              DateTime.now(),
-              'Hey @$twitterHandle! Here is your X DMs summary',
-              MessageSender.ai,
-              MessageType.text,
-              null,
-              false,
-              [],
-            ),
-          );
-          _initialized = true;
-        });
-      }
+      _initializeChat();
     });
+  }
+
+  Future<void> _initializeChat() async {
+    if (!_initialized) {
+      _onboardingProvider = context.read<NoDeviceOnboardingProvider>();
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        final token = await getIdToken();
+        if (token != null) {
+          await _loadMessageSummary();
+        }
+      }
+      
+      FirebaseAuth.instance.authStateChanges().listen((User? user) {
+        if (user != null && mounted) {
+          _loadMessageSummary();
+        }
+      });
+    }
+  }
+
+  Future<void> _loadMessageSummary() async {
+    try {
+      final messages = await _twitterService.getStoredMessages();
+      final conversationGroups = <String, List<Map<String, dynamic>>>{};
+      for (var message in messages) {
+        final participantKey = (message['participant_ids'] as List).join('-');
+        if (!conversationGroups.containsKey(participantKey)) {
+          conversationGroups[participantKey] = [];
+        }
+        conversationGroups[participantKey]!.add(message);
+      }
+
+      final totalMessages = messages.length;
+      final totalConversations = conversationGroups.length;
+      final latestMessageDate = messages.isNotEmpty 
+          ? DateTime.parse(messages.first['created_at']) 
+          : null;
+
+      String summaryMessage = 'Hey @${_onboardingProvider.twitterHandle.replaceAll('@', '')}! Here\'s your X DMs summary:\n\n';
+      summaryMessage += '📨 Total Messages: $totalMessages\n';
+      summaryMessage += '💬 Active Conversations: $totalConversations\n';
+      
+      if (latestMessageDate != null) {
+        final now = DateTime.now();
+        final difference = now.difference(latestMessageDate);
+        String timeAgo;
+        if (difference.inDays > 0) {
+          timeAgo = '${difference.inDays} days';
+        } else if (difference.inHours > 0) {
+          timeAgo = '${difference.inHours} hours';
+        } else {
+          timeAgo = '${difference.inMinutes} minutes';
+        }
+        summaryMessage += '🕒 Latest Message: $timeAgo ago';
+      }
+
+      if (mounted) {
+        context.read<NoDeviceChatProvider>().addMessage(
+          ServerMessage(
+            '1',
+            DateTime.now(),
+            summaryMessage,
+            MessageSender.ai,
+            MessageType.text,
+            null,
+            false,
+            [],
+          ),
+        );
+        setState(() => _initialized = true);
+      }
+    } catch (e) {
+      if (mounted) {
+        context.read<NoDeviceChatProvider>().addMessage(
+          ServerMessage(
+            '1',
+            DateTime.now(),
+            'Hey @${_onboardingProvider.twitterHandle.replaceAll('@', '')}! Welcome to your X DMs summary.',
+            MessageSender.ai,
+            MessageType.text,
+            null,
+            false,
+            [],
+          ),
+        );
+        setState(() => _initialized = true);
+      }
+    }
   }
 
   @override
@@ -57,33 +130,26 @@ class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
+    
+    final provider = context.read<NoDeviceChatProvider>();
+    final text = _messageController.text;
+    _messageController.clear();
+    
+    MixpanelManager().chatMessageSent(text);
+    await provider.sendMessageToServer(text);
+    _scrollToBottom();
+  }
 
-    setState(() {
-      _messages.add(
-        ServerMessage(
-          DateTime.now().toString(),
-          DateTime.now(),
-          _messageController.text,
-          MessageSender.human,
-          MessageType.text,
-          null,
-          false,
-          [],
-        ),
-      );
-      _messageController.clear();
-    });
-
-    // Simulate bot typing
-    setState(() => _isTyping = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isTyping = false;
-          // Add bot response here
-        });
+  void _scrollToBottom() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -136,34 +202,39 @@ class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ChangeNotifierProvider.value(
-                    value: Provider.of<NoDeviceOnboardingProvider>(context, listen: false),
-                    child: const SettingsScreen(),
-                  ),
+                  builder: (context) => const SettingsScreen(),
                 ),
               );
             },
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _messages.length + (_isTyping ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _messages.length) {
-                  return _buildTypingIndicator();
-                }
-                final message = _messages[index];
-                return _buildMessageBubble(message);
-              },
+      body: Consumer<NoDeviceChatProvider>(
+        builder: (context, provider, child) {
+          return GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    reverse: true,
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: provider.messages.length + (provider.showTypingIndicator ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (provider.showTypingIndicator && index == 0) {
+                        return _buildTypingIndicator();
+                      }
+                      final message = provider.messages[provider.showTypingIndicator ? index - 1 : index];
+                      return _buildMessageBubble(message);
+                    },
+                  ),
+                ),
+                _buildMessageInput(),
+              ],
             ),
-          ),
-          _buildMessageInput(),
-        ],
+          );
+        },
       ),
     );
   }
@@ -216,8 +287,9 @@ class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
 
   Widget _buildTypingIndicator() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16, left: 16),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Container(
             width: 32,
@@ -242,6 +314,7 @@ class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _buildDot(0),
                 _buildDot(1),
@@ -284,21 +357,28 @@ class _NoDeviceChatScreenState extends State<NoDeviceChatScreen> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
+              constraints: const BoxConstraints(maxHeight: 120),
               decoration: BoxDecoration(
                 color: Colors.grey[900],
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: TextField(
+              child: TextFormField(
                 controller: _messageController,
                 style: const TextStyle(color: Colors.white),
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
                 decoration: const InputDecoration(
                   hintText: 'Type a response',
                   hintStyle: TextStyle(color: Colors.grey),
                   border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  isDense: true,
                 ),
               ),
             ),

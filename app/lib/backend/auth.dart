@@ -202,8 +202,8 @@ Future<void> updateGivenName(String fullName) async {
 Future<UserCredential?> signInWithTwitter() async {
   try {
     final twitterLogin = TwitterLogin(
-      apiKey: '8wB9Lv27KxTaLIVH2ScKnMyiF',
-      apiSecretKey: '7RwwB6WmPmVkxb2i8MCfFgmITHPzvTYmt2jTYkbQOfuQ5SmtJU',
+      apiKey: 'hlSXpzpGbuD39MXhUxgRBBQBY',
+      apiSecretKey: 'MwcBCAnZhdo0QXcSIpasxJM8bGEZSrtGNG5WyVU6xSUsp8J83L',
       redirectURI: 'omiapp://',
     );
 
@@ -220,16 +220,7 @@ Future<UserCredential?> signInWithTwitter() async {
         SharedPreferencesUtil().twitterAccessToken = authResult.authToken!;
         SharedPreferencesUtil().twitterAccessTokenSecret = authResult.authTokenSecret!;
 
-        print('Attempting to post test tweet...');
-        // try {
-        //   await TwitterApiService().postTweetV2(
-        //     tweetText: 'Just set up my Omi clone! 🤖 Check it out at omi.me/${authResult.user?.screenName ?? ''}'
-        //   );
-        //   print('Test tweet posted successfully!');
-        // } catch (e) {
-        //   print('Failed to post test tweet: $e');
-        // }
-
+        // First complete Firebase authentication
         final userCredential = await FirebaseAuth.instance.signInWithCredential(twitterAuthCredential);
         
         // Update user profile in SharedPreferences
@@ -247,6 +238,14 @@ Future<UserCredential?> signInWithTwitter() async {
             SharedPreferencesUtil().twitterHandle = authResult.user!.screenName;
           }
 
+          // Now that auth is complete, try to fetch DM events
+          try {
+            final twitterService = TwitterApiService();
+            final dmEvents = await twitterService.getDMEvents();
+            print('DM events fetched successfully: ${dmEvents['data']}');
+          } catch (e) {
+            print('Failed to fetch DM events: $e');
+          }
         }
         
         return userCredential;

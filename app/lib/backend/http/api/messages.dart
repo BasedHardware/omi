@@ -274,3 +274,104 @@ Future reportMessageServer(String messageId) async {
     throw Exception('Failed to report message');
   }
 }
+
+Stream<ServerMessageChunk> sendMessageStreamServerV3(String text, {String? appId}) async* {
+  var url = '${Env.apiBaseUrl}v2/messages_twitter?plugin_id=$appId';
+  if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
+    url = '${Env.apiBaseUrl}v2/messages_twitter';
+  }
+
+  try {
+    final request = await HttpClient().postUrl(Uri.parse(url));
+    request.headers.set('Authorization', await getAuthHeader());
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({'text': text}));
+
+    final response = await request.close();
+
+    if (response.statusCode != 200) {
+      Logger.error('Failed to send message: ${response.statusCode}');
+      yield ServerMessageChunk.failedMessage();
+      return;
+    }
+
+    var buffers = <String>[];
+    var messageId = "1000"; // Default new message
+    await for (var data in response.transform(utf8.decoder)) {
+      var lines = data.split('\n\n');
+      for (var line in lines.where((line) => line.isNotEmpty)) {
+        // Dealing w/ the package spliting by 1024 bytes in dart
+        // Waiting for the next package
+        if (line.length >= 1024) {
+          buffers.add(line);
+          continue;
+        }
+
+        // Merge package if needed
+        if (buffers.isNotEmpty) {
+          buffers.add(line);
+          line = buffers.join();
+          buffers.clear();
+        }
+
+        var messageChunk = parseMessageChunk(line, messageId);
+        if (messageChunk != null) {
+          yield messageChunk;
+        }
+      }
+    }
+
+    // Flush remainings
+    if (buffers.isNotEmpty) {
+      var messageChunk = parseMessageChunk(buffers.join(), messageId);
+      if (messageChunk != null) {
+        yield messageChunk;
+      }
+    }
+  } catch (e) {
+    Logger.error('Error sending message: $e');
+    yield ServerMessageChunk.failedMessage();
+  }
+}
+
+Future<List<ServerMessage>> getMessagesServerV3({
+  String? pluginId,
+  bool dropdownSelected = false,
+}) async {
+  if (pluginId == 'no_selected') pluginId = null;
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/messages?plugin_id=${pluginId ?? ''}&dropdown_selected=$dropdownSelected',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getMessages: ${response.body}');
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var decodedBody = jsonDecode(body) as List<dynamic>;
+    if (decodedBody.isEmpty) {
+      return [];
+    }
+    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
+    debugPrint('getMessages length: ${messages.length}');
+    return messages;
+  }
+  return [];
+}
+
+Future<List<ServerMessage>> clearChatServerV3({String? pluginId}) async {
+  if (pluginId == 'no_selected') pluginId = null;
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/messages?plugin_id=${pluginId ?? ''}',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) throw Exception('Failed to delete chat');
+  if (response.statusCode == 200) {
+    return [ServerMessage.fromJson(jsonDecode(response.body))];
+  } else {
+    throw Exception('Failed to delete chat');
+  }
+}
