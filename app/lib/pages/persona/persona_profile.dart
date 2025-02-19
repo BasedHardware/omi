@@ -258,7 +258,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           child: TextButton(
                             onPressed: () {
                               Share.share(
-                                'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://persona.omi.me/u/${provider.userPersona!.name}',
+                                'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://personas.omi.me/u/${provider.userPersona!.username}',
                                 subject: '${provider.userPersona!.name} Persona',
                               );
                             },
