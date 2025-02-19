@@ -17,7 +17,7 @@ from database.redis_db import delete_generic_cache, get_specific_user_review, in
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc
+    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid
 from utils.llm import generate_description, generate_persona_description
 
 from utils.notifications import send_notification
@@ -25,7 +25,7 @@ from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
-    create_persona_from_twitter_profile
+    create_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
 
@@ -78,10 +78,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                 external_integration['is_instructions_url'] = True
             else:
                 external_integration['is_instructions_url'] = False
-    if "persona" in data['capabilities']:
-        save_username(data['username'], uid)
-        data['persona_prompt'] = generate_persona_prompt(uid)
-        data['connected_accounts'] = ['omi']
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -100,7 +96,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'])
-def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(persona_data)
     data['approved'] = False
     data['deleted'] = False
@@ -114,9 +110,10 @@ def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), 
     data['author'] = user['display_name']
     data['email'] = user['email']
     save_username(data['username'], uid)
-    data['persona_prompt'] = generate_persona_prompt(uid)
+    if data['connected_accounts'] is None:
+        data['connected_accounts'] = ['omi']
+    data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = generate_persona_desc(uid, data['name'])
-    data['connected_accounts'] = ['omi']
     os.makedirs(f'_temp/plugins', exist_ok=True)
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
@@ -155,6 +152,22 @@ def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadF
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(persona_id)
     return {'status': 'ok'}
+
+
+@router.get('/v1/personas', tags=['v1'])
+def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
+    app = get_persona_by_uid(uid)
+    print(app)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.uid != uid:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.private is not None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
+
+    return app
 
 
 @router.get('/v1/apps/check-username', tags=['v1'])
@@ -412,7 +425,7 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 # ******************************************************
 
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
-async def get_twitter_profile_data(username: str):
+async def get_twitter_profile_data(username: str, uid: str = Depends(auth.get_current_user_uid)):
     if username.startswith('@'):
         username = username[1:]
     res = await get_twitter_profile(username)
@@ -422,18 +435,30 @@ async def get_twitter_profile_data(username: str):
 
 
 @router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
-async def verify_twitter_ownership_tweet(username: str):
+async def verify_twitter_ownership_tweet(
+    username: str, 
+    uid: str = Depends(auth.get_current_user_uid),
+    persona_id: str | None = None
+):
+    # Get user info to check auth provider
+    user = get_user_from_uid(uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get provider info from Firebase
+    user_info = auth.get_user(uid)
+    provider_data = [p.provider_id for p in user_info.provider_data]
+
     if username.startswith('@'):
         username = username[1:]
     res = await get_latest_tweet(username)
     if res['verified']:
-        await create_persona_from_twitter_profile(username)
+        if not ('google.com' in provider_data or 'apple.com' in provider_data):
+            await create_persona_from_twitter_profile(username, uid)
+        else:
+            if persona_id:
+                await add_twitter_to_persona(username, persona_id)
     return res
-
-
-
-
-
 
 
 # ******************************************************
