@@ -2046,7 +2046,6 @@ Conversations:
 
 
 def condense_tweets(tweets, name):
-    combined_tweets = "\n".join(tweets)
     prompt = f"""
 You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}’s core identity, personality, communication style, and thought patterns.  
 
@@ -2077,14 +2076,14 @@ A condensed context that includes:
 Generate the condensed context now.
 
 Tweets:
-{combined_tweets}
+{tweets}
     """
     response = llm_medium.invoke(prompt)
+    print(response.content)
     return response.content
 
 
 def generate_twitter_persona_prompt(tweets, name):
-    combined_tweets = "\n".join(tweets)
     prompt = f"""
 You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
 
@@ -2115,6 +2114,6 @@ You have:
 You have all the necessary condensed tweets context. Begin personifying {name} now.
 
 Tweets:
-{combined_tweets}
+{tweets}
     """
     return prompt

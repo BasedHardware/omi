@@ -91,7 +91,7 @@ async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[s
         }
     }
     tweets = await get_twitter_timeline(username)
-    tweets = [tweet['text'] for tweet in tweets['timeline']]
+    tweets = [{'tweet': tweet['text'], 'posted_at': tweet['created_at']} for tweet in tweets['timeline']]
     condensed_tweets = condense_tweets(tweets, profile["name"])
     persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, profile["name"])
     add_app_to_db(persona)
