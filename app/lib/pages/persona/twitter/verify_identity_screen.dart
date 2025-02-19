@@ -24,8 +24,12 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
   }
 
   Future<void> _openTwitterToTweet(BuildContext context) async {
-    final handle = context.read<PersonaProvider>().twitterProfile['profile'];
-    final tweetText = Uri.encodeComponent('Verifying my clone: persona.omi.me/u/$handle');
+    var provider = context.read<PersonaProvider>();
+    var handle = provider.usernameController.text;
+    if (handle.isEmpty) {
+      handle = provider.twitterProfile['profile'];
+    }
+    final tweetText = Uri.encodeComponent('Verifying my clone: https://persona.omi.me/u/$handle');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
 
     if (await canLaunchUrl(Uri.parse(twitterUrl))) {
