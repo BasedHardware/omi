@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/http/api/apps.dart';
@@ -23,12 +22,14 @@ class PersonaProvider extends ChangeNotifier {
 
   String? personaId;
 
-  bool isFormValid = false;
-  bool _isLoading = false;
+  bool isFormValid = true;
+  bool isLoading = false;
 
   Map twitterProfile = {};
+  App? userPersona;
 
   Future getTwitterProfile(String username) async {
+    setIsLoading(true);
     var res = await getTwitterProfileData(username);
     print('Twitter Profile: $res');
     if (res != null) {
@@ -39,17 +40,30 @@ class PersonaProvider extends ChangeNotifier {
         twitterProfile = res;
       }
     }
+    setIsLoading(false);
     notifyListeners();
   }
 
   Future verifyTweet(String username) async {
-    var res = await verifyTwitterOwnership(username);
+    var res = await verifyTwitterOwnership(username, personaId);
     if (res) {
       AppSnackbar.showSnackbarSuccess('Twitter handle verified');
     } else {
       AppSnackbar.showSnackbarError('Failed to verify Twitter handle');
     }
     return res;
+  }
+
+  Future getUserPersona() async {
+    setIsLoading(true);
+    var res = await getUserPersonaServer();
+    if (res != null) {
+      userPersona = res;
+    } else {
+      userPersona = null;
+      AppSnackbar.showSnackbarError('Failed to fetch your persona');
+    }
+    setIsLoading(false);
   }
 
   void setPersonaPublic(bool? value) {
@@ -80,7 +94,7 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   void validateForm() {
-    isFormValid = formKey.currentState!.validate() && selectedImage != null;
+    isFormValid = formKey.currentState!.validate() && (selectedImage != null || selectedImageUrl != null);
     notifyListeners();
   }
 
@@ -91,7 +105,44 @@ class PersonaProvider extends ChangeNotifier {
     makePersonaPublic = false;
     isFormValid = false;
     onShowSuccessDialog = null;
+    personaId = null;
+    twitterProfile = {};
     notifyListeners();
+  }
+
+  Future<void> updatePersona() async {
+    if (!formKey.currentState!.validate() || selectedImage == null) {
+      if (selectedImage == null) {
+        AppSnackbar.showSnackbarError('Please select an image');
+      }
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      final personaData = {
+        'name': nameController.text,
+        'username': usernameController.text,
+        'private': !makePersonaPublic,
+      };
+
+      var res = await updatePersonaApp(selectedImage, personaData);
+
+      if (res) {
+        String personaUrl = 'personas.omi.me/u/${usernameController.text}';
+        print('Persona URL: $personaUrl');
+        if (onShowSuccessDialog != null) {
+          onShowSuccessDialog!(personaUrl);
+        }
+      } else {
+        AppSnackbar.showSnackbarError('Failed to create your persona. Please try again later.');
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Failed to create persona: $e');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   Future<void> createPersona() async {
@@ -110,6 +161,14 @@ class PersonaProvider extends ChangeNotifier {
         'username': usernameController.text,
         'private': !makePersonaPublic,
       };
+
+      if (twitterProfile.isNotEmpty) {
+        personaData['connected_accounts'] = ['omi', 'twitter'];
+        personaData['twitter'] = {
+          'username': twitterProfile['profile'],
+          'avatar': twitterProfile['avatar'],
+        };
+      }
 
       var res = await createPersonaApp(selectedImage!, personaData);
 
@@ -141,7 +200,7 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   void setIsLoading(bool loading) {
-    _isLoading = loading;
+    isLoading = loading;
     notifyListeners();
   }
 }

@@ -21,7 +21,9 @@ import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/home/page.dart';
 import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/onboarding/device_selection.dart';
 import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/auth_provider.dart';
@@ -327,9 +329,14 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<AuthenticationProvider>().user != null ||
           (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        IntercomManager.instance.intercom.loginIdentifiedUser(
-          userId: SharedPreferencesUtil().uid,
-        );
+        try {
+          await IntercomManager.instance.intercom.loginIdentifiedUser(
+            userId: SharedPreferencesUtil().uid,
+          );
+        } catch (e) {
+          debugPrint('Failed to login to Intercom: $e');
+        }
+
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
@@ -345,13 +352,19 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted &&
-            (authProvider.user != null ||
-                (SharedPreferencesUtil().customBackendUrl.isNotEmpty &&
-                    SharedPreferencesUtil().authToken.isNotEmpty))) {
-          return const HomePageWrapper();
+        if ((authProvider.user != null ||
+            (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty))) {
+          if (SharedPreferencesUtil().hasOmiDevice == false) {
+            return const PersonaProfilePage();
+          } else {
+            if (SharedPreferencesUtil().onboardingCompleted) {
+              return const HomePageWrapper();
+            } else {
+              return const OnboardingWrapper();
+            }
+          }
         } else {
-          return const OnboardingWrapper();
+          return const DeviceSelectionPage();
         }
       },
     );

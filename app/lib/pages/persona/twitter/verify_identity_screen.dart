@@ -21,15 +21,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
   @override
   void initState() {
     super.initState();
-    _checkExistingVerification();
-  }
-
-  Future<void> _checkExistingVerification() async {
-    // final handle = context.read<NoDeviceOnboardingProvider>().twitterHandle.replaceAll('@', '');
-    // if (TwitterVerificationService.isVerified(handle)) {
-    //   // If already verified, move to next screen
-    //   widget.onNext();
-    // }
   }
 
   Future<void> _openTwitterToTweet(BuildContext context) async {
@@ -231,14 +222,6 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            // Text(
-                            //   lastName,
-                            //   style: const TextStyle(
-                            //     color: Colors.white,
-                            //     fontSize: 20,
-                            //     fontWeight: FontWeight.bold,
-                            //   ),
-                            // ),
                           ],
                         ),
                       ],
