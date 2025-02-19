@@ -111,7 +111,7 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updatePersona() async {
-    if (!formKey.currentState!.validate() || selectedImage == null) {
+    if (!formKey.currentState!.validate() || (selectedImage == null || selectedImageUrl == null)) {
       if (selectedImage == null) {
         AppSnackbar.showSnackbarError('Please select an image');
       }
