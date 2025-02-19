@@ -4,6 +4,7 @@ import asyncio
 from typing import List, Optional, Tuple, AsyncGenerator
 
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
@@ -15,6 +16,7 @@ import database.memories as memories_db
 from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
+from models.app import App
 from models.chat import ChatSession, Message
 from models.memory import Memory
 from models.plugin import Plugin
@@ -39,6 +41,7 @@ from utils.other.endpoints import timeit
 from utils.plugins import get_github_docs_content
 
 model = ChatOpenAI(model="gpt-4o-mini")
+llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
 
 
 class StructuredFilters(TypedDict):
@@ -419,3 +422,57 @@ async def execute_graph_chat_stream(
 
     yield None
     return
+
+
+async def execute_persona_chat_stream(
+        uid: str, messages: List[Message], app: App, cited: Optional[bool] = False,
+        callback_data: dict = None, chat_session: Optional[str] = None
+) -> AsyncGenerator[str, None]:
+    """Handle streaming chat responses for persona-type apps"""
+
+    system_prompt = app.persona_prompt
+    formatted_messages = [SystemMessage(content=system_prompt)]
+
+    for msg in messages:
+        if msg.sender == "ai":
+            formatted_messages.append(AIMessage(content=msg.text))
+        else:
+            formatted_messages.append(HumanMessage(content=msg.text))
+
+    full_response = []
+    callback = AsyncStreamingCallback()
+
+    try:
+        task = asyncio.create_task(llm_medium_stream.agenerate(
+            messages=[formatted_messages],
+            callbacks=[callback]
+        ))
+
+        while True:
+            try:
+                chunk = await callback.queue.get()
+                if chunk:
+                    token = chunk.replace("data: ", "")
+                    full_response.append(token)
+                    yield chunk
+                else:
+                    break
+            except asyncio.CancelledError:
+                break
+
+        await task
+
+        if callback_data is not None:
+            callback_data['answer'] = ''.join(full_response)
+            callback_data['memories_found'] = []
+            callback_data['ask_for_nps'] = False
+
+        yield None
+        return
+
+    except Exception as e:
+        print(f"Error in execute_persona_chat_stream: {e}")
+        if callback_data is not None:
+            callback_data['error'] = str(e)
+        yield None
+        return

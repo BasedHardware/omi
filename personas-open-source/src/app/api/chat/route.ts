@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       const botDoc = await getDoc(doc(db, 'plugins_data', botId));
       if (botDoc.exists()) {
         const bot = botDoc.data();
-        chatPrompt = bot.chat_prompt;
+        chatPrompt = bot.chat_prompt ?? bot.persona_prompt;
         isInfluencer = bot.is_influencer ?? false;
       }
     } catch (error) {

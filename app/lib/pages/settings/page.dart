@@ -119,6 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       return getDialog(context, () {
                         Navigator.of(context).pop();
                       }, () {
+                        SharedPreferencesUtil().hasOmiDevice = null;
                         signOut();
                         Navigator.of(context).pop();
                         routeToPage(context, const DeciderWidget(), replace: true);

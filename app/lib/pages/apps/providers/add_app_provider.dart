@@ -23,10 +23,9 @@ class AddAppProvider extends ChangeNotifier {
 
   TextEditingController appNameController = TextEditingController();
   TextEditingController appDescriptionController = TextEditingController();
-  TextEditingController creatorNameController = TextEditingController();
-  TextEditingController creatorEmailController = TextEditingController();
   TextEditingController chatPromptController = TextEditingController();
   TextEditingController conversationPromptController = TextEditingController();
+
   String? appCategory;
 
 // Trigger Event
@@ -84,8 +83,6 @@ class AddAppProvider extends ChangeNotifier {
     if (paymentPlans.isEmpty) {
       await getPaymentPlans();
     }
-    creatorNameController.text = SharedPreferencesUtil().givenName;
-    creatorEmailController.text = SharedPreferencesUtil().email;
     setIsLoading(false);
   }
 
@@ -132,9 +129,7 @@ class AddAppProvider extends ChangeNotifier {
     imageUrl = app.image;
     appNameController.text = app.name.decodeString;
     appDescriptionController.text = app.description.decodeString;
-    creatorNameController.text = app.author.decodeString;
     priceController.text = app.price.toString();
-    creatorEmailController.text = app.email ?? '';
     makeAppPublic = !app.private;
     selectedCapabilities = app.getCapabilitiesFromIds(capabilities);
     if (app.externalIntegration != null) {
@@ -169,8 +164,6 @@ class AddAppProvider extends ChangeNotifier {
   void clear() {
     appNameController.clear();
     appDescriptionController.clear();
-    creatorNameController.clear();
-    creatorEmailController.clear();
     chatPromptController.clear();
     conversationPromptController.clear();
     triggerEvent = null;
@@ -254,9 +247,6 @@ class AddAppProvider extends ChangeNotifier {
       return true;
     }
     if (appDescriptionController.text != app.description) {
-      return true;
-    }
-    if (creatorNameController.text != app.author) {
       return true;
     }
     if (makeAppPublic != !app.private) {
@@ -424,8 +414,6 @@ class AddAppProvider extends ChangeNotifier {
     Map<String, dynamic> data = {
       'name': appNameController.text,
       'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
@@ -490,10 +478,8 @@ class AddAppProvider extends ChangeNotifier {
     setIsSubmitting(true);
 
     Map<String, dynamic> data = {
-      'name': appNameController.text,
-      'description': appDescriptionController.text,
-      'author': creatorNameController.text,
-      'email': creatorEmailController.text,
+      'name': appNameController.text.trim(),
+      'description': appDescriptionController.text.trim(),
       'capabilities': selectedCapabilities.map((e) => e.id).toList(),
       'deleted': false,
       'uid': SharedPreferencesUtil().uid,
@@ -523,10 +509,10 @@ class AddAppProvider extends ChangeNotifier {
         }
       }
       if (capability.id == 'chat') {
-        data['chat_prompt'] = chatPromptController.text;
+        data['chat_prompt'] = chatPromptController.text.trim();
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = conversationPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text.trim();
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
@@ -630,7 +616,13 @@ class AddAppProvider extends ChangeNotifier {
     if (selectedCapabilities.contains(capability)) {
       selectedCapabilities.remove(capability);
     } else {
-      selectedCapabilities.add(capability);
+      if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'persona') {
+        AppSnackbar.showSnackbarError('Other capabilities cannot be selected with Persona');
+      } else if (selectedCapabilities.isNotEmpty && capability.id == 'persona') {
+        AppSnackbar.showSnackbarError('Persona cannot be selected with other capabilities');
+      } else {
+        selectedCapabilities.add(capability);
+      }
     }
     checkValidity();
     notifyListeners();
@@ -727,6 +719,5 @@ class AddAppProvider extends ChangeNotifier {
 
   void setIsGenratingDescription(bool genrating) {
     isGenratingDescription = genrating;
-    notifyListeners();
   }
 }

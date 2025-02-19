@@ -343,7 +343,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
                                               message: message,
                                               sendMessage: _sendMessageUtil,
-                                              displayOptions: provider.messages.length <= 1,
+                                              displayOptions: provider.messages.length <= 1 &&
+                                                  provider.messageSenderApp(message.appId)?.isNotPersona() == true,
                                               appSender: provider.messageSenderApp(message.appId),
                                               updateConversation: (ServerConversation conversation) {
                                                 context.read<ConversationProvider>().updateConversation(conversation);

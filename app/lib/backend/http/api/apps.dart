@@ -414,3 +414,138 @@ Future<String> getGenratedDescription(String name, String description) async {
     return '';
   }
 }
+
+Future<bool> createPersonaApp(File file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'POST',
+    Uri.parse('${Env.apiBaseUrl}v1/personas'),
+  );
+  request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  print(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      if (response.body.isNotEmpty) {
+        return false;
+      } else {
+        return false;
+      }
+    }
+  } catch (e) {
+    debugPrint('An error occurred createPersonaApp: $e');
+    return false;
+  }
+}
+
+Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
+  var request = http.MultipartRequest(
+    'PATCH',
+    Uri.parse('${Env.apiBaseUrl}v1/personas/${personaData['id']}'),
+  );
+  if (file != null) {
+    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: basename(file.path)));
+  }
+  request.headers.addAll({'Authorization': await getAuthHeader()});
+  request.fields.addAll({'persona_data': jsonEncode(personaData)});
+  debugPrint(jsonEncode(personaData));
+  try {
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      debugPrint('updatePersonaApp Response body: ${jsonDecode(response.body)}');
+      return true;
+    } else {
+      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('An error occurred updatePersonaApp: $e');
+    return false;
+  }
+}
+
+Future<bool> checkPersonaUsername(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/check-username?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('checkPersonaUsernames: ${response.body}');
+    return jsonDecode(response.body)['is_taken'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return true;
+  }
+}
+
+Future<Map?> getTwitterProfileData(String username) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas/twitter/profile?username=$username',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getTwitterProfileData: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}
+
+Future<bool> verifyTwitterOwnership(String username, String? personaId) async {
+  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username';
+  if (personaId != null) {
+    url += '&persona_id=$personaId';
+  }
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('verifyTwitterOwnership: ${response.body}');
+    return jsonDecode(response.body)['verified'];
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return false;
+  }
+}
+
+Future<App?> getUserPersonaServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getPersonaProfile: ${response.body}');
+    var res = jsonDecode(response.body);
+    return App.fromJson(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
+  }
+}

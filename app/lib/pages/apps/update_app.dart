@@ -114,8 +114,6 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                           imageFile: provider.imageFile,
                           appNameController: provider.appNameController,
                           appDescriptionController: provider.appDescriptionController,
-                          creatorNameController: provider.creatorNameController,
-                          creatorEmailController: provider.creatorEmailController,
                           categories: provider.categories,
                           setAppCategory: provider.setAppCategory,
                           imageUrl: provider.imageUrl,
@@ -152,8 +150,8 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                   itemCount: provider.thumbnailUrls.length + 1,
                                   itemBuilder: (context, index) {
                                     // Calculate dimensions to maintain 2:3 ratio
-                                    final width = 120.0;
-                                    final height = width * 1.5; // 2:3 ratio
+                                    const width = 120.0;
+                                    const height = width * 1.5; // 2:3 ratio
 
                                     if (index == provider.thumbnailUrls.length) {
                                       return GestureDetector(

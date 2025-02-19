@@ -15,8 +15,6 @@ class AppMetadataWidget extends StatelessWidget {
   final VoidCallback pickImage;
   final TextEditingController appNameController;
   final TextEditingController appDescriptionController;
-  final TextEditingController creatorNameController;
-  final TextEditingController creatorEmailController;
   final List<Category> categories;
   final Function(String?) setAppCategory;
   final String? category;
@@ -31,8 +29,6 @@ class AppMetadataWidget extends StatelessWidget {
     required this.pickImage,
     required this.appNameController,
     required this.appDescriptionController,
-    required this.creatorNameController,
-    required this.creatorEmailController,
     required this.categories,
     required this.setAppCategory,
     this.category,
@@ -264,75 +260,6 @@ class AppMetadataWidget extends StatelessWidget {
                             width: 12,
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'Creator Name',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    width: double.infinity,
-                    child: TextFormField(
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter creator name';
-                        }
-                        return null;
-                      },
-                      controller: creatorNameController,
-                      decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.only(top: 6, bottom: 6),
-                        isDense: true,
-                        errorText: null,
-                        border: InputBorder.none,
-                        hintText: 'Nik Shevchenko',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'Email Address',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    width: double.infinity,
-                    child: TextFormField(
-                      controller: creatorEmailController,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter creator email';
-                        }
-                        return null;
-                      },
-                      decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.only(top: 6, bottom: 6),
-                        isDense: true,
-                        border: InputBorder.none,
-                        hintText: 'nik@basedhardware.com',
                       ),
                     ),
                   ),

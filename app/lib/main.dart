@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+rename-friend-to-omi
 import 'package:omi_private/backend/auth.dart';
 import 'package:omi_private/backend/http/api/custom_auth.dart';
 import 'package:omi_private/backend/preferences.dart';
@@ -43,6 +44,46 @@ import 'package:omi_private/utils/analytics/intercom.dart';
 import 'package:omi_private/utils/analytics/mixpanel.dart';
 import 'package:omi_private/utils/features/calendar.dart';
 import 'package:omi_private/utils/logger.dart';
+
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/http/api/custom_auth.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/dev_env.dart';
+import 'package:friend_private/env/env.dart';
+import 'package:friend_private/env/prod_env.dart';
+import 'package:friend_private/firebase_options_dev.dart' as dev;
+import 'package:friend_private/firebase_options_prod.dart' as prod;
+import 'package:friend_private/flavors.dart';
+import 'package:friend_private/pages/apps/app_detail/app_detail.dart';
+import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
+import 'package:friend_private/pages/home/page.dart';
+import 'package:friend_private/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:friend_private/pages/onboarding/device_selection.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
+import 'package:friend_private/pages/persona/persona_profile.dart';
+import 'package:friend_private/pages/persona/persona_provider.dart';
+import 'package:friend_private/providers/app_provider.dart';
+import 'package:friend_private/providers/auth_provider.dart';
+import 'package:friend_private/providers/calendar_provider.dart';
+import 'package:friend_private/providers/capture_provider.dart';
+import 'package:friend_private/providers/connectivity_provider.dart';
+import 'package:friend_private/providers/developer_mode_provider.dart';
+import 'package:friend_private/providers/device_provider.dart';
+import 'package:friend_private/providers/home_provider.dart';
+import 'package:friend_private/providers/conversation_provider.dart';
+import 'package:friend_private/providers/message_provider.dart';
+import 'package:friend_private/providers/onboarding_provider.dart';
+import 'package:friend_private/pages/payments/payment_method_provider.dart';
+import 'package:friend_private/providers/speech_profile_provider.dart';
+import 'package:friend_private/services/notifications.dart';
+import 'package:friend_private/services/services.dart';
+import 'package:friend_private/utils/alerts/app_snackbar.dart';
+import 'package:friend_private/utils/analytics/growthbook.dart';
+import 'package:friend_private/utils/analytics/intercom.dart';
+import 'package:friend_private/utils/analytics/mixpanel.dart';
+import 'package:friend_private/utils/features/calendar.dart';
+import 'package:friend_private/utils/logger.dart';
+ main
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
@@ -205,6 +246,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+          ChangeNotifierProvider(create: (context) => PersonaProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -325,9 +367,14 @@ class _DeciderWidgetState extends State<DeciderWidget> {
       if (context.read<AuthenticationProvider>().user != null ||
           (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
-        IntercomManager.instance.intercom.loginIdentifiedUser(
-          userId: SharedPreferencesUtil().uid,
-        );
+        try {
+          await IntercomManager.instance.intercom.loginIdentifiedUser(
+            userId: SharedPreferencesUtil().uid,
+          );
+        } catch (e) {
+          debugPrint('Failed to login to Intercom: $e');
+        }
+
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
@@ -343,13 +390,19 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if (SharedPreferencesUtil().onboardingCompleted &&
-            (authProvider.user != null ||
-                (SharedPreferencesUtil().customBackendUrl.isNotEmpty &&
-                    SharedPreferencesUtil().authToken.isNotEmpty))) {
-          return const HomePageWrapper();
+        if ((authProvider.user != null ||
+            (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty))) {
+          if (SharedPreferencesUtil().hasOmiDevice == false) {
+            return const PersonaProfilePage();
+          } else {
+            if (SharedPreferencesUtil().onboardingCompleted) {
+              return const HomePageWrapper();
+            } else {
+              return const OnboardingWrapper();
+            }
+          }
         } else {
-          return const OnboardingWrapper();
+          return const DeviceSelectionPage();
         }
       },
     );

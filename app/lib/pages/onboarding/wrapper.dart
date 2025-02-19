@@ -86,9 +86,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             userId: SharedPreferencesUtil().uid,
           );
           if (SharedPreferencesUtil().onboardingCompleted) {
-            // previous users
-            // Not needed anymore, because AuthProvider already does this
-            // routeToPage(context, const HomePageWrapper(), replace: true);
+            routeToPage(context, const HomePageWrapper(), replace: true);
           } else {
             _goNext();
           }

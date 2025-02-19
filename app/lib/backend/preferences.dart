@@ -29,6 +29,13 @@ class SharedPreferencesUtil {
 
   //-------------------------------- Device ----------------------------------//
 
+  bool? get hasOmiDevice => _preferences?.getBool('hasOmiDevice');
+  set hasOmiDevice(bool? value) {
+    if (value != null) {
+      _preferences?.setBool('hasOmiDevice', value);
+    }
+  }
+
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
   }

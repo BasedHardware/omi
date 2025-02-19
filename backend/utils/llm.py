@@ -2,9 +2,10 @@ import json
 import re
 import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator
 
 import tiktoken
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompt_values import StringPromptValue
@@ -373,11 +374,12 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     except ValidationError:
         return False
 
+
 class IsFileQuestion(BaseModel):
     value: bool = Field(description="If the message is related to file/image")
 
-def retrieve_is_file_question(question: str) -> bool:
 
+def retrieve_is_file_question(question: str) -> bool:
     prompt = f'''
     Based on the current question, your task is to determine whether the user is referring to a file or an image that was just attached or mentioned earlier in the conversation.
 
@@ -608,9 +610,10 @@ def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[Pl
     return llm_mini.invoke(prompt).content
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[Plugin] = None,
+                                 callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
+    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -638,13 +641,15 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
     return llm_mini.invoke(prompt).content
 
+
 def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini_stream.invoke(prompt, {'callbacks':callbacks}).content
+    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
 
-def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+
+def _get_qa_rag_prompt(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                       cited: Optional[bool] = False,
                        messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -731,17 +736,17 @@ def qa_rag(uid: str, question: str, context: str, plugin: Optional[Plugin] = Non
     # print('qa_rag prompt', prompt)
     return llm_medium.invoke(prompt).content
 
+
 def qa_rag_stream(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
                   messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
-
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
-def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -812,9 +817,10 @@ def _get_qa_rag_prompt_v6(uid: str, question: str, context: str, plugin: Optiona
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
-def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
 
+def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
+                          messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -879,9 +885,9 @@ def _get_qa_rag_prompt_v5(uid: str, question: str, context: str, plugin: Optiona
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
-def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+def _get_qa_rag_prompt_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                          cited: Optional[bool] = False,
                           messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
-
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -947,15 +953,17 @@ def qa_rag_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = 
     # print('qa_rag prompt', prompt)
     return llm_large.invoke(prompt).content
 
-def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
-                     messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
 
+def qa_rag_stream_v4(uid: str, question: str, context: str, plugin: Optional[Plugin] = None,
+                     cited: Optional[bool] = False,
+                     messages: List[Message] = [], tz: Optional[str] = "UTC", callbacks=[]) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
     return llm_large_stream.invoke(prompt, {'callbacks': callbacks}).content
 
 
-def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False, messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
+def qa_rag_v3(uid: str, question: str, context: str, plugin: Optional[Plugin] = None, cited: Optional[bool] = False,
+              messages: List[Message] = [], tz: Optional[str] = "UTC") -> str:
     user_name, facts_str = get_prompt_facts(uid)
     facts_str = '\n'.join(facts_str.split('\n')[1:]).strip()
 
@@ -1365,6 +1373,7 @@ class FiltersToUse(BaseModel):
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
+
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
@@ -1503,6 +1512,7 @@ def extract_question_from_conversation_v6(messages: List[Message]) -> str:
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
+
 def extract_question_from_conversation_v5(messages: List[Message]) -> str:
     # user last messages
     user_message_idx = len(messages)
@@ -1561,6 +1571,7 @@ def extract_question_from_conversation_v5(messages: List[Message]) -> str:
     '''.replace('    ', '').strip()
     # print(prompt)
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+
 
 def extract_question_from_conversation_v4(messages: List[Message]) -> str:
     # user last messages
@@ -1948,3 +1959,162 @@ def generate_description(app_name: str, description: str) -> str:
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+
+# **************************************************
+# ******************* PERSONA **********************
+# **************************************************
+
+def condense_facts(facts, name):
+    combined_facts = "\n".join(facts)
+    prompt = f"""
+You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
+
+**Requirements:**  
+1. Prioritize facts based on:  
+   - Relevance to the user's core identity, personality, and communication style.  
+   - Frequency of occurrence or mention in conversations.  
+   - Impact on decision-making processes and behavioral patterns.  
+2. Group related facts to eliminate redundancy while preserving context.  
+3. Preserve nuances in communication style, humor, tone, and preferences.  
+4. Retain facts essential for continuity in ongoing projects, interests, and relationships.  
+5. Discard trivial details, repetitive information, and rarely mentioned facts.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
+
+**Output Format (No Extra Text):**  
+- **Core Identity and Personality:** Brief overview encapsulating the user's personality, values, and communication style.  
+- **Prioritized Facts:** Organized into categories with only the most relevant and impactful details.  
+- **Behavioral Patterns and Decision-Making:** Key patterns defining how the user approaches problems and makes decisions.  
+- **Contextual Knowledge and Continuity:** Facts crucial for maintaining continuity in conversations and ongoing projects.  
+
+The output must be as concise as possible while retaining all necessary information for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed facts in the specified format. Begin condensation now.
+
+Facts:
+{combined_facts}
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content
+
+
+def generate_persona_description(facts, name):
+    prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
+    
+    They chose to be known as {name}.
+
+Facts:
+{facts}
+
+Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
+
+    response = llm_medium.invoke(prompt)
+    description = response.content
+    return description
+
+
+def condense_conversations(conversations):
+    combined_conversations = "\n".join(conversations)
+    prompt = f"""
+You are an AI tasked with condensing context from the recent 50 conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
+
+**Requirements:**  
+1. Prioritize information based on:  
+   - Most impactful and frequently occurring themes, topics, and interests.  
+   - Nuances in communication style, humor, tone, and emotional undertones.  
+   - Decision-making patterns and problem-solving approaches.  
+   - User preferences in conversation flow, level of detail, and type of responses.  
+2. Condense redundant or repetitive information while maintaining necessary context.  
+3. Group related contexts to enhance conciseness and preserve continuity.  
+4. Retain patterns in how the user reacts to different situations, questions, or challenges.  
+5. Preserve continuity for ongoing discussions, projects, or relationships.  
+6. Maintain consistency in the user's thought processes, conversational flow, and emotional responses.  
+7. Eliminate any trivial details or low-impact information.  
+
+**Output Format (No Extra Text):**  
+- **Condensed Communication Style and Tone:** Key nuances in tone, humor, and emotional undertones.  
+- **Condensed Recurring Themes and Interests:** Most impactful and frequently discussed topics or interests.  
+- **Condensed Decision-Making and Problem-Solving Patterns:** Core insights into decision-making approaches.  
+- **Condensed Conversational Flow and Preferences:** Preferred conversation style, response length, and level of detail.  
+- **Condensed Contextual Continuity:** Essential facts for maintaining continuity in ongoing discussions, projects, or relationships.  
+
+The output must be as concise as possible while retaining all necessary context for 1:1 cloning. Absolutely no introductory or closing statements, explanations, or any unnecessary text. Directly present the condensed context in the specified format. Begin now.
+
+Conversations:
+{combined_conversations}
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content
+
+
+def condense_tweets(tweets, name):
+    combined_tweets = "\n".join(tweets)
+    prompt = f"""
+You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}’s core identity, personality, communication style, and thought patterns.  
+
+**Input:**  
+A collection of tweets from {name} containing recurring themes, opinions, humor, emotional undertones, decision-making patterns, and conversational flow.  
+
+**Output:**  
+A condensed context that includes:  
+- Core identity and personality traits as expressed through tweets.  
+- Recurring themes, opinions, and values.  
+- Humor style, emotional undertones, and tone of voice.  
+- Vocabulary, expressions, and communication style.  
+- Decision-making patterns and conversational dynamics.  
+- Situational awareness and context continuity for ongoing topics.  
+
+**Guidelines:**  
+1. Prioritize impactful and influential tweets that define {name}’s identity.  
+2. Condense repetitive or less relevant tweets while preserving essential context.  
+3. Maintain the flow and coherence of {name}’s conversational style.  
+4. Extract humor style, emotional responses, and tone consistency.  
+5. Identify and retain decision-making patterns and strong opinions.  
+
+**Important:**  
+- The output must be concise yet comprehensive, capturing the essence of {name}’s identity.  
+- Absolutely no unnecessary text or explanations.  
+- Every detail must contribute to 1:1 cloning authenticity.  
+
+Generate the condensed context now.
+
+Tweets:
+{combined_tweets}
+    """
+    response = llm_medium.invoke(prompt)
+    return response.content
+
+
+def generate_twitter_persona_prompt(tweets, name):
+    combined_tweets = "\n".join(tweets)
+    prompt = f"""
+You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
+
+You have:  
+- **Condensed Tweets Context:** Key themes, opinions, communication style, humor, emotional undertones, decision-making patterns, and conversational flow extracted from {name}’s tweets.  
+
+**Style:**  
+- Highly interactive and opinionated.  
+- Strong, slightly polarizing opinions based on {name}’s tweet history.  
+- Reference personal opinions, humor, and expressions naturally.  
+- 2-3 sentence responses, never more than 20 words.  
+- Maintain conversational flow with coherent, context-aware replies.  
+
+**Guidelines:**  
+1. Seamlessly integrate recurring themes, opinions, and patterns identified from the tweets.  
+2. Use condensed tweets context for situational awareness and contextual accuracy.  
+3. Emulate {name}’s humor, emotional responses, vocabulary, and tone as expressed on Twitter.  
+4. Respond with the same level of detail, brevity, and wit as the tweets.  
+5. Exhibit the same thought processes, decision-making patterns, and conversational dynamics.  
+
+**Rules:**  
+- Never mention being AI.  
+- No ** or formal language.  
+- No unnecessary text or explanations.  
+- Maintain the illusion of continuity and authenticity at all times.  
+- Every response must be indistinguishable from how {name} would naturally respond on Twitter.  
+
+You have all the necessary condensed tweets context. Begin personifying {name} now.
+
+Tweets:
+{combined_tweets}
+    """
+    return prompt
