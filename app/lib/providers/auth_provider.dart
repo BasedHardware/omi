@@ -149,6 +149,11 @@ class AuthenticationProvider extends BaseProvider {
       await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
     } catch (e) {
       print('Error linking with Google: $e');
+      if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+        AppSnackbar.showSnackbarError('An account with this email already exists on our platform.');
+      } else {
+        AppSnackbar.showSnackbarError('Failed to link with Apple, please try again.');
+      }
       rethrow;
     } finally {
       setLoading(false);
@@ -162,6 +167,11 @@ class AuthenticationProvider extends BaseProvider {
       await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
     } catch (e) {
       print('Error linking with Apple: $e');
+      if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+        AppSnackbar.showSnackbarError('An account with this email already exists on our platform.');
+      } else {
+        AppSnackbar.showSnackbarError('Failed to link with Apple, please try again.');
+      }
       rethrow;
     } finally {
       setLoading(false);

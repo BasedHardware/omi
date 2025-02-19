@@ -29,7 +29,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
     if (handle.isEmpty) {
       handle = provider.twitterProfile['profile'];
     }
-    final tweetText = Uri.encodeComponent('Verifying my clone: https://persona.omi.me/u/$handle');
+    final tweetText = Uri.encodeComponent('Verifying my clone: https://personas.omi.me/u/$handle');
     final twitterUrl = 'https://twitter.com/intent/tweet?text=$tweetText';
 
     if (await canLaunchUrl(Uri.parse(twitterUrl))) {
