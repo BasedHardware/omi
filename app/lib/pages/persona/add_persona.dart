@@ -366,6 +366,11 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                               if (provider.twitterProfile.isEmpty)
                                 GestureDetector(
                                   onTap: () {
+                                    if (provider.usernameController.text.isEmpty) {
+                                      AppSnackbar.showSnackbarError(
+                                          'Please enter a username to before connecting Twitter');
+                                      return;
+                                    }
                                     routeToPage(context, SocialHandleScreen());
                                   },
                                   child: Container(
