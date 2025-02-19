@@ -3,7 +3,7 @@ title: Update OMI Firmware
 description: "This document outlines the process of updating the OMI firmware."
 ---
 
-To update the firmware of your OMI device, navigate to the OMI App:  
+To update the firmware of your OMI device, navigate to the OMI App:
 **Settings > Device Settings > Update Firmware.**
 
 ---
@@ -13,27 +13,43 @@ To update the firmware of your OMI device, navigate to the OMI App:
 ### Video Tutorial
 
 <div style={{ textAlign: "center" }}>
-  <video width="100%" height="auto" controls>
+  <video width="100%" height="auto" controls playsInline>
     <source
-      src="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov"
+      src="/images/updating_your_friend.mp4"
       type="video/mp4"
     />
-    Your browser does not support the video tag. <a href="https://github.com/BasedHardware/omi/blob/main/docs/static/images/updating_your_friend.mov">
-      Click here to watch the video
+    <source
+      src="/images/updating_your_friend.mov"
+      type="video/quicktime"
+    />
+    Your browser does not support the video tag. <a href="/images/updating_your_friend.mp4">
+      Click here to download the video
     </a>.
   </video>
 </div>
 
 ---
 
-## Walkthrough
+## Flash Your DevKit
 
-### Downloading the Firmware
+To flash your DevKit, follow these steps:
 
-1. Visit the [OMI GitHub releases](https://github.com/BasedHardware/omi/releases).
-2. Download the latest firmware and bootloader `.uf2` files.  
-   **Important:** Ensure you select the correct files for your device:
-   - Developer Kit 2 firmware is **not** compatible with Developer Kit 1.
+1. **Download the Latest DevKit Firmware**
+   - Go to [the Omi GitHub Releases page](https://github.com/BasedHardware/omi/releases).
+   - Search for the release that includes **`Omi_DK`** in its name.
+   - Download the `.uf2` files for the **DevKit** from the release’s “Assets.”
+
+2. **Put the DevKit in Bootloader Mode**
+   - Connect your DevKit via USB to your computer.
+   - Press and hold the BOOT/RESET button (on your DevKit) while plugging in or resetting the board.
+   - Your DevKit should now appear as a USB drive named something like `DEVKIT`.
+
+3. **Copy the Firmware to the DevKit**
+   - Drag and drop the **`.uf2`** file you downloaded onto the `DEVKIT` drive.
+   - The DevKit will automatically restart, running the newly flashed firmware.
+
+> **Note**: For additional documentation on updating your DevKit2 firmware, please see [Updating Your DevKit2 Firmware](https://help.omi.me/en/articles/9995941-updating-your-devkit2-firmware).
+
 
 ---
 
@@ -73,5 +89,5 @@ To update the firmware of your OMI device, navigate to the OMI App:
 
 ## Congratulations!
 
-You have successfully flashed the latest firmware onto your OMI device.  
+You have successfully flashed the latest firmware onto your OMI device.
 Enjoy the enhanced functionality and features of your updated OMI!
