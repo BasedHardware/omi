@@ -11,6 +11,7 @@ import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PersonaProfilePage extends StatefulWidget {
   const PersonaProfilePage({
@@ -123,7 +124,8 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                   ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      await launchUrl(Uri.parse('https://www.omi.me/?_ref=omi_persona_flow'));
                       // Navigator.pop(context);
                       //  var persona = context.read<PersonaProvider>().userPersona;
                       // routeToPage(context, UpdatePersonaPage(app: persona));
@@ -171,14 +173,14 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             backgroundColor: Colors.transparent,
             appBar: AppBar(
               backgroundColor: Colors.transparent,
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white),
-                  onPressed: () {
-                    // TODO: Implement settings
-                  },
-                ),
-              ],
+              // actions: [
+              //   IconButton(
+              //     icon: const Icon(Icons.settings, color: Colors.white),
+              //     onPressed: () {
+              //       // TODO: Implement settings
+              //     },
+              //   ),
+              // ],
             ),
             body: provider.isLoading || provider.userPersona == null
                 ? const Center(
@@ -246,7 +248,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "40% Clone",
+                          "40% Cloned",
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 16,
@@ -258,7 +260,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           child: TextButton(
                             onPressed: () {
                               Share.share(
-                                'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://persona.omi.me/u/${provider.userPersona!.name}',
+                                'Check out this Persona on Omi AI: ${provider.userPersona!.name} by me \n\nhttps://personas.omi.me/u/${provider.userPersona!.username}',
                                 subject: '${provider.userPersona!.name} Persona',
                               );
                             },
@@ -351,7 +353,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               ),
                               _buildSocialLink(
                                 icon: 'assets/images/x_logo_mini.png',
-                                text: 'mohsinxyz_',
+                                text: provider.userPersona!.username ?? 'username',
                                 isConnected: true,
                               ),
                               const SizedBox(height: 12),
