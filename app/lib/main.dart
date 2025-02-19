@@ -67,6 +67,10 @@ Future<bool> _init() async {
   await NotificationService.instance.initialize();
   await SharedPreferencesUtil.init();
   await MixpanelManager.init();
+  if (SharedPreferencesUtil().hasOmiDevice == null && FirebaseAuth.instance.currentUser?.isAnonymous == true) {
+    debugPrint('User is anonymous and unnecessarily created by Firebase');
+    await FirebaseAuth.instance.currentUser?.delete();
+  }
 
   // TODO: thinh, move to app start
   await ServiceManager.instance().start();
@@ -79,7 +83,6 @@ Future<bool> _init() async {
       isAuth = (await getIdToken()) != null;
     }
   } catch (e) {} // if no connect this will fail
-
   if (isAuth) MixpanelManager().identify();
   initOpus(await opus_flutter.load());
 
@@ -352,8 +355,8 @@ class _DeciderWidgetState extends State<DeciderWidget> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
-        if ((authProvider.user != null ||
-            (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty))) {
+        if (authProvider.user != null ||
+            (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
           if (SharedPreferencesUtil().hasOmiDevice == false) {
             return const PersonaProfilePage();
           } else {
