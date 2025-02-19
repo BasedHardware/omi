@@ -28,6 +28,9 @@ import { Mixpanel } from '@/lib/mixpanel';
 function ChatContent() {
 
   useEffect(() => {
+    // Identify the user first
+    Mixpanel.identify();
+
     // Then track the page view
     Mixpanel.track('Page View', {
       page: 'Chat',
