@@ -52,6 +52,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                 const SizedBox(height: 24),
                 const Text(
                   'Your Omi Persona is live!',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,
