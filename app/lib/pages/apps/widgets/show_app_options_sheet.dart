@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/pages/apps/update_app.dart';
+import 'package:friend_private/pages/persona/update_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
@@ -40,9 +41,9 @@ class ShowAppOptionsSheet extends StatelessWidget {
                 borderRadius: BorderRadius.all(Radius.circular(8)),
               ),
               child: ListTile(
-                title: const Text(
-                  'Keep App Public',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                title: Text(
+                  app.isNotPersona() ? 'Keep App Public' : 'Keep Persona Public',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 trailing: Switch(
                   value: provider.appPublicToggled,
@@ -59,8 +60,8 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          'Make App Public?',
-                          'If you make the app public, it can be used by everyone',
+                          app.isNotPersona() ? 'Make App Public?' : 'Make Persona Public?',
+                          'If you make the ${app.isNotPersona() ? 'app' : 'persona'} public, it can be used by everyone',
                           okButtonText: 'Confirm',
                         ),
                       );
@@ -76,8 +77,8 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          'Make App Private?',
-                          'If you make the app private now, it will stop working for everyone and will be visible only to you',
+                          app.isNotPersona() ? 'Make App Private?' : 'Make Persona Private?',
+                          'If you make the ${app.isNotPersona() ? 'app' : 'persona'} private now, it will stop working for everyone and will be visible only to you',
                           okButtonText: 'Confirm',
                         ),
                       );
@@ -93,15 +94,19 @@ class ShowAppOptionsSheet extends StatelessWidget {
               child: Column(
                 children: [
                   ListTile(
-                    title: const Text('Update App Details'),
+                    title: Text(app.isNotPersona() ? 'Update App Details' : 'Update Persona Details'),
                     leading: const Icon(Icons.edit),
                     onTap: () {
                       Navigator.pop(context);
-                      routeToPage(context, UpdateAppPage(app: app));
+                      if (app.isNotPersona()) {
+                        routeToPage(context, UpdateAppPage(app: app));
+                      } else {
+                        routeToPage(context, UpdatePersonaPage(app: app, fromNewFlow: false));
+                      }
                     },
                   ),
                   ListTile(
-                    title: const Text('Delete App'),
+                    title: Text('Delete ${app.isNotPersona() ? 'App' : 'Persona'}'),
                     leading: const Icon(
                       Icons.delete,
                     ),
@@ -117,8 +122,8 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          'Delete App',
-                          'Are you sure you want to delete this app? This action cannot be undone.',
+                          'Delete ${app.isNotPersona() ? 'App' : 'Persona'}?',
+                          'Are you sure you want to delete this ${app.isNotPersona() ? 'App' : 'Persona'}? This action cannot be undone.',
                           okButtonText: 'Confirm',
                         ),
                       );

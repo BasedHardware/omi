@@ -8,6 +8,11 @@ from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 
 
+def get_user(uid: str):
+    user = auth.get_user(uid)
+    return user
+
+
 def get_current_user_uid(authorization: str = Header(None)):
     if authorization and os.getenv('ADMIN_KEY') in authorization:
         return authorization.split(os.getenv('ADMIN_KEY'))[1]
