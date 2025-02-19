@@ -46,6 +46,10 @@
 				<key>CFBundleTypeRole</key>
 				<string>Editor</string>
 				<key>CFBundleURLName</key>
+				<string>com.friend.ios</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>omiapp</string>
 				<string>h.omi.me</string>
 				<key>CFBundleURLSchemes</key>
 				<array>

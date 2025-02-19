@@ -5,9 +5,12 @@ import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/env/env.dart';
 import 'package:friend_private/utils/logger.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:twitter_login/twitter_login.dart';
+import 'package:friend_private/services/twitter_api_service.dart';
 
 /// Generates a cryptographically secure random nonce, to be included in a
 /// credential request.
@@ -203,5 +206,74 @@ Future<void> updateGivenName(String fullName) async {
   var user = FirebaseAuth.instance.currentUser;
   if (user != null) {
     await user.updateProfile(displayName: fullName);
+  }
+}
+
+Future<UserCredential?> signInWithTwitter() async {
+  try {
+    final twitterLogin = TwitterLogin(
+      apiKey: 'hlSXpzpGbuD39MXhUxgRBBQBY',
+      apiSecretKey: 'MwcBCAnZhdo0QXcSIpasxJM8bGEZSrtGNG5WyVU6xSUsp8J83L',
+      redirectURI: 'omiapp://',
+    );
+
+    final authResult = await twitterLogin.login();
+    switch (authResult.status) {
+      case TwitterLoginStatus.loggedIn:
+      
+        final twitterAuthCredential = TwitterAuthProvider.credential(
+          accessToken: authResult.authToken!,
+          secret: authResult.authTokenSecret!,
+        );
+
+        // Store Twitter tokens
+        SharedPreferencesUtil().twitterAccessToken = authResult.authToken!;
+        SharedPreferencesUtil().twitterAccessTokenSecret = authResult.authTokenSecret!;
+
+        // First complete Firebase authentication
+        final userCredential = await FirebaseAuth.instance.signInWithCredential(twitterAuthCredential);
+        
+        // Update user profile in SharedPreferences
+        if (userCredential.user != null) {
+          SharedPreferencesUtil().uid = userCredential.user!.uid;
+          if (userCredential.user!.email != null) {
+            SharedPreferencesUtil().email = userCredential.user!.email!;
+          }
+          if (userCredential.user!.displayName != null) {
+            var nameParts = userCredential.user!.displayName!.split(' ');
+            SharedPreferencesUtil().givenName = nameParts[0];
+            SharedPreferencesUtil().familyName = nameParts.length > 1 ? nameParts[1] : '';
+          }
+          if (authResult.user?.screenName != null) {
+            SharedPreferencesUtil().twitterHandle = authResult.user!.screenName;
+          }
+
+          // Now that auth is complete, try to fetch DM events
+          try {
+            final twitterService = TwitterApiService();
+            final dmEvents = await twitterService.getDMEvents();
+            print('DM events fetched successfully: ${dmEvents['data']}');
+          } catch (e) {
+            print('Failed to fetch DM events: $e');
+          }
+        }
+        
+        return userCredential;
+      case TwitterLoginStatus.cancelledByUser:
+        print('Twitter login cancelled by user');
+        return null;
+      case TwitterLoginStatus.error:
+        print('Twitter login error: ${authResult.errorMessage}');
+        return null;
+      default:
+        print('Twitter login unknown error');
+        return null;
+    }
+  } on FirebaseAuthException catch (e) {
+    print('Firebase auth error: ${e.message}');
+    return null;
+  } catch (e) {
+    print('Unexpected error during Twitter sign in: $e');
+    return null;
   }
 }

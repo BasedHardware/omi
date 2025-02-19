@@ -36,6 +36,11 @@ dependencies:
   firebase_core: 3.3.0
   firebase_auth: 5.1.4
   firebase_messaging: 15.0.4
+  cloud_firestore: ^5.2.1 
+
+  # Auth
+  twitter_login: ^4.4.2
+  oauth1: ^2.0.0
 
   # Analytics and Support
   intercom_flutter:
@@ -160,6 +165,9 @@ flutter:
     - assets/silero_vad.v5.onnx
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
+    - assets/images/x_logo.png
+    - assets/images/new_background.png
+    - assets/images/clone.png
   fonts:
     - family: "SF Pro Display"
       fonts:

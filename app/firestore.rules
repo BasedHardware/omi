@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Match users collection
+    match /users/{userId} {
+      // Allow users to read and write their own documents
+      allow read, write: if isAuthenticated() && isOwner(userId);
+
+      // Match direct_messages subcollection
+      match /twitter_messages/{messageId} {
+        // Allow users to read and write their own messages
+        allow read: if isAuthenticated() && isOwner(userId);
+        // Only allow creation if user is authenticated and sets their own user_id
+        allow create: if isAuthenticated() 
+          && isOwner(userId)
+          && request.resource.data.user_id == request.auth.uid;
+        // Allow updates only to specific fields and by the message owner
+        allow update: if isAuthenticated() 
+          && isOwner(userId)
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.id == resource.data.id;
+        // Allow deletion by the message owner
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 
