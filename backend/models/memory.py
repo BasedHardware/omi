@@ -118,7 +118,7 @@ class Geolocation(BaseModel):
 
 
 class MemorySource(str, Enum):
-    friend = 'friend'
+    omi = 'omi'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
@@ -162,7 +162,7 @@ class Memory(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource] = MemorySource.friend  # TODO: once released migrate db to include this field
+    source: Optional[MemorySource] = MemorySource.omi  # TODO: once released migrate db to include this field
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
@@ -233,7 +233,7 @@ class CreateMemory(BaseModel):
 
     photos: List[MemoryPhoto] = []
 
-    source: MemorySource = MemorySource.friend
+    source: MemorySource = MemorySource.omi
     language: Optional[str] = None
 
     processing_memory_id: Optional[str] = None

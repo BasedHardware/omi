@@ -86,7 +86,7 @@ export default function AppHeader({
       className: 'text-white hover:text-gray-300',
     },
     {
-      href: 'https://www.omi.me/products/friend-dev-kit-2',
+      href: 'https://www.omi.me/products/omi-dev-kit-2',
       label: 'Order Now',
       className: 'text-white hover:text-gray-300',
     },

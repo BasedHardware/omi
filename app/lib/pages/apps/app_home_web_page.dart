@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+rename-friend-to-omi
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:omi_private/backend/preferences.dart';
+
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/backend/preferences.dart';
+main
 
 class AppHomeWebPage extends StatefulWidget {
   final App app;
@@ -16,7 +22,7 @@ class AppHomeWebPage extends StatefulWidget {
 }
 
 class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProviderStateMixin {
-  late final WebViewController _controller;
+late final WebViewController _controller;
   late final AnimationController _animationController;
   late final Animation<Offset> _slideAnimation;
   bool _isLoading = true;

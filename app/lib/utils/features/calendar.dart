@@ -1,5 +1,5 @@
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/utils/logger.dart';
 import 'package:manage_calendar_events/manage_calendar_events.dart';
 import 'package:permission_handler/permission_handler.dart';
 

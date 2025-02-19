@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/env/env.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/env/env.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 
 class IntercomManager {

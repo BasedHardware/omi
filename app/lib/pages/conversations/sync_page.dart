@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:friend_private/pages/settings/widgets/appbar_with_banner.dart';
-import 'package:friend_private/providers/connectivity_provider.dart';
-import 'package:friend_private/providers/conversation_provider.dart';
-import 'package:friend_private/services/services.dart';
-import 'package:friend_private/services/wals.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/utils/other/time_utils.dart';
+import 'package:omi_private/pages/settings/widgets/appbar_with_banner.dart';
+import 'package:omi_private/providers/connectivity_provider.dart';
+import 'package:omi_private/providers/conversation_provider.dart';
+import 'package:omi_private/services/services.dart';
+import 'package:omi_private/services/wals.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/utils/other/time_utils.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 

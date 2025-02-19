@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/auth.dart';
-import 'package:friend_private/backend/preferences.dart';
-import 'package:friend_private/main.dart';
-import 'package:friend_private/pages/settings/about.dart';
-import 'package:friend_private/pages/settings/developer.dart';
-import 'package:friend_private/pages/settings/profile.dart';
-import 'package:friend_private/pages/settings/widgets.dart';
-import 'package:friend_private/utils/other/temp.dart';
-import 'package:friend_private/widgets/dialog.dart';
+import 'package:omi_private/backend/auth.dart';
+import 'package:omi_private/backend/preferences.dart';
+import 'package:omi_private/main.dart';
+import 'package:omi_private/pages/settings/about.dart';
+import 'package:omi_private/pages/settings/developer.dart';
+import 'package:omi_private/pages/settings/profile.dart';
+import 'package:omi_private/pages/settings/widgets.dart';
+import 'package:omi_private/utils/other/temp.dart';
+import 'package:omi_private/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 

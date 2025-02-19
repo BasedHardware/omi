@@ -4,12 +4,12 @@ flavors:
       name: "Omi"
       icon: "assets/images/app_launcher_icon.png"
     android:
-      applicationId: "com.friend.ios"
+      applicationId: "com.omi.ios"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/android/app/src/prod/google-services.json"
     ios:
-      bundleId: "com.friend-app-with-wearable.ios12"
+      bundleId: "com.omi-app-with-wearable.ios12"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/ios/Config/Prod/GoogleService-Info.plist"
@@ -19,11 +19,11 @@ flavors:
       icon: "assets/images/app_launcher_icon.png"
     android:
       icon: "assets/images/app_launcher_icon.png"
-      applicationId: "com.friend.ios.dev"
+      applicationId: "com.omi.ios.dev"
       firebase:
         config: "app/android/app/src/dev/google-services.json"
     ios:
-      bundleId: "com.friend-app-with-wearable.ios12.development"
+      bundleId: "com.omi-app-with-wearable.ios12.development"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/ios/Config/Dev/GoogleService-Info.plist"

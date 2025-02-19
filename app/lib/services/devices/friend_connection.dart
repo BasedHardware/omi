@@ -6,17 +6,17 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:friend_private/backend/schema/bt_device/bt_device.dart';
-import 'package:friend_private/services/devices.dart';
-import 'package:friend_private/services/devices/device_connection.dart';
-import 'package:friend_private/services/devices/errors.dart';
-import 'package:friend_private/services/devices/models.dart';
-import 'package:friend_private/utils/audio/wav_bytes.dart';
-import 'package:friend_private/utils/logger.dart';
+import 'package:omi_private/backend/schema/bt_device/bt_device.dart';
+import 'package:omi_private/services/devices.dart';
+import 'package:omi_private/services/devices/device_connection.dart';
+import 'package:omi_private/services/devices/errors.dart';
+import 'package:omi_private/services/devices/models.dart';
+import 'package:omi_private/utils/audio/wav_bytes.dart';
+import 'package:omi_private/utils/logger.dart';
 
 class FriendDeviceConnection extends DeviceConnection {
   BluetoothService? _batteryService;
-  BluetoothService? _friendService;
+  BluetoothService? _omiService;
   BluetoothService? _storageService;
   BluetoothService? _accelService;
   BluetoothService? _buttonService;
@@ -31,8 +31,8 @@ class FriendDeviceConnection extends DeviceConnection {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     // Services
-    _friendService = await getService(friendServiceUuid);
-    if (_friendService == null) {
+    _omiService = await getService(omiServiceUuid);
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       throw DeviceConnectionException("Friend ble service is not found");
     }
@@ -63,7 +63,7 @@ class FriendDeviceConnection extends DeviceConnection {
     }
   }
 
-  // Mimic @app/lib/utils/ble/friend_communication.dart
+  // Mimic @app/lib/utils/ble/omi_communication.dart
   @override
   Future<bool> isConnected() async {
     return bleDevice.isConnected;
@@ -206,12 +206,12 @@ class FriendDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return null;
     }
 
-    var audioDataStreamCharacteristic = getCharacteristic(_friendService!, audioDataStreamCharacteristicUuid);
+    var audioDataStreamCharacteristic = getCharacteristic(_omiService!, audioDataStreamCharacteristicUuid);
     if (audioDataStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Audio data stream', deviceId);
       return null;
@@ -260,12 +260,12 @@ class FriendDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return BleAudioCodec.pcm8;
     }
 
-    var audioCodecCharacteristic = getCharacteristic(_friendService!, audioCodecCharacteristicUuid);
+    var audioCodecCharacteristic = getCharacteristic(_omiService!, audioCodecCharacteristicUuid);
     if (audioCodecCharacteristic == null) {
       logCharacteristicNotFoundError('Audio codec', deviceId);
       return BleAudioCodec.pcm8;
@@ -441,12 +441,12 @@ class FriendDeviceConnection extends DeviceConnection {
 
   @override
   Future performCameraStartPhotoController() async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_omiService!, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -460,12 +460,12 @@ class FriendDeviceConnection extends DeviceConnection {
 
   @override
   Future performCameraStopPhotoController() async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return;
     }
 
-    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageCaptureControlCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_omiService!, imageCaptureControlCharacteristicUuid);
     if (imageCaptureControlCharacteristic == null) {
       logCharacteristicNotFoundError('Image capture control', deviceId);
       return;
@@ -478,23 +478,23 @@ class FriendDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return false;
     }
-    var imageCaptureControlCharacteristic = getCharacteristic(_friendService!, imageDataStreamCharacteristicUuid);
+    var imageCaptureControlCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
     return imageCaptureControlCharacteristic != null;
   }
 
   Future<StreamSubscription?> _getBleImageBytesListener({
     required void Function(List<int>) onImageBytesReceived,
   }) async {
-    if (_friendService == null) {
+    if (_omiService == null) {
       logServiceNotFoundError('Friend', deviceId);
       return null;
     }
 
-    var imageStreamCharacteristic = getCharacteristic(_friendService!, imageDataStreamCharacteristicUuid);
+    var imageStreamCharacteristic = getCharacteristic(_omiService!, imageDataStreamCharacteristicUuid);
     if (imageStreamCharacteristic == null) {
       logCharacteristicNotFoundError('Image data stream', deviceId);
       return null;

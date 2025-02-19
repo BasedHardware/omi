@@ -60,6 +60,6 @@
   at  
   Home you were chatting about x and y"
 - [ ] ~~ (Idea) Speaker detection, use something like the python  
-  library [librosa](https://github.com/librosa/librosa), so that friend recognizes when is you the  
+  library [librosa](https://github.com/librosa/librosa), so that omi recognizes when is you the  
   one speaking and creates memories better considering that. Maybe even later learns to recognize  
   other people.

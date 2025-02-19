@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/providers/auth_provider.dart';
-import 'package:friend_private/widgets/sign_in_button.dart';
+import 'package:omi_private/providers/auth_provider.dart';
+import 'package:omi_private/widgets/sign_in_button.dart';
 import 'package:provider/provider.dart';
 
 class AuthComponent extends StatefulWidget {

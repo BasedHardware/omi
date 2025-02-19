@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.omi.ios
 
 import android.app.Application
 import io.maido.intercom.IntercomFlutterPlugin

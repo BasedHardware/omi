@@ -268,7 +268,7 @@ class FriendClient:
 
 zap_client = ZapierClient()
 
-friend_client = FriendClient(
+omi_client = FriendClient(
     base_url=os.getenv('FRIEND_API_URL'),
     workflow_api_key=os.getenv('WORKFLOW_API_KEY'),
 )
@@ -278,5 +278,5 @@ def get_zapier():
     return zap_client
 
 
-def get_friend():
-    return friend_client
+def get_omi():
+    return omi_client

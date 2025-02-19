@@ -145,7 +145,7 @@
 # # "Pack my box with five dozen liquor jugs."
 # # "The five boxing wizards jump quickly and quietly."
 # # "Bright blue birds fly above the green grassy hills."
-# # "Fred’s friends fried Fritos for Friday's food festival."
+# # "Fred’s omis fried Fritos for Friday's food festival."
 #
 # # Natural Conversation Phrases
 # # "Hey, can you pass me that book?"
@@ -171,4 +171,4 @@
 # # "I need to buy some groceries, like milk, eggs, and bread."
 # # "He quickly ran to catch the bus before it left."
 # # "Technology is evolving rapidly, changing our daily lives."
-# # "She whispered a secret to her best friend in class."
+# # "She whispered a secret to her best omi in class."

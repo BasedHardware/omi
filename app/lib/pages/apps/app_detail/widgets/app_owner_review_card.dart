@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
-import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/providers/app_provider.dart';
-import 'package:friend_private/widgets/extensions/string.dart';
+import 'package:omi_private/backend/http/api/apps.dart';
+import 'package:omi_private/backend/schema/app.dart';
+import 'package:omi_private/providers/app_provider.dart';
+import 'package:omi_private/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 

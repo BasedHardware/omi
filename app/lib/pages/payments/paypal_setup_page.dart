@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/payments/payment_method_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/widgets/animated_loading_button.dart';
+import 'package:omi_private/gen/assets.gen.dart';
+import 'package:omi_private/pages/payments/payment_method_provider.dart';
+import 'package:omi_private/utils/analytics/mixpanel.dart';
+import 'package:omi_private/widgets/animated_loading_button.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/other/validators.dart';
