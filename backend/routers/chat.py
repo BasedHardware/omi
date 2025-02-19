@@ -12,7 +12,8 @@ from multipart.multipart import shutil
 import database.chat as chat_db
 from database.apps import record_app_usage
 from models.app import App
-from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, FileChat
+from models.chat import ChatSession, Message, SendMessageRequest, MessageSender, ResponseMessage, MessageMemory, \
+    FileChat
 from models.memory import Memory
 from models.plugin import UsageHistoryType
 from routers.sync import retrieve_file_paths, decode_files_to_wav, retrieve_vad_segments
@@ -21,10 +22,11 @@ from utils.chat import process_voice_message_segment, process_voice_message_segm
 from utils.llm import initial_chat_message
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
+from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
 
 router = APIRouter()
 fc = FileChatTool()
+
 
 def filter_messages(messages, plugin_id):
     print('filter_messages', len(messages), plugin_id)
@@ -35,6 +37,7 @@ def filter_messages(messages, plugin_id):
         collected.append(message)
     print('filter_messages output:', len(collected))
     return collected
+
 
 def acquire_chat_session(uid: str, plugin_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
@@ -132,10 +135,11 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
+        stream_function = execute_persona_chat_stream if app and app.is_a_persona() else execute_graph_chat_stream
+        async for chunk in stream_function(uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session):
             if chunk:
-                data = chunk.replace("\n", "__CRLF__")
-                yield f'{data}\n\n'
+                msg = chunk.replace("\n", "__CRLF__")
+                yield f'{msg}\n\n'
             else:
                 response = callback_data.get('answer')
                 if response:
@@ -156,7 +160,6 @@ def send_message(
 def report_message(
         message_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
-
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -246,11 +249,10 @@ async def send_message_with_file(
 
 @router.delete('/v1/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
-
     if plugin_id in ['null', '']:
         plugin_id = None
 
-   # get current chat session
+    # get current chat session
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
@@ -326,7 +328,8 @@ def get_messages(plugin_id: Optional[str] = None, uid: str = Depends(auth.get_cu
     chat_session = chat_db.get_chat_session(uid, plugin_id=plugin_id)
     chat_session_id = chat_session['id'] if chat_session else None
 
-    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id, chat_session_id=chat_session_id)
+    messages = chat_db.get_messages(uid, limit=100, include_memories=True, plugin_id=plugin_id,
+                                    chat_session_id=chat_session_id)
     print('get_messages', len(messages), plugin_id)
     if not messages:
         return [initial_message_util(uid, plugin_id)]
@@ -378,6 +381,7 @@ async def create_voice_message_stream(files: List[UploadFile] = File(...),
         generate_stream(),
         media_type="text/event-stream"
     )
+
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
 def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):

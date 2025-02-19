@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/auth.dart';
 import 'package:friend_private/backend/schema/app.dart';
-import 'package:friend_private/pages/apps/add_app.dart';
 import 'package:friend_private/pages/apps/providers/add_app_provider.dart';
 import 'package:friend_private/pages/apps/widgets/app_section_card.dart';
 import 'package:friend_private/pages/apps/widgets/filter_sheet.dart';
 import 'package:friend_private/pages/apps/list_item.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
-import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+
+import '../persona/twitter/social_profile.dart';
+import 'widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value.runtimeType == String) {
@@ -189,9 +191,15 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
           )),
           SliverToBoxAdapter(
             child: GestureDetector(
-              onTap: () {
-                MixpanelManager().pageOpened('Submit App');
-                routeToPage(context, const AddAppPage());
+              onTap: () async {
+                // routeToPage(context, SocialHandleScreen());
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => const CreateOptionsSheet(),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                );
               },
               child: Container(
                 padding: const EdgeInsets.all(12.0),
@@ -208,7 +216,7 @@ class _ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticK
                       Icon(Icons.add, color: Colors.white),
                       SizedBox(width: 8),
                       Text(
-                        'Create and submit a new app',
+                        'Create your own',
                         textAlign: TextAlign.center,
                       ),
                     ],

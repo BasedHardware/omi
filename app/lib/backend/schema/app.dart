@@ -173,6 +173,8 @@ class App {
   String description;
   String image;
   Set<String> capabilities;
+  List<String> connectedAccounts = [];
+  Map? twitter;
   bool private;
   bool approved;
   String? conversationPrompt;
@@ -195,6 +197,7 @@ class App {
   String? paymentLink;
   List<String> thumbnailIds;
   List<String> thumbnailUrls;
+  String? username;
 
   App({
     required this.id,
@@ -229,6 +232,9 @@ class App {
     this.paymentLink,
     this.thumbnailIds = const [],
     this.thumbnailUrls = const [],
+    this.username,
+    this.connectedAccounts = const [],
+    this.twitter,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -237,7 +243,9 @@ class App {
 
   bool worksWithMemories() => hasCapability('memories');
 
-  bool worksWithChat() => hasCapability('chat');
+  bool worksWithChat() => hasCapability('chat') || hasCapability('persona');
+
+  bool isNotPersona() => !hasCapability('persona');
 
   bool worksExternally() => hasCapability('external_integration');
 
@@ -278,6 +286,9 @@ class App {
       paymentLink: json['payment_link'],
       thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
       thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
+      username: json['username'],
+      connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
+      twitter: json['twitter'],
     );
   }
 

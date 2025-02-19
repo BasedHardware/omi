@@ -205,3 +205,11 @@ Future<void> updateGivenName(String fullName) async {
     await user.updateProfile(displayName: fullName);
   }
 }
+
+Future<void> signInAnonymously() async {
+  try {
+    await FirebaseAuth.instance.signInAnonymously();
+  } catch (e) {
+    Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
+  }
+}
