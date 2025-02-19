@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:friend_private/utils/other/debouncer.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/pages/apps/widgets/full_screen_image_viewer.dart';
@@ -29,6 +30,8 @@ class AddAppPage extends StatefulWidget {
 
 class _AddAppPageState extends State<AddAppPage> {
   late bool showSubmitAppConfirmation;
+  final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
+
   @override
   void initState() {
     showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
@@ -114,8 +117,6 @@ class _AddAppPageState extends State<AddAppPage> {
                             appPricing: provider.isPaid ? 'Paid' : 'Free',
                             appNameController: provider.appNameController,
                             appDescriptionController: provider.appDescriptionController,
-                            creatorNameController: provider.creatorNameController,
-                            creatorEmailController: provider.creatorEmailController,
                             categories: provider.categories,
                             setAppCategory: provider.setAppCategory,
                             imageFile: provider.imageFile,

@@ -9,21 +9,23 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from database.apps import change_app_approval_status, get_unapproved_public_apps_db, \
     add_app_to_db, update_app_in_db, delete_app_from_db, update_app_visibility_in_db, \
     get_personas_by_username_db, get_persona_by_id_db, delete_persona_db
+from database.auth import get_user_from_uid
 from database.notifications import get_token_only
 from database.redis_db import delete_generic_cache, get_specific_user_review, increase_app_installs_count, \
-    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id
-from database.users import get_stripe_connect_account_id
+    decrease_app_installs_count, enable_app, disable_app, delete_app_cache_by_id, is_username_taken, save_username, \
+    get_uid_by_username
 from utils.apps import get_available_apps, get_available_app_by_id, get_approved_available_apps, \
     get_available_app_by_id_with_reviews, set_app_review, get_app_reviews, add_tester, is_tester, \
     add_app_access_for_tester, remove_app_access_for_tester, upsert_app_payment_link, get_is_user_paid_app, \
-    is_permit_payment_plan_get
-from utils.llm import generate_description
+    is_permit_payment_plan_get, generate_persona_prompt, generate_persona_desc, get_persona_by_uid
+from utils.llm import generate_description, generate_persona_description
 
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
 from utils.other.storage import upload_plugin_logo, delete_plugin_logo, upload_app_thumbnail, get_app_thumbnail_url
-from utils.stripe import is_onboarding_complete
+from utils.social import get_twitter_profile, get_twitter_timeline, get_latest_tweet, \
+    create_persona_from_twitter_profile, add_twitter_to_persona
 
 router = APIRouter()
 
@@ -50,6 +52,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = data['name'].strip()
     data['id'] = str(ULID())
+    if not data.get('author') and not data.get('email'):
+        user = get_user_from_uid(uid)
+        data['author'] = user['display_name']
+        data['email'] = user['email']
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -76,8 +82,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     file_path = f"_temp/plugins/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
-    imgUrl = upload_plugin_logo(file_path, data['id'])
-    data['image'] = imgUrl
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
@@ -95,6 +101,94 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
+
+
+@router.post('/v1/personas', tags=['v1'])
+async def create_persona(persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    data['approved'] = False
+    data['deleted'] = False
+    data['status'] = 'under-review'
+    data['category'] = 'personality-emulation'
+    data['name'] = data['name'].strip()
+    data['id'] = str(ULID())
+    data['uid'] = uid
+    data['capabilities'] = ['persona']
+    user = get_user_from_uid(uid)
+    data['author'] = user['display_name']
+    data['email'] = user['email']
+    save_username(data['username'], uid)
+    if data['connected_accounts'] is None:
+        data['connected_accounts'] = ['omi']
+    data['persona_prompt'] = await generate_persona_prompt(uid, data)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    os.makedirs(f'_temp/plugins', exist_ok=True)
+    file_path = f"_temp/plugins/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    img_url = upload_plugin_logo(file_path, data['id'])
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
+
+    add_app_to_db(data)
+
+    return {'status': 'ok', 'app_id': data['id']}
+
+
+@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+def update_persona(persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None),
+                   uid=Depends(auth.get_current_user_uid)):
+    data = json.loads(persona_data)
+    persona = get_available_app_by_id(persona_id, uid)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if persona['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if file:
+        delete_plugin_logo(persona['image'])
+        os.makedirs(f'_temp/plugins', exist_ok=True)
+        file_path = f"_temp/plugins/{file.filename}"
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        img_url = upload_plugin_logo(file_path, persona_id)
+        data['image'] = img_url
+    save_username(data['username'], uid)
+    data['description'] = generate_persona_desc(uid, data['name'])
+    data['updated_at'] = datetime.now(timezone.utc)
+    update_app_in_db(data)
+    if persona['approved'] and (persona['private'] is None or persona['private'] is False):
+        delete_generic_cache('get_public_approved_apps_data')
+    delete_app_cache_by_id(persona_id)
+    return {'status': 'ok'}
+
+
+@router.get('/v1/personas', tags=['v1'])
+def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
+    app = get_persona_by_uid(uid)
+    print(app)
+    app = App(**app) if app else None
+    if not app:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.uid != uid:
+        raise HTTPException(status_code=404, detail='Persona not found')
+    if app.private is not None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
+
+    return app
+
+
+@router.get('/v1/apps/check-username', tags=['v1'])
+def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    persona = is_username_taken(username)
+    if persona == 0:
+        return {'is_taken': False}
+    else:
+        username_owner = get_uid_by_username(username)
+        if username_owner == uid:
+            return {'is_taken': False}
+        else:
+            return {'is_taken': True}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
@@ -128,7 +222,8 @@ def update_app(app_id: str, app_data: str = Form(...), file: UploadFile = File(N
     update_app_in_db(data)
 
     # payment link
-    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'), data.get('uid'),
+    upsert_app_payment_link(data.get('id'), data.get('is_paid', False), data.get('price'), data.get('payment_plan'),
+                            data.get('uid'),
                             previous_price=plugin.get("price", 0))
 
     if plugin['approved'] and (plugin['private'] is None or plugin['private'] is False):
@@ -343,6 +438,47 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 
 
 # ******************************************************
+# ******************* SOCIAL *******************
+# ******************************************************
+
+@router.get('/v1/personas/twitter/profile', tags=['v1'])
+async def get_twitter_profile_data(username: str, uid: str = Depends(auth.get_current_user_uid)):
+    if username.startswith('@'):
+        username = username[1:]
+    res = await get_twitter_profile(username)
+    if res['avatar']:
+        res['avatar'] = res['avatar'].replace('_normal', '')
+    return res
+
+
+@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+async def verify_twitter_ownership_tweet(
+    username: str, 
+    uid: str = Depends(auth.get_current_user_uid),
+    persona_id: str | None = None
+):
+    # Get user info to check auth provider
+    user = get_user_from_uid(uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get provider info from Firebase
+    user_info = auth.get_user(uid)
+    provider_data = [p.provider_id for p in user_info.provider_data]
+
+    if username.startswith('@'):
+        username = username[1:]
+    res = await get_latest_tweet(username)
+    if res['verified']:
+        if not ('google.com' in provider_data or 'apple.com' in provider_data):
+            await create_persona_from_twitter_profile(username, uid)
+        else:
+            if persona_id:
+                await add_twitter_to_persona(username, persona_id)
+    return res
+
+
+# ******************************************************
 # **************** ENABLE/DISABLE APPS *****************
 # ******************************************************
 
@@ -474,8 +610,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(
-    file: UploadFile = File(...),
-    uid: str = Depends(auth.get_current_user_uid)
+        file: UploadFile = File(...),
+        uid: str = Depends(auth.get_current_user_uid)
 ):
     """Upload a thumbnail image for an app.
 
@@ -508,6 +644,7 @@ async def upload_app_thumbnail_endpoint(
         # Cleanup temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
 
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
