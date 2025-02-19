@@ -2,7 +2,25 @@
 
 The Friend App is a Flutter-based mobile application that serves as the companion app for Omi devices. This app enables users to interact with their Omi device, manage apps, and customize their experience.
 
-### Automated Setup (Recommended)
+## 📚 **[View Full App setup instructions in the documentation](https://docs.omi.me/docs/developer/AppSetup)**
+
+## What's in the Documentation?
+
+### 🛠 Development Setup
+- **Firebase Setup**: Complete guide for configuring Firebase authentication and services
+- **Environment Setup**: Step-by-step guide for .env configuration and API keys
+- **Build Configuration**: Instructions for build runner and platform-specific setups
+- **Manual Setup Option**: Alternative to automated setup for custom configurations
+- **Troubleshooting Guide**: Common setup issues and their solutions
+
+### 🚀 Advanced Topics
+- **Backend Integration**: Guide for connecting to custom backend services
+- **Production Setup**: Detailed Firebase configuration for production environment
+- **Authentication**: Complete OAuth setup including SHA key generation
+- **Multi-Environment**: Managing development and production configurations
+- **Platform Specifics**: iOS and Android platform-specific requirements
+
+### Quick Setup
 
 1. Navigate to the app directory:
    ```bash
@@ -23,26 +41,6 @@ The Friend App is a Flutter-based mobile application that serves as the companio
    flutter run --flavor dev
    ```
 
-For detailed setup instructions, including manual setup and Firebase configuration, visit our [App Setup Guide](https://docs.omi.me/docs/developer/AppSetup).
+## Need Help?
 
-## Key Features
-
-- **Device Management**: Connect and manage Omi devices
-- **App Marketplace**: Browse, install, and manage apps
-- **Chat Interface**: Interact with your Omi device
-- **External Integrations**: Support for various services and APIs
-- **Payment Integration**: Secure payment processing through Stripe
-- **Developer Tools**: Create and publish your own apps
-
-## Project Structure
-
-- `lib/`: Main application code
-  - `pages/`: UI screens and components
-  - `providers/`: State management
-  - `backend/`: API and backend services
-  - `utils/`: Utility functions and helpers
-
-## Support
-
-- Discord: http://discord.omi.me
-- Documentation: https://docs.omi.me
+- 💬 Join our [Discord Community](http://discord.omi.me)
