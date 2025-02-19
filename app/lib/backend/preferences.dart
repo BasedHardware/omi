@@ -36,6 +36,10 @@ class SharedPreferencesUtil {
     }
   }
 
+  bool get hasPersonaCreated => getBool('hasPersonaCreated') ?? false;
+
+  set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
+
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
   }

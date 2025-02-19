@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
@@ -199,7 +200,10 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               height: 100,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.grey[800]!, width: 2),
+                                border: Border.all(
+                                  color: const Color(0xFF494947),
+                                  width: 2.5,
+                                ),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(50),
@@ -217,9 +221,14 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               child: Container(
                                 width: 16,
                                 height: 16,
-                                decoration: const BoxDecoration(
-                                  color: Colors.green,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00FF29),
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFF494947),
+                                    width: 2.5,
+                                    strokeAlign: BorderSide.strokeAlignOutside,
+                                  ),
                                 ),
                               ),
                             ),
@@ -248,7 +257,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "40% Cloned",
+                          "25% Cloned",
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 16,
@@ -265,26 +274,23 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                               );
                             },
                             style: TextButton.styleFrom(
-                              backgroundColor: Colors.grey[900],
+                              backgroundColor: Colors.white.withOpacity(0.08),
                               minimumSize: const Size(double.infinity, 50),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(30),
                               ),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.link,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
+                                SvgPicture.asset('assets/images/link_icon.svg'),
+                                const SizedBox(width: 14),
                                 Text(
                                   'Share Public Link',
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
+                                    color: Colors.white.withOpacity(0.86),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
                                   ),
                                 ),
                               ],
@@ -306,9 +312,13 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           child: Container(
                             margin: const EdgeInsets.symmetric(horizontal: 16),
                             width: double.infinity,
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: Colors.grey[900],
+                              image: const DecorationImage(
+                                image: AssetImage('assets/images/gradient_card.png'),
+                                fit: BoxFit.fill,
+                                opacity: 0.9,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
@@ -318,23 +328,24 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   'Clone from device',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 18,
+                                    fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Create a clone from conversations',
+                                  'Create a clone from\nconversations',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 16,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 28),
                         Container(
                           margin: const EdgeInsets.symmetric(horizontal: 16),
                           child: Column(
@@ -345,9 +356,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 child: Text(
                                   'Connected Knowledge Data',
                                   style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withOpacity(0.65),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -401,10 +412,14 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
     bool showConnect = false,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        // color: Colors.grey[900],
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
@@ -426,13 +441,13 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
                 'Coming soon',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: Colors.white,
                   fontSize: 12,
                 ),
               ),
@@ -441,7 +456,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
@@ -456,13 +471,13 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
                 'Connected',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: Colors.white,
                   fontSize: 12,
                 ),
               ),

@@ -358,7 +358,11 @@ class _DeciderWidgetState extends State<DeciderWidget> {
         if (authProvider.user != null ||
             (SharedPreferencesUtil().customBackendUrl.isNotEmpty && SharedPreferencesUtil().authToken.isNotEmpty)) {
           if (SharedPreferencesUtil().hasOmiDevice == false) {
-            return const PersonaProfilePage();
+            if (SharedPreferencesUtil().hasPersonaCreated) {
+              return const PersonaProfilePage();
+            } else {
+              return const DeviceSelectionPage();
+            }
           } else {
             if (SharedPreferencesUtil().onboardingCompleted) {
               return const HomePageWrapper();
