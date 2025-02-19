@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -16,6 +17,20 @@ class CloneSuccessScreen extends StatefulWidget {
 
 class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
   bool _isLoading = false;
+
+  void _handleNavigation() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    // If user is not anonymous (signed in with Google/Apple), they came from create/update flow
+    if (user != null && !user.isAnonymous) {
+      Navigator.pop(context);
+      Navigator.pop(context);
+      Navigator.pop(context);
+    } else {
+      // Anonymous user, just go to profile
+      routeToPage(context, const PersonaProfilePage());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,9 +123,38 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          const Text(
-                            'Your Omi Clone is live!',
-                            style: TextStyle(
+                          if (FirebaseAuth.instance.currentUser?.isAnonymous == false) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/images/x_logo_mini.png',
+                                  width: 16,
+                                  height: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Twitter Connected',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color.fromARGB(255, 85, 184, 88),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          Text(
+                            FirebaseAuth.instance.currentUser?.isAnonymous == false
+                                ? 'Twitter Connected Successfully!'
+                                : 'Your Omi Clone is live!',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -119,7 +163,9 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Share it with anyone who\nneeds to hear back from you',
+                            FirebaseAuth.instance.currentUser?.isAnonymous == false
+                                ? 'Your Twitter data has been connected\nto enhance your persona'
+                                : 'Share it with anyone who\nneeds to hear back from you',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.8),
                               fontSize: 14,
@@ -127,48 +173,40 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 32),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.link,
-                                  color: Colors.white.withOpacity(0.5),
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'personas.omi.me/u/${provider.twitterProfile['profile']}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
+                          FirebaseAuth.instance.currentUser?.isAnonymous == false
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.link,
+                                        color: Colors.white.withOpacity(0.5),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'personas.omi.me/u/${provider.twitterProfile['profile']}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Container(),
                         ],
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 50),
                       child: ElevatedButton(
-                        onPressed: () {
-                          routeToPage(
-                              context,
-                              PersonaProfilePage(
-                                name: provider.twitterProfile['name'],
-                                username: provider.twitterProfile['profile'],
-                                imageUrl: provider.twitterProfile['avatar'],
-                                clonePercentage: 35,
-                                isVerified: true,
-                              ));
-                        },
+                        onPressed: _handleNavigation,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           foregroundColor: Colors.white,
@@ -191,9 +229,11 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                                 ),
                               )
                             else ...[
-                              const Text(
-                                'Check out your persona',
-                                style: TextStyle(
+                              Text(
+                                FirebaseAuth.instance.currentUser?.isAnonymous == false
+                                    ? 'Continue creating your persona'
+                                    : 'Check out your persona',
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),

@@ -101,7 +101,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                       if (app.isNotPersona()) {
                         routeToPage(context, UpdateAppPage(app: app));
                       } else {
-                        routeToPage(context, UpdatePersonaPage(app: app));
+                        routeToPage(context, UpdatePersonaPage(app: app, fromNewFlow: false));
                       }
                     },
                   ),

@@ -8,11 +8,14 @@ import 'package:friend_private/utils/alerts/app_snackbar.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
 import 'package:instabug_flutter/instabug_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthenticationProvider extends BaseProvider {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   User? user;
   String? authToken;
+  bool _loading = false;
+  bool get loading => _loading;
 
   AuthenticationProvider() {
     _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
@@ -46,6 +49,11 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() => _auth.currentUser != null;
+
+  void setLoading(bool value) {
+    _loading = value;
+    notifyListeners();
+  }
 
   Future<void> onGoogleSignIn(Function() onSignIn) async {
     if (!loading) {
@@ -121,5 +129,42 @@ class AuthenticationProvider extends BaseProvider {
 
   void _launchUrl(String url) async {
     if (!await launchUrl(Uri.parse(url))) throw 'Could not launch $url';
+  }
+
+  Future<void> linkWithGoogle() async {
+    setLoading(true);
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setLoading(false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      await FirebaseAuth.instance.currentUser?.linkWithCredential(credential);
+    } catch (e) {
+      print('Error linking with Google: $e');
+      rethrow;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  Future<void> linkWithApple() async {
+    setLoading(true);
+    try {
+      final appleProvider = AppleAuthProvider();
+      await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
+    } catch (e) {
+      print('Error linking with Apple: $e');
+      rethrow;
+    } finally {
+      setLoading(false);
+    }
   }
 }

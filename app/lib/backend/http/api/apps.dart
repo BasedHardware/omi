@@ -509,9 +509,13 @@ Future<Map?> getTwitterProfileData(String username) async {
   }
 }
 
-Future<bool> verifyTwitterOwnership(String username) async {
+Future<bool> verifyTwitterOwnership(String username, String? personaId) async {
+  var url = '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username';
+  if (personaId != null) {
+    url += '&persona_id=$personaId';
+  }
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/personas/twitter/verify-ownership?username=$username',
+    url: url,
     headers: {},
     body: '',
     method: 'GET',
@@ -524,5 +528,24 @@ Future<bool> verifyTwitterOwnership(String username) async {
     debugPrint(e.toString());
     CrashReporting.reportHandledCrash(e, stackTrace);
     return false;
+  }
+}
+
+Future<App?> getUserPersonaServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/personas',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    log('getPersonaProfile: ${response.body}');
+    var res = jsonDecode(response.body);
+    return App.fromJson(res);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    CrashReporting.reportHandledCrash(e, stackTrace);
+    return null;
   }
 }

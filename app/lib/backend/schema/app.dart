@@ -173,6 +173,8 @@ class App {
   String description;
   String image;
   Set<String> capabilities;
+  List<String> connectedAccounts = [];
+  Map? twitter;
   bool private;
   bool approved;
   String? conversationPrompt;
@@ -231,6 +233,8 @@ class App {
     this.thumbnailIds = const [],
     this.thumbnailUrls = const [],
     this.username,
+    this.connectedAccounts = const [],
+    this.twitter,
   });
 
   String? getRatingAvg() => ratingAvg?.toStringAsFixed(1);
@@ -283,6 +287,8 @@ class App {
       thumbnailIds: (json['thumbnails'] as List<dynamic>?)?.cast<String>() ?? [],
       thumbnailUrls: (json['thumbnail_urls'] as List<dynamic>?)?.cast<String>() ?? [],
       username: json['username'],
+      connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
+      twitter: json['twitter'],
     );
   }
 
