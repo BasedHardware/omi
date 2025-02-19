@@ -63,6 +63,8 @@ class App(BaseModel):
     chat_prompt: Optional[str] = None
     persona_prompt: Optional[str] = None
     username: Optional[str] = None
+    connected_accounts: List[str] = []
+    twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
     reviews: List[AppReview] = []
     user_review: Optional[AppReview] = None

@@ -1,15 +1,16 @@
+import os
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import httpx
 from fastapi import HTTPException
 from ulid import ULID
 
-from database.apps import update_app_in_db
+from database.apps import update_app_in_db, add_app_to_db, get_persona_by_uid_db, get_persona_by_id_db
 from database.redis_db import delete_generic_cache
 from utils.llm import condense_tweets, generate_twitter_persona_prompt
 
-rapid_api_host = ''
-rapid_api_key = ''
+rapid_api_host = os.getenv('RAPID_API_HOST')
+rapid_api_key = os.getenv('RAPID_API_KEY')
 
 
 async def get_twitter_profile(username: str) -> Dict[str, Any]:
@@ -65,13 +66,15 @@ async def get_latest_tweet(username: str) -> Dict[str, Any]:
             return {"tweet": latest_tweet['text'], 'verified': False}
 
 
-async def create_persona_from_twitter_profile(username: str) -> Dict[str, Any]:
+async def create_persona_from_twitter_profile(username: str, uid: str) -> Dict[str, Any]:
     profile = await get_twitter_profile(username)
+    profile['avatar'] = profile['avatar'].replace('_normal', '')
     persona = {
         "name": profile["name"],
+        "author": profile['name'],
+        "uid": uid,
         "id": str(ULID()),
         "deleted": False,
-        "archived": True,
         "status": "approved",
         "capabilities": ["persona"],
         "username": profile["profile"],
@@ -79,11 +82,33 @@ async def create_persona_from_twitter_profile(username: str) -> Dict[str, Any]:
         "description": profile["desc"],
         "image": profile["avatar"],
         "category": "personality-emulation",
+        "approved": True,
+        "private": False,
         "created_at": datetime.now(timezone.utc),
+        "twitter": {
+            "username": profile["profile"],
+            "avatar": profile["avatar"],
+        }
     }
-    tweets = get_twitter_timeline(username)
+    tweets = await get_twitter_timeline(username)
+    tweets = [tweet['text'] for tweet in tweets['timeline']]
     condensed_tweets = condense_tweets(tweets, profile["name"])
     persona['persona_prompt'] = generate_twitter_persona_prompt(condensed_tweets, profile["name"])
+    add_app_to_db(persona)
+    delete_generic_cache('get_public_approved_apps_data')
+    return persona
+
+
+async def add_twitter_to_persona(username: str, persona_id) -> Dict[str, Any]:
+    persona = get_persona_by_id_db(persona_id)
+    twitter = await get_twitter_profile(username)
+    twitter['avatar'] = twitter['avatar'].replace('_normal', '')
+    persona['connected_accounts'].append('twitter')
+    persona['twitter'] = {
+        "username": twitter["profile"],
+        "avatar": twitter["avatar"],
+        "connected_at": datetime.now(timezone.utc)
+    }
     update_app_in_db(persona)
     delete_generic_cache('get_public_approved_apps_data')
     return persona
