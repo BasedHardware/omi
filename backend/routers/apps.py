@@ -118,7 +118,7 @@ async def create_persona(persona_data: str = Form(...), file: UploadFile = File(
     data['author'] = user['display_name']
     data['email'] = user['email']
     save_username(data['username'], uid)
-    if data['connected_accounts'] is None:
+    if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = generate_persona_desc(uid, data['name'])
