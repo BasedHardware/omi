@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:friend_private/backend/auth.dart';
+import 'package:friend_private/backend/preferences.dart';
+import 'package:friend_private/pages/onboarding/wrapper.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/pages/persona/twitter/verify_identity_screen.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -48,145 +51,152 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
               elevation: 0,
             ),
             body: SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            children: [
-                              const SizedBox(height: 20),
-                              const Center(
-                                child: Text(
-                                  '🤖',
-                                  style: TextStyle(
-                                    fontSize: 42,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Let\'s train your clone!\nWhat\'s your Twitter handle?',
-                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  shadows: [
-                                    Shadow(
-                                      offset: const Offset(0, 1),
-                                      blurRadius: 15,
-                                      color: Colors.white.withOpacity(1),
-                                    ),
-                                    Shadow(
-                                      offset: const Offset(0, 0),
-                                      blurRadius: 15,
-                                      color: Colors.white.withOpacity(0.3),
-                                    ),
-                                  ],
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'We will pre-train your Omi clone\nbased on your account\'s activity',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Colors.white.withOpacity(0.8),
-                                  shadows: [
-                                    Shadow(
-                                      offset: const Offset(0, 1),
-                                      blurRadius: 3,
-                                      color: Colors.white.withOpacity(0.25),
-                                    ),
-                                  ],
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 32),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.2),
-                                  ),
-                                ),
-                                child: TextFormField(
-                                  controller: _controller,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                  decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                    border: InputBorder.none,
-                                    hintText: '@nikshevchenko',
-                                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                                    prefixIcon: Padding(
-                                      padding: const EdgeInsets.all(12.0),
-                                      child: Image.asset(
-                                        'assets/images/x_logo.png',
-                                        width: 24,
-                                        height: 24,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your Twitter handle';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Spacer(flex: 5),
+                      const Center(
+                        child: Text(
+                          '🤖',
+                          style: TextStyle(
+                            fontSize: 42,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        if (_formKey.currentState!.validate()) {
-                          await context.read<PersonaProvider>().getTwitterProfile(_controller.text.trim());
-                          if (context.read<PersonaProvider>().twitterProfile.isNotEmpty) {
-                            // await Preferences().setTwitterHandle(_controller.text.trim());
-                            routeToPage(context, VerifyIdentityScreen());
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[900],
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
+                      const Spacer(flex: 1),
+                      Text(
+                        'Let\'s train your clone!\nWhat\'s your X handle?',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                        textAlign: TextAlign.center,
                       ),
-                      child: provider.isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              'Next',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                      const SizedBox(height: 10),
+                      Text(
+                        'We will pre-train your Omi clone\nbased on your account\'s activity',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Colors.white.withOpacity(0.55),
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(0, 1),
+                              blurRadius: 3,
+                              color: Colors.white.withOpacity(0.25),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const Spacer(flex: 2),
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.24),
+                          ),
+                        ),
+                        child: TextFormField(
+                          controller: _controller,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.left,
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            border: InputBorder.none,
+                            hintText: '@nikshevchenko',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.38),
+                              fontWeight: FontWeight.bold,
+                            ),
+                            prefixIcon: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Image.asset(
+                                'assets/images/x_logo.png',
+                                width: 22,
+                                height: 22,
                               ),
                             ),
-                    ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your X handle';
+                            }
+                            if (value.trim().length < 3 || value.trim().length > 15) {
+                              return 'Please enter a valid X handle';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const Spacer(flex: 3),
+                      TextButton(
+                        onPressed: () {
+                          FocusScope.of(context).unfocus();
+                          SharedPreferencesUtil().hasOmiDevice = true;
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const OnboardingWrapper()),
+                          );
+                        },
+                        child: const Text(
+                          'I have omi',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                      const Spacer(flex: 1),
+                      ElevatedButton(
+                        onPressed: () async {
+                          FocusScope.of(context).unfocus();
+                          if (_formKey.currentState!.validate()) {
+                            provider.setIsLoading(true);
+                            await signInAnonymously();
+                            SharedPreferencesUtil().hasOmiDevice = false;
+                            await provider.getTwitterProfile(_controller.text.trim());
+                            if (provider.twitterProfile.isNotEmpty) {
+                              routeToPage(context, const VerifyIdentityScreen());
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.12),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                        ),
+                        child: provider.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'Next',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                      const Spacer(flex: 3),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

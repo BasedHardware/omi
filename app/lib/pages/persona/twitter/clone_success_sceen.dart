@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
 import 'package:provider/provider.dart';
@@ -16,8 +17,6 @@ class CloneSuccessScreen extends StatefulWidget {
 }
 
 class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
-  bool _isLoading = false;
-
   void _handleNavigation() {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -50,199 +49,188 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    Spacer(flex: 2),
+                    SvgPicture.asset('assets/images/checkbox.svg'),
                     const SizedBox(height: 24),
-                    Container(
-                      margin: const EdgeInsets.only(top: 40),
-                      padding: const EdgeInsets.fromLTRB(40, 60, 40, 24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
+                    Text(
+                      FirebaseAuth.instance.currentUser?.isAnonymous == false
+                          ? 'X Connected Successfully!'
+                          : 'Your Omi clone is\nverified and live!',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: Column(
-                        children: [
-                          Column(
-                            children: [
-                              Stack(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.2),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: ClipOval(
-                                      child: Image.network(
-                                        provider.twitterProfile['avatar'],
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Container(
-                                            color: Colors.grey[900],
-                                            child: Icon(
-                                              Icons.person,
-                                              size: 40,
-                                              color: Colors.white.withOpacity(0.5),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      width: 20,
-                                      height: 20,
-                                      decoration: BoxDecoration(
-                                        color: const Color.fromARGB(255, 85, 184, 88),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white.withOpacity(0.3),
-                                          width: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                provider.twitterProfile['name'],
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                    ),
+                    Spacer(flex: 1),
+                    Column(
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF494947),
+                                  width: 2.5,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          if (FirebaseAuth.instance.currentUser?.isAnonymous == false) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset(
-                                  'assets/images/x_logo_mini.png',
-                                  width: 16,
-                                  height: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Twitter Connected',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Color.fromARGB(255, 85, 184, 88),
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          Text(
-                            FirebaseAuth.instance.currentUser?.isAnonymous == false
-                                ? 'Twitter Connected Successfully!'
-                                : 'Your Omi Clone is live!',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            FirebaseAuth.instance.currentUser?.isAnonymous == false
-                                ? 'Your Twitter data has been connected\nto enhance your persona'
-                                : 'Share it with anyone who\nneeds to hear back from you',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 32),
-                          FirebaseAuth.instance.currentUser?.isAnonymous == true
-                              ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.link,
+                              child: ClipOval(
+                                child: Image.network(
+                                  provider.twitterProfile['avatar'],
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey[900],
+                                      child: Icon(
+                                        Icons.person,
+                                        size: 40,
                                         color: Colors.white.withOpacity(0.5),
-                                        size: 20,
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'personas.omi.me/u/${provider.twitterProfile['profile']}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 4,
+                              bottom: 2,
+                              child: Container(
+                                width: 18,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00FF29),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFF494947),
+                                    width: 2.5,
+                                    strokeAlign: BorderSide.strokeAlignOutside,
                                   ),
-                                )
-                              : Container(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2.0),
+                              child: Text(
+                                provider.twitterProfile['name'],
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.74),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.verified,
+                              color: Color(0xFF0073FF),
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 34),
+                    Container(
+                      width: MediaQuery.sizeOf(context).width * 0.65,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(18),
+                          topRight: Radius.circular(18),
+                          bottomRight: Radius.circular(18),
+                        ),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Hey, what's up bro.",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            "What did you learn this week?",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
                         ],
                       ),
                     ),
+                    Spacer(flex: 2),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 50),
+                      padding: const EdgeInsets.only(bottom: 10),
                       child: ElevatedButton(
-                        onPressed: _handleNavigation,
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Coming soon!'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 56),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: Colors.grey),
+                            side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
                           ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (_isLoading)
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            else ...[
-                              Text(
-                                FirebaseAuth.instance.currentUser?.isAnonymous == false
-                                    ? 'Continue creating your persona'
-                                    : 'Check out your persona',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            Image.asset(
+                              'assets/images/x_logo.png',
+                              width: 18,
+                              height: 18,
+                            ),
+                            const SizedBox(width: 14),
+                            const Text(
+                              'Connect to DMs',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
                     ),
+                    TextButton(
+                      onPressed: _handleNavigation,
+                      child: Text(
+                        FirebaseAuth.instance.currentUser?.isAnonymous == false
+                            ? 'Continue creating your persona'
+                            : 'Use public link instead',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.white.withOpacity(0.6),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Spacer(flex: 1),
                   ],
                 ),
               ),
