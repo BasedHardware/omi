@@ -52,6 +52,7 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                 const SizedBox(height: 24),
                 const Text(
                   'Your Omi Persona is live!',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 24,
@@ -366,6 +367,11 @@ class _AddPersonaPageState extends State<AddPersonaPage> {
                               if (provider.twitterProfile.isEmpty)
                                 GestureDetector(
                                   onTap: () {
+                                    if (provider.usernameController.text.isEmpty) {
+                                      AppSnackbar.showSnackbarError(
+                                          'Please enter a username to before connecting Twitter');
+                                      return;
+                                    }
                                     routeToPage(context, SocialHandleScreen());
                                   },
                                   child: Container(

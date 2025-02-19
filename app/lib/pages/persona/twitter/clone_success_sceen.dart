@@ -173,7 +173,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 32),
-                          FirebaseAuth.instance.currentUser?.isAnonymous == false
+                          FirebaseAuth.instance.currentUser?.isAnonymous == true
                               ? Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                   decoration: BoxDecoration(

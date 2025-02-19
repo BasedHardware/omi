@@ -111,8 +111,8 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updatePersona() async {
-    if (!formKey.currentState!.validate() || selectedImage == null) {
-      if (selectedImage == null) {
+    if (!formKey.currentState!.validate()) {
+      if (selectedImage == null && selectedImageUrl == null) {
         AppSnackbar.showSnackbarError('Please select an image');
       }
       return;
@@ -125,11 +125,13 @@ class PersonaProvider extends ChangeNotifier {
         'name': nameController.text,
         'username': usernameController.text,
         'private': !makePersonaPublic,
+        'id': personaId,
       };
 
       var res = await updatePersonaApp(selectedImage, personaData);
 
       if (res) {
+        AppSnackbar.showSnackbarSuccess('Persona updated successfully');
         String personaUrl = 'personas.omi.me/u/${usernameController.text}';
         print('Persona URL: $personaUrl');
         if (onShowSuccessDialog != null) {
