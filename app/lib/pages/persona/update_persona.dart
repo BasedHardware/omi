@@ -45,7 +45,9 @@ class _UpdatePersonaPageState extends State<UpdatePersonaPage> {
           if (didPop) {
             context.read<PersonaProvider>().resetForm();
             if (widget.fromNewFlow) {
-              routeToPage(context, DeciderWidget(), replace: true);
+              Future.delayed(Duration.zero, () {
+                routeToPage(context, DeciderWidget(), replace: true);
+              });
             } else {
               Future.delayed(Duration.zero, () {
                 Navigator.pop(context);
