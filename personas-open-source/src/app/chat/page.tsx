@@ -23,9 +23,22 @@ import {
 } from "@/components/ui/dialog";
 import { Message } from '@/types/chat';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import Mixpanel from 'mixpanel-browser';
+import { Mixpanel } from '@/lib/mixpanel';
 
 function ChatContent() {
+
+  useEffect(() => {
+    // Identify the user first
+    Mixpanel.identify();
+
+    // Then track the page view
+    Mixpanel.track('Page View', {
+      page: 'Chat',
+      url: window.location.pathname,
+      timestamp: new Date().toISOString()
+    });
+  }, []);
+
   const searchParams = useSearchParams();
   const botId = searchParams.get('id');
 
