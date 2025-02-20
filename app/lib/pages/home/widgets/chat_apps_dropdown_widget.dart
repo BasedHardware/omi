@@ -1,15 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/gen/assets.gen.dart';
-import 'package:friend_private/pages/persona/add_persona.dart';
 import 'package:friend_private/providers/app_provider.dart';
 import 'package:friend_private/providers/home_provider.dart';
 import 'package:friend_private/providers/message_provider.dart';
 import 'package:friend_private/utils/analytics/mixpanel.dart';
-import 'package:friend_private/utils/other/temp.dart';
 import 'package:friend_private/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -98,12 +95,6 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   MixpanelManager().pageOpened('Chat Apps');
                   context.read<HomeProvider>().setIndex(2);
                   controller?.animateToPage(2, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
-                  return;
-                }
-
-                if (val == 'create_clone') {
-                  MixpanelManager().pageOpened('Create Clone');
-                  routeToPage(context, AddPersonaPage());
                   return;
                 }
 
@@ -238,37 +229,6 @@ class ChatAppsDropdownWidget extends StatelessWidget {
               ],
             ),
           ),
-          PopupMenuItem<String>(
-            value: 'create_clone',
-            height: 40,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.start,
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                const SizedBox(
-                  width: 24,
-                  child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Create My Clone', style: TextStyle(color: Colors.white, fontSize: 16)),
-                        SizedBox(
-                          width: 24,
-                          child: Icon(Icons.person, color: Colors.white60, size: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
         ] +
         [
           const PopupMenuItem<String>(
