@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:friend_private/gen/assets.gen.dart';
 import 'package:friend_private/pages/chat/clone_chat_page.dart';
 import 'package:friend_private/pages/persona/persona_provider.dart';
 import 'package:friend_private/utils/other/temp.dart';
@@ -43,7 +44,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
           // Background image
           Positioned.fill(
             child: Image.asset(
-              'assets/images/new_background.png',
+              Assets.images.newBackground.path,
               fit: BoxFit.cover,
             ),
           ),
@@ -55,7 +56,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                 child: Column(
                   children: [
                     const Spacer(flex: 2),
-                    SvgPicture.asset('assets/images/checkbox.svg'),
+                    SvgPicture.asset(Assets.images.checkbox.path),
                     const SizedBox(height: 24),
                     Text(
                       FirebaseAuth.instance.currentUser?.isAnonymous == false
