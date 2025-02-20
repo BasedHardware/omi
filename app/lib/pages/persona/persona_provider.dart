@@ -1,7 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:friend_private/backend/http/api/apps.dart';
+import 'package:friend_private/backend/http/api/apps.dart'
+    show
+        checkPersonaUsername,
+        createPersonaApp,
+        enableAppServer,
+        getTwitterProfileData,
+        getUserPersonaServer,
+        updatePersonaApp,
+        verifyTwitterOwnership;
 import 'package:friend_private/backend/preferences.dart';
 import 'package:friend_private/backend/schema/app.dart';
 import 'package:friend_private/utils/alerts/app_snackbar.dart';
@@ -212,5 +220,29 @@ class PersonaProvider extends ChangeNotifier {
   void setIsLoading(bool loading) {
     isLoading = loading;
     notifyListeners();
+  }
+
+  Future<bool> enablePersonaApp() async {
+    if (userPersona == null) {
+      await getUserPersona();
+    }
+
+    debugPrint(userPersona!.id);
+
+    setIsLoading(true);
+    try {
+      var enabled = await enableAppServer(userPersona!.id);
+      if (enabled) {
+        return true;
+      } else {
+        AppSnackbar.showSnackbarError('Failed to enable persona');
+        return false;
+      }
+    } catch (e) {
+      AppSnackbar.showSnackbarError('Error enabling persona: $e');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
   }
 }
